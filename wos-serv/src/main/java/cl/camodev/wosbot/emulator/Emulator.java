@@ -132,22 +132,6 @@ public abstract class Emulator {
 	public abstract boolean isRunning(String emulatorNumber);
 
 	/**
-	 * Verifies and applies mandatory emulator settings.
-	 * Settings to enforce:
-	 * - Resolution: 720x1280 (Portrait)
-	 * - DPI: 320
-	 * - Language: English (en-US)
-	 * - ADB Debugging: Enabled
-	 * 
-	 * @param emulatorNumber Emulator identifier
-	 * @return true if applied successfully
-	 */
-	public boolean verifyAndApplySettings(String emulatorNumber) {
-		logger.info("Auto-configure settings not implemented for this emulator type.");
-		return true;
-	}
-
-	/**
 	 * Waits for the ddmlib bridge to be ready.
 	 * @throws InterruptedException if interrupted while waiting
 	 */

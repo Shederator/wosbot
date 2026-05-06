@@ -28,9 +28,6 @@ public class SkipTutorialTask extends DelayedTask {
     }
 
     private void ensureEmulatorRunning() {
-        logInfo("Checking and applying emulator settings...");
-        emuManager.verifyAndApplySettings(EMULATOR_NUMBER);
-
         logInfo("Checking emulator status...");
 
         while (!isStarted) {

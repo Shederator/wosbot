@@ -4,11 +4,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.nio.file.Files;
 import java.util.concurrent.TimeUnit;
-
-import com.android.ddmlib.IDevice;
-import com.android.ddmlib.NullOutputReceiver;
 
 import cl.camodev.wosbot.emulator.Emulator;
 import org.slf4j.Logger;
@@ -75,81 +71,6 @@ public class LDPlayerEmulator extends Emulator {
             logger.error("Error checking if LDPlayer emulator is running at index {}", emulatorNumber, e);
         }
         return false;
-    }
-
-    @Override
-    public boolean verifyAndApplySettings(String emulatorNumber) {
-        logger.info("Verifying and applying settings for LDPlayer index {}", emulatorNumber);
-        boolean wasRunning = isRunning(emulatorNumber);
-
-        // Settings that require emulator to be stopped: Resolution, DPI, and ADB
-        if (wasRunning) {
-            logger.info("Stopping LDPlayer index {} to apply core settings...", emulatorNumber);
-            closeEmulator(emulatorNumber);
-            try {
-                // Wait for emulator to stop properly
-                for (int i = 0; i < 15; i++) {
-                    if (!isRunning(emulatorNumber)) break;
-                    Thread.sleep(1000);
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return false;
-            }
-        }
-
-        // Apply Resolution + DPI using ldconsole modify
-        logger.info("Setting LDPlayer index {} Resolution to 720x1280 and DPI to 320", emulatorNumber);
-        String[] modifyCommand = { consolePath + File.separator + "ldconsole.exe", "modify", "--index", emulatorNumber, "--resolution", "720,1280,320" };
-        executeCommand(modifyCommand);
-
-        // Apply ADB Debugging in vms/config/leidianX.config
-        logger.info("Ensuring ADB Debugging is enabled for LDPlayer index {}", emulatorNumber);
-        File configFile = new File(consolePath + File.separator + "vms" + File.separator + "config" + File.separator + "leidian" + emulatorNumber + ".config");
-        if (configFile.exists()) {
-            try {
-                String content = new String(java.nio.file.Files.readAllBytes(configFile.toPath()), java.nio.charset.StandardCharsets.UTF_8);
-                if (content.contains("\"basicSettings.adbDebug\": 0") || content.contains("\"basicSettings.adbDebug\":0")) {
-                    content = content.replaceAll("\"basicSettings\\.adbDebug\"\\s*:\\s*0", "\"basicSettings.adbDebug\": 1");
-                    java.nio.file.Files.write(configFile.toPath(), content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                } else if (!content.contains("\"basicSettings.adbDebug\"")) {
-                    content = content.replaceAll("}$", ",\n    \"basicSettings.adbDebug\": 1\n}");
-                    java.nio.file.Files.write(configFile.toPath(), content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                }
-            } catch (IOException e) {
-                logger.error("Failed to update config file for LDPlayer index {}", emulatorNumber, e);
-            }
-        } else {
-            logger.warn("LDPlayer config file not found for index {}: {}", emulatorNumber, configFile.getAbsolutePath());
-        }
-
-        // Now we need it running to set language via ADB
-        logger.info("Starting LDPlayer index {} to apply Language settings...", emulatorNumber);
-        launchEmulator(emulatorNumber);
-        
-        try {
-            // Give emulator time to establish ADB
-            Thread.sleep(15000); 
-            IDevice device = findDevice(emulatorNumber);
-            if (device != null) {
-                logger.info("Setting locale to en-US for LDPlayer index {}", emulatorNumber);
-                try {
-                	device.executeShellCommand("setprop persist.sys.locale en-US; stop; sleep 2; start", new NullOutputReceiver(), 10000, TimeUnit.MILLISECONDS);
-                	logger.info("Language applied successfully for LDPlayer index {}", emulatorNumber);
-                	Thread.sleep(10000); // Give android time to restart UI
-                } catch (Exception e) {
-                	logger.error("Failed to apply Language setting via ADB", e);
-                }
-            } else {
-                logger.warn("Could not connect to device via ADB to set language on LDPlayer index {}", emulatorNumber);
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-
-        // If it wasn't initially running, maybe we leave it as running, 
-        // since starting task will need it running anyway.
-        return true;
     }
 
     private void executeCommand(String[] command) {

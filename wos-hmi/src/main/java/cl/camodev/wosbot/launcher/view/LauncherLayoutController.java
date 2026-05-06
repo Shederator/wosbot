@@ -356,59 +356,92 @@ public class LauncherLayoutController implements IProfileLoadListener, IStaminaC
                 ServScheduler.getServices().saveEmulatorPath(EnumConfigurationKey.CURRENT_EMULATOR_STRING.name(),
                         foundEmulators.get(0).name());
                 return;
-            } else if (foundEmulators.isEmpty()) {
-                selectEmulatorManually();
             } else {
                 EmulatorType selectedEmulator = askUserForPreferredEmulator(foundEmulators);
-                ServScheduler.getServices().saveEmulatorPath(EnumConfigurationKey.CURRENT_EMULATOR_STRING.name(),
-                        selectedEmulator.name());
+                if (!foundEmulators.contains(selectedEmulator)) {
+                    // It was not found automatically. They must select it manually.
+                    Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                    alert.setTitle("Emulator Not Found");
+                    alert.setHeaderText("The selected emulator was not found automatically.");
+                    alert.setContentText("Please specify its executable location manually in the following dialog.");
+                    alert.showAndWait();
+                    selectEmulatorManually(selectedEmulator);
+                } else {
+                    ServScheduler.getServices().saveEmulatorPath(EnumConfigurationKey.CURRENT_EMULATOR_STRING.name(),
+                            selectedEmulator.name());
+                }
             }
         }
     }
 
-    private EmulatorType askUserForPreferredEmulator(List<EmulatorType> emulators) {
+    private EmulatorType askUserForPreferredEmulator(List<EmulatorType> foundEmulators) {
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle("Select Emulator");
-        alert.setHeaderText("Multiple emulators found. Please select which one to use.");
+        alert.setHeaderText("Please select which emulator to use. Found emulators are highlighted.");
 
         List<ButtonType> buttons = new ArrayList<>();
-        for (EmulatorType emulator : emulators) {
-            buttons.add(new ButtonType(emulator.getDisplayName()));
+        Map<ButtonType, EmulatorType> buttonMap = new HashMap<>();
+
+        // Add found emulators first
+        for (EmulatorType emulator : EmulatorType.values()) {
+            if (foundEmulators.contains(emulator)) {
+                ButtonType btnType = new ButtonType(emulator.getDisplayName(), ButtonBar.ButtonData.OK_DONE);
+                buttons.add(btnType);
+                buttonMap.put(btnType, emulator);
+            }
         }
+
+        // Add not found emulators next
+        for (EmulatorType emulator : EmulatorType.values()) {
+            if (!foundEmulators.contains(emulator)) {
+                ButtonType btnType = new ButtonType(emulator.getDisplayName(), ButtonBar.ButtonData.OK_DONE);
+                buttons.add(btnType);
+                buttonMap.put(btnType, emulator);
+            }
+        }
+        
         ButtonType cancelButton = new ButtonType("Cancel", ButtonBar.ButtonData.CANCEL_CLOSE);
         buttons.add(cancelButton);
 
         alert.getButtonTypes().setAll(buttons);
+
+        // Keep it compact but styled
+        for (ButtonType btnType : buttons) {
+            if (btnType != cancelButton) {
+                Button btn = (Button) alert.getDialogPane().lookupButton(btnType);
+                EmulatorType emulator = buttonMap.get(btnType);
+                if (foundEmulators.contains(emulator)) {
+                    btn.setStyle("-fx-font-weight: bold; -fx-text-fill: #2e7d32; -fx-border-color: #4caf50; -fx-border-radius: 3; -fx-background-color: #e8f5e9;");
+                }
+            }
+        }
+
         Optional<ButtonType> result = alert.showAndWait();
 
-        for (EmulatorType emulator : emulators) {
-            if (result.isPresent() && result.get().getText().equals(emulator.getDisplayName())) {
-                return emulator;
-            }
+        if (result.isPresent() && result.get() != cancelButton) {
+            return buttonMap.get(result.get());
         }
 
         showErrorAndExit("No emulator selected. The application will close.");
         return null;
     }
 
-    private void selectEmulatorManually() {
+    private void selectEmulatorManually(EmulatorType selectedEmulator) {
         FileChooser fileChooser = new FileChooser();
-        fileChooser.setTitle("Select Emulator Executable");
+        fileChooser.setTitle("Select Emulator Executable for " + selectedEmulator.getDisplayName());
 
-        FileChooser.ExtensionFilter exeFilter = new FileChooser.ExtensionFilter("Emulator Executable", "*.exe");
+        FileChooser.ExtensionFilter exeFilter = new FileChooser.ExtensionFilter(selectedEmulator.getDisplayName() + " Executable (" + selectedEmulator.getExecutableName() + ")", selectedEmulator.getExecutableName());
         fileChooser.getExtensionFilters().add(exeFilter);
         fileChooser.setInitialDirectory(new File(System.getProperty("user.home")));
 
         File selectedFile = fileChooser.showOpenDialog(stage);
 
         if (selectedFile != null) {
-            for (EmulatorType emulator : EmulatorType.values()) {
-                if (selectedFile.getName().equals(new File(emulator.getDefaultPath()).getName())) {
-                    ServScheduler.getServices().saveEmulatorPath(emulator.getConfigKey(), selectedFile.getParent());
-                    ServScheduler.getServices().saveEmulatorPath(EnumConfigurationKey.CURRENT_EMULATOR_STRING.name(),
-                            emulator.name());
-                    return;
-                }
+            if (selectedFile.getName().equals(selectedEmulator.getExecutableName())) {
+                ServScheduler.getServices().saveEmulatorPath(selectedEmulator.getConfigKey(), selectedFile.getParent());
+                ServScheduler.getServices().saveEmulatorPath(EnumConfigurationKey.CURRENT_EMULATOR_STRING.name(),
+                        selectedEmulator.name());
+                return;
             }
             showErrorAndExit("Invalid emulator file selected. Please select a valid emulator executable.");
         } else {

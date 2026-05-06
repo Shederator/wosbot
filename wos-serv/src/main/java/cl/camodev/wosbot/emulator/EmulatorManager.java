@@ -725,11 +725,6 @@ public class EmulatorManager {
         emulator.launchEmulator(emulatorNumber);
     }
 
-    public boolean verifyAndApplySettings(String emulatorNumber) {
-        checkEmulatorInitialized();
-        return emulator.verifyAndApplySettings(emulatorNumber);
-    }
-
     /**
      * Closes the emulator and invalidates all ADB caches for it.
      */
