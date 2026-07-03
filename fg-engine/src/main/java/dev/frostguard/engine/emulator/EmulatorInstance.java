@@ -247,8 +247,12 @@ public abstract class EmulatorInstance {
             byte[] raw = buf.toByteArray();
             if (raw.length < 12) throw new RuntimeException("screencap too small");
             int w = le32(raw, 0), h = le32(raw, 4), fmt = le32(raw, 8);
-            byte[] px = new byte[raw.length - 12];
-            System.arraycopy(raw, 12, px, 0, px.length);
+            // header is 12 bytes on old Android, 16 on newer; derive from pixel size
+            int bytesPerPixel = (fmt == 1) ? 4 : 2;
+            int headerLen = raw.length - (w * h * bytesPerPixel);
+            if (headerLen < 12 || headerLen > 64) headerLen = 12; // fallback
+            byte[] px = new byte[raw.length - headerLen];
+            System.arraycopy(raw, headerLen, px, 0, px.length);
             RawImageData frame = RawImageData.capture(px, w, h, fmt == 1 ? 32 : 16);
             lastFrame.put(idx, frame);
             return frame;

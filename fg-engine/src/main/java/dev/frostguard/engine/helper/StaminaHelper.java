@@ -14,6 +14,9 @@ import dev.frostguard.vision.ocr.ResilientOcrExecutor;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Predicate;
 
 // Orchestrates stamina tracking: OCR reads, regen delay computation,
 // availability gating, and travel time parsing.
@@ -62,23 +65,65 @@ public class StaminaHelper {
                 CommonGameAreas.STAMINA_BUTTON.topLeft(),
                 CommonGameAreas.STAMINA_BUTTON.bottomRight(), 1, 500);
 
-        Integer reading = numberReader.attemptRecognition(
-                CommonGameAreas.STAMINA_OCR_AREA.topLeft(),
-                CommonGameAreas.STAMINA_OCR_AREA.bottomRight(),
-                5, 200L,
-                CommonOCRSettings.STAMINA_FRACTION_SETTINGS,
-                RegexNumberParser::hasFractionSyntax,
-                RegexNumberParser::numerator);
+        Integer reading = readStableStamina();
 
         if (reading == null) {
-            emitWarn("OCR could not parse stamina");
+            emitWarn("OCR could not reach a stable stamina reading; keeping previous value");
         } else {
-            emitInfo("Stamina read: " + reading);
+            emitInfo("Stamina read (consensus): " + reading);
             persistence.setStamina(accountKey, reading);
         }
 
         device.pressBack(deviceSlot);
         device.pressBack(deviceSlot);
+    }
+
+    // How many independent OCR samples to take, and how many must agree.
+    private static final int STAMINA_SAMPLE_COUNT = 5;
+    private static final int STAMINA_MIN_AGREEMENT = 2;
+    private static final int STAMINA_SAMPLE_PAUSE_MS = 120;
+    private static final int STAMINA_MIN_DENOMINATOR = 100;
+
+    // Reads the stamina fraction across several frames and returns the value the
+    // majority agree on (with a denominator/numerator sanity check), so a transient
+    // mid-animation frame can't poison the model. Returns null when none agree.
+    private Integer readStableStamina() {
+        // only require a plausible max; stamina can overfill above it (e.g. 260/200)
+        Predicate<String> saneFraction = text -> {
+            Integer numerator = RegexNumberParser.numerator(text);
+            Integer denominator = RegexNumberParser.denominator(text);
+            return numerator != null && denominator != null
+                    && denominator >= STAMINA_MIN_DENOMINATOR;
+        };
+
+        Map<Integer, Integer> tally = new HashMap<>();
+        for (int sample = 0; sample < STAMINA_SAMPLE_COUNT; sample++) {
+            Integer value = numberReader.attemptRecognition(
+                    CommonGameAreas.STAMINA_OCR_AREA.topLeft(),
+                    CommonGameAreas.STAMINA_OCR_AREA.bottomRight(),
+                    1, 0L,
+                    CommonOCRSettings.STAMINA_FRACTION_SETTINGS,
+                    saneFraction,
+                    RegexNumberParser::numerator);
+            if (value != null) {
+                tally.merge(value, 1, Integer::sum);
+            }
+            pauseBetweenSamples();
+        }
+
+        return tally.entrySet().stream()
+                .filter(entry -> entry.getValue() >= STAMINA_MIN_AGREEMENT)
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(null);
+    }
+
+    private void pauseBetweenSamples() {
+        try {
+            Thread.sleep(STAMINA_SAMPLE_PAUSE_MS);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     // Reads stamina cost from the deployment confirmation screen.
