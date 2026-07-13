@@ -67,16 +67,17 @@
 
 /* --- Structure elements ------------------------------------------------------------ */
 .module-card {
-    -fx-background-color: -fg-bg-card;
+    -fx-background-color: linear-gradient(to bottom, #1b2029, #171b23);
     -fx-background-radius: 10;
     -fx-border-radius: 10;
     -fx-border-color: -fg-border-subtle;
     -fx-padding: 18;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 8, 0.2, 0, 2);
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 10, 0.2, 0, 3);
 }
 
 .module-card:hover {
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 12, 0.3, 0, 3);
+    -fx-border-color: -fg-border-strong;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 14, 0.3, 0, 4);
 }
 
 .module-title {

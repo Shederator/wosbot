@@ -213,6 +213,32 @@ public class StatisticsLayoutController extends AbstractProfileController {
                 createSummaryCard("Avg Img Fail", avgImg, "stat-value-coral"),
                 createSummaryCard("Actions", String.valueOf(counterTotal), "stat-value-purple")
         );
+        playSummaryCardEntrance();
+    }
+
+    /** Staggered fade + drift entrance for the summary cards. */
+    private void playSummaryCardEntrance() {
+        int index = 0;
+        for (javafx.scene.Node card : hboxSummaryCards.getChildren()) {
+            card.setOpacity(0);
+            card.setTranslateY(12);
+            javafx.animation.PauseTransition delay =
+                    new javafx.animation.PauseTransition(javafx.util.Duration.millis(40L * index));
+            delay.setOnFinished(e -> {
+                javafx.animation.FadeTransition fade =
+                        new javafx.animation.FadeTransition(javafx.util.Duration.millis(180), card);
+                fade.setFromValue(0);
+                fade.setToValue(1);
+                javafx.animation.TranslateTransition drift =
+                        new javafx.animation.TranslateTransition(javafx.util.Duration.millis(220), card);
+                drift.setFromY(12);
+                drift.setToY(0);
+                drift.setInterpolator(javafx.animation.Interpolator.EASE_OUT);
+                new javafx.animation.ParallelTransition(fade, drift).play();
+            });
+            delay.play();
+            index++;
+        }
     }
 
     private VBox createSummaryCard(String title, String value, String accentClass) {

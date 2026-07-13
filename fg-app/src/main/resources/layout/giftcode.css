@@ -16,12 +16,12 @@
 
 /* --- Card container --------------------------------------------------------- */
 .giftcode-card {
-    -fx-background-color: -fg-bg-card;
+    -fx-background-color: linear-gradient(to bottom, #1b2029, #171b23);
     -fx-background-radius: 10;
     -fx-border-color: -fg-border-subtle;
     -fx-border-radius: 10;
     -fx-border-width: 1;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 10, 0, 0, 3);
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 12, 0, 0, 4);
 }
 
 .giftcode-card-header {
@@ -44,7 +44,7 @@
 
 /* --- Fetch button ------------------------------------------------------------ */
 .giftcode-fetch-btn {
-    -fx-background-color: -fg-yellow;
+    -fx-background-color: linear-gradient(to bottom, #ffe09a, -fg-yellow);
     -fx-text-fill: -fg-text-dark;
     -fx-font-weight: bold;
     -fx-font-size: 12px;

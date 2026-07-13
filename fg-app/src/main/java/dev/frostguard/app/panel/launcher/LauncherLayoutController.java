@@ -535,12 +535,17 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         AnchorPane.setRightAnchor(content, 0.0);
         mainContentPane.getChildren().add(content);
 
-        // Subtle fade-in when switching pages (matches existing transition style)
+        // Premium page transition: fade + gentle upward drift
         content.setOpacity(0.0);
-        FadeTransition fade = new FadeTransition(Duration.millis(160), content);
+        content.setTranslateY(10);
+        FadeTransition fade = new FadeTransition(Duration.millis(180), content);
         fade.setFromValue(0.0);
         fade.setToValue(1.0);
-        fade.play();
+        TranslateTransition drift = new TranslateTransition(Duration.millis(220), content);
+        drift.setFromY(10);
+        drift.setToY(0);
+        drift.setInterpolator(Interpolator.EASE_OUT);
+        new ParallelTransition(fade, drift).play();
     }
 
     private void initializeProfileComboBox() { /* internal */
