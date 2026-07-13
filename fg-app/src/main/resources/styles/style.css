@@ -198,6 +198,9 @@
 .nav-button:hover .ikonli-font-icon { -fx-icon-color: -fg-text-primary; }
 .nav-button.active .ikonli-font-icon { -fx-icon-color: -fg-text-dark; }
 
+/* Explicit class added programmatically in LauncherLayoutController */
+.nav-button-icon { -fx-icon-size: 14; }
+
 /* ---------------------------------------------------------------------------
  * 05. STATUS BAR
  * --------------------------------------------------------------------------- */
