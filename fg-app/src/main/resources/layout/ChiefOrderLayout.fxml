@@ -28,7 +28,7 @@
                                         <Label styleClass="task-card-description"
                                                text="Configure which chief orders to automatically complete" wrapText="true" />
 
-                                        <Separator style="-fx-opacity: 0.25;" />
+                                        <Separator styleClass="separator-subtle" />
 
                                         <VBox styleClass="task-subsection" spacing="14">
                                             <children>

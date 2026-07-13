@@ -11,7 +11,7 @@
     <!-- Top controls -->
     <top>
         <HBox alignment="CENTER_RIGHT" spacing="12"
-              style="-fx-padding: 10 16 6 16;">
+              styleClass="stats-top-bar">
             <Button fx:id="btnRefresh" mnemonicParsing="false"
                     onAction="#handleRefresh" styleClass="action-button-timeline" text="Refresh" />
             <Button fx:id="btnReset" mnemonicParsing="false"
@@ -21,16 +21,16 @@
 
     <!-- Main content -->
     <center>
-        <VBox spacing="10" style="-fx-padding: 0 16 16 16;">
+        <VBox spacing="10" styleClass="stats-content">
 
             <!-- Summary Cards -->
             <HBox fx:id="hboxSummaryCards" spacing="15" alignment="CENTER" />
 
-            <Separator style="-fx-opacity: 0.25;" />
+            <Separator styleClass="separator-subtle" />
 
             <!-- Task Statistics Table -->
             <VBox styleClass="content-card" VBox.vgrow="ALWAYS">
-                <VBox style="-fx-padding: 0;" VBox.vgrow="ALWAYS">
+                <VBox styleClass="pad-0" VBox.vgrow="ALWAYS">
                     <TableView fx:id="tableTasks" minHeight="300.0" prefHeight="450.0"
                                VBox.vgrow="ALWAYS">
                         <columnResizePolicy>
@@ -49,7 +49,7 @@
                 </VBox>
             </VBox>
 
-            <Separator style="-fx-opacity: 0.25;" />
+            <Separator styleClass="separator-subtle" />
 
             <!-- Activity Counters -->
             <VBox styleClass="content-card">

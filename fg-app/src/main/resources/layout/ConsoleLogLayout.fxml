@@ -14,7 +14,7 @@
 <?import javafx.scene.layout.VBox?>
 
 <VBox maxHeight="Infinity" maxWidth="Infinity"
-      spacing="6" style="-fx-padding: 8 16 16 16;" xmlns="http://javafx.com/javafx/17.0.12" xmlns:fx="http://javafx.com/fxml/1">
+      spacing="6" styleClass="page-padded" xmlns="http://javafx.com/javafx/17.0.12" xmlns:fx="http://javafx.com/fxml/1">
    <children>
 
       <!-- Top Search + Filter Bar -->
@@ -46,15 +46,15 @@
                  maxHeight="Infinity" maxWidth="Infinity">
         <columns>
           <TableColumn fx:id="columnTimeStamp" editable="false" minWidth="80.0"
-                       prefWidth="160.0" sortable="false" text="TIMESTAMP" style="-fx-alignment: CENTER;" />
+                       prefWidth="160.0" sortable="false" text="TIMESTAMP" styleClass="column-center" />
           <TableColumn fx:id="columnLevel" editable="false" minWidth="60.0"
-                       prefWidth="70.0" sortable="false" text="LEVEL" style="-fx-alignment: CENTER;" />
+                       prefWidth="70.0" sortable="false" text="LEVEL" styleClass="column-center" />
           <TableColumn fx:id="columnMessage" editable="false" maxWidth="Infinity"
-                       minWidth="200.0" sortable="false" text="MESSAGE" style="-fx-alignment: CENTER_LEFT;" />
+                       minWidth="200.0" sortable="false" text="MESSAGE" styleClass="column-left" />
           <TableColumn fx:id="columnProfile" editable="false" minWidth="80.0"
-                       prefWidth="110.0" sortable="false" text="PROFILE" style="-fx-alignment: CENTER;" />
+                       prefWidth="110.0" sortable="false" text="PROFILE" styleClass="column-center" />
           <TableColumn fx:id="columnTask" editable="false" minWidth="80.0"
-                       prefWidth="140.0" sortable="false" text="TASK" style="-fx-alignment: CENTER;" />
+                       prefWidth="140.0" sortable="false" text="TASK" styleClass="column-center" />
         </columns>
         <columnResizePolicy>
            <TableView fx:constant="CONSTRAINED_RESIZE_POLICY" />

@@ -22,7 +22,7 @@
                         <Label styleClass="task-card-description"
                                text="Configure automatic pet skill activation and management"
                                wrapText="true" />
-                        <Separator style="-fx-opacity: 0.25;" />
+                        <Separator styleClass="separator-subtle" />
                         <CheckBox fx:id="checkBoxPetSkills" mnemonicParsing="false"
                                   text="Enable Pet Management" />
                         <CheckBox fx:id="checkBoxPetAllianceTreasure" mnemonicParsing="false"
@@ -41,7 +41,7 @@
                         <Label styleClass="task-card-description"
                                text="Select which pet skills to activate automatically"
                                wrapText="true" />
-                        <Separator style="-fx-opacity: 0.25;" />
+                        <Separator styleClass="separator-subtle" />
 
                         <FlowPane hgap="18" vgap="10" alignment="CENTER_LEFT">
                             <CheckBox fx:id="checkboxFoodSkill" mnemonicParsing="false"
@@ -54,7 +54,7 @@
                                       text="Treasure Skill" />
                         </FlowPane>
                         
-                        <Separator style="-fx-opacity: 0.25;" />
+                        <Separator styleClass="separator-subtle" />
                         
                         <HBox alignment="CENTER_LEFT" spacing="14">
                             <Label styleClass="task-field-label" text="Gathering Resource" minWidth="140" />

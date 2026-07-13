@@ -19,15 +19,15 @@
             fx:controller="dev.frostguard.app.panel.profile.EditProfileController">
 
     <top>
-        <VBox style="-fx-padding: 20 20 0 20;" spacing="6">
-            <Label style="-fx-font-size: 16px; -fx-font-weight: bold;" text="Edit Profile" />
-            <Separator style="-fx-opacity: 0.3;" />
+        <VBox styleClass="dialog-header-pad" spacing="6">
+            <Label styleClass="dialog-title" text="Edit Profile" />
+            <Separator styleClass="separator-subtle" />
         </VBox>
     </top>
 
     <center>
-        <ScrollPane fitToWidth="true" style="-fx-background-color: transparent; -fx-background: transparent;">
-            <VBox spacing="14" style="-fx-padding: 16 20 16 20;">
+        <ScrollPane fitToWidth="true" styleClass="scroll-transparent">
+            <VBox spacing="14" styleClass="dialog-body-pad">
 
                 <!-- Profile identification -->
                 <VBox spacing="10">
@@ -53,12 +53,12 @@
                                 showTickLabels="true" showTickMarks="true" value="50.0"
                                 HBox.hgrow="ALWAYS" />
                         <Label fx:id="lblPriorityValue" text="50" minWidth="36"
-                               style="-fx-alignment: CENTER_RIGHT;" />
+                               styleClass="column-right" />
                     </HBox>
                     <CheckBox fx:id="chkEnabled" mnemonicParsing="false" text="Enabled" />
                 </VBox>
 
-                <Separator style="-fx-opacity: 0.3;" />
+                <Separator styleClass="separator-subtle" />
 
                 <!-- Character data -->
                 <VBox spacing="10">
@@ -88,11 +88,11 @@
     </center>
 
     <bottom>
-        <HBox alignment="CENTER_RIGHT" spacing="10.0" style="-fx-padding: 10 20 20 20;">
+        <HBox alignment="CENTER_RIGHT" spacing="10.0" styleClass="dialog-footer-pad">
             <Button fx:id="btnCancel" mnemonicParsing="false" onAction="#handleCancel"
-                    prefWidth="84.0" style="-fx-cursor: hand;" text="Cancel" />
+                    prefWidth="84.0" styleClass="icon-link" text="Cancel" />
             <Button fx:id="btnSave" mnemonicParsing="false" onAction="#handleSave"
-                    prefWidth="84.0" style="-fx-cursor: hand; -fx-font-weight: bold;"
+                    prefWidth="84.0" styleClass="button-emphasis"
                     text="Save" />
         </HBox>
     </bottom>

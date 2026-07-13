@@ -12,13 +12,12 @@
 <?import javafx.scene.layout.VBox?>
 
 <BorderPane prefHeight="350.0" prefWidth="440.0"
-            style="-fx-background-color: transparent; -fx-padding: 10;"
+            styleClass="dialog-backdrop"
             xmlns="http://javafx.com/javafx/17.0.12" xmlns:fx="http://javafx.com/fxml/1"
             fx:controller="dev.frostguard.app.panel.scheduler.ScheduleTaskDialogController">
 
     <center>
-        <VBox style="-fx-background-color: #1e1e24; -fx-background-radius: 8; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.6), 15, 0, 0, 8);"
-              styleClass="content-card">
+        <VBox styleClass="content-card, dialog-surface">
 
             <!-- Dialog header -->
             <HBox fx:id="headerBox" alignment="CENTER_LEFT" maxWidth="Infinity"
@@ -27,7 +26,7 @@
                        HBox.hgrow="ALWAYS" />
                 <Region HBox.hgrow="ALWAYS" />
                 <Button mnemonicParsing="false" onAction="#handleClose"
-                        style="-fx-background-color: transparent; -fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: hand;"
+                        styleClass="dialog-close-btn"
                         text="X" />
             </HBox>
 
@@ -55,7 +54,7 @@
                 <Label fx:id="lblInfo" styleClass="task-card-note" text=""
                        visible="false" wrapText="true" />
 
-                <Separator style="-fx-opacity: 0.25;" />
+                <Separator styleClass="separator-subtle" />
 
                 <!-- Action buttons -->
                 <HBox alignment="CENTER_RIGHT" spacing="10.0">

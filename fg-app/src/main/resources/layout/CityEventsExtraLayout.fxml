@@ -15,7 +15,7 @@
 
             <VBox maxWidth="Infinity" styleClass="content-card">
                 <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
-                    <Label style="-fx-font-weight: bold; -fx-text-fill: -fg-bg-app; -fx-font-size: 13px;"
+                    <Label
                            text="Extra City Events" />
                 </HBox>
 
@@ -26,7 +26,7 @@
                                    text="Arena target filters use the selected profile's Character Information: Alliance and Server."
                                    wrapText="true" />
 
-                            <Separator style="-fx-opacity: 0.25;" />
+                            <Separator styleClass="separator-subtle" />
 
                             <GridPane hgap="14" maxWidth="Infinity" vgap="12">
                                 <columnConstraints>
@@ -52,7 +52,7 @@
                                           GridPane.columnIndex="1" GridPane.rowIndex="3" />
                             </GridPane>
 
-                            <Separator style="-fx-opacity: 0.15;" />
+                            <Separator styleClass="separator-subtle" />
 
                             <VBox maxWidth="Infinity" spacing="10">
                                 <Label fx:id="labelArenaTargetingHint" styleClass="task-card-description"
@@ -84,7 +84,7 @@
                             </VBox>
 
                             <Label fx:id="labelDateTimeError"
-                                   style="-fx-font-size: 11px; -fx-text-fill: #ff4444;"
+                                   styleClass="field-error-label"
                                    text="" wrapText="true" />
                         </VBox>
                     </Tab>
@@ -95,21 +95,21 @@
                                    text="Additional daily operations and tasks"
                                    wrapText="true" />
 
-                            <Separator style="-fx-opacity: 0.25;" />
+                            <Separator styleClass="separator-subtle" />
 
                             <CheckBox fx:id="checkBoxDailyVipRewards" text="Claim daily vip rewards" />
 
-                            <Separator style="-fx-opacity: 0.15;" />
+                            <Separator styleClass="separator-subtle" />
 
                             <CheckBox fx:id="checkBoxStorehouseChest"
                                       text="Claim storehouse chests + stamina" />
 
-                            <Separator style="-fx-opacity: 0.15;" />
+                            <Separator styleClass="separator-subtle" />
 
                             <CheckBox fx:id="checkBoxHeroRecruitment"
                                       text="Open recruitment hero chests" />
 
-                            <Separator style="-fx-opacity: 0.15;" />
+                            <Separator styleClass="separator-subtle" />
 
                             <FlowPane alignment="CENTER_LEFT" hgap="20" vgap="10">
                                 <CheckBox fx:id="checkBoxDailyLabyrinth"
@@ -118,7 +118,7 @@
                                           text="Buy monthly vip (10k gems)" />
                             </FlowPane>
 
-                            <Separator style="-fx-opacity: 0.15;" />
+                            <Separator styleClass="separator-subtle" />
 
                             <FlowPane alignment="CENTER_LEFT" hgap="20" vgap="10">
                                 <CheckBox fx:id="checkBoxTrekSupplies" text="Claim Trek Supplies" />

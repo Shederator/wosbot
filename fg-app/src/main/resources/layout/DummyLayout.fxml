@@ -21,7 +21,7 @@
                                       styleClass="header-blue">
                                     <children>
                                         <CheckBox fx:id="checkBoxEnableDummyTask" mnemonicParsing="false"
-                                                  style="-fx-font-weight: bold;" text="Enable Dummy Task" />
+                                                  styleClass="checkbox-emphasis" text="Enable Dummy Task" />
                                     </children>
                                 </HBox>
                                 <VBox styleClass="task-section-inner">
@@ -30,7 +30,7 @@
                                                text="This task will run infinitely until it finds 'go.png' image. Checks every 5 seconds. Reschedules for 60 mins if found."
                                                wrapText="true" />
 
-                                        <Separator style="-fx-opacity: 0.25;" />
+                                        <Separator styleClass="separator-subtle" />
 
                                         <HBox alignment="CENTER_LEFT" spacing="12">
                                             <children>

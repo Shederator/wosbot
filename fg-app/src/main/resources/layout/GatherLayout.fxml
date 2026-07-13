@@ -23,7 +23,7 @@
                                         <Label styleClass="task-card-description"
                                                text="Send marches for selected resources, level targets, and gathering options."
                                                wrapText="true" />
-                                        <Separator style="-fx-opacity: 0.25;" />
+                                        <Separator styleClass="separator-subtle" />
 
                                         <GridPane fx:id="gridPaneGathering" hgap="18" styleClass="task-subsection" vgap="12">
                                             <columnConstraints>
@@ -69,9 +69,9 @@
                                                                 <ComboBox fx:id="comboBoxGatherSpeedBoostType" prefWidth="120.0" />
                                                             </children>
                                                         </HBox>
-                                                        <Separator style="-fx-opacity: 0.25;" />
+                                                        <Separator styleClass="separator-subtle" />
                                                         <CheckBox fx:id="checkBoxTestPreemption" mnemonicParsing="false"
-                                                                  style="-fx-text-fill: #ffaa00; -fx-font-weight: bold;"
+                                                                  styleClass="label-warning-strong"
                                                                   text="TEST: Trigger Preemption on Gather Deploy" />
                                                     </children>
                                                 </VBox>

@@ -20,7 +20,7 @@
                 <VBox spacing="10" styleClass="task-section-inner">
                     <Label styleClass="task-card-description"
                            text="Configure purchases from the Nomadic Merchant shop" wrapText="true" />
-                    <Separator style="-fx-opacity: 0.25;" />
+                    <Separator styleClass="separator-subtle" />
                     <FlowPane hgap="20" vgap="10" alignment="CENTER_LEFT">
                         <CheckBox fx:id="checkBoxNomadicMerchant" mnemonicParsing="false"
                                   text="Buy resources" />
@@ -38,9 +38,9 @@
                 <VBox spacing="10" styleClass="task-section-inner">
                     <Label styleClass="task-card-description"
                            text="Configure automatic bank transactions" wrapText="true" />
-                    <Separator style="-fx-opacity: 0.25;" />
+                    <Separator styleClass="separator-subtle" />
                     <CheckBox fx:id="checkBoxBank" mnemonicParsing="false" text="Enable Bank" />
-                    <Separator style="-fx-opacity: 0.25;" />
+                    <Separator styleClass="separator-subtle" />
                     <HBox spacing="10" alignment="CENTER_LEFT">
                         <Label styleClass="task-field-label" text="Period:" />
                         <ComboBox fx:id="comboBoxBankDelay" prefWidth="150.0"
@@ -55,10 +55,10 @@
                 <VBox spacing="10" styleClass="task-section-inner">
                     <Label styleClass="task-card-description"
                            text="Configure automatic purchases from Mystery Shop" wrapText="true" />
-                    <Separator style="-fx-opacity: 0.25;" />
+                    <Separator styleClass="separator-subtle" />
                     <CheckBox fx:id="checkBoxMysteryShop" mnemonicParsing="false"
                               text="Enable Mystery Shop" />
-                    <Separator style="-fx-opacity: 0.25;" />
+                    <Separator styleClass="separator-subtle" />
                     <CheckBox fx:id="checkBoxMysteryShop50DiscountGear" mnemonicParsing="false"
                               text="Buy 50% discounted hero gear (250 badges)" />
                 </VBox>

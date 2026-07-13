@@ -16,12 +16,12 @@
                 <VBox styleClass="content-card">
                     <HBox styleClass="header-yellow" alignment="CENTER_LEFT" maxWidth="Infinity">
                         <Label text="City Upgrades"
-                               style="-fx-text-fill: -fg-bg-app; -fx-font-weight: 700; -fx-font-size: 13px;" />
+                               />
                     </HBox>
                     <VBox spacing="14" styleClass="task-section-inner">
                         <Label text="Configure automated building upgrades safely"
-                               style="-fx-text-fill: -fg-text-secondary;" />
-                        <Separator style="-fx-opacity: 0.25;" />
+                               styleClass="label-muted" />
+                        <Separator styleClass="separator-subtle" />
 
                         <!-- Furnace options -->
                         <VBox spacing="10">
@@ -31,7 +31,7 @@
                                       text="Prioritise Furnace" />
                         </VBox>
 
-                        <Separator style="-fx-opacity: 0.25;" />
+                        <Separator styleClass="separator-subtle" />
 
                         <!-- Survivors with offset -->
                         <HBox alignment="CENTER_LEFT" spacing="14">

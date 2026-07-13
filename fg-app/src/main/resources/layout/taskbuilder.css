@@ -675,3 +675,12 @@
 .hover-menu-btn:hover { -fx-background-color: #2a2e38; }
 .hover-menu-btn .hover-menu-svg { -fx-fill: -vfx-fg-secondary; }
 .hover-menu-btn:hover .hover-menu-svg { -fx-fill: #fff; }
+
+
+/* ── FXML UTILITY ADDITIONS ────────────────────────────── */
+.tb-toolbar-center { -fx-padding: 0 10; }
+
+.tb-props-label-warn {
+    -fx-font-weight: bold;
+    -fx-text-fill: -vfx-flame;
+}

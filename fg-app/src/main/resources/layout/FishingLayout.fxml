@@ -29,7 +29,7 @@
                                                text="Automates the fishing tournament minigame. Threads through gaps to reach the bottom while avoiding fish."
                                                wrapText="true" />
 
-                                        <Separator style="-fx-opacity: 0.25;" />
+                                        <Separator styleClass="separator-subtle" />
 
                                         <CheckBox fx:id="checkBoxEnableFishing" mnemonicParsing="false"
                                                   text="Enable Fishing Minigame Task" />
@@ -53,7 +53,7 @@
                                                text="Captures every frame from the emulator and searches for the fishing hook template. Logs hook coordinates and per-frame ADB vs OpenCV timing to the Logs UI."
                                                wrapText="true" />
 
-                                        <Separator style="-fx-opacity: 0.25;" />
+                                        <Separator styleClass="separator-subtle" />
 
                                         <CheckBox fx:id="checkBoxEnableTestHookLoop" mnemonicParsing="false"
                                                   text="Enable Test Hook Loop" />

@@ -19,7 +19,7 @@
                 <VBox styleClass="content-card">
                     <HBox maxWidth="Infinity" styleClass="header-yellow">
                         <CheckBox fx:id="checkBoxEnableBearTrap" mnemonicParsing="false"
-                                  style="-fx-font-size: 15px; -fx-font-weight: bold;"
+                                  styleClass="section-title"
                                   text="Enable Bear Trap" />
                     </HBox>
                     <VBox spacing="10" styleClass="task-section-inner">
@@ -33,7 +33,7 @@
                                 <TextField fx:id="textFieldScheduleDateTime"
                                            promptText="dd-MM-yyyy HH:mm" />
                                 <Label fx:id="labelDateTimeError"
-                                       style="-fx-font-size: 11px; -fx-text-fill: #ff4444;"
+                                       styleClass="field-error-label"
                                        text="" wrapText="true" />
                             </VBox>
                             <VBox spacing="6" prefWidth="120">
@@ -90,7 +90,7 @@
                 <!-- Quick guide as collapsible TitledPane instead of BorderPane.right -->
                 <TitledPane text="Quick Guide" expanded="false" collapsible="true"
                             styleClass="content-card">
-                    <VBox spacing="6" style="-fx-padding: 10;">
+                    <VBox spacing="6" styleClass="pad-10">
                         <Label styleClass="task-info-panel-bullet"
                                text="• Use UTC time in dd-MM-yyyy HH:mm format." wrapText="true" />
                         <Label styleClass="task-info-panel-bullet"

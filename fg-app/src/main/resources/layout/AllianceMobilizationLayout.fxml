@@ -17,7 +17,7 @@
                 <VBox styleClass="content-card">
                     <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-green">
                         <CheckBox fx:id="checkBoxAllianceMobilization" mnemonicParsing="false"
-                                  style="-fx-font-weight: bold;" text="Enable Alliance Mobilization" />
+                                  styleClass="checkbox-emphasis" text="Enable Alliance Mobilization" />
                     </HBox>
                     <VBox spacing="10" styleClass="task-section-inner">
                         <Label styleClass="task-card-description"
@@ -35,7 +35,7 @@
                         <Label styleClass="task-card-description"
                                text="Select which mission types to automatically complete"
                                wrapText="true" />
-                        <Separator style="-fx-opacity: 0.25;" />
+                        <Separator styleClass="separator-subtle" />
 
                         <FlowPane hgap="20" vgap="10" alignment="CENTER_LEFT">
                             <CheckBox fx:id="gatherResourcesCheck" mnemonicParsing="false"

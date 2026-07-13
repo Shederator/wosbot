@@ -14,13 +14,13 @@
 
             <VBox styleClass="content-card">
                 <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
-                    <Label style="-fx-font-weight: bold; -fx-text-fill: -fg-bg-app; -fx-font-size: 13px;"
+                    <Label
                            text="City Events &amp; Missions" />
                 </HBox>
                 <VBox spacing="12" styleClass="task-section-inner">
                     <Label styleClass="task-card-description"
                            text="Configure automated tasks for internal city events" wrapText="true" />
-                    <Separator style="-fx-opacity: 0.25;" />
+                    <Separator styleClass="separator-subtle" />
 
                     <!-- Daily missions row -->
                     <HBox alignment="CENTER_LEFT" spacing="14">
@@ -34,7 +34,7 @@
                     <CheckBox fx:id="checkBoxAutoScheduleDailyMission" graphicTextGap="6.0"
                               mnemonicParsing="false" text="Auto schedule daily mission claim" />
 
-                    <Separator style="-fx-opacity: 0.25;" />
+                    <Separator styleClass="separator-subtle" />
 
                     <!-- Exploration row -->
                     <CheckBox fx:id="checkBoxDoExploration" graphicTextGap="6.0"
@@ -48,7 +48,7 @@
                         <TextField fx:id="textfieldExplorationOffset" prefWidth="80.0" />
                     </HBox>
 
-                    <Separator style="-fx-opacity: 0.25;" />
+                    <Separator styleClass="separator-subtle" />
 
                     <!-- Mail rewards row -->
                     <HBox alignment="CENTER_LEFT" spacing="14">
@@ -59,7 +59,7 @@
                         <TextField fx:id="textfieldMailOffset" prefWidth="80.0" />
                     </HBox>
 
-                    <Separator style="-fx-opacity: 0.25;" />
+                    <Separator styleClass="separator-subtle" />
 
                     <!-- Life essence and weekly scroll -->
                     <HBox alignment="CENTER_LEFT" spacing="14">
@@ -72,7 +72,7 @@
                         <TextField fx:id="textfieldLifeEssenceOffset" prefWidth="80.0" />
                     </HBox>
 
-                    <Separator style="-fx-opacity: 0.25;" />
+                    <Separator styleClass="separator-subtle" />
 
                     <!-- Crystal lab and RFC -->
                     <CheckBox fx:id="checkBoxCrystalLabFC" graphicTextGap="6.0"

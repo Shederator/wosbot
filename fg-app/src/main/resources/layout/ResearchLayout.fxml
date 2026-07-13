@@ -21,14 +21,14 @@
                 <VBox spacing="10" styleClass="task-section-inner">
                     <Label styleClass="task-card-description"
                            text="Automates research technology in your city" wrapText="true" />
-                    <Separator style="-fx-opacity: 0.25;" />
+                    <Separator styleClass="separator-subtle" />
                     <CheckBox fx:id="checkBoxEnableResearch" mnemonicParsing="false"
                               text="Enable Research" />
 
-                    <Separator style="-fx-opacity: 0.25;" />
+                    <Separator styleClass="separator-subtle" />
 
                     <Label text="Research Categories"
-                           style="-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #9eaab6;" />
+                           styleClass="form-section-label" />
 
                     <FlowPane hgap="20" vgap="10" alignment="CENTER_LEFT">
                         <CheckBox fx:id="checkBoxGrowth" mnemonicParsing="false" text="Growth" />

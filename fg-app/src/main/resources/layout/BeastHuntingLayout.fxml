@@ -16,13 +16,13 @@
                 <VBox styleClass="content-card">
                     <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-red">
                         <CheckBox fx:id="checkBoxEnableBeastHunting" mnemonicParsing="false"
-                                  style="-fx-font-weight: bold;" text="Enable Beast Hunting" />
+                                  styleClass="checkbox-emphasis" text="Enable Beast Hunting" />
                     </HBox>
                     <VBox spacing="12" styleClass="task-section-inner">
                         <Label styleClass="task-card-description"
                                text="Automatically hunts beasts on the world map using available stamina and march queues."
                                wrapText="true" />
-                        <Separator style="-fx-opacity: 0.25;" />
+                        <Separator styleClass="separator-subtle" />
 
                         <HBox alignment="CENTER_LEFT" spacing="14">
                             <Label styleClass="task-field-label" text="Active Marches" minWidth="120" />

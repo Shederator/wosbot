@@ -32,7 +32,7 @@
                 </columnConstraints>
 
                 <!-- Title -->
-                <Label style="-fx-font-size: 18; -fx-font-weight: bold; -fx-text-fill: -fg-yellow;"
+                <Label styleClass="gantt-title"
                        text="Task Timeline"
                        GridPane.columnIndex="0" GridPane.rowIndex="0" />
 
@@ -41,22 +41,22 @@
                       GridPane.columnIndex="1" GridPane.rowIndex="0">
                     <HBox alignment="CENTER_LEFT" spacing="5">
                         <Rectangle arcHeight="3" arcWidth="3" height="14" width="14"
-                                   style="-fx-fill: -fg-yellow; -fx-stroke: -fg-text-dark; -fx-stroke-width: 2;" />
+                                   styleClass="gantt-legend-running" />
                         <Label styleClass="task-field-label" text="Running" />
                     </HBox>
                     <HBox alignment="CENTER_LEFT" spacing="5">
                         <Rectangle arcHeight="3" arcWidth="3" height="14" width="14"
-                                   style="-fx-fill: -fg-green;" />
+                                   styleClass="gantt-legend-ready" />
                         <Label styleClass="task-field-label" text="Ready" />
                     </HBox>
                     <HBox alignment="CENTER_LEFT" spacing="5">
                         <Rectangle arcHeight="3" arcWidth="3" height="14" width="14"
-                                   style="-fx-fill: -fg-blue;" />
+                                   styleClass="gantt-legend-scheduled" />
                         <Label styleClass="task-field-label" text="Scheduled" />
                     </HBox>
                     <HBox alignment="CENTER_LEFT" spacing="5">
                         <Rectangle arcHeight="3" arcWidth="3" height="14" width="14"
-                                   style="-fx-fill: -fg-border-subtle; -fx-stroke: -fg-text-secondary; -fx-stroke-width: 1;" />
+                                   styleClass="gantt-legend-inactive" />
                         <Label styleClass="task-field-label" text="Inactive" />
                     </HBox>
                 </HBox>
@@ -65,11 +65,11 @@
                 <HBox alignment="CENTER_RIGHT" spacing="8"
                       GridPane.columnIndex="2" GridPane.rowIndex="0">
                     <ToggleButton fx:id="toggleInactiveTasksButton" onAction="#toggleInactiveTasks"
-                                  style="-fx-font-size: 11; -fx-background-color: -fg-bg-card; -fx-text-fill: -fg-text-primary; -fx-padding: 4 12; -fx-border-color: -fg-border-subtle; -fx-border-radius: 4; -fx-background-radius: 4;"
+                                  styleClass="gantt-toggle"
                                   text="Hide inactive" />
                     <Label styleClass="task-field-label" text="Window" />
                     <ToggleButton fx:id="toggleViewButton" onAction="#toggleTimeView"
-                                  style="-fx-font-size: 11; -fx-background-color: -fg-bg-card; -fx-text-fill: -fg-yellow; -fx-padding: 4 12; -fx-border-color: -fg-yellow; -fx-border-radius: 4; -fx-background-radius: 4;"
+                                  styleClass="gantt-toggle, gantt-toggle-accent"
                                   text="2 Hours" />
                 </HBox>
             </GridPane>
@@ -79,7 +79,7 @@
                 <padding>
                     <Insets bottom="6" />
                 </padding>
-                <Label style="-fx-font-weight: bold; -fx-text-fill: -fg-yellow; -fx-pref-width: 128; -fx-font-size: 12;"
+                <Label styleClass="gantt-account-label"
                        text="Account" />
                 <HBox fx:id="timeAxisHeader" alignment="CENTER_LEFT" spacing="0" />
             </HBox>
@@ -92,7 +92,7 @@
                     styleClass="task-page-scroll" vbarPolicy="AS_NEEDED">
             <content>
                 <VBox fx:id="vboxAccounts" spacing="0"
-                      style="-fx-background-color: transparent;" />
+                      styleClass="bg-transparent" />
             </content>
         </ScrollPane>
     </center>

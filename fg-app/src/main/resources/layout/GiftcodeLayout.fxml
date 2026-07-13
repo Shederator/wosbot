@@ -23,7 +23,7 @@
                                     <children>
                                         <Label styleClass="task-card-description" text="Fetch the latest available gift codes from the server. Click the copy button next to any code to copy it to your clipboard." wrapText="true" />
 
-                                        <Separator style="-fx-opacity: 0.25;" />
+                                        <Separator styleClass="separator-subtle" />
 
                                         <!-- Controls row -->
                                         <HBox spacing="10" alignment="CENTER_LEFT">
@@ -35,7 +35,7 @@
                                             </children>
                                         </HBox>
 
-                                        <Separator style="-fx-opacity: 0.25;" />
+                                        <Separator styleClass="separator-subtle" />
 
                                         <!-- Gift code list container -->
                                         <VBox fx:id="giftcodeListContainer" spacing="6" VBox.vgrow="ALWAYS">

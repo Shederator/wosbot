@@ -25,12 +25,11 @@
                                 </HBox>
                                 <VBox styleClass="task-section-inner">
                                     <children>
-                                        <Label styleClass="task-card-description"
-                                               style="-fx-font-style: italic;"
+                                        <Label styleClass="task-card-description, text-italic"
                                                text="This task will attempt to skip the initial tutorial. Use with caution on new accounts."
                                                wrapText="true" />
 
-                                        <Separator style="-fx-opacity: 0.25;" />
+                                        <Separator styleClass="separator-subtle" />
 
                                         <HBox alignment="CENTER_LEFT" spacing="12">
                                             <children>

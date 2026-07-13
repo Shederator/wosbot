@@ -7,7 +7,7 @@
 <?import javafx.scene.layout.VBox?>
 
 <VBox maxHeight="Infinity" maxWidth="Infinity"
-      spacing="6" style="-fx-padding: 8 16 16 16;" xmlns="http://javafx.com/javafx/17.0.12" xmlns:fx="http://javafx.com/fxml/1">
+      spacing="6" styleClass="page-padded" xmlns="http://javafx.com/javafx/17.0.12" xmlns:fx="http://javafx.com/fxml/1">
    <children>
 
       <!-- Top Search + Sort Bar -->
@@ -46,21 +46,21 @@
          </columnResizePolicy>
          <columns>
             <TableColumn fx:id="columnEnabled" minWidth="50.0"
-                         prefWidth="90.0" text="ENABLED" style="-fx-alignment: CENTER;" />
+                         prefWidth="90.0" text="ENABLED" styleClass="column-center" />
             <TableColumn fx:id="columnEmulatorNumber" minWidth="40.0"
-                         prefWidth="80.0" text="EMULATOR" style="-fx-alignment: CENTER;" />
+                         prefWidth="80.0" text="EMULATOR" styleClass="column-center" />
             <TableColumn fx:id="columnFurnaceLevel" minWidth="60.0"
-                         prefWidth="120.0" text="FURNACE LEVEL" style="-fx-alignment: CENTER;" />
+                         prefWidth="120.0" text="FURNACE LEVEL" styleClass="column-center" />
             <TableColumn fx:id="columnProfileName" maxWidth="Infinity"
-                         minWidth="60.0" prefWidth="200.0" text="NAME" style="-fx-alignment: CENTER;" />
+                         minWidth="60.0" prefWidth="200.0" text="NAME" styleClass="column-center" />
             <TableColumn fx:id="columnPriority" minWidth="40.0"
-                         prefWidth="90.0" text="PRIORITY" style="-fx-alignment: CENTER;" />
+                         prefWidth="90.0" text="PRIORITY" styleClass="column-center" />
             <TableColumn fx:id="columnStatus" minWidth="60.0"
-                         prefWidth="200.0" text="STATUS" style="-fx-alignment: CENTER;" />
+                         prefWidth="200.0" text="STATUS" styleClass="column-center" />
             <TableColumn fx:id="columnStamina" minWidth="40.0"
-                         prefWidth="90.0" text="STAMINA" style="-fx-alignment: CENTER;" />
+                         prefWidth="90.0" text="STAMINA" styleClass="column-center" />
             <TableColumn fx:id="columnDelete" minWidth="60.0"
-                         prefWidth="140.0" text="ACTIONS" style="-fx-alignment: CENTER;" />
+                         prefWidth="140.0" text="ACTIONS" styleClass="column-center" />
          </columns>
       </TableView>
 

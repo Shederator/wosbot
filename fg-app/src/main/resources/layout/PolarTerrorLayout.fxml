@@ -14,7 +14,7 @@
 
             <VBox maxWidth="Infinity" styleClass="content-card">
                 <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-red">
-                    <Label style="-fx-font-weight: bold; -fx-text-fill: -fg-bg-app; -fx-font-size: 13px;"
+                    <Label
                            text="Rally" />
                 </HBox>
 
@@ -24,12 +24,12 @@
                         <VBox maxWidth="Infinity" spacing="10" styleClass="task-section-inner">
                             <HBox alignment="CENTER_LEFT" maxWidth="Infinity">
                                 <CheckBox fx:id="checkBoxEnablePolarTerror" mnemonicParsing="false"
-                                          style="-fx-font-weight: bold;" text="Enable Polar Terror Hunting" />
+                                          styleClass="checkbox-emphasis" text="Enable Polar Terror Hunting" />
                             </HBox>
                             <Label styleClass="task-card-description"
                                    text="Automates hunting of polar terror creatures with selected settings"
                                    wrapText="true" />
-                            <Separator style="-fx-opacity: 0.25;" />
+                            <Separator styleClass="separator-subtle" />
 
                             <HBox alignment="CENTER_LEFT" spacing="14">
                                 <Label styleClass="task-field-label" text="Operation Mode" minWidth="140" />
@@ -71,7 +71,7 @@
                                    text="Keeps this many 10-stamina items in reserve before using any for Polar Terror."
                                    wrapText="true" />
 
-                            <Separator style="-fx-opacity: 0.25;" />
+                            <Separator styleClass="separator-subtle" />
 
                             <HBox alignment="CENTER_LEFT" spacing="14">
                                 <Label fx:id="labelPolarTerrorMarch1Flag" styleClass="task-field-label"
@@ -114,11 +114,11 @@
                         <VBox maxWidth="Infinity" spacing="10" styleClass="task-section-inner">
                             <HBox alignment="CENTER_LEFT" maxWidth="Infinity">
                                 <CheckBox fx:id="checkBoxEnableBerserkCryptid" mnemonicParsing="false"
-                                          style="-fx-font-weight: bold;" text="Manual Rally Join (Preemptive)" />
+                                          styleClass="checkbox-emphasis" text="Manual Rally Join (Preemptive)" />
                             </HBox>
                             <Label styleClass="task-card-description"
                                    text="Automates joining of rallies with selected settings" wrapText="true" />
-                            <Separator style="-fx-opacity: 0.25;" />
+                            <Separator styleClass="separator-subtle" />
 
                             <HBox alignment="CENTER_LEFT" spacing="14">
                                 <Label styleClass="task-field-label" text="Operation Mode" minWidth="140" />
@@ -133,7 +133,7 @@
                                 <ComboBox fx:id="comboBoxRallyTarget" prefWidth="150.0" />
                             </HBox>
 
-                            <Separator style="-fx-opacity: 0.25;" />
+                            <Separator styleClass="separator-subtle" />
 
                             <HBox alignment="CENTER_LEFT" spacing="14">
                                 <Label fx:id="labelBerserkCryptidMarch1Flag" styleClass="task-field-label"

@@ -31,7 +31,7 @@
 
             <!-- Center: flow management -->
             <HBox alignment="CENTER" spacing="8" GridPane.columnIndex="1"
-                  style="-fx-padding: 0 10;">
+                  styleClass="tb-toolbar-center">
                 <Separator orientation="VERTICAL" styleClass="tb-toolbar-sep"/>
                 <Label text="Flow" styleClass="tb-toolbar-label"/>
                 <TextField fx:id="taskNameField" promptText="Untitled Task" prefWidth="150"
@@ -212,8 +212,7 @@
                         </FlowPane>
                         <FlowPane fx:id="ocrLoopPropsBox" hgap="14" vgap="10"
                                   alignment="CENTER_LEFT" visible="false" managed="false">
-                            <Label text="🔁 Loop Guard:" styleClass="tb-props-label"
-                                   style="-fx-font-weight:bold; -fx-text-fill:#f59e0b;"/>
+                            <Label text="🔁 Loop Guard:" styleClass="tb-props-label, tb-props-label-warn"/>
                             <Label text="Max Iterations:" styleClass="tb-props-label"/>
                             <TextField fx:id="ocrLoopMaxField" promptText="10" prefWidth="60"
                                        styleClass="tb-text-field"/>
@@ -280,8 +279,7 @@
                         </FlowPane>
                         <FlowPane fx:id="tplLoopPropsBox" hgap="14" vgap="10"
                                   alignment="CENTER_LEFT" visible="false" managed="false">
-                            <Label text="🔁 Loop Guard:" styleClass="tb-props-label"
-                                   style="-fx-font-weight:bold; -fx-text-fill:#f59e0b;"/>
+                            <Label text="🔁 Loop Guard:" styleClass="tb-props-label, tb-props-label-warn"/>
                             <Label text="Max Iterations:" styleClass="tb-props-label"/>
                             <TextField fx:id="tplLoopMaxField" promptText="10" prefWidth="60"
                                        styleClass="tb-text-field"/>

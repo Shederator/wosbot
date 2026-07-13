@@ -24,7 +24,7 @@
                         <Label styleClass="task-card-description"
                                text="Configure automatic purchasing from the alliance shop"
                                wrapText="true" />
-                        <Separator style="-fx-opacity: 0.25;" />
+                        <Separator styleClass="separator-subtle" />
 
                         <HBox alignment="CENTER_LEFT" spacing="14">
                             <CheckBox fx:id="enableAllianceShopCheckbox" mnemonicParsing="false"
@@ -42,7 +42,7 @@
                         <Label styleClass="task-card-description"
                                text="Configure minimum coin thresholds and purchase percentage"
                                wrapText="true" />
-                        <Separator style="-fx-opacity: 0.25;" />
+                        <Separator styleClass="separator-subtle" />
 
                         <HBox alignment="CENTER_LEFT" spacing="14">
                             <Label styleClass="task-field-label" text="Min Coins to Activate" minWidth="160" />
@@ -70,7 +70,7 @@
                         <Label fx:id="instructionsLabel" styleClass="task-card-description"
                                text="Drag items to reorder purchase priority. Higher items are bought first."
                                wrapText="true" />
-                        <Separator style="-fx-opacity: 0.25;" />
+                        <Separator styleClass="separator-subtle" />
 
                         <dev.frostguard.app.shared.PriorityListView fx:id="allianceShopPriorities" prefHeight="220" maxWidth="Infinity" />
                     </VBox>

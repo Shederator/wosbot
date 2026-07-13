@@ -29,7 +29,7 @@
             <Label styleClass="bulk-update-note"
                    text="Choose the destination profiles that should receive this configuration set."
                    wrapText="true" />
-            <Separator style="-fx-opacity: 0.2;" />
+            <Separator styleClass="separator-subtle" />
         </VBox>
     </top>
 

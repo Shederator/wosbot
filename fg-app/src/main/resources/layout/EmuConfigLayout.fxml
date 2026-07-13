@@ -118,7 +118,7 @@
                   <VBox spacing="10" styleClass="content-card-inner">
                       <CheckBox fx:id="checkboxAnalyticsEnabled" text="Share anonymous usage data (helps improve Frostguard)" />
                       <CheckBox fx:id="checkboxHideAnalyticsLogs" text="Hide analytics and statistics logs from console output" />
-                      <Label text="No personal data, game accounts, or file paths are collected." styleClass="description-label" style="-fx-text-fill: #8b949e; -fx-font-size: 11;" />
+                      <Label text="No personal data, game accounts, or file paths are collected." styleClass="description-label" />
                   </VBox>
               </VBox>
           </children>

@@ -1739,3 +1739,219 @@
     -fx-background-color: rgba(255, 255, 255, 0.15);
     -fx-text-fill: white;
 }
+
+/* ---------------------------------------------------------------------------
+ * 24. FXML UTILITY CLASSES (replace inline styles across layouts)
+ * --------------------------------------------------------------------------- */
+.text-italic { -fx-font-style: italic; }
+
+/* Emphasised "Enable X" checkboxes at the top of task pages */
+.checkbox-emphasis {
+    -fx-font-weight: bold;
+    -fx-text-fill: -fg-text-primary;
+}
+
+/* Table column alignment */
+.column-center { -fx-alignment: CENTER; }
+.column-left   { -fx-alignment: CENTER-LEFT; }
+.column-right  { -fx-alignment: CENTER-RIGHT; }
+
+/* Clickable footer / social icons */
+.icon-link { -fx-cursor: hand; }
+
+/* Standard page content padding (console, profile manager, task manager) */
+.page-padded { -fx-padding: 8 16 16 16; }
+
+/* Command-reference labels (Telegram view & similar cheat-sheets) */
+.cmd-label    { -fx-font-weight: bold; }
+.cmd-positive { -fx-text-fill: -fg-green;          -fx-font-weight: bold; }
+.cmd-negative { -fx-text-fill: #f28b82;            -fx-font-weight: bold; }
+.cmd-warning  { -fx-text-fill: -fg-orange;         -fx-font-weight: bold; }
+.cmd-info     { -fx-text-fill: -fg-blue-hover;     -fx-font-weight: bold; }
+.cmd-accent   { -fx-text-fill: -fg-purple;         -fx-font-weight: bold; }
+.cmd-teal     { -fx-text-fill: -fg-teal;           -fx-font-weight: bold; }
+.cmd-neutral  { -fx-text-fill: -fg-text-secondary; -fx-font-weight: bold; }
+.cmd-heading  { -fx-text-fill: -fg-blue-hover; -fx-font-size: 11px; -fx-font-weight: bold; }
+.cmd-tip      { -fx-text-fill: -fg-green; -fx-font-size: 12px; -fx-font-weight: bold; }
+
+/* Soft danger status text (overridden dynamically by controllers) */
+.status-danger { -fx-text-fill: #e57373; }
+
+/* Launcher shell (window chrome + sidebar + status) */
+.window-root {
+    -fx-background-color: -fg-bg-app;
+    -fx-border-color: #30363d;
+    -fx-border-width: 1;
+}
+
+.sidebar-header {
+    -fx-padding: 20 16 16 16;
+}
+
+.logo-container {
+    -fx-cursor: hand;
+    -fx-padding: 0;
+}
+
+.sidebar-profile-label {
+    -fx-text-fill: #e2e8f0;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.scroll-transparent,
+.scroll-transparent > .viewport {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+}
+
+.main-content-pane {
+    -fx-background-color: -fg-bg-app;
+}
+
+.app-version {
+    -fx-text-fill: -fg-text-primary;
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+}
+
+.status-uptime {
+    -fx-text-fill: -fg-text-primary;
+    -fx-font-size: 13px;
+}
+
+/* Dialog / profile-editor spacing helpers */
+.dialog-header-pad   { -fx-padding: 20 20 0 20; }
+.dialog-titlebar-pad { -fx-padding: 20 20 10 20; }
+.dialog-body-pad     { -fx-padding: 16 20 16 20; }
+.dialog-body-pad-sm  { -fx-padding: 10 20 10 20; }
+.dialog-footer-pad   { -fx-padding: 10 20 20 20; }
+
+.form-section-label {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -fg-text-secondary;
+}
+
+/* Emphasised action button (Save etc.) */
+.button-emphasis {
+    -fx-cursor: hand;
+    -fx-font-weight: bold;
+}
+
+/* Transparent backdrop wrapper around floating dialogs */
+.dialog-backdrop {
+    -fx-background-color: transparent;
+    -fx-padding: 10;
+}
+
+/* Section titles inside cards */
+.section-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -fg-text-primary;
+}
+
+/* Generic small padding wrapper */
+.pad-10 { -fx-padding: 10; }
+
+/* Small dark pill badge (e.g. troop counters) */
+.badge-dark {
+    -fx-font-size: 11px;
+    -fx-background-color: rgba(0, 0, 0, 0.2);
+    -fx-padding: 2 6;
+    -fx-background-radius: 4;
+}
+
+/* Amber highlight label (warnings / totals) */
+.label-warning-strong {
+    -fx-text-fill: -fg-orange;
+    -fx-font-weight: bold;
+}
+
+/* Indented helper text under a labelled field (Telegram jar path) */
+.field-hint-indented {
+    -fx-font-size: 11px;
+    -fx-padding: 0 0 0 130;
+}
+
+/* Import button graphic content inherits button contrast */
+.custom-tasks-import-btn .ikonli-font-icon { -fx-icon-color: #14101f; }
+.custom-tasks-import-btn .label {
+    -fx-text-fill: #14101f;
+    -fx-font-weight: bold;
+    -fx-font-size: 12px;
+}
+
+/* Custom tasks empty state */
+.custom-tasks-empty-state .empty-icon  { -fx-icon-color: #3b4254; }
+.custom-tasks-empty-state .empty-title {
+    -fx-text-fill: -fg-text-muted;
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+}
+.custom-tasks-empty-state .empty-hint {
+    -fx-text-fill: #4a5160;
+    -fx-font-size: 13px;
+}
+
+/* Custom tasks status bar */
+.custom-tasks-status-bar .ikonli-font-icon { -fx-icon-color: #4a5160; }
+.custom-tasks-status-bar .label {
+    -fx-text-fill: -fg-text-muted;
+    -fx-font-size: 11px;
+}
+
+/* Statistics page spacing */
+.stats-top-bar    { -fx-padding: 10 16 6 16; }
+.stats-content    { -fx-padding: 0 16 16 16; }
+.pad-0            { -fx-padding: 0; }
+.bg-transparent   { -fx-background-color: transparent; }
+
+/* Gantt timeline (Task overview) */
+.gantt-title {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -fg-yellow;
+}
+
+.gantt-account-label {
+    -fx-font-weight: bold;
+    -fx-text-fill: -fg-yellow;
+    -fx-pref-width: 128;
+    -fx-font-size: 12px;
+}
+
+.gantt-toggle {
+    -fx-font-size: 11px;
+    -fx-background-color: -fg-bg-card;
+    -fx-text-fill: -fg-text-primary;
+    -fx-padding: 4 12;
+    -fx-border-color: -fg-border-subtle;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-cursor: hand;
+}
+
+.gantt-toggle:hover { -fx-border-color: -fg-border-strong; }
+
+.gantt-toggle-accent {
+    -fx-text-fill: -fg-yellow;
+    -fx-border-color: -fg-yellow;
+}
+
+.gantt-legend-running   { -fx-fill: -fg-yellow; -fx-stroke: -fg-text-dark; -fx-stroke-width: 2; }
+.gantt-legend-ready     { -fx-fill: -fg-green; }
+.gantt-legend-scheduled { -fx-fill: -fg-blue; }
+.gantt-legend-inactive  { -fx-fill: -fg-border-subtle; -fx-stroke: -fg-text-secondary; -fx-stroke-width: 1; }
+
+/* Previously undefined classes referenced from FXML */
+.description-label {
+    -fx-text-fill: #8b949e;
+    -fx-font-size: 11px;
+}
+
+.image-view-rounded {
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+}

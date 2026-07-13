@@ -10,7 +10,7 @@
 <?import org.kordamp.ikonli.javafx.FontIcon?>
 
 <VBox maxHeight="Infinity" maxWidth="Infinity"
-      spacing="6" style="-fx-padding: 8 16 16 16;"
+      spacing="6" styleClass="page-padded"
       xmlns="http://javafx.com/javafx/17.0.12" xmlns:fx="http://javafx.com/fxml/1">
    <children>
       <!-- Top Search + Action Bar -->

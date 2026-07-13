@@ -19,7 +19,7 @@
                 <VBox styleClass="content-card">
                     <HBox maxWidth="Infinity" styleClass="header-purple">
                         <CheckBox fx:id="checkBoxEnableChampionship" mnemonicParsing="false"
-                                  style="-fx-font-size: 15px; -fx-font-weight: bold;"
+                                  styleClass="section-title"
                                   text="Enable Alliance Championship" />
                     </HBox>
                     <VBox spacing="10" styleClass="task-section-inner">
@@ -35,7 +35,7 @@
                         <CheckBox fx:id="checkBoxOverrideCurrentDeploy" mnemonicParsing="false"
                                   text="Override Current Deployment" />
 
-                        <Separator style="-fx-opacity: 0.25;" />
+                        <Separator styleClass="separator-subtle" />
 
                         <Label styleClass="task-field-label" text="Troop Mix Percentages" />
                         
@@ -59,7 +59,7 @@
                 <!-- Quick Guide -->
                 <TitledPane text="Quick Guide" expanded="false"
                             styleClass="content-card" collapsible="true">
-                    <VBox spacing="6" style="-fx-padding: 10;">
+                    <VBox spacing="6" styleClass="pad-10">
                         <Label styleClass="task-info-panel-bullet"
                                text="• Select your preferred lane position (LEFT, CENTER, or RIGHT)." wrapText="true" />
                         <Label styleClass="task-info-panel-bullet"

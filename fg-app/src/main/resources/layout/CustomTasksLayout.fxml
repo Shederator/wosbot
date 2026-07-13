@@ -23,9 +23,8 @@
                 styleClass="custom-tasks-import-btn">
             <graphic>
                 <HBox alignment="CENTER" spacing="6">
-                    <FontIcon iconLiteral="mdi2f-file-import-outline" iconSize="16"
-                              style="-fx-icon-color: #ffffff;"/>
-                    <Label text="Import .java" style="-fx-text-fill: #ffffff; -fx-font-weight: bold; -fx-font-size: 12px;"/>
+                    <FontIcon iconLiteral="mdi2f-file-import-outline" iconSize="16"/>
+                    <Label text="Import .java"/>
                 </HBox>
             </graphic>
         </Button>
@@ -46,10 +45,10 @@
                   VBox.vgrow="ALWAYS">
                 <padding><Insets top="60" bottom="60"/></padding>
                 <FontIcon iconLiteral="mdi2p-puzzle-plus-outline" iconSize="48"
-                          style="-fx-icon-color: #3a3a5c;"/>
-                <Label text="No Custom Tasks" style="-fx-text-fill: #636a75; -fx-font-size: 16px; -fx-font-weight: bold;"/>
+                          styleClass="empty-icon"/>
+                <Label text="No Custom Tasks" styleClass="empty-title"/>
                 <Label text="Import a .java file from the Task Builder to get started"
-                       style="-fx-text-fill: #4a4a6a; -fx-font-size: 13px;"
+                       styleClass="empty-hint"
                        wrapText="true" textAlignment="CENTER" maxWidth="300"/>
             </VBox>
         </VBox>
@@ -58,9 +57,7 @@
     <!-- Status bar -->
     <HBox alignment="CENTER_LEFT" spacing="8" styleClass="custom-tasks-status-bar">
         <padding><Insets top="8" right="18" bottom="8" left="18"/></padding>
-        <FontIcon iconLiteral="mdi2i-information-outline" iconSize="14"
-                  style="-fx-icon-color: #4a4a6a;"/>
-        <Label fx:id="statusLabel" text="Ready"
-               style="-fx-text-fill: #636a75; -fx-font-size: 11px;"/>
+        <FontIcon iconLiteral="mdi2i-information-outline" iconSize="14"/>
+        <Label fx:id="statusLabel" text="Ready"/>
     </HBox>
 </VBox>

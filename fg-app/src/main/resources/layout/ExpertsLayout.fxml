@@ -24,7 +24,7 @@
                     <Label styleClass="task-card-description"
                            text="Automates expert skill management and hero class assignments"
                            wrapText="true" />
-                    <Separator style="-fx-opacity: 0.25;" />
+                    <Separator styleClass="separator-subtle" />
 
                     <VBox spacing="10">
                         <CheckBox fx:id="claimIntelCheckBox" mnemonicParsing="false"
@@ -34,14 +34,14 @@
                         <CheckBox fx:id="claimTroopsCheckBox" mnemonicParsing="false"
                                   text="Claim Troops (Romulus)" />
 
-                        <Separator style="-fx-opacity: 0.25;" />
+                        <Separator styleClass="separator-subtle" />
 
                         <HBox alignment="CENTER_LEFT" spacing="14">
                             <Label styleClass="task-field-label" text="Troop Type" minWidth="120" />
                             <ComboBox fx:id="troopTypeComboBox" prefWidth="160.0" />
                         </HBox>
                         
-                        <Separator style="-fx-opacity: 0.25;" />
+                        <Separator styleClass="separator-subtle" />
                         
                         <CheckBox fx:id="enableExpertSkillTrainingCheckBox" mnemonicParsing="false"
                                   text="Enable Expert Skill Training" />
@@ -58,7 +58,7 @@
                     <Label styleClass="task-card-description"
                            text="Drag to reorder skill training priorities"
                            wrapText="true" />
-                    <Separator style="-fx-opacity: 0.25;" />
+                    <Separator styleClass="separator-subtle" />
                     
                     <dev.frostguard.app.shared.PriorityListView fx:id="expertSkillPriorities" prefHeight="220" maxWidth="Infinity" />
                 </VBox>

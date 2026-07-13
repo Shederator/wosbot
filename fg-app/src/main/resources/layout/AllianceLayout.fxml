@@ -23,7 +23,7 @@
                                         <Label styleClass="task-card-description"
                                                text="Manage daily alliance collection, autojoin behavior, and help requests."
                                                wrapText="true" />
-                                        <Separator style="-fx-opacity: 0.25;" />
+                                        <Separator styleClass="separator-subtle" />
 
                                         <VBox spacing="10" styleClass="task-subsection">
                                             <children>
@@ -80,7 +80,7 @@
                                                         <Label styleClass="task-subsection-title" text="Troop Source" />
                                                         <RadioButton fx:id="radioAllTroops" mnemonicParsing="false" text="All Troops" />
                                                         <RadioButton fx:id="radioUseFormation" mnemonicParsing="false" text="Use Formation" />
-                                                        <Separator style="-fx-opacity: 0.25;" />
+                                                        <Separator styleClass="separator-subtle" />
                                                         <CheckBox fx:id="checkBoxHelpRequests" mnemonicParsing="false" text="Help alliance requests" />
                                                     </children>
                                                 </VBox>

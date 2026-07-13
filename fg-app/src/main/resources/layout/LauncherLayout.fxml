@@ -7,7 +7,7 @@
 
 <BorderPane xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1"
             maxHeight="Infinity" maxWidth="Infinity"
-            style="-fx-background-color: #11141a; -fx-border-color: #30363d; -fx-border-width: 1;">
+            styleClass="window-root">
 
     <!-- TOP: Title bar using BorderPane instead of StackPane for different hierarchy -->
     <top>
@@ -42,11 +42,11 @@
         <VBox styleClass="nav-sidebar">
 
             <VBox fx:id="sidebarHeader" alignment="CENTER" spacing="14"
-                  style="-fx-padding: 20 16 16 16;">
+                  styleClass="sidebar-header">
 
                 <!-- Logo -->
                 <VBox fx:id="logoContainer" alignment="CENTER"
-                      style="-fx-cursor: hand; -fx-padding: 0;" maxWidth="Infinity">
+                      styleClass="logo-container" maxWidth="Infinity">
                     <ImageView preserveRatio="true" fitWidth="158">
                         <image>
                             <Image url="@../icons/logo.png" />
@@ -63,7 +63,7 @@
                 <!-- Profile selector below search -->
                 <VBox alignment="CENTER" spacing="8" maxWidth="Infinity">
                     <Label text="Loaded profile"
-                           style="-fx-text-fill: #e2e8f0; -fx-font-size: 13px; -fx-font-weight: bold;" />
+                           styleClass="sidebar-profile-label" />
                     <ComboBox fx:id="profileComboBox" maxWidth="Infinity" />
                 </VBox>
             </VBox>
@@ -73,7 +73,7 @@
             <!-- Scrollable navigation buttons -->
             <ScrollPane hbarPolicy="NEVER" vbarPolicy="AS_NEEDED" fitToWidth="true"
                         VBox.vgrow="ALWAYS"
-                        style="-fx-background-color: transparent; -fx-background: transparent;">
+                        styleClass="scroll-transparent">
                 <VBox fx:id="buttonsContainer" styleClass="nav-button-container" spacing="8" />
             </ScrollPane>
 
@@ -86,7 +86,7 @@
     <center>
         <StackPane fx:id="centerStack">
             <AnchorPane fx:id="mainContentPane"
-                        style="-fx-background-color: #11141a;"
+                        styleClass="main-content-pane"
                         BorderPane.alignment="CENTER" />
         </StackPane>
     </center>
@@ -99,13 +99,13 @@
             <VBox alignment="CENTER_LEFT" spacing="2">
                 <HBox alignment="CENTER_LEFT" spacing="12">
                     <Label fx:id="labelVersion" text="Whiteout Survival Bot" styleClass="app-version"
-                           style="-fx-text-fill: #e6edf3; -fx-font-weight: bold; -fx-font-size: 13px;" />
+                            />
                     <org.kordamp.ikonli.javafx.FontIcon fx:id="iconDiscord" iconSize="18"
                         iconColor="#e6edf3" styleClass="social-icon"
-                        onMouseClicked="#openDiscord" style="-fx-cursor: hand;" />
+                        onMouseClicked="#openDiscord" />
                     <org.kordamp.ikonli.javafx.FontIcon fx:id="iconGithub" iconSize="18"
                         iconColor="#e6edf3" styleClass="social-icon"
-                        onMouseClicked="#openGithub" style="-fx-cursor: hand;" />
+                        onMouseClicked="#openGithub" />
                 </HBox>
             </VBox>
 
@@ -135,7 +135,7 @@
             <!-- Right cluster: runtime + action controls -->
             <HBox alignment="CENTER" spacing="16">
                 <Label fx:id="labelRunTime" text="Uptime: 00:00:00"
-                       style="-fx-text-fill: #e6edf3; -fx-font-size: 13px;" />
+                       styleClass="status-uptime" />
 
                 <SplitMenuButton fx:id="buttonPauseResume" disable="true" mnemonicParsing="false"
                                  onAction="#handleButtonPauseResume" text="Pause"

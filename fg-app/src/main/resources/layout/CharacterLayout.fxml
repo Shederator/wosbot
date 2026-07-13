@@ -21,7 +21,7 @@
                     <Label styleClass="task-card-description"
                            text="Automatically create and manage new characters"
                            wrapText="true" />
-                    <Separator style="-fx-opacity: 0.25;" />
+                    <Separator styleClass="separator-subtle" />
 
                     <VBox spacing="10">
                         <CheckBox fx:id="checkBoxEnableCreateCharacter" mnemonicParsing="false"
@@ -29,7 +29,7 @@
                         <CheckBox fx:id="checkBoxSkipTutorial" mnemonicParsing="false"
                                   text="Skip Tutorial" />
                         
-                        <Separator style="-fx-opacity: 0.25;" />
+                        <Separator styleClass="separator-subtle" />
                         
                         <HBox alignment="CENTER_LEFT" spacing="14">
                             <Label styleClass="task-field-label" text="Max Age (minutes)" minWidth="140" />
