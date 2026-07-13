@@ -1142,7 +1142,7 @@
 .search-go-button:hover { -fx-background-color: #4875fa; }
 
 /* Social icons */
-.social-icon { -fx-opacity: 0.8; -fx-cursor: hand; }
+.social-icon { -fx-icon-color: -fg-text-primary; -fx-opacity: 0.8; -fx-cursor: hand; }
 .social-icon:hover { -fx-opacity: 1.0; -fx-icon-color: -fg-blue; }
 
 /* ---------------------------------------------------------------------------

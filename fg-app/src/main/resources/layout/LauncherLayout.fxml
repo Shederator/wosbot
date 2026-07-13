@@ -101,10 +101,10 @@
                     <Label fx:id="labelVersion" text="Whiteout Survival Bot" styleClass="app-version"
                             />
                     <org.kordamp.ikonli.javafx.FontIcon fx:id="iconDiscord" iconSize="18"
-                        iconColor="#e6edf3" styleClass="social-icon"
+                        styleClass="social-icon"
                         onMouseClicked="#openDiscord" />
                     <org.kordamp.ikonli.javafx.FontIcon fx:id="iconGithub" iconSize="18"
-                        iconColor="#e6edf3" styleClass="social-icon"
+                        styleClass="social-icon"
                         onMouseClicked="#openGithub" />
                 </HBox>
             </VBox>
