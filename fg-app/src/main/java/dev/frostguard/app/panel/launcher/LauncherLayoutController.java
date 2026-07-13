@@ -1778,13 +1778,17 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
         card.getChildren().add(cardLabel);
         card.setOpacity(0);
+        card.setTranslateY(8);
 
-        // Subtler stagger
+        // Staggered fade + drift entrance matching the page-transition motion language
         PauseTransition delay = new PauseTransition(Duration.millis(15 * index));
         delay.setOnFinished(e -> {
             FadeTransition cardFade = new FadeTransition(Duration.millis(150), card);
             cardFade.setFromValue(0); cardFade.setToValue(1);
-            cardFade.play();
+            TranslateTransition cardDrift = new TranslateTransition(Duration.millis(180), card);
+            cardDrift.setFromY(8); cardDrift.setToY(0);
+            cardDrift.setInterpolator(Interpolator.EASE_OUT);
+            new ParallelTransition(cardFade, cardDrift).play();
         });
         delay.play();
 

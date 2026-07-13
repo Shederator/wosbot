@@ -23,7 +23,7 @@
             <!-- Search Field -->
             <HBox alignment="CENTER_LEFT" spacing="0" HBox.hgrow="ALWAYS" styleClass="log-search-wrapper">
                <children>
-                  <FontIcon iconLiteral="mdi2m-magnify" iconSize="16" iconColor="#636a75" />
+                  <FontIcon iconLiteral="mdi2m-magnify" iconSize="16" styleClass="icon-muted" />
                   <TextField fx:id="txtSearchLogs" promptText="Filter log entries..."
                              HBox.hgrow="ALWAYS" styleClass="control-search-field" />
                   <Button fx:id="btnClearSearch" text="✕" onAction="#handleClearSearch"

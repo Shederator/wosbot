@@ -16,7 +16,7 @@
             <!-- Search Field -->
             <HBox alignment="CENTER_LEFT" spacing="0" HBox.hgrow="ALWAYS" styleClass="log-search-wrapper">
                <children>
-                  <FontIcon iconLiteral="mdi2m-magnify" iconSize="16" iconColor="#636a75" />
+                  <FontIcon iconLiteral="mdi2m-magnify" iconSize="16" styleClass="icon-muted" />
                   <TextField fx:id="txtSearchProfiles" promptText="Search profiles..."
                              HBox.hgrow="ALWAYS" styleClass="control-search-field" />
                   <Button fx:id="btnClearSearch" onAction="#handleClearSearch" styleClass="search-clear-btn" text="✕" />
@@ -26,13 +26,13 @@
             <Region HBox.hgrow="ALWAYS" />
 
             <!-- Sort By -->
-            <Label text="Sort by:" textFill="#636a75" />
+            <Label text="Sort by:" styleClass="text-caption" />
             <ComboBox fx:id="comboBoxSortBy" prefWidth="150" promptText="Name" styleClass="control-filter-combo" />
 
             <!-- Settings Button (column visibility) -->
             <Button fx:id="btnColumnSettings" onAction="#handleColumnSettings" styleClass="column-settings-btn">
                <graphic>
-                  <FontIcon iconLiteral="mdi2c-cog" iconSize="18" iconColor="#636a75" />
+                  <FontIcon iconLiteral="mdi2c-cog" iconSize="18" styleClass="icon-muted" />
                </graphic>
             </Button>
          </children>

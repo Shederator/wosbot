@@ -687,6 +687,7 @@
 .log-level-info { -fx-text-fill: -fg-info-cyan; }
 .log-module-text { -fx-text-fill: -fg-module-blue; }
 .icon-active-yellow { -fx-icon-color: -fg-yellow; }
+.icon-muted { -fx-icon-color: -fg-text-muted; }
 
 /* ---------------------------------------------------------------------------
  * 09. TABS
