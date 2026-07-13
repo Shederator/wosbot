@@ -469,11 +469,11 @@ public class TaskGanttOverviewController implements TaskStatusChangeListener, St
         box.setMaxWidth(60);
 
         Label local = new Label("Local");
-        local.setStyle("-fx-text-fill: #ffb347; -fx-font-size: 9; -fx-font-weight: bold;");
+        local.getStyleClass().add("gantt-tz-label");
         local.setAlignment(javafx.geometry.Pos.CENTER);
 
         Label utc = new Label("UTC");
-        utc.setStyle("-fx-text-fill: #ffb347; -fx-font-size: 8; -fx-font-weight: bold;");
+        utc.getStyleClass().add("gantt-tz-label-small");
         utc.setAlignment(javafx.geometry.Pos.CENTER);
 
         box.getChildren().addAll(local, utc);
@@ -963,18 +963,18 @@ public class TaskGanttOverviewController implements TaskStatusChangeListener, St
         row.setPrefHeight(height);
         row.setMinHeight(height);
         row.setMaxHeight(height);
-        row.setStyle("-fx-padding: 0; -fx-spacing: 8;");
+        row.getStyleClass().add("gantt-row");
         return row;
     }
 
     private VBox createProfileLabel(AccountDescriptor profile) {
         Label nameLabel = new Label(profile.getName());
-        nameLabel.setStyle("-fx-text-fill: #ffffff; -fx-font-size: 12; -fx-font-weight: bold;");
+        nameLabel.getStyleClass().add("gantt-profile-name");
         nameLabel.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
 
         int stamina = StaminaService.getServices().getCurrentStamina(profile.getId());
         Label staminaLabel = new Label(renderStamina(stamina));
-        staminaLabel.setStyle("-fx-text-fill: #cccccc; -fx-font-size: 10;");
+        staminaLabel.getStyleClass().add("gantt-profile-stamina");
         staminaLabel.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
         staminaLabelRegistry.put(profile.getId(), staminaLabel);
 
@@ -1002,7 +1002,7 @@ public class TaskGanttOverviewController implements TaskStatusChangeListener, St
         pane.setPrefHeight(h);
         pane.setMinHeight(h);
         pane.setMaxHeight(h);
-        pane.setStyle("-fx-background-color: #2a2a2a; -fx-border-color: #3a3a3a; -fx-border-width: 1;");
+        pane.getStyleClass().add("gantt-canvas");
         return pane;
     }
 
@@ -1096,7 +1096,7 @@ public class TaskGanttOverviewController implements TaskStatusChangeListener, St
         bg.setStrokeWidth(layout.look().borderWidth());
 
         Label lbl = new Label(layout.shortName());
-        lbl.setStyle("-fx-text-fill: #ffffff; -fx-font-size: 8; -fx-font-weight: bold;");
+        lbl.getStyleClass().add("gantt-bar-label");
         lbl.setMaxWidth(layout.width() - 4);
 
         wireInteractions(stack, layout);
@@ -1125,7 +1125,7 @@ public class TaskGanttOverviewController implements TaskStatusChangeListener, St
             }
         });
         if (!layout.task().isExecuting()) {
-            node.setStyle("-fx-cursor: hand;");
+            node.getStyleClass().add("gantt-bar-clickable");
         }
     }
 

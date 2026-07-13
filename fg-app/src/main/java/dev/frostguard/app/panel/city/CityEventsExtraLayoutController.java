@@ -227,12 +227,12 @@ public class CityEventsExtraLayoutController extends AbstractProfileController {
 
         private void clearWarning() {
             labelDateTimeError.setText("");
-            textFieldArenaActivationHour.setStyle("");
+            textFieldArenaActivationHour.getStyleClass().remove("field-error");
         }
 
         private void showWarning(String message) {
             labelDateTimeError.setText(message);
-            textFieldArenaActivationHour.setStyle("-fx-border-color: #ef4444; -fx-border-width: 2px;");
+            if (!textFieldArenaActivationHour.getStyleClass().contains("field-error")) { textFieldArenaActivationHour.getStyleClass().add("field-error"); }
         }
     }
 }

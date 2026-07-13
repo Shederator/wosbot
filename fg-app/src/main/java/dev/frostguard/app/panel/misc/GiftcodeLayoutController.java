@@ -151,7 +151,7 @@ public class GiftcodeLayoutController {
 	private HBox createGiftcodeRow(GiftcodeEntry entry, int index) {
 		// Left side: index + code + date
 		Label indexLabel = new Label("#" + index);
-		indexLabel.setStyle("-fx-text-fill: #555555; -fx-font-size: 11px; -fx-min-width: 28;");
+		indexLabel.getStyleClass().add("giftcode-index-label");
 
 		Label codeLabel = new Label(entry.code());
 		codeLabel.getStyleClass().add("giftcode-code-label");

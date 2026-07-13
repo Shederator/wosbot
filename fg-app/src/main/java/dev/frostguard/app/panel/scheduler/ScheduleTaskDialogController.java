@@ -178,13 +178,15 @@ public class ScheduleTaskDialogController {
 
     private void showInfo(String message) { /* internal */
         lblInfo.setText(message);
-        lblInfo.setStyle("");
+        lblInfo.getStyleClass().remove("status-danger");
         lblInfo.setVisible(true);
     }
 
     private void showError(String message) { /* internal */
         lblInfo.setText("Error: " + message);
-        lblInfo.setStyle("-fx-text-fill: #ff5722;");
+        if (!lblInfo.getStyleClass().contains("status-danger")) {
+            lblInfo.getStyleClass().add("status-danger");
+        }
         lblInfo.setVisible(true);
     }
 

@@ -240,15 +240,15 @@ public class ProfileManagerLayoutController implements IProfileChangeObserver {
 		popup.setAutoHide(true);
 
 		VBox root = new VBox(10);
-		root.setStyle("-fx-background-color: #1e1e2e; -fx-padding: 15; -fx-border-color: #388bfd; -fx-border-width: 1; -fx-border-radius: 5; -fx-background-radius: 5;");
+		root.getStyleClass().add("tasks-popup-surface");
 		Label title = new Label("Enabled Tasks: " + profile.getName());
-		title.setStyle("-fx-text-fill: #a8dadc; -fx-font-size: 14px; -fx-font-weight: bold;");
+		title.getStyleClass().add("tasks-popup-title");
 		root.getChildren().add(title);
 
 		FlowPane flowPane = enabledTasksFlow(profile);
 		if (flowPane.getChildren().isEmpty()) {
 			Label empty = new Label("No tasks enabled.");
-			empty.setStyle("-fx-text-fill: #8b949e; -fx-font-style: italic;");
+			empty.getStyleClass().add("tasks-popup-empty");
 			root.getChildren().add(empty);
 		} else {
 			root.getChildren().add(flowPane);
@@ -284,7 +284,7 @@ public class ProfileManagerLayoutController implements IProfileChangeObserver {
 
 	private Label taskChip(String label) {
 		Label chip = new Label(label);
-		chip.setStyle("-fx-background-color: #2ea043; -fx-text-fill: white; -fx-padding: 4 8; -fx-background-radius: 4; -fx-font-size: 11px;");
+		chip.getStyleClass().add("task-chip");
 		FontIcon check = new FontIcon("mdi2c-check-circle");
 		check.setIconSize(12);
 		check.setIconColor(Color.WHITE);

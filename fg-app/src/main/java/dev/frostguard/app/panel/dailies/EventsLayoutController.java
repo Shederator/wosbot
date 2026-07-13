@@ -121,11 +121,11 @@ public class EventsLayoutController extends AbstractProfileController {
 
     private void clearTimeError() {
         labelDateTimeError.setText("");
-        textfieldTundraActivationHour.setStyle("");
+        textfieldTundraActivationHour.getStyleClass().remove("field-error");
     }
 
     private void showTimeError(String message) {
         labelDateTimeError.setText(message);
-        textfieldTundraActivationHour.setStyle("-fx-border-color: #ef4444; -fx-border-width: 2px;");
+        if (!textfieldTundraActivationHour.getStyleClass().contains("field-error")) { textfieldTundraActivationHour.getStyleClass().add("field-error"); }
     }
 }

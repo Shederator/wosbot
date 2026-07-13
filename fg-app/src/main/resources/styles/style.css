@@ -2183,3 +2183,9 @@
     -fx-font-size: 9px;
     -fx-font-weight: 700;
 }
+
+/* Invalid input highlight (validation errors on text fields) */
+.field-error {
+    -fx-border-color: #ef4444;
+    -fx-border-width: 2px;
+}

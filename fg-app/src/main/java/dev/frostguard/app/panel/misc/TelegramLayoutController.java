@@ -157,14 +157,14 @@ public class TelegramLayoutController {
             long cid = chatId.isBlank() ? 0L : Long.parseLong(chatId);
             svc.start(token, cid);
             labelStatus.setText("Status: ✅ Running");
-            labelStatus.setStyle("-fx-text-fill: #4caf50;");
+            applyStatusTone(labelStatus, "status-ok");
             
             // Auto-start watcher
             dev.frostguard.engine.service.TelegramWatcherLauncher.startWatcherIfNotRunning();
         } else {
             svc.stop();
             labelStatus.setText("Status: 🔴 Stopped");
-            labelStatus.setStyle("-fx-text-fill: #e57373;");
+            applyStatusTone(labelStatus, "status-danger");
         }
 
         showInfo("Configuration saved successfully.\nWatcher properties written to:\n" + watcherConfigPath());
@@ -332,10 +332,10 @@ public class TelegramLayoutController {
         if (labelStartupStatus == null) return;
         if (registered) {
             labelStartupStatus.setText("Auto-start: ✅ Registered");
-            labelStartupStatus.setStyle("-fx-text-fill: #4caf50;");
+            applyStatusTone(labelStartupStatus, "status-ok");
         } else {
             labelStartupStatus.setText("Auto-start: ❌ Not registered");
-            labelStartupStatus.setStyle("-fx-text-fill: #e57373;");
+            applyStatusTone(labelStartupStatus, "status-danger");
         }
     }
 
@@ -392,7 +392,7 @@ public class TelegramLayoutController {
         }
         buttonTest.setDisable(true);
         labelStatus.setText("Status: Testing…");
-        labelStatus.setStyle("-fx-text-fill: #ffb74d;");
+        applyStatusTone(labelStatus, "status-warning");
 
         Thread.ofVirtual().start(() -> {
             String result = TelegramBotService.getInstance().testToken(token);
@@ -400,10 +400,10 @@ public class TelegramLayoutController {
                 buttonTest.setDisable(false);
                 if (result.startsWith("ERROR:")) {
                     labelStatus.setText("Status: ❌ " + result);
-                    labelStatus.setStyle("-fx-text-fill: #e57373;");
+                    applyStatusTone(labelStatus, "status-danger");
                 } else {
                     labelStatus.setText("Status: ✅ Connected as " + result);
-                    labelStatus.setStyle("-fx-text-fill: #4caf50;");
+                    applyStatusTone(labelStatus, "status-ok");
                 }
             });
         });
@@ -413,10 +413,10 @@ public class TelegramLayoutController {
         boolean running = TelegramBotService.getInstance().isRunning();
         if (running) {
             labelStatus.setText("Status: ✅ Running");
-            labelStatus.setStyle("-fx-text-fill: #4caf50;");
+            applyStatusTone(labelStatus, "status-ok");
         } else {
             labelStatus.setText("Status: 🔴 Stopped");
-            labelStatus.setStyle("-fx-text-fill: #e57373;");
+            applyStatusTone(labelStatus, "status-danger");
         }
     }
 
@@ -435,4 +435,10 @@ public class TelegramLayoutController {
         alert.setContentText(msg);
         alert.showAndWait();
     }
+
+    private void applyStatusTone(Label label, String toneClass) {
+        label.getStyleClass().removeAll("status-ok", "status-danger", "status-warning");
+        label.getStyleClass().add(toneClass);
+    }
+
 }

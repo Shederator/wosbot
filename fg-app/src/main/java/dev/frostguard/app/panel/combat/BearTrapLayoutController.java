@@ -185,12 +185,12 @@ public class BearTrapLayoutController extends AbstractProfileController {
 
     private void clearDateTimeError() {
         labelDateTimeError.setText("");
-        textFieldScheduleDateTime.setStyle("");
+        textFieldScheduleDateTime.getStyleClass().remove("field-error");
     }
 
     private void showDateTimeError(String message) {
         labelDateTimeError.setText(message);
-        textFieldScheduleDateTime.setStyle("-fx-border-color: #ef4444; -fx-border-width: 2px;");
+        if (!textFieldScheduleDateTime.getStyleClass().contains("field-error")) { textFieldScheduleDateTime.getStyleClass().add("field-error"); }
     }
 
     private static void bindManagedVisibility(javafx.scene.Node node, javafx.beans.value.ObservableBooleanValue visible) {

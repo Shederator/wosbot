@@ -207,15 +207,15 @@ public class StatisticsLayoutController extends AbstractProfileController {
         int counterTotal = stats.getCustomCounters().values().stream().mapToInt(Integer::intValue).sum();
 
         hboxSummaryCards.getChildren().addAll(
-                createSummaryCard("Total Runs", String.valueOf(totalRuns), "#4fc3f7"),
-                createSummaryCard("Total Time", totalTimeStr, "#81c784"),
-                createSummaryCard("Avg OCR Fail", avgOcr, "#ffb74d"),
-                createSummaryCard("Avg Img Fail", avgImg, "#ff8a65"),
-                createSummaryCard("Actions", String.valueOf(counterTotal), "#ba68c8")
+                createSummaryCard("Total Runs", String.valueOf(totalRuns), "stat-value-blue"),
+                createSummaryCard("Total Time", totalTimeStr, "stat-value-green"),
+                createSummaryCard("Avg OCR Fail", avgOcr, "stat-value-orange"),
+                createSummaryCard("Avg Img Fail", avgImg, "stat-value-coral"),
+                createSummaryCard("Actions", String.valueOf(counterTotal), "stat-value-purple")
         );
     }
 
-    private VBox createSummaryCard(String title, String value, String accentColor) {
+    private VBox createSummaryCard(String title, String value, String accentClass) {
         VBox card = new VBox(4);
         card.setAlignment(Pos.CENTER);
         card.getStyleClass().add("stat-summary-card");
@@ -225,8 +225,7 @@ public class StatisticsLayoutController extends AbstractProfileController {
         lblTitle.getStyleClass().add("stat-title");
 
         Label lblValue = new Label(value);
-        lblValue.getStyleClass().add("stat-value");
-        lblValue.setStyle("-fx-text-fill: " + accentColor + ";");
+        lblValue.getStyleClass().addAll("stat-value", accentClass);
 
         card.getChildren().addAll(lblTitle, lblValue);
 

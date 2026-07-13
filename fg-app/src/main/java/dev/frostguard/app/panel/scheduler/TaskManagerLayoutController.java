@@ -410,10 +410,10 @@ public class TaskManagerLayoutController implements ProfileDataChangeListener {
 			protected void updateItem(String item, boolean empty) {
 				super.updateItem(item, empty);
 				graphicProperty().unbind();
+				getStyleClass().remove("task-name-cell");
 				if (empty || item == null) {
 					setText(null);
 					setGraphic(null);
-					setStyle("");
 					return;
 				}
 				setText(item);
@@ -423,7 +423,7 @@ public class TaskManagerLayoutController implements ProfileDataChangeListener {
 							task.scheduledProperty(), task.executingProperty(), task.hasReadyTaskProperty(), globalClock));
 					setContentDisplay(ContentDisplay.LEFT);
 				}
-				setStyle("-fx-text-fill: white; -fx-font-size: 14px; -fx-font-weight: bold;");
+				getStyleClass().add("task-name-cell");
 			}
 		});
 		return column;
@@ -437,7 +437,7 @@ public class TaskManagerLayoutController implements ProfileDataChangeListener {
 			return Bindings.createStringBinding(() -> GameTimeUtils.formatElapsed(task.getLastExecution()),
 					task.nextExecutionProperty(), task.executingProperty(), globalClock);
 		});
-		column.setCellFactory(col -> plainTextCell("-fx-text-fill: white; -fx-font-size: 14px;"));
+		column.setCellFactory(col -> plainTextCell("task-plain-cell"));
 		return column;
 	}
 
@@ -456,7 +456,6 @@ public class TaskManagerLayoutController implements ProfileDataChangeListener {
 				getStyleClass().removeAll(TIME_STATUS_STYLES);
 				if (empty || item == null) {
 					setText(null);
-					setStyle("");
 					return;
 				}
 				setText(item);
@@ -473,17 +472,17 @@ public class TaskManagerLayoutController implements ProfileDataChangeListener {
 		return column;
 	}
 
-	private TableCell<TaskManagerAux, String> plainTextCell(String style) {
+	private TableCell<TaskManagerAux, String> plainTextCell(String cellClass) {
 		return new TableCell<>() {
 			@Override
 			protected void updateItem(String item, boolean empty) {
 				super.updateItem(item, empty);
+				getStyleClass().remove(cellClass);
 				if (empty || item == null) {
 					setText(null);
-					setStyle("");
 				} else {
 					setText(item);
-					setStyle(style);
+					getStyleClass().add(cellClass);
 				}
 			}
 		};

@@ -412,7 +412,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
                 Button btn = (Button) alert.getDialogPane().lookupButton(btnType);
                 EmulatorType emulator = buttonMap.get(btnType);
                 if (foundEmulators.contains(emulator)) {
-                    btn.setStyle("-fx-font-weight: bold; -fx-text-fill: #2e7d32; -fx-border-color: #4caf50; -fx-border-radius: 3; -fx-background-color: #e8f5e9;");
+                    btn.getStyleClass().add("emulator-found-button");
                 }
             }
         }
@@ -1478,17 +1478,20 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
         // Header
         Label title = new Label("Search Results");
-        title.setStyle("-fx-font-size: 28px; -fx-font-weight: bold; -fx-text-fill: #ffffff; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 6, 0, 0, 3);");
+        title.getStyleClass().add("search-overlay-title");
 
         Label searchingFor = new Label("Searching for: ");
-        searchingFor.setStyle("-fx-font-size: 14px; -fx-text-fill: #8b949e;");
+        searchingFor.getStyleClass().add("search-overlay-subtitle");
         Label queryText = new Label("\"" + query + "\"");
-        queryText.setStyle("-fx-font-size: 14px; -fx-text-fill: #fcd176; -fx-font-weight: bold;");
+        queryText.getStyleClass().add("search-overlay-query");
         HBox searchingBox = new HBox(4, searchingFor, queryText);
         searchingBox.setAlignment(Pos.CENTER_LEFT);
 
         Label countLabel = new Label(totalMatches + " result" + (totalMatches == 1 ? "" : "s") + " found");
-        countLabel.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: " + (totalMatches == 0 ? "#ff271e;" : "#a0a6b2;") + " -fx-padding: 6 12 6 12; -fx-background-color: #212632; -fx-background-radius: 12;");
+        countLabel.getStyleClass().add("search-count-badge");
+        if (totalMatches == 0) {
+            countLabel.getStyleClass().add("search-count-badge-empty");
+        }
 
         VBox headerBox = new VBox(12, title, searchingBox, countLabel);
         headerBox.setAlignment(Pos.CENTER_LEFT);
@@ -1500,7 +1503,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
         if (matches.isEmpty()) {
             Label none = new Label("No matching modules or configs.");
-            none.setStyle("-fx-text-fill: #636a75; -fx-font-size: 15px; -fx-padding: 16 0 0 0;");
+            none.getStyleClass().add("search-no-results");
             resultsList.getChildren().add(none);
         } else {
             int gIndex = 0;
@@ -1537,13 +1540,12 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         VBox centeringWrapper = new VBox(contentContainer);
         centeringWrapper.setAlignment(Pos.TOP_CENTER);
         centeringWrapper.setFillWidth(true);
-        centeringWrapper.setStyle("-fx-background-color: transparent;");
+        centeringWrapper.getStyleClass().add("bg-transparent");
 
         ScrollPane scroll = new ScrollPane(centeringWrapper);
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
-        scroll.getStyleClass().add("search-results-pane");
+        scroll.getStyleClass().addAll("scroll-transparent", "search-results-pane");
 
         if (isNewSearch) {
             searchOverlay = new VBox(scroll);
@@ -1551,7 +1553,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
             VBox.setVgrow(scroll, Priority.ALWAYS);
             searchOverlay.setMaxWidth(Double.MAX_VALUE);
             searchOverlay.setMaxHeight(Double.MAX_VALUE);
-            searchOverlay.setStyle("-fx-background-color: rgba(12, 14, 20, 0.97);");
+            searchOverlay.getStyleClass().add("search-overlay-root");
             searchOverlay.setOpacity(0);
 
             StackPane.setAlignment(searchOverlay, Pos.TOP_LEFT);
@@ -1568,7 +1570,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
     private VBox createSearchResultGroup(QuickNavEntry entry, Map<ConfigurationKeyEnum, String> matchedSettings, String query) { /* internal */
         Label moduleLabel = new Label(entry.title());
-        moduleLabel.setStyle("-fx-text-fill: #fcd176; -fx-font-size: 15px; -fx-font-weight: bold;");
+        moduleLabel.getStyleClass().add("search-module-title");
 
         javafx.scene.layout.Region spacer = new javafx.scene.layout.Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
@@ -1595,13 +1597,13 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
             String enumStr = setEntry.getKey().name();
             String humanStr = enumStr.replace("_", " ").toLowerCase();
 
-            TextFlow labelFlow = buildHighlightedText(labelStr, query, "#e6edf3", true);
-            TextFlow enumFlow = buildHighlightedText(enumStr, query, "#8b949e", false);
-            TextFlow humanFlow = buildHighlightedText(humanStr, query, "#636a75", false);
-            humanFlow.setStyle("-fx-font-style: italic;");
+            TextFlow labelFlow = buildHighlightedText(labelStr, query, "", true);
+            TextFlow enumFlow = buildHighlightedText(enumStr, query, "search-text-dim", false);
+            TextFlow humanFlow = buildHighlightedText(humanStr, query, "search-text-faint", false);
+            humanFlow.getStyleClass().add("text-italic");
 
             HBox enumChip = new HBox(enumFlow);
-            enumChip.setStyle("-fx-background-color: #13151b; -fx-padding: 3 8; -fx-background-radius: 6; -fx-border-color: #262a36; -fx-border-radius: 6; -fx-border-width: 1;");
+            enumChip.getStyleClass().add("search-enum-chip");
 
             HBox rowContent = new HBox(16, labelFlow, enumChip, humanFlow);
             rowContent.setAlignment(Pos.CENTER_LEFT);
@@ -1623,7 +1625,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
         VBox group = new VBox(0);
         if (matchedSettings.isEmpty()) {
-            header.setStyle("-fx-background-radius: 9; -fx-border-width: 0;");
+            header.getStyleClass().add("search-group-header-solo");
         }
         group.getChildren().add(header);
         if (!matchedSettings.isEmpty()) {
@@ -1640,32 +1642,37 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         return group;
     }
 
-    private TextFlow buildHighlightedText(String text, String query, String baseColor, boolean isBold) { /* internal */
+    private TextFlow buildHighlightedText(String text, String query, String toneClass, boolean isBold) { /* internal */
         TextFlow flow = new TextFlow();
         String lText = text.toLowerCase();
         String lQuery = query.toLowerCase();
-        String weight = isBold ? "; -fx-font-weight: bold;" : ";";
         int idx = lText.indexOf(lQuery);
         if (idx < 0) {
-            Text t = new Text(text);
-            t.setStyle("-fx-fill: " + baseColor + "; -fx-font-size: 13px" + weight);
-            flow.getChildren().add(t);
+            flow.getChildren().add(searchText(text, toneClass, isBold));
             return flow;
         }
         if (idx > 0) {
-            Text before = new Text(text.substring(0, idx));
-            before.setStyle("-fx-fill: " + baseColor + "; -fx-font-size: 13px" + weight);
-            flow.getChildren().add(before);
+            flow.getChildren().add(searchText(text.substring(0, idx), toneClass, isBold));
         }
         Text match = new Text(text.substring(idx, idx + query.length()));
-        match.setStyle("-fx-fill: #fcd176; -fx-font-size: 13px; -fx-font-weight: bold; -fx-underline: true;");
+        match.getStyleClass().addAll("search-text", "search-text-match");
         flow.getChildren().add(match);
         if (idx + query.length() < text.length()) {
-            Text after = new Text(text.substring(idx + query.length()));
-            after.setStyle("-fx-fill: " + baseColor + "; -fx-font-size: 13px" + weight);
-            flow.getChildren().add(after);
+            flow.getChildren().add(searchText(text.substring(idx + query.length()), toneClass, isBold));
         }
         return flow;
+    }
+
+    private Text searchText(String content, String toneClass, boolean isBold) { /* internal */
+        Text t = new Text(content);
+        t.getStyleClass().add("search-text");
+        if (!toneClass.isEmpty()) {
+            t.getStyleClass().add(toneClass);
+        }
+        if (isBold) {
+            t.getStyleClass().add("search-text-bold");
+        }
+        return t;
     }
 
     private void hideSearchOverlay() { /* internal */
