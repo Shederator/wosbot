@@ -57,7 +57,13 @@
     -fg-border-strong: #3b4254;
     -fg-focus-ring: rgba(252, 209, 118, 0.35);
 
-    -fx-background-color: -fg-bg-app;
+    /* Ambient app canvas — subtle vertical wash instead of a flat fill */
+    -fx-background-color: linear-gradient(to bottom, #141824 0%, #11141a 45%, #0e1117 100%);
+}
+
+/* Gradient surface helper reused across cards / bars */
+.surface-gradient-card {
+    -fx-background-color: linear-gradient(to bottom, #1b2029, #171b23);
 }
 
 /* ---------------------------------------------------------------------------
@@ -66,6 +72,7 @@
 .elevation-0 { -fx-effect: none; }
 .elevation-1 { -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.45), 10, 0, 0, 3); }
 .elevation-2 { -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.55), 18, 0, 0, 6); }
+.elevation-3 { -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.65), 28, 0, 0, 10); }
 
 /* ---------------------------------------------------------------------------
  * 03. TYPOGRAPHY
@@ -107,7 +114,7 @@
 }
 
 .nav-sidebar {
-    -fx-background-color: -fg-bg-sidebar;
+    -fx-background-color: linear-gradient(to bottom, #0e1119 0%, #0c0f16 55%, #0a0d13 100%);
     -fx-border-color: transparent -fg-border-subtle transparent transparent;
     -fx-border-width: 0 1 0 0;
     -fx-min-width: 190;
@@ -182,10 +189,10 @@
 .nav-button:focused { -fx-border-color: -fg-focus-ring; }
 
 .nav-button.active {
-    -fx-background-color: -fg-yellow;
+    -fx-background-color: linear-gradient(to bottom, #ffe09a, -fg-yellow);
     -fx-text-fill: -fg-text-dark;
     -fx-border-color: -fg-yellow;
-    -fx-effect: dropshadow(gaussian, rgba(252, 209, 118, 0.25), 10, 0, 0, 2);
+    -fx-effect: dropshadow(gaussian, rgba(252, 209, 118, 0.30), 12, 0, 0, 3);
 }
 
 .nav-button.active .label { -fx-text-fill: -fg-text-dark; }
@@ -205,7 +212,7 @@
  * 05. STATUS BAR
  * --------------------------------------------------------------------------- */
 .status-bar {
-    -fx-background-color: #12151c;
+    -fx-background-color: linear-gradient(to bottom, #151924, #10131b);
     -fx-border-color: -fg-border-subtle transparent transparent transparent;
     -fx-border-width: 1 0 0 0;
     -fx-padding: 8 20 8 20;
@@ -232,7 +239,7 @@
 
 /* Primary — brand yellow */
 .action-button-start {
-    -fx-background-color: -fg-yellow;
+    -fx-background-color: linear-gradient(to bottom, #ffe09a, -fg-yellow);
     -fx-text-fill: -fg-text-dark;
     -fx-font-weight: bold;
     -fx-font-size: 13px;
@@ -241,6 +248,7 @@
     -fx-max-height: 34;
     -fx-pref-height: 34;
     -fx-background-radius: 6;
+    -fx-effect: dropshadow(gaussian, rgba(252, 209, 118, 0.18), 8, 0, 0, 2);
 }
 
 .action-button-start:hover {
@@ -809,13 +817,13 @@
  * 12. CARDS & SECTION HEADERS
  * --------------------------------------------------------------------------- */
 .content-card {
-    -fx-background-color: -fg-bg-card;
-    -fx-background-radius: 8;
+    -fx-background-color: linear-gradient(to bottom, #1b2029, #171b23);
+    -fx-background-radius: 10;
     -fx-border-color: -fg-border-subtle;
-    -fx-border-radius: 8;
+    -fx-border-radius: 10;
     -fx-border-width: 1;
     -fx-padding: 0;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.22), 8, 0, 0, 2);
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.28), 12, 0, 0, 4);
 }
 
 .content-card-inner { -fx-padding: 16; }
@@ -823,19 +831,19 @@
 /* Unified colored header blocks (single source of truth) */
 .header-yellow, .header-red, .header-blue, .header-orange,
 .header-teal, .header-purple, .header-green {
-    -fx-padding: 10 14;
-    -fx-background-radius: 7 7 0 0;
+    -fx-padding: 11 16;
+    -fx-background-radius: 9 9 0 0;
     -fx-font-weight: bold;
     -fx-font-size: 13px;
 }
 
-.header-yellow { -fx-background-color: -fg-yellow; }
-.header-red    { -fx-background-color: -fg-red; }
-.header-blue   { -fx-background-color: -fg-blue; }
-.header-orange { -fx-background-color: -fg-orange; }
-.header-teal   { -fx-background-color: -fg-teal; }
-.header-purple { -fx-background-color: -fg-purple; }
-.header-green  { -fx-background-color: -fg-green; }
+.header-yellow { -fx-background-color: linear-gradient(to right, #ffe09a, -fg-yellow); }
+.header-red    { -fx-background-color: linear-gradient(to right, #fb5a5a, -fg-red); }
+.header-blue   { -fx-background-color: linear-gradient(to right, #58a6ff, -fg-blue); }
+.header-orange { -fx-background-color: linear-gradient(to right, #ffbe55, -fg-orange); }
+.header-teal   { -fx-background-color: linear-gradient(to right, #5fd9d9, -fg-teal); }
+.header-purple { -fx-background-color: linear-gradient(to right, #bd7cfa, -fg-purple); }
+.header-green  { -fx-background-color: linear-gradient(to right, #6fe89d, -fg-green); }
 
 /* Header content contrast */
 .header-yellow .label, .header-orange .label, .header-green .label, .header-teal .label,
@@ -1540,13 +1548,14 @@
  * 21. STATISTICS
  * --------------------------------------------------------------------------- */
 .stat-summary-card {
-    -fx-background-color: linear-gradient(to bottom, #232834, -fg-bg-card);
-    -fx-background-radius: 10;
+    -fx-background-color: linear-gradient(to bottom, #242a38, #1a1e28);
+    -fx-background-radius: 12;
     -fx-border-color: -fg-border-strong;
-    -fx-border-radius: 10;
+    -fx-border-radius: 12;
     -fx-border-width: 1;
     -fx-padding: 16 20 16 20;
     -fx-min-width: 140;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.30), 10, 0, 0, 3);
 }
 
 .stat-summary-card:hover {
@@ -1957,4 +1966,220 @@
 .image-view-rounded {
     -fx-background-radius: 8;
     -fx-border-radius: 8;
+}
+
+/* ---------------------------------------------------------------------------
+ * 25. SEARCH OVERLAY (programmatic nodes from LauncherLayoutController)
+ * --------------------------------------------------------------------------- */
+.search-overlay-root { -fx-background-color: rgba(12, 14, 20, 0.97); }
+
+.search-overlay-title {
+    -fx-font-size: 28px;
+    -fx-font-weight: bold;
+    -fx-text-fill: white;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 6, 0, 0, 3);
+}
+
+.search-overlay-subtitle { -fx-font-size: 14px; -fx-text-fill: #8b949e; }
+
+.search-overlay-query {
+    -fx-font-size: 14px;
+    -fx-text-fill: -fg-yellow;
+    -fx-font-weight: bold;
+}
+
+.search-count-badge {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #a0a6b2;
+    -fx-padding: 6 12 6 12;
+    -fx-background-color: #212632;
+    -fx-background-radius: 12;
+}
+
+.search-count-badge-empty { -fx-text-fill: #ff271e; }
+
+.search-no-results {
+    -fx-text-fill: -fg-text-muted;
+    -fx-font-size: 15px;
+    -fx-padding: 16 0 0 0;
+}
+
+.search-enum-chip {
+    -fx-background-color: #13151b;
+    -fx-padding: 3 8;
+    -fx-background-radius: 6;
+    -fx-border-color: -fg-border-subtle;
+    -fx-border-radius: 6;
+    -fx-border-width: 1;
+}
+
+.search-group-header-solo { -fx-background-radius: 9; -fx-border-width: 0; }
+
+.search-module-title {
+    -fx-text-fill: -fg-yellow;
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+/* Text nodes inside highlighted search results (javafx.scene.text.Text uses -fx-fill) */
+.search-text        { -fx-font-size: 13px; -fx-fill: -fg-text-primary; }
+.search-text-bold   { -fx-font-weight: bold; }
+.search-text-dim    { -fx-fill: #8b949e; }
+.search-text-faint  { -fx-fill: -fg-text-muted; }
+.search-text-match  {
+    -fx-fill: -fg-yellow;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-underline: true;
+}
+
+/* ---------------------------------------------------------------------------
+ * 26. STATUS TEXT & SEMANTIC ACCENTS (replaces controller setStyle calls)
+ * --------------------------------------------------------------------------- */
+.status-ok      { -fx-text-fill: #4caf50; }
+.status-warning { -fx-text-fill: #ffb74d; }
+
+.stat-value-blue   { -fx-text-fill: #4fc3f7; }
+.stat-value-green  { -fx-text-fill: #81c784; }
+.stat-value-orange { -fx-text-fill: #ffb74d; }
+.stat-value-coral  { -fx-text-fill: #ff8a65; }
+.stat-value-purple { -fx-text-fill: #ba68c8; }
+
+/* Giftcode row index */
+.giftcode-index-label {
+    -fx-text-fill: #555555;
+    -fx-font-size: 11px;
+    -fx-min-width: 28;
+}
+
+/* Emulator picker dialog — highlighted "found" emulator choice */
+.emulator-found-button {
+    -fx-font-weight: bold;
+    -fx-text-fill: #2e7d32;
+    -fx-border-color: #4caf50;
+    -fx-border-radius: 3;
+    -fx-background-color: #e8f5e9;
+}
+
+/* ---------------------------------------------------------------------------
+ * 27. PROFILE TASKS POPUP
+ * --------------------------------------------------------------------------- */
+.tasks-popup-surface {
+    -fx-background-color: #1e1e2e;
+    -fx-padding: 15;
+    -fx-border-color: -fg-blue;
+    -fx-border-width: 1;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.55), 18, 0, 0, 6);
+}
+
+.tasks-popup-title {
+    -fx-text-fill: #a8dadc;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+.tasks-popup-empty {
+    -fx-text-fill: #8b949e;
+    -fx-font-style: italic;
+}
+
+.task-chip {
+    -fx-background-color: #2ea043;
+    -fx-text-fill: white;
+    -fx-padding: 4 8;
+    -fx-background-radius: 4;
+    -fx-font-size: 11px;
+}
+
+/* ---------------------------------------------------------------------------
+ * 28. TASK MANAGER TABLE CELLS
+ * --------------------------------------------------------------------------- */
+.task-name-cell {
+    -fx-text-fill: white;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+.task-plain-cell {
+    -fx-text-fill: white;
+    -fx-font-size: 14px;
+}
+
+/* ---------------------------------------------------------------------------
+ * 29. GANTT TIMELINE (programmatic nodes from TaskGanttOverviewController)
+ * --------------------------------------------------------------------------- */
+.gantt-tz-label {
+    -fx-text-fill: #ffb347;
+    -fx-font-size: 9px;
+    -fx-font-weight: bold;
+}
+
+.gantt-tz-label-small {
+    -fx-text-fill: #ffb347;
+    -fx-font-size: 8px;
+    -fx-font-weight: bold;
+}
+
+.gantt-row { -fx-padding: 0; -fx-spacing: 8; }
+
+.gantt-profile-name {
+    -fx-text-fill: white;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.gantt-profile-stamina {
+    -fx-text-fill: #cccccc;
+    -fx-font-size: 10px;
+}
+
+.gantt-canvas {
+    -fx-background-color: #232732;
+    -fx-border-color: #323847;
+    -fx-border-width: 1;
+}
+
+.gantt-bar-label {
+    -fx-text-fill: white;
+    -fx-font-size: 8px;
+    -fx-font-weight: bold;
+}
+
+.gantt-bar-clickable { -fx-cursor: hand; }
+
+/* ---------------------------------------------------------------------------
+ * 30. TASK BUILDER PROGRAMMATIC NODES
+ * --------------------------------------------------------------------------- */
+.tb-node-caption {
+    -fx-text-fill: white;
+    -fx-font-size: 9px;
+    -fx-font-weight: 600;
+    -fx-opacity: 0.8;
+}
+
+.tb-node-icon { -fx-font-size: 14px; }
+
+.tb-branch-yes { -fx-text-fill: #27ae60; -fx-font-size: 10px; -fx-font-weight: bold; }
+.tb-branch-no  { -fx-text-fill: #e74c3c; -fx-font-size: 10px; -fx-font-weight: bold; }
+
+.tb-drawer-label { -fx-font-size: 11px; -fx-font-weight: bold; }
+
+.tb-inline-edit-field {
+    -fx-background-color: #2d3748;
+    -fx-text-fill: #f59e0b;
+    -fx-border-color: #f59e0b;
+    -fx-border-radius: 5;
+    -fx-background-radius: 5;
+}
+
+.tb-header-rounded-top { -fx-background-radius: 8 8 0 0; }
+.tb-header-rounded-all { -fx-background-radius: 8; }
+
+.tb-preview-caption {
+    -fx-text-fill: -fg-text-muted;
+    -fx-font-size: 9px;
+    -fx-font-weight: 700;
 }
