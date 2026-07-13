@@ -1353,6 +1353,20 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         button.setMaxWidth(Double.MAX_VALUE);
         button.getStyleClass().add("nav-button");
 
+        // Micro-interaction: content nudges right 3px on hover, springs back on exit
+        button.setOnMouseEntered(e -> {
+            TranslateTransition nudge = new TranslateTransition(Duration.millis(120), content);
+            nudge.setToX(3);
+            nudge.setInterpolator(Interpolator.EASE_OUT);
+            nudge.play();
+        });
+        button.setOnMouseExited(e -> {
+            TranslateTransition back = new TranslateTransition(Duration.millis(150), content);
+            back.setToX(0);
+            back.setInterpolator(Interpolator.EASE_OUT);
+            back.play();
+        });
+
         button.setOnAction(e -> {
             hideSearchOverlay();
             setMainContent(root);

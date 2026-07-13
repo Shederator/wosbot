@@ -62,7 +62,7 @@
 
                 <!-- Profile selector below search -->
                 <VBox alignment="CENTER" spacing="8" maxWidth="Infinity">
-                    <Label text="Loaded profile"
+                    <Label text="LOADED PROFILE"
                            styleClass="sidebar-profile-label" />
                     <ComboBox fx:id="profileComboBox" maxWidth="Infinity" />
                 </VBox>

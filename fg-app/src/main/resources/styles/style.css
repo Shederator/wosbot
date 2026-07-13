@@ -115,6 +115,10 @@
 
 .nav-sidebar {
     -fx-background-color: linear-gradient(to bottom, #0e1119 0%, #0c0f16 55%, #0a0d13 100%);
+    -fx-background-image: url("../art/sidebar_aurora.png");
+    -fx-background-size: cover;
+    -fx-background-position: center bottom;
+    -fx-background-repeat: no-repeat;
     -fx-border-color: transparent -fg-border-subtle transparent transparent;
     -fx-border-width: 0 1 0 0;
     -fx-min-width: 190;
@@ -138,15 +142,20 @@
 
 .sidebar-divider { -fx-padding: 0 16; }
 
+/* Gradient-fade divider — dissolves at both ends for a lighter feel */
 .sidebar-divider .line {
-    -fx-border-color: -fg-border-subtle;
-    -fx-border-width: 1 0 0 0;
-    -fx-border-style: solid;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-background-color: linear-gradient(to right,
+        transparent 0%, rgba(139, 148, 165, 0.35) 50%, transparent 100%);
+    -fx-pref-height: 1;
+    -fx-max-height: 1;
 }
 
+/* Semi-transparent so the aurora art glows through from beneath */
 .sidebar-footer {
-    -fx-background-color: #10131b;
-    -fx-border-color: -fg-border-subtle transparent transparent transparent;
+    -fx-background-color: rgba(10, 13, 19, 0.45);
+    -fx-border-color: rgba(139, 148, 165, 0.18) transparent transparent transparent;
     -fx-border-width: 1 0 0 0;
     -fx-padding: 12 10 16 10;
 }
@@ -178,8 +187,10 @@
 }
 
 .nav-button:hover {
-    -fx-background-color: rgba(255, 255, 255, 0.06);
+    -fx-background-color: rgba(255, 255, 255, 0.07);
+    -fx-border-color: rgba(252, 209, 118, 0.22);
     -fx-text-fill: white;
+    -fx-effect: dropshadow(gaussian, rgba(252, 209, 118, 0.10), 8, 0, 0, 0);
 }
 
 .nav-button:hover .label { -fx-text-fill: white; }
@@ -189,10 +200,10 @@
 .nav-button:focused { -fx-border-color: -fg-focus-ring; }
 
 .nav-button.active {
-    -fx-background-color: linear-gradient(to bottom, #ffe09a, -fg-yellow);
+    -fx-background-color: linear-gradient(to bottom, #ffe6ab, #ffd987 45%, -fg-yellow);
     -fx-text-fill: -fg-text-dark;
-    -fx-border-color: -fg-yellow;
-    -fx-effect: dropshadow(gaussian, rgba(252, 209, 118, 0.30), 12, 0, 0, 3);
+    -fx-border-color: rgba(255, 240, 200, 0.85);
+    -fx-effect: dropshadow(gaussian, rgba(252, 209, 118, 0.40), 16, 0, 0, 3);
 }
 
 .nav-button.active .label { -fx-text-fill: -fg-text-dark; }
@@ -445,8 +456,8 @@
 .text-area .content { -fx-background-color: -fg-input-bg; -fx-background-radius: 6; }
 
 .search-field {
-    -fx-background-color: -fg-input-bg;
-    -fx-border-color: -fg-border-subtle;
+    -fx-background-color: rgba(22, 27, 34, 0.75);
+    -fx-border-color: rgba(139, 148, 165, 0.25);
     -fx-background-radius: 14;
     -fx-border-radius: 14;
     -fx-padding: 6 12 6 12;
@@ -819,6 +830,10 @@
  * --------------------------------------------------------------------------- */
 .content-card {
     -fx-background-color: linear-gradient(to bottom, #1b2029, #171b23);
+    -fx-background-image: url("../art/card_frost.png");
+    -fx-background-size: cover;
+    -fx-background-position: right top;
+    -fx-background-repeat: no-repeat;
     -fx-background-radius: 10;
     -fx-border-color: -fg-border-subtle;
     -fx-border-radius: 10;
@@ -1064,6 +1079,10 @@
 
 .quick-nav-card {
     -fx-background-color: -fg-bg-overlay;
+    -fx-background-image: url("../art/card_frost.png");
+    -fx-background-size: cover;
+    -fx-background-position: right top;
+    -fx-background-repeat: no-repeat;
     -fx-border-color: -fg-border-subtle;
     -fx-border-width: 1;
     -fx-border-radius: 10;
@@ -1073,8 +1092,8 @@
 
 .quick-nav-card:hover {
     -fx-background-color: -fg-bg-raised;
-    -fx-border-color: -fg-border-strong;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.4), 12, 0, 0, 4);
+    -fx-border-color: rgba(252, 209, 118, 0.45);
+    -fx-effect: dropshadow(gaussian, rgba(252, 209, 118, 0.18), 14, 0, 0, 4);
 }
 
 .quick-nav-card-icon {
@@ -1806,9 +1825,14 @@
     -fx-padding: 0;
 }
 
+.logo-container:hover {
+    -fx-effect: dropshadow(gaussian, rgba(252, 209, 118, 0.35), 18, 0, 0, 0);
+}
+
+/* Eyebrow-style micro label above the profile selector */
 .sidebar-profile-label {
-    -fx-text-fill: #e2e8f0;
-    -fx-font-size: 13px;
+    -fx-text-fill: #8b94a5;
+    -fx-font-size: 10px;
     -fx-font-weight: bold;
 }
 
