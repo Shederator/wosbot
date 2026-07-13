@@ -495,13 +495,10 @@ public class TaskGanttOverviewController implements TaskStatusChangeListener, St
             javafx.scene.layout.VBox col = buildAxisCell(lblW);
 
             Label lLocal = new Label(String.format("%02d", tick.getHour()));
-            lLocal.setStyle(String.format("-fx-text-fill: %s; -fx-font-size: %d;",
-                    h % 6 == 0 ? "#888888" : "#666666",
-                    h % 6 == 0 ? 10 : 9));
+            lLocal.getStyleClass().add(h % 6 == 0 ? "gantt-axis-major" : "gantt-axis-minor");
 
             Label lUtc = new Label(String.format("%02d", utcTick.getHour()));
-            lUtc.setStyle(String.format("-fx-text-fill: %s; -fx-font-size: 8;",
-                    h % 6 == 0 ? "#666666" : "#555555"));
+            lUtc.getStyleClass().add(h % 6 == 0 ? "gantt-axis-major-sub" : "gantt-axis-minor-sub");
 
             col.getChildren().addAll(lLocal, lUtc);
             positionAxisCell(col, h * hourSpan, lblW, computedWidth);
@@ -539,12 +536,10 @@ public class TaskGanttOverviewController implements TaskStatusChangeListener, St
             }
 
             Label lLocal = new Label(localTxt);
-            lLocal.setStyle(String.format("-fx-text-fill: %s; -fx-font-size: %d; -fx-font-weight: %s;",
-                    d == 0 ? "#ffb347" : "#888888", d == 0 ? 11 : 10, d == 0 ? "bold" : "normal"));
+            lLocal.getStyleClass().add(d == 0 ? "gantt-axis-today" : "gantt-axis-day");
 
             Label lUtc = new Label(utcTxt);
-            lUtc.setStyle(String.format("-fx-text-fill: %s; -fx-font-size: 7;",
-                    d == 0 ? "#ffaa44" : "#666666"));
+            lUtc.getStyleClass().add(d == 0 ? "gantt-axis-today-sub" : "gantt-axis-day-sub");
 
             col.getChildren().addAll(lLocal, lUtc);
             positionAxisCell(col, d * daySpan, lblW, computedWidth);
@@ -577,16 +572,11 @@ public class TaskGanttOverviewController implements TaskStatusChangeListener, St
             String localTxt = String.format("%02d:%02d", lz.getHour(), lz.getMinute());
             String utcTxt   = String.format("%02d:%02d", uz.getHour(), uz.getMinute());
 
-            String lColor = isNow ? "#ffb347" : (isPast ? "#888888" : "#666666");
-            String uColor = isNow ? "#ffb347" : (isPast ? "#666666" : "#555555");
-
             Label lLocal = new Label(localTxt);
-            lLocal.setStyle(String.format("-fx-text-fill: %s; -fx-font-size: 10; -fx-font-weight: %s;",
-                    lColor, isNow ? "bold" : "normal"));
+            lLocal.getStyleClass().add(isNow ? "gantt-axis-now" : (isPast ? "gantt-axis-past" : "gantt-axis-future"));
 
             Label lUtc = new Label(utcTxt);
-            lUtc.setStyle(String.format("-fx-text-fill: %s; -fx-font-size: 8; -fx-font-weight: %s;",
-                    uColor, isNow ? "bold" : "normal"));
+            lUtc.getStyleClass().add(isNow ? "gantt-axis-now-sub" : (isPast ? "gantt-axis-past-sub" : "gantt-axis-future-sub"));
 
             javafx.scene.layout.VBox col = new javafx.scene.layout.VBox(lLocal, lUtc);
             col.setAlignment(javafx.geometry.Pos.CENTER);

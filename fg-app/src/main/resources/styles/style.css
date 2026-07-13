@@ -2189,3 +2189,77 @@
     -fx-border-color: #ef4444;
     -fx-border-width: 2px;
 }
+
+/* Task builder — OCR / template result banners */
+.tb-result-banner {
+    -fx-background-color: #0d0f15;
+    -fx-background-radius: 0 0 10 10;
+    -fx-padding: 8 14 10 14;
+    -fx-border-color: -fg-border-subtle;
+    -fx-border-width: 1 0 0 0;
+}
+
+.tb-banner-title {
+    -fx-text-fill: -fg-text-muted;
+    -fx-font-size: 9px;
+    -fx-font-weight: 700;
+}
+
+.tb-banner-mono {
+    -fx-font-size: 11px;
+    -fx-font-family: "JetBrains Mono", "Consolas", "Courier New", monospace;
+    -fx-background-color: #11141a;
+    -fx-background-radius: 4;
+    -fx-padding: 4 8;
+}
+
+.tb-banner-ocr-text { -fx-text-fill: #59ba59; }
+
+.tb-banner-match-yes { -fx-text-fill: #59ba59; -fx-font-size: 10px; -fx-font-weight: 700; }
+.tb-banner-match-no  { -fx-text-fill: #ef4444; -fx-font-size: 10px; -fx-font-weight: 700; }
+
+.tb-banner-match-yes-mono { -fx-text-fill: #59ba59; -fx-font-weight: 700; }
+.tb-banner-match-no-mono  { -fx-text-fill: #ef4444; -fx-font-weight: 700; }
+
+.tb-banner-tap {
+    -fx-text-fill: -fg-yellow;
+    -fx-font-size: 10px;
+    -fx-font-weight: 700;
+}
+
+/* Task builder — wire branch labels */
+.tb-wire-label {
+    -fx-font-size: 9px;
+    -fx-font-weight: 700;
+    -fx-background-color: #1e2233cc;
+    -fx-background-radius: 6;
+    -fx-padding: 1 6;
+}
+
+.tb-wire-label-yes { -fx-text-fill: #59ba59; }
+.tb-wire-label-no  { -fx-text-fill: #ef4444; }
+
+/* Gantt axis tick labels — tonal ladder replaces string-formatted inline styles */
+.gantt-axis-major        { -fx-text-fill: #98a2b3; -fx-font-size: 10px; }
+.gantt-axis-minor        { -fx-text-fill: #667085; -fx-font-size: 9px;  }
+.gantt-axis-major-sub    { -fx-text-fill: #667085; -fx-font-size: 8px;  }
+.gantt-axis-minor-sub    { -fx-text-fill: #4d5567; -fx-font-size: 8px;  }
+.gantt-axis-today        { -fx-text-fill: #ffb347; -fx-font-size: 11px; -fx-font-weight: bold; }
+.gantt-axis-day          { -fx-text-fill: #98a2b3; -fx-font-size: 10px; }
+.gantt-axis-today-sub    { -fx-text-fill: #ffaa44; -fx-font-size: 7px;  }
+.gantt-axis-day-sub      { -fx-text-fill: #667085; -fx-font-size: 7px;  }
+.gantt-axis-now          { -fx-text-fill: #ffb347; -fx-font-size: 10px; -fx-font-weight: bold; }
+.gantt-axis-past         { -fx-text-fill: #98a2b3; -fx-font-size: 10px; }
+.gantt-axis-future       { -fx-text-fill: #667085; -fx-font-size: 10px; }
+.gantt-axis-now-sub      { -fx-text-fill: #ffb347; -fx-font-size: 8px; -fx-font-weight: bold; }
+.gantt-axis-past-sub     { -fx-text-fill: #667085; -fx-font-size: 8px; }
+.gantt-axis-future-sub   { -fx-text-fill: #4d5567; -fx-font-size: 8px; }
+
+/* Window snap preview overlay */
+.snap-preview {
+    -fx-background-color: rgba(252, 209, 118, 0.18);
+    -fx-border-color: rgba(252, 209, 118, 0.75);
+    -fx-border-width: 2;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+}

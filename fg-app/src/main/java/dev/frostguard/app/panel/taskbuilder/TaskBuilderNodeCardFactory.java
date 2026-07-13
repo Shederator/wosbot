@@ -153,27 +153,15 @@ public class TaskBuilderNodeCardFactory {
         VBox banner = createResultBanner("ocr-result-banner");
 
         Label titleLbl = new Label("▸ OCR Result");
-        titleLbl.setStyle("-fx-text-fill: #636a75; -fx-font-size: 9px; -fx-font-weight: 700;");
+        titleLbl.getStyleClass().add("tb-banner-title");
 
         Label resultLbl = new Label(result.isEmpty() ? "(empty)" : result);
         resultLbl.setWrapText(true);
-        resultLbl.setStyle(
-            "-fx-text-fill: #59ba59;" +
-            "-fx-font-size: 11px;" +
-            "-fx-font-family: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;" +
-            "-fx-background-color: #11141a;" +
-            "-fx-background-radius: 4;" +
-            "-fx-padding: 4 8;"
-        );
+        resultLbl.getStyleClass().addAll("tb-banner-mono", "tb-banner-ocr-text");
 
-        String matchColor = matches ? "#59ba59" : "#ef4444";
-        String matchIcon  = matches ? "✓ YES" : "✗ NO";
+        String matchIcon = matches ? "✓ YES" : "✗ NO";
         Label matchLbl = new Label(matchIcon + "  matches '" + expected + "'");
-        matchLbl.setStyle(
-            "-fx-text-fill: " + matchColor + ";" +
-            "-fx-font-size: 10px;" +
-            "-fx-font-weight: 700;"
-        );
+        matchLbl.getStyleClass().add(matches ? "tb-banner-match-yes" : "tb-banner-match-no");
 
         banner.getChildren().addAll(titleLbl, resultLbl, matchLbl);
         card.getChildren().add(banner);
@@ -202,30 +190,18 @@ public class TaskBuilderNodeCardFactory {
         VBox banner = createResultBanner("tpl-result-banner");
 
         Label titleLbl = new Label("▸ Search Result");
-        titleLbl.setStyle("-fx-text-fill: #636a75; -fx-font-size: 9px; -fx-font-weight: 700;");
+        titleLbl.getStyleClass().add("tb-banner-title");
 
-        String matchColor = found ? "#59ba59" : "#ef4444";
-        String matchIcon  = found ? "✓ FOUND" : "✗ NOT FOUND";
+        String matchIcon = found ? "✓ FOUND" : "✗ NOT FOUND";
         Label matchLbl = new Label(matchIcon + "  (match: " + matchPct + "%)");
-        matchLbl.setStyle(
-            "-fx-text-fill: " + matchColor + ";" +
-            "-fx-font-size: 11px;" +
-            "-fx-font-weight: 700;" +
-            "-fx-font-family: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;" +
-            "-fx-background-color: #11141a;" +
-            "-fx-background-radius: 4;" +
-            "-fx-padding: 4 8;"
-        );
+        matchLbl.getStyleClass().addAll("tb-banner-mono",
+                found ? "tb-banner-match-yes-mono" : "tb-banner-match-no-mono");
 
         banner.getChildren().addAll(titleLbl, matchLbl);
 
         if (tappedAt != null && !tappedAt.isEmpty()) {
             Label tapLbl = new Label("👆 Tapped at: " + tappedAt);
-            tapLbl.setStyle(
-                "-fx-text-fill: #fcd176;" +
-                "-fx-font-size: 10px;" +
-                "-fx-font-weight: 700;"
-            );
+            tapLbl.getStyleClass().add("tb-banner-tap");
             banner.getChildren().add(tapLbl);
         }
 
@@ -241,12 +217,7 @@ public class TaskBuilderNodeCardFactory {
     private static VBox createResultBanner(String bannerId) {
         VBox banner = new VBox(4);
         banner.setId(bannerId);
-        banner.setStyle(
-            "-fx-background-color: #0d0f15;" +
-            "-fx-background-radius: 0 0 10 10;" +
-            "-fx-padding: 8 14 10 14;" +
-            "-fx-border-color: #262a36; -fx-border-width: 1 0 0 0;"
-        );
+        banner.getStyleClass().add("tb-result-banner");
         return banner;
     }
 

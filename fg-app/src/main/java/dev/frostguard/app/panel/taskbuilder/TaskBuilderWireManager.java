@@ -215,7 +215,7 @@ public class TaskBuilderWireManager {
                     flowCanvas.getChildren().add(wire);
 
                     if (isBranching) {
-                        addWireLabel(wire, "Yes", "#59ba59");
+                        addWireLabel(wire, "Yes", "tb-wire-label-yes");
                     }
                 }
             }
@@ -229,7 +229,7 @@ public class TaskBuilderWireManager {
                     String key = node.getId() + "→F" + node.getNextNodeFalseId();
                     connectionWires.put(key, wire);
                     flowCanvas.getChildren().add(wire);
-                    addWireLabel(wire, "No", "#ef4444");
+                    addWireLabel(wire, "No", "tb-wire-label-no");
                 }
             }
         }
@@ -276,14 +276,9 @@ public class TaskBuilderWireManager {
         return wire;
     }
 
-    private void addWireLabel(CubicCurve wire, String text, String color) {
+    private void addWireLabel(CubicCurve wire, String text, String toneClass) {
         Label label = new Label(text);
-        label.setStyle(
-            "-fx-font-size: 9px; -fx-font-weight: 700; " +
-            "-fx-text-fill: " + color + "; " +
-            "-fx-background-color: #1e2233cc; " +
-            "-fx-background-radius: 6; -fx-padding: 1 6;"
-        );
+        label.getStyleClass().addAll("tb-wire-label", toneClass);
         label.setMouseTransparent(true);
 
         double midX = (wire.getStartX() + wire.getEndX()) / 2;

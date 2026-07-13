@@ -918,14 +918,9 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
             snapPreviewStage.setAlwaysOnTop(true);
 
             javafx.scene.layout.Region previewPane = new javafx.scene.layout.Region();
-            previewPane.setStyle(
-                "-fx-background-color: rgba(0, 120, 215, 0.3);" +
-                "-fx-border-color: rgba(0, 120, 215, 0.8);" +
-                "-fx-border-width: 2;" +
-                "-fx-border-radius: 8;" +
-                "-fx-background-radius: 8;"
-            );
+            previewPane.getStyleClass().add("snap-preview");
             javafx.scene.Scene previewScene = new javafx.scene.Scene(previewPane, w, h);
+            previewScene.getStylesheets().add(ILauncherConstants.getCssPath());
             previewScene.setFill(javafx.scene.paint.Color.TRANSPARENT);
             snapPreviewStage.setScene(previewScene);
         }
