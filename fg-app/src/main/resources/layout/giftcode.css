@@ -1,7 +1,11 @@
-/* === Gift Code Tab Styles === */
+/* =============================================================================
+ * giftcode.css — Gift Code view
+ * Aligned to the Frostguard design system: inherits -fg-* tokens from the
+ * main scene stylesheet (styles/style.css).
+ * ============================================================================= */
 
 .giftcode-root {
-    -fx-background-color: #1f1f1f;
+    -fx-background-color: -fg-bg-app;
 }
 
 .giftcode-root .scroll-pane,
@@ -10,63 +14,66 @@
     -fx-background: transparent;
 }
 
-/* Card container */
+/* --- Card container --------------------------------------------------------- */
 .giftcode-card {
-    -fx-background-color: #242424;
-    -fx-background-radius: 8;
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 6, 0, 0, 2);
+    -fx-background-color: -fg-bg-card;
+    -fx-background-radius: 10;
+    -fx-border-color: -fg-border-subtle;
+    -fx-border-radius: 10;
+    -fx-border-width: 1;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 10, 0, 0, 3);
 }
 
 .giftcode-card-header {
-    -fx-background-color: linear-gradient(to right, #e74c3c, #c0392b);
-    -fx-background-radius: 8 8 0 0;
-    -fx-padding: 10 14;
+    -fx-background-color: -fg-bg-raised;
+    -fx-background-radius: 10 10 0 0;
+    -fx-border-color: transparent transparent -fg-border-subtle transparent;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 10 16;
 }
 
 .giftcode-card-header .label {
-    -fx-text-fill: #ffffff;
+    -fx-text-fill: -fg-yellow;
     -fx-font-weight: bold;
     -fx-font-size: 13px;
 }
 
 .giftcode-card-body {
-    -fx-padding: 14;
+    -fx-padding: 14 16;
 }
 
-/* Fetch button */
+/* --- Fetch button ------------------------------------------------------------ */
 .giftcode-fetch-btn {
-    -fx-background-color: linear-gradient(to bottom, #e74c3c, #c0392b);
-    -fx-text-fill: white;
+    -fx-background-color: -fg-yellow;
+    -fx-text-fill: -fg-text-dark;
     -fx-font-weight: bold;
     -fx-font-size: 12px;
     -fx-background-radius: 6;
     -fx-cursor: hand;
     -fx-padding: 6 20;
-    -fx-effect: dropshadow(gaussian, rgba(231,76,60,0.4), 4, 0, 0, 1);
 }
 
 .giftcode-fetch-btn:hover {
-    -fx-background-color: linear-gradient(to bottom, #ff6b5a, #e74c3c);
-    -fx-effect: dropshadow(gaussian, rgba(231,76,60,0.6), 8, 0, 0, 2);
+    -fx-background-color: -fg-yellow-hover;
 }
 
 .giftcode-fetch-btn:pressed {
-    -fx-background-color: linear-gradient(to bottom, #c0392b, #a93226);
+    -fx-background-color: -fg-yellow-active;
+    -fx-scale-x: 0.98;
+    -fx-scale-y: 0.98;
 }
 
 .giftcode-fetch-btn:disabled {
-    -fx-background-color: #444444;
-    -fx-text-fill: #888888;
-    -fx-opacity: 0.7;
+    -fx-opacity: 0.45;
 }
 
-/* Status label */
+/* --- Status label ------------------------------------------------------------ */
 .giftcode-status {
-    -fx-text-fill: #b5b5b5;
+    -fx-text-fill: -fg-text-secondary;
     -fx-font-size: 11px;
 }
 
-/* ListView for gift code rows */
+/* --- ListView for gift code rows ---------------------------------------------- */
 .giftcode-list {
     -fx-background-color: transparent;
     -fx-background-insets: 0;
@@ -82,42 +89,42 @@
     -fx-background-color: transparent;
 }
 
-/* Individual gift code row card */
+/* --- Individual gift code row card --------------------------------------------- */
 .giftcode-row {
-    -fx-background-color: #2a2a2a;
+    -fx-background-color: -fg-bg-raised;
     -fx-background-radius: 6;
     -fx-padding: 10 14;
-    -fx-border-color: #333333;
+    -fx-border-color: -fg-border-subtle;
     -fx-border-radius: 6;
     -fx-border-width: 1;
 }
 
 .giftcode-row:hover {
-    -fx-background-color: #323232;
-    -fx-border-color: #e74c3c;
+    -fx-background-color: derive(-fg-bg-raised, 8%);
+    -fx-border-color: -fg-yellow;
 }
 
-/* Code text */
+/* --- Code text ---------------------------------------------------------------- */
 .giftcode-code-label {
-    -fx-text-fill: #e74c3c;
+    -fx-text-fill: -fg-yellow;
     -fx-font-weight: bold;
     -fx-font-size: 14px;
     -fx-font-family: "Consolas", "Courier New", monospace;
 }
 
-/* Date text */
+/* --- Date text ---------------------------------------------------------------- */
 .giftcode-date-label {
-    -fx-text-fill: #888888;
+    -fx-text-fill: -fg-text-muted;
     -fx-font-size: 11px;
 }
 
-/* Copy button */
+/* --- Copy button ---------------------------------------------------------------- */
 .giftcode-copy-btn {
-    -fx-background-color: #3a3a3a;
-    -fx-text-fill: #cccccc;
+    -fx-background-color: transparent;
+    -fx-text-fill: -fg-text-secondary;
     -fx-font-size: 11px;
     -fx-background-radius: 4;
-    -fx-border-color: #555555;
+    -fx-border-color: -fg-border-strong;
     -fx-border-radius: 4;
     -fx-border-width: 1;
     -fx-cursor: hand;
@@ -125,49 +132,51 @@
 }
 
 .giftcode-copy-btn:hover {
-    -fx-background-color: #e74c3c;
-    -fx-text-fill: white;
-    -fx-border-color: #e74c3c;
+    -fx-background-color: -fg-yellow;
+    -fx-text-fill: -fg-text-dark;
+    -fx-border-color: -fg-yellow;
 }
 
 .giftcode-copy-btn:pressed {
-    -fx-background-color: #c0392b;
-    -fx-border-color: #c0392b;
+    -fx-background-color: -fg-yellow-active;
+    -fx-border-color: -fg-yellow-active;
+    -fx-scale-x: 0.98;
+    -fx-scale-y: 0.98;
 }
 
 /* Copied feedback style */
 .giftcode-copy-btn-copied {
-    -fx-background-color: #27ae60;
-    -fx-text-fill: white;
-    -fx-border-color: #27ae60;
+    -fx-background-color: -fg-green;
+    -fx-text-fill: -fg-text-dark;
+    -fx-border-color: -fg-green;
 }
 
-/* Placeholder */
+/* --- Placeholder ---------------------------------------------------------------- */
 .giftcode-placeholder {
-    -fx-text-fill: #666666;
+    -fx-text-fill: -fg-text-muted;
     -fx-font-size: 13px;
     -fx-font-style: italic;
 }
 
-/* Separator */
+/* --- Separator ---------------------------------------------------------------- */
 .giftcode-separator {
-    -fx-opacity: 0.2;
+    -fx-opacity: 0.25;
     -fx-padding: 4 0;
 }
 
-/* Description */
+/* --- Description ---------------------------------------------------------------- */
 .giftcode-description {
-    -fx-text-fill: #b5b5b5;
+    -fx-text-fill: -fg-text-secondary;
     -fx-font-size: 10px;
 }
 
-/* Copy All button */
+/* --- Copy All button ---------------------------------------------------------------- */
 .giftcode-copy-all-btn {
-    -fx-background-color: #3a3a3a;
-    -fx-text-fill: #cccccc;
+    -fx-background-color: transparent;
+    -fx-text-fill: -fg-text-secondary;
     -fx-font-size: 11px;
     -fx-background-radius: 6;
-    -fx-border-color: #555555;
+    -fx-border-color: -fg-border-strong;
     -fx-border-radius: 6;
     -fx-border-width: 1;
     -fx-cursor: hand;
@@ -175,12 +184,14 @@
 }
 
 .giftcode-copy-all-btn:hover {
-    -fx-background-color: #e74c3c;
-    -fx-text-fill: white;
-    -fx-border-color: #e74c3c;
+    -fx-background-color: -fg-yellow;
+    -fx-text-fill: -fg-text-dark;
+    -fx-border-color: -fg-yellow;
 }
 
 .giftcode-copy-all-btn:pressed {
-    -fx-background-color: #c0392b;
-    -fx-border-color: #c0392b;
+    -fx-background-color: -fg-yellow-active;
+    -fx-border-color: -fg-yellow-active;
+    -fx-scale-x: 0.98;
+    -fx-scale-y: 0.98;
 }

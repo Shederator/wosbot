@@ -10,19 +10,19 @@
 
     /* Surface palette */
     -vfx-surface-base: #11141a;
-    -vfx-surface-sunken: #0c0b17;
+    -vfx-surface-sunken: #0c0f16;
     -vfx-surface-card: #181c24;
-    -vfx-surface-raised: #1a1e27;
+    -vfx-surface-raised: #1e222b;
     -vfx-surface-input: #0d0f15;
 
     /* Accent spectrum */
     -vfx-accent: #fcd176;
     -vfx-accent-warm: #fcd176;
-    -vfx-danger: #ff271e;
-    -vfx-info: #155dfc;
+    -vfx-danger: #f4433a;
+    -vfx-info: #388bfd;
     -vfx-aqua: #3dc3c3;
-    -vfx-success: #59ba59;
-    -vfx-grape: #9b2fb8;
+    -vfx-success: #4ade80;
+    -vfx-grape: #a855f7;
     -vfx-flame: #ff8c42;
 
     /* Typography */
@@ -33,7 +33,7 @@
 
     /* Borders */
     -vfx-rule-faint: #262a36;
-    -vfx-rule-medium: #363c4a;
+    -vfx-rule-medium: #3b4254;
 }
 
 

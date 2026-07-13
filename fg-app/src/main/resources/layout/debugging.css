@@ -1,34 +1,40 @@
-/* debugging.css */
-/* Main container background */
+/* =============================================================================
+ * debugging.css — Debugging / capture view
+ * Aligned to the Frostguard design system: inherits -fg-* tokens from the
+ * main scene stylesheet (styles/style.css). Control overrides below are
+ * scoped to this layout's subtree via the FXML stylesheets attribute.
+ * ============================================================================= */
+
+/* --- Main container ---------------------------------------------------------- */
 .split-pane {
-    -fx-background-color: #1e1f26;
+    -fx-background-color: -fg-bg-app;
     -fx-padding: 0;
 }
 
 .split-pane *.split-pane-divider {
-    -fx-background-color: #3a3d4a;
+    -fx-background-color: -fg-border-subtle;
 }
 
-/* Left side container for the phone */
+/* --- Left side container for the phone ---------------------------------------- */
 .phone-container {
-    -fx-background-color: #1e1f26;
+    -fx-background-color: -fg-bg-app;
     -fx-alignment: center;
     -fx-padding: 24;
 }
 
-/* The Mobile Phone Canvas Wrapper */
+/* --- The mobile phone canvas wrapper ------------------------------------------- */
 .phone-frame {
-    -fx-background-color: #111111;
-    -fx-border-color: #3a3d4a;
+    -fx-background-color: #0a0c10;
+    -fx-border-color: -fg-border-strong;
     -fx-border-width: 6;
     -fx-border-radius: 35;
     -fx-background-radius: 35;
     -fx-padding: 20 10 20 10;
 }
 
-/* The Notch at the top of the screen */
+/* --- The notch at the top of the screen ---------------------------------------- */
 .phone-notch {
-    -fx-background-color: #111111;
+    -fx-background-color: #0a0c10;
     -fx-background-radius: 0 0 15 15;
     -fx-pref-width: 120;
     -fx-pref-height: 25;
@@ -37,34 +43,34 @@
     -fx-translate-y: -20;
 }
 
-/* Internal drop area styling (The Screen) */
+/* --- Internal drop area styling (the screen) ------------------------------------ */
 .drop-zone {
-    -fx-background-color: #1a1a1a;
+    -fx-background-color: -fg-input-bg;
     -fx-background-radius: 20;
-    -fx-border-color: #333333;
+    -fx-border-color: -fg-border-subtle;
     -fx-border-width: 2;
     -fx-border-radius: 20;
     -fx-border-style: dashed;
 }
 
 .drag-hover {
-    -fx-background-color: #2a2c36;
-    -fx-border-color: #ff9800;
+    -fx-background-color: -fg-bg-raised;
+    -fx-border-color: -fg-yellow;
     -fx-border-style: dashed;
 }
 
-/* Right side flat modern card */
+/* --- Right side flat modern card -------------------------------------------------- */
 .controls-card {
-    -fx-background-color: #1e1f26;
+    -fx-background-color: -fg-bg-app;
     -fx-padding: 32;
 }
 
-/* Professional Structure Elements */
+/* --- Structure elements ------------------------------------------------------------ */
 .module-card {
-    -fx-background-color: #2b2f3a;
+    -fx-background-color: -fg-bg-card;
     -fx-background-radius: 10;
     -fx-border-radius: 10;
-    -fx-border-color: #3a3d4a;
+    -fx-border-color: -fg-border-subtle;
     -fx-padding: 18;
     -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 8, 0.2, 0, 2);
 }
@@ -76,48 +82,49 @@
 .module-title {
     -fx-font-size: 15px;
     -fx-font-weight: 600;
-    -fx-text-fill: #e8eaf0;
+    -fx-text-fill: -fg-text-primary;
     -fx-letter-spacing: 0.3;
 }
 
 .field-label {
     -fx-font-size: 12px;
     -fx-font-weight: 500;
-    -fx-text-fill: #a9adbb;
+    -fx-text-fill: -fg-text-secondary;
 }
 
 .hint-text {
-    -fx-text-fill: #a9adbb;
+    -fx-text-fill: -fg-text-secondary;
     -fx-font-size: 12px;
     -fx-font-style: italic;
 }
 
-/* Controls */
+/* --- Controls (scoped to this layout) --------------------------------------------- */
 .text-field {
-    -fx-background-color: #1e1f26;
-    -fx-text-fill: #e8eaf0;
-    -fx-prompt-text-fill: #a9adbb;
+    -fx-background-color: -fg-input-bg;
+    -fx-text-fill: -fg-text-primary;
+    -fx-prompt-text-fill: -fg-text-muted;
     -fx-background-radius: 6;
     -fx-border-radius: 6;
-    -fx-border-color: #3a3d4a;
+    -fx-border-color: -fg-border-subtle;
     -fx-padding: 8;
     -fx-font-size: 13px;
 }
 
 .text-field:focused {
-    -fx-border-color: #ff9800;
+    -fx-border-color: -fg-yellow;
+    -fx-effect: dropshadow(gaussian, -fg-focus-ring, 6, 0.4, 0, 0);
 }
 
 .list-view {
-    -fx-background-color: #1e1f26;
+    -fx-background-color: -fg-input-bg;
     -fx-background-radius: 6;
-    -fx-control-inner-background: #1e1f26;
-    -fx-border-color: #3a3d4a;
+    -fx-control-inner-background: -fg-input-bg;
+    -fx-border-color: -fg-border-subtle;
     -fx-border-radius: 6;
 }
 
 .list-view .list-cell {
-    -fx-text-fill: #e8eaf0;
+    -fx-text-fill: -fg-text-primary;
     -fx-background-color: transparent;
     -fx-padding: 8 12;
 }
@@ -127,35 +134,39 @@
 }
 
 .list-view .list-cell:filled:hover {
-    -fx-background-color: #3a3d4a;
+    -fx-background-color: -fg-bg-raised;
 }
 
 .list-view .list-cell:filled:selected {
-    -fx-background-color: #ff9800;
-    -fx-text-fill: #ffffff;
+    -fx-background-color: -fg-yellow;
+    -fx-text-fill: -fg-text-dark;
 }
 
 .combo-box {
-    -fx-background-color: #1e1f26;
-    -fx-text-fill: #e8eaf0;
+    -fx-background-color: -fg-input-bg;
+    -fx-text-fill: -fg-text-primary;
     -fx-background-radius: 6;
-    -fx-border-color: #3a3d4a;
+    -fx-border-color: -fg-border-subtle;
     -fx-border-radius: 6;
     -fx-font-size: 13px;
 }
 
+.combo-box:focused {
+    -fx-border-color: -fg-yellow;
+}
+
 .combo-box .list-cell {
-    -fx-text-fill: #e8eaf0;
-    -fx-background-color: #1e1f26;
+    -fx-text-fill: -fg-text-primary;
+    -fx-background-color: -fg-input-bg;
 }
 
 .combo-box .list-cell:hover {
-    -fx-background-color: #3a3d4a;
+    -fx-background-color: -fg-bg-raised;
 }
 
 .compact-button {
-    -fx-background-color: #ff9800;
-    -fx-text-fill: white;
+    -fx-background-color: -fg-yellow;
+    -fx-text-fill: -fg-text-dark;
     -fx-font-weight: bold;
     -fx-font-size: 13px;
     -fx-padding: 6 14 6 14;
@@ -164,52 +175,52 @@
 }
 
 .compact-button:hover {
-    -fx-background-color: #ffad33;
+    -fx-background-color: -fg-yellow-hover;
 }
 
 .compact-button:armed {
-    -fx-background-color: #d87c00;
-    -fx-effect: dropshadow(gaussian, rgba(255, 152, 0, 0.6), 8, 0.3, 0, 0);
+    -fx-background-color: -fg-yellow-active;
+    -fx-effect: dropshadow(gaussian, -fg-focus-ring, 8, 0.3, 0, 0);
 }
 
 .divider {
-    -fx-background-color: #3a3d4a;
+    -fx-background-color: -fg-border-subtle;
     -fx-pref-height: 1;
 }
 
-/* Terminal style log window */
+/* --- Terminal style log window ------------------------------------------------------ */
 .terminal-text-area {
-    -fx-background-color: #15161b;
-    -fx-control-inner-background: #15161b;
-    -fx-text-fill: #ff9800;
+    -fx-background-color: -fg-input-bg;
+    -fx-control-inner-background: -fg-input-bg;
+    -fx-text-fill: -fg-yellow;
     -fx-font-family: "Consolas", "Courier New", monospace;
     -fx-background-radius: 6;
-    -fx-border-color: #3a3d4a;
+    -fx-border-color: -fg-border-subtle;
     -fx-border-radius: 6;
     -fx-padding: 5;
     -fx-font-size: 12px;
 }
 
-/* Crosshair Overlay */
+/* --- Crosshair overlay ---------------------------------------------------------------- */
 .crosshair-line {
-    -fx-stroke: #ff9800;
+    -fx-stroke: -fg-yellow;
     -fx-stroke-width: 1.5;
     -fx-stroke-dash-array: 5 5;
 }
 
 .coordinates-label {
-    -fx-background-color: rgba(21, 22, 27, 0.8);
-    -fx-text-fill: #00ff00;
+    -fx-background-color: rgba(12, 15, 22, 0.85);
+    -fx-text-fill: -fg-green;
     -fx-font-family: "Consolas", "Courier New", monospace;
     -fx-padding: 4 8;
     -fx-background-radius: 4;
     -fx-font-size: 12px;
 }
 
-/* Selection Box Overlay */
+/* --- Selection box overlay --------------------------------------------------------------- */
 .selection-box {
-    -fx-fill: rgba(0, 153, 255, 0.3);
-    -fx-stroke: #0099ff;
+    -fx-fill: rgba(56, 139, 253, 0.3);
+    -fx-stroke: -fg-blue;
     -fx-stroke-width: 1;
     -fx-stroke-dash-array: 5 5;
 }
