@@ -6,10 +6,10 @@ import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.MarchSlotState;
-import dev.frostguard.api.domain.MarchSlotStatus;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.data.entity.DailyTask;
 import dev.frostguard.data.repository.DailyTaskRepository;
+import dev.frostguard.engine.helper.MarchSlotAvailabilityEstimator;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.engine.nav.SearchConfigConstants;
@@ -18,6 +18,7 @@ import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.service.TaskManagementService;
 import dev.frostguard.vision.convert.GameTimeUtils;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -48,7 +49,15 @@ private static final int RALLY_RETURN_SAFETY_SECONDS = 5;
 // shortly. If no slot announces a return at all (encamped, reinforcing, locked), back off much further.
 private static final int UNKNOWN_MARCH_RETRY_MINUTES = 5;
 private static final int STATIONED_MARCH_RETRY_MINUTES = 60;
+private static final int LOWER_BOUND_RECHECK_BUFFER_MINUTES = 1;
+private static final int GATHER_RETURN_BUFFER_MINUTES = 5;
 private static final int MIN_RETRY_SECONDS = 30;
+private static final MarchSlotAvailabilityEstimator.Settings MARCH_SLOT_ESTIMATE_SETTINGS =
+        new MarchSlotAvailabilityEstimator.Settings(
+                Duration.ofMinutes(LOWER_BOUND_RECHECK_BUFFER_MINUTES),
+                Duration.ofMinutes(GATHER_RETURN_BUFFER_MINUTES),
+                Duration.ofMinutes(UNKNOWN_MARCH_RETRY_MINUTES),
+                Duration.ofMinutes(STATIONED_MARCH_RETRY_MINUTES));
 // Another player beat us to the target: search again in-run, and only give up on the whole wake-up
 // once several fresh targets in a row turn out to be contested.
 private static final int TARGET_TAKEN_MAX_RETRIES = 3;
@@ -449,29 +458,24 @@ private void leaveSameTargetDialog() {
         }
     }
 
-// Picks the moment the first march slot frees up. Rallies this routine launched itself carry an
-// exact return time, so they win over anything the panel can tell us. Gathering and returning rows
-// expose a meaningful countdown; a rally or an attack shows one that describes the outbound leg, so
-// those only earn a short recheck. Stationed and locked rows never announce a return at all.
+// Picks the next useful wake-up when every march slot is busy. Rallies this routine launched itself
+// carry exact return times; the panel contributes exact returning countdowns or conservative recheck
+// hints for gather, rally, attack, and stationed rows.
 private LocalDateTime resolveNoSlotRetry(List<MarchSlotState> marchQueue) {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime earliest = resolveEarliestReturn(profile.getId());
 
-        for (MarchSlotState slot : marchQueue) {
-            LocalDateTime wakeAt = null;
-            if (slot.hasReturnCountdown()) {
-                wakeAt = now.plus(slot.countdown());
-            } else if (slot.status() == MarchSlotStatus.BUSY_UNKNOWN) {
-                wakeAt = now.plusMinutes(UNKNOWN_MARCH_RETRY_MINUTES);
-            }
-            if (wakeAt != null && (earliest == null || wakeAt.isBefore(earliest))) {
-                earliest = wakeAt;
-            }
+        LocalDateTime panelEstimate = MarchSlotAvailabilityEstimator
+                .estimateEarliestCheckAt(marchQueue, now, MARCH_SLOT_ESTIMATE_SETTINGS)
+                .orElse(null);
+        if (panelEstimate != null && (earliest == null || panelEstimate.isBefore(earliest))) {
+            earliest = panelEstimate;
         }
 
         if (earliest == null) {
             logInfo(routineLogPolarTerrorHuntingLine(
-                    "March queue holds no returning march; rechecking in " + STATIONED_MARCH_RETRY_MINUTES + " min"));
+                    "March queue has no usable wake-up estimate; rechecking in "
+                            + STATIONED_MARCH_RETRY_MINUTES + " min"));
             earliest = now.plusMinutes(STATIONED_MARCH_RETRY_MINUTES);
         }
 
