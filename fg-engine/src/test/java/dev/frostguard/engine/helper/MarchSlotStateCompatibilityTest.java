@@ -30,6 +30,7 @@ class MarchSlotStateCompatibilityTest {
         assertEquals(MarchCountdownKind.WORK_REMAINING, slot.countdownKind());
         assertEquals(MarchSlotReleaseConfidence.LOWER_BOUND, slot.releaseConfidence());
         assertTrue(slot.isGather());
+        assertEquals(false, slot.hasExactReleaseCountdown());
         assertEquals(false, slot.hasReturnCountdown());
     }
 

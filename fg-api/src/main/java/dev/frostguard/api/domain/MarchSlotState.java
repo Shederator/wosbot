@@ -48,9 +48,14 @@ public record MarchSlotState(
     }
 
     /** True when the countdown marks the moment this slot frees up. */
-    public boolean hasReturnCountdown() {
+    public boolean hasExactReleaseCountdown() {
         return countdown != null && countdownKind == MarchCountdownKind.RETURN
                 && releaseConfidence == MarchSlotReleaseConfidence.EXACT;
+    }
+
+    /** True when the countdown marks the moment this slot frees up. */
+    public boolean hasReturnCountdown() {
+        return hasExactReleaseCountdown();
     }
 
     public MarchSlotState withEvidence(String evidence) {
