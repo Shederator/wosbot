@@ -56,6 +56,8 @@
                                                                 <ComboBox fx:id="comboBoxActiveMarchQueue" prefWidth="120.0" />
                                                             </children>
                                                         </HBox>
+                                                        <CheckBox fx:id="checkBoxOnlyFullResources" mnemonicParsing="false" text="Only search for full resources" />
+                                                        <CheckBox fx:id="checkBoxDowngradeLevel" mnemonicParsing="false" text="Downgrade level if no node is found" />
                                                         <CheckBox fx:id="checkBoxRemoveHeros" mnemonicParsing="false" text="Remove 2nd and 3rd hero from march" />
                                                     </children>
                                                 </VBox>

@@ -683,7 +683,7 @@ public class OpenCvPatternLocator {
             long totalTime = System.currentTimeMillis() - startTime;
 
             if (scorePct < threshold) {
-                log.debug(
+                log.info(
                         "=== Pattern Correlation Completed === Pattern: {}, Total: {} ms, Match: {}% (BELOW threshold)",
                         spriteLabel, totalTime, String.format("%.2f", scorePct));
                 return new ImageSearchResultData(false, null, scorePct);
@@ -694,7 +694,7 @@ public class OpenCvPatternLocator {
             double centerX = bestPos.x + roi.x + (template.cols() / 2.0);
             double centerY = bestPos.y + roi.y + (template.rows() / 2.0);
 
-            log.debug("=== Pattern Correlation Completed === Pattern: {}, Total: {} ms, Match: {}%, Position: ({},{})",
+            log.info("=== Pattern Correlation Completed === Pattern: {}, Total: {} ms, Match: {}%, Position: ({},{})",
                     spriteLabel, totalTime, String.format("%.2f", scorePct), (int) centerX, (int) centerY);
 
             return new ImageSearchResultData(true, new PointData((int) centerX, (int) centerY), scorePct);
@@ -1073,12 +1073,12 @@ public class OpenCvPatternLocator {
             double scorePct = mmr.maxVal * 100.0;
 
             if (scorePct < threshold) {
-                log.debug(tagged("Template " + spritePath + " match percentage " + scorePct
+                log.warn(tagged("Template " + spritePath + " match percentage " + scorePct
                         + " below threshold " + threshold));
                 return new ImageSearchResultData(false, null, scorePct);
             }
 
-            log.debug(tagged(
+            log.info(tagged(
                     "Template " + spritePath + " found with match percentage: " + scorePct));
 
             // Calculate center coordinates
@@ -1177,12 +1177,12 @@ public class OpenCvPatternLocator {
             double scorePct = mmr.maxVal * 100.0;
 
             if (scorePct < threshold) {
-                log.debug(tagged("Mono reference " + spritePath + " match percentage "
+                log.warn(tagged("Mono reference " + spritePath + " match percentage "
                         + scorePct + " below threshold " + threshold));
                 return new ImageSearchResultData(false, null, scorePct);
             }
 
-            log.debug(tagged(
+            log.info(tagged(
                     "Mono reference " + spritePath + " found with match percentage: " + scorePct));
 
             // Calculate center point of the match (taking ROI into profile)
@@ -1403,12 +1403,12 @@ public class OpenCvPatternLocator {
             double scorePct = mmr.maxVal * 100.0;
 
             if (scorePct < threshold) {
-                log.debug(tagged("Mono reference " + spritePath + " match percentage "
+                log.warn(tagged("Mono reference " + spritePath + " match percentage "
                         + scorePct + " below threshold " + threshold));
                 return new ImageSearchResultData(false, null, scorePct);
             }
 
-            log.debug(tagged(
+            log.info(tagged(
                     "Mono reference " + spritePath + " found with match percentage: " + scorePct));
 
             // Calculate center point of the match (taking ROI into profile)

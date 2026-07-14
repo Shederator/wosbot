@@ -13,8 +13,6 @@ import dev.frostguard.engine.service.TaskManagementService;
 
 public final class GatherQueuePolicy {
 
-    // Changed by pernerch | Date: 2026-07-02 | Why: hard-cap gather marches at 4 to prevent march-slot overcommitment.
-    private static final int HARD_QUEUE_CAP = 4;
     // Changed by pernerch | Date: 2026-07-02 | Why: only treat future high-priority tasks as blocking gather when they are actually imminent.
     private static final int PENDING_TASK_LOOKAHEAD_MINUTES = 1;
     // Changed by pernerch | Date: 2026-07-02 | Why: prioritize Bear Trap/Intel so gather can defer when needed.
@@ -30,8 +28,7 @@ public final class GatherQueuePolicy {
         if (configuredLimit <= 0) {
             return 1;
         }
-        // Changed by pernerch | Date: 2026-07-02 | Why: enforce the hard queue ceiling even if config is higher.
-        return Math.min(HARD_QUEUE_CAP, configuredLimit);
+        return configuredLimit;
     }
 
     public static boolean allowMarchDeployment(Collection<String> activeMarches, String resourceName) {

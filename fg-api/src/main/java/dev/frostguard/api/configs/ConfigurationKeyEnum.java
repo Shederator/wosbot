@@ -203,6 +203,8 @@ public enum ConfigurationKeyEnum {
     GATHER_IRON_LEVEL_INT           ("8",                   Integer.class,  ConfigCategory.GATHERING),
     GATHER_MEAT_BOOL                ("false",               Boolean.class,  ConfigCategory.GATHERING),
     GATHER_MEAT_LEVEL_INT           ("8",                   Integer.class,  ConfigCategory.GATHERING),
+    GATHER_ONLY_FULL_RESOURCES_BOOL ("false",               Boolean.class,  ConfigCategory.GATHERING),
+    GATHER_DOWNGRADE_LEVEL_BOOL     ("true",                Boolean.class,  ConfigCategory.GATHERING),
     GATHER_REMOVE_HEROS_BOOL        ("true",                Boolean.class,  ConfigCategory.GATHERING),
     GATHER_ROTATION_POOL            ("",                    String.class,   ConfigCategory.GATHERING),
     // pernerch/2026-07-02: timestamp of the last gather recall (Intel/Bear), stored per-profile task instance

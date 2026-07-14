@@ -10,10 +10,11 @@ import org.junit.jupiter.api.Test;
 
 class GatherQueuePolicyTest {
 
-    // Changed by pernerch | Date: 2026-07-02 | Why: regression guard for the gather queue hard-cap policy.
+    // Gather may be configured above the four resource types; deployment still avoids duplicate
+    // resources until every enabled type is already active.
     @Test
-    void capsConfiguredQueueCountAtFour() {
-        assertEquals(4, GatherQueuePolicy.resolveActiveQueueLimit(8));
+    void keepsConfiguredQueueCount() {
+        assertEquals(8, GatherQueuePolicy.resolveActiveQueueLimit(8));
         assertEquals(4, GatherQueuePolicy.resolveActiveQueueLimit(4));
         assertEquals(1, GatherQueuePolicy.resolveActiveQueueLimit(0));
     }
