@@ -456,6 +456,7 @@ C:\LDPlayer\LDPlayer9\ldconsole.exe
 | 2026-07-02 | Character Switch | Corrected template paths for character-switch detection | More reliable switch-button discovery and profile switching |
 | 2026-07-03 | Logging | Emulator tap logs now resolve active profile per device slot instead of first profile on that emulator | Correct profile names in multi-profile shared-emulator logs |
 | 2026-07-04 | Stop Control | Introduced separate GUI/Telegram stop paths with optional emulator-close behavior | Consistent operator control and safer remote stop handling |
+| 2026-07-31 | Profile Switching | Restored same-emulator fast profile switching fallback to avoid forced emulator reboot on character-switch miss | Cleaner multi-account handover continuity without unnecessary restart cycle |
 
 ### Stamina & Stability
 
@@ -484,10 +485,26 @@ All commits in the range `upstream/main..HEAD` are represented above.
 
 | Scope | Command / Suite | Result |
 |:------|:----------------|:-------|
-| Full Reactor Build | `mvn clean install` | ✅ `BUILD SUCCESS` (Total time: 17.797 s) |
+| Full Reactor Build | `mvn clean install` | ✅ `BUILD SUCCESS` (Total time: 17.082 s) |
 | Queue Guard Regression | `GatherQueuePolicyTest` | ✅ 3 tests, 0 failures, 0 errors |
 | Intel Flag-Lock Guard Regression | `IntelligenceRoutineTest` | ✅ 3 tests, 0 failures, 0 errors |
 | Telegram Compatibility Regression | `TelegramBotServiceTest` | ✅ 2 tests, 0 failures, 0 errors |
+
+### Detailed Test Report: Fast Profile Switching Restore (2026-07-31)
+
+| Category | Verification | Evidence | Status |
+|:---------|:-------------|:---------|:-------|
+| Functional Change | Character switch failure path keeps emulator session alive instead of forcing emulator shutdown | `CharacterSwitchHelper.switchToCharacter(...)` fallback now exits UI state and returns failure without closing emulator | ✅ Pass |
+| Initialization Safety | Initialization no longer assumes emulator restart on character-switch miss | `InitializeRoutine.verifyAndSwitchCharacter(...)` failure branch keeps runtime session continuity | ✅ Pass |
+| Build Integrity | Full multi-module reactor compile/test/package/install | `mvn clean install` completed with `BUILD SUCCESS` | ✅ Pass |
+| Module Health | All modules completed successfully in reactor summary | `fg-api`, `fg-data`, `fg-vision`, `fg-engine`, `fg-tasks`, `fg-watcher`, `fg-app` all `SUCCESS` | ✅ Pass |
+| Tasks Test Suite | Focused task runtime/test stability after switching behavior change | Surefire summary in `fg-tasks`: 45 tests, 0 failures, 0 errors, 0 skipped | ✅ Pass |
+| Packaging Path | Desktop artifact packaging still intact | `fg-app` produced `frostguard-2.1.0.jar` and `frostguard-2.1.0-desktop-bundle.zip` | ✅ Pass |
+
+#### Notes
+
+- Existing Maven shade overlap warnings in `fg-watcher` remain unchanged and non-blocking for this fix.
+- No additional functional surface was modified beyond the switch-failure/session-continuity path.
 
 <br/>
 
