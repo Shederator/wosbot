@@ -363,11 +363,9 @@ public class InitializeRoutine extends DelayedTask {
 			boolean switchSuccess = characterSwitchHelper.switchToCharacter(profile);
 			
 			if (!switchSuccess) {
-				// Character not found - emulator already closed by helper
-				// According to requirements: do not retry, continue to next profile
+				// Character not found. Keep emulator session alive so same-emulator
+				// sibling profiles can continue without reboot.
 				logError("Character switching failed. Character not found. Continuing to next profile.");
-				// Reset isStarted flag since emulator was closed
-				isStarted = false;
 				// Do not set recurring=true - let queue continue to next profile
 				return false;
 			}
