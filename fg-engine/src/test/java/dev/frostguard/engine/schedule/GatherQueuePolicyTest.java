@@ -10,11 +10,11 @@ import org.junit.jupiter.api.Test;
 
 class GatherQueuePolicyTest {
 
-    // Gather may be configured above the four resource types; deployment still avoids duplicate
-    // resources until every enabled type is already active.
+    // Queue capacity is bounded by game slot limits while still normalizing invalid values.
     @Test
-    void keepsConfiguredQueueCount() {
-        assertEquals(8, GatherQueuePolicy.resolveActiveQueueLimit(8));
+    void clampsConfiguredQueueCountWithinSupportedBounds() {
+        assertEquals(6, GatherQueuePolicy.resolveActiveQueueLimit(8));
+        assertEquals(6, GatherQueuePolicy.resolveActiveQueueLimit(6));
         assertEquals(4, GatherQueuePolicy.resolveActiveQueueLimit(4));
         assertEquals(1, GatherQueuePolicy.resolveActiveQueueLimit(0));
     }

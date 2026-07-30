@@ -13,6 +13,8 @@ import dev.frostguard.engine.service.TaskManagementService;
 
 public final class GatherQueuePolicy {
 
+    private static final int MAX_ACTIVE_QUEUE_LIMIT = 6;
+
     // Changed by pernerch | Date: 2026-07-02 | Why: only treat future high-priority tasks as blocking gather when they are actually imminent.
     private static final int PENDING_TASK_LOOKAHEAD_MINUTES = 1;
     // Changed by pernerch | Date: 2026-07-02 | Why: prioritize Bear Trap/Intel so gather can defer when needed.
@@ -28,7 +30,7 @@ public final class GatherQueuePolicy {
         if (configuredLimit <= 0) {
             return 1;
         }
-        return configuredLimit;
+        return Math.min(MAX_ACTIVE_QUEUE_LIMIT, configuredLimit);
     }
 
     public static boolean allowMarchDeployment(Collection<String> activeMarches, String resourceName) {

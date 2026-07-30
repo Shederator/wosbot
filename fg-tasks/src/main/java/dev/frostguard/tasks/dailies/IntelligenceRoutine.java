@@ -1400,6 +1400,10 @@ private void manageRescheduling(boolean anyIntelProcessed,
 		return beastFound;
 	}
 
+	static boolean shouldAbortBeastDeployForLockedFlag(boolean useFlag, boolean flagSelected) {
+		return useFlag && !flagSelected;
+	}
+
 private void handleSurvivor(ImageSearchResultData result) {
 		if (survivorMissionsSincePause >= SURVIVOR_BATCH_LIMIT) {
 			logInfo(routineLogIntelligenceLine("Survivor batch limit reached (" + SURVIVOR_BATCH_LIMIT
@@ -1509,7 +1513,13 @@ private void handleBeast(ImageSearchResultData beast) {
 
 
 		if (useFlag) {
-			marchHelper.selectFlag(flagNumber);
+			boolean flagSelected = marchHelper.selectFlag(flagNumber);
+			if (shouldAbortBeastDeployForLockedFlag(useFlag, flagSelected)) {
+				logWarning(routineLogIntelligenceLine("Selected Intel flag is locked. Aborting this beast deployment cycle."));
+				pressBack();
+				pressBack();
+				return;
+			}
 		}
 
 
