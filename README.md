@@ -415,6 +415,7 @@ C:\LDPlayer\LDPlayer9\ldconsole.exe
 | 2026-07-04 | Build Script | `fg-build.bat` now retries full build once after `fg-vision` transient copy/package failures | Better local build stability on occasional file-lock/resource-copy hiccups |
 | 2026-07-04 | Build Validation | `fg-build.bat` verifies packaged app JAR content and auto-runs focused `fg-app` fallback rebuild if integrity check fails | Reduces risk of distributing incomplete application JARs |
 | 2026-07-04 | Build Artifacts | `fg-build.bat` now opens the generated desktop-bundle ZIP in Explorer after successful builds (fallback: target folder) | Faster handoff to packaged output without manual folder navigation |
+| 2026-07-31 | Build Compatibility | Restored Telegram service compatibility constants/helpers expected by engine tests (`CURRENT_LOG_PATH`, standard-queue guard helper) | Prevented test-compile break after merge integration and kept behavior backward-compatible |
 
 ### UI & Navigation
 
@@ -442,6 +443,8 @@ C:\LDPlayer\LDPlayer9\ldconsole.exe
 | 2026-07-04 | Scheduler | Bot start now guarantees first Initialize execution before normal queue heuristics apply | Prevents skipped startup initialization when emulator/game is already open |
 | 2026-07-04 | Intel | Added dynamic march-capacity fallback (`configured-1`) for possible VIP expiry during recall edge-case | Intel flow continues safely instead of retry-looping on false full-capacity assumptions |
 | 2026-07-04 | Injection | Furnace upgrade injection now performs recovery back navigation when claim button is missing | Reduces risk of leaving unexpected overlays (e.g., chat) open after aborted injection |
+| 2026-07-31 | Gather | Reintroduced active queue clamping in central policy (`resolveActiveQueueLimit`) to cap out-of-range configured queue values | Prevents gather overcommit while preserving existing scheduler architecture |
+| 2026-07-31 | Intel | Added locked-flag deployment guard in beast flow to abort safely when selected rally flag cannot be applied | Avoids accidental deployment with wrong flag state and keeps march assignment deterministic |
 
 ### Multi-Profile Runtime & Logging
 
@@ -476,6 +479,15 @@ C:\LDPlayer\LDPlayer9\ldconsole.exe
 | 2026-07-03 | 8e80aa8 | Hotfix #5 | Intelligence routine refinements | Covered in Scheduler and Task Logic group |
 
 All commits in the range `upstream/main..HEAD` are represented above.
+
+### Validation Snapshot (2026-07-31)
+
+| Scope | Command / Suite | Result |
+|:------|:----------------|:-------|
+| Full Reactor Build | `mvn clean install` | ✅ `BUILD SUCCESS` (Total time: 17.797 s) |
+| Queue Guard Regression | `GatherQueuePolicyTest` | ✅ 3 tests, 0 failures, 0 errors |
+| Intel Flag-Lock Guard Regression | `IntelligenceRoutineTest` | ✅ 3 tests, 0 failures, 0 errors |
+| Telegram Compatibility Regression | `TelegramBotServiceTest` | ✅ 2 tests, 0 failures, 0 errors |
 
 <br/>
 

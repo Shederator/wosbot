@@ -60,6 +60,8 @@ public class TelegramBotService implements BotStateListener {
 
     private static final Logger logger = LoggerFactory.getLogger(TelegramBotService.class);
     private static final String API_BASE = "https://api.telegram.org/bot";
+    // Kept public for compatibility with existing log-download tests and tooling.
+    static final String CURRENT_LOG_PATH = "log/frostguard.log";
 
     // ── singleton ────────────────────────────────────────────────────────────
     private static TelegramBotService instance;
@@ -69,6 +71,11 @@ public class TelegramBotService implements BotStateListener {
             instance = new TelegramBotService();
         }
         return instance;
+    }
+
+    // Backward-compatible queue-task filter used by existing tests.
+    static boolean isStandardQueueTask(TpDailyTaskEnum task) {
+        return task != null && task != TpDailyTaskEnum.CUSTOM_TASK;
     }
 
     // ── state ─────────────────────────────────────────────────────────────────
