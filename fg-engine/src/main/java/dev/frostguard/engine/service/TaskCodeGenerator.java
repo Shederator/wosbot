@@ -169,7 +169,7 @@ public class TaskCodeGenerator {
                                Map<Integer, AutomationStep> nodeIndex) {
         String i4 = indent(4), i5 = indent(5);
         out.append(i4).append("case ").append(node.getId()).append(": {\n");
-        out.append(i5).append("// ").append(node.getType().getDisplayName()).append("\n");
+        out.append(i5).append("// ").append(getNodeComment(node)).append("\n");
 
         switch (node.getType()) {
             case TAP_POINT       -> writeTap(out, node);
@@ -194,6 +194,14 @@ public class TaskCodeGenerator {
 
         out.append(i5).append("break;\n");
         out.append(i4).append("}\n");
+    }
+
+    private String getNodeComment(AutomationStep node) {
+        String nodeName = node.getNodeName();
+        if (nodeName == null || nodeName.isBlank()) {
+            return node.getType().getDisplayName();
+        }
+        return nodeName.replace('\r', ' ').replace('\n', ' ');
     }
 
     // ── Action emitters ───────────────────────────────────────────────

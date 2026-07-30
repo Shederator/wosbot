@@ -23,7 +23,7 @@ public class HeadlessApp {
 
 		// 1. Initialize external libraries
 		try {
-			OpenCvPatternLocator.extractAndLoadNative("/native/opencv/opencv_java4110.dll");
+			OpenCvPatternLocator.loadNativeLibrary();
 			logger.info("OpenCV native library loaded successfully.");
 		} catch (IOException e) {
 			logger.error("Failed to load OpenCV: ", e);

@@ -688,7 +688,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
     private void initializeExternalLibraries() { /* internal */
         try {
-            OpenCvPatternLocator.extractAndLoadNative("/native/opencv/opencv_java4110.dll");
+            OpenCvPatternLocator.loadNativeLibrary();
         } catch (IOException e) {
             e.printStackTrace();
         }

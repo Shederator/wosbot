@@ -725,7 +725,10 @@ private void handleJoinRallies2() {
         if (!joinRally || sharedEmulator) {
             if (sharedEmulator) {
                 logInfo(routineLogBearTrapLine("Skipping rally joining because this profile shares an emulator with another account."));
+            } else {
+                logDebug(routineLogBearTrapLine("Skipping rally joining because joining is disabled."));
             }
+            return;
         }
 
         try {

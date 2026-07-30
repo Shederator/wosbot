@@ -9,10 +9,18 @@ import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.domain.AutomationBlueprint;
 import dev.frostguard.api.domain.AutomationStep;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 /**
  * Service that manages a Task Builder recording session.
@@ -33,12 +41,25 @@ public class TaskBuilderService {
     private static final String FILE_PREFIX = "file://";
 
     private final EmulatorController emuManager;
+    private final Path customTasksDir;
+    private final ObjectMapper mapper;
     private AutomationBlueprint currentDefinition;
     private String activeEmulatorNumber;
 
     public TaskBuilderService() {
         this.emuManager = EmulatorController.getInstance();
+        this.customTasksDir = Paths.get(System.getProperty("user.dir"), "custom_tasks");
+        this.mapper = new ObjectMapper()
+                .enable(SerializationFeature.INDENT_OUTPUT)
+                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+        try {
+            Files.createDirectories(customTasksDir);
+        } catch (IOException e) {
+            logger.error("Failed to create custom_tasks directory", e);
+        }
     }
+
+    public record CustomTaskSaveResult(Path javaFile, Path builderFile, String className) {}
 
     // ========================================================================
     // Session management
@@ -54,6 +75,84 @@ public class TaskBuilderService {
         this.currentDefinition = new AutomationBlueprint(taskName);
         this.activeEmulatorNumber = emulatorNumber;
         logger.info("Task Builder session started: '{}' on emulator {}", taskName, emulatorNumber);
+    }
+
+    /**
+     * Loads a saved builder definition into the current Task Builder session.
+     */
+    public AutomationBlueprint loadDefinition(File file, String emulatorNumber) throws IOException {
+        AutomationBlueprint loaded = mapper.readValue(file, AutomationBlueprint.class);
+        if (loaded.getNodes() == null) {
+            loaded.setNodes(new java.util.ArrayList<>());
+        }
+        if (loaded.getName() == null || loaded.getName().trim().isEmpty()) {
+            loaded.setName(stripBuilderExtension(file.getName()));
+        }
+        if (loaded.getStartLocation() == null || loaded.getStartLocation().trim().isEmpty()) {
+            loaded.setStartLocation("ANY");
+        }
+        this.currentDefinition = loaded;
+        this.activeEmulatorNumber = emulatorNumber;
+        logger.info("Task Builder definition imported: '{}' from {}", loaded.getName(), file.getAbsolutePath());
+        return loaded;
+    }
+
+    /**
+     * Saves the editable flow as generated Java and a builder JSON snapshot.
+     */
+    public CustomTaskSaveResult saveCurrentTaskToCustomTasks(String preferredName) throws IOException {
+        String displayName = preferredName == null || preferredName.trim().isEmpty()
+                ? currentDefinition != null ? currentDefinition.getName() : null
+                : preferredName.trim();
+        if (displayName == null || displayName.trim().isEmpty()) {
+            displayName = "Generated Task";
+        }
+        return saveCurrentTaskToCustomTasks(preferredName,
+                customTasksDir.resolve(toJavaClassName(displayName) + ".json"));
+    }
+
+    /**
+     * Saves the editable flow to a chosen builder JSON file and writes generated Java beside it.
+     */
+    public CustomTaskSaveResult saveCurrentTaskToCustomTasks(String preferredName, Path builderPath) throws IOException {
+        if (currentDefinition == null) {
+            throw new IllegalStateException("No active task builder session");
+        }
+        if (builderPath == null) {
+            throw new IllegalArgumentException("Builder JSON path is required");
+        }
+
+        Path absoluteBuilderPath = builderPath.toAbsolutePath();
+        Path parentDir = absoluteBuilderPath.getParent();
+        if (parentDir == null) {
+            parentDir = customTasksDir;
+            absoluteBuilderPath = parentDir.resolve(absoluteBuilderPath.getFileName());
+        }
+        Files.createDirectories(parentDir);
+
+        String displayName = preferredName == null || preferredName.trim().isEmpty()
+                ? currentDefinition.getName()
+                : preferredName.trim();
+        if (displayName == null || displayName.trim().isEmpty()) {
+            displayName = stripBuilderExtension(absoluteBuilderPath.getFileName().toString());
+        }
+
+        currentDefinition.setName(displayName);
+        currentDefinition.setUpdatedAt(System.currentTimeMillis());
+
+        String className = toJavaIdentifier(stripBuilderExtension(absoluteBuilderPath.getFileName().toString()));
+        Path javaPath = parentDir.resolve(className + ".java");
+
+        TaskCodeGenerator generator = new TaskCodeGenerator();
+        Files.writeString(javaPath, generator.generate(currentDefinition, className, displayName));
+        mapper.writeValue(absoluteBuilderPath.toFile(), currentDefinition);
+
+        logger.info("Saved custom task '{}' to {} and {}", className, javaPath, absoluteBuilderPath);
+        return new CustomTaskSaveResult(javaPath, absoluteBuilderPath, className);
+    }
+
+    public Path getCustomTasksDirectory() {
+        return customTasksDir;
     }
 
     /**
@@ -396,5 +495,55 @@ public class TaskBuilderService {
 
     public boolean hasActiveSession() {
         return currentDefinition != null && activeEmulatorNumber != null;
+    }
+
+    private String toJavaClassName(String taskName) {
+        String[] parts = taskName.trim().split("[^A-Za-z0-9]+");
+        StringBuilder name = new StringBuilder();
+        for (String part : parts) {
+            if (part.isEmpty()) {
+                continue;
+            }
+            name.append(Character.toUpperCase(part.charAt(0)));
+            if (part.length() > 1) {
+                name.append(part.substring(1));
+            }
+        }
+        if (name.isEmpty()) {
+            name.append("GeneratedTask");
+        }
+        if (!Character.isJavaIdentifierStart(name.charAt(0))) {
+            name.insert(0, 'T');
+        }
+
+        StringBuilder sanitized = new StringBuilder();
+        for (int i = 0; i < name.length(); i++) {
+            char ch = name.charAt(i);
+            sanitized.append(Character.isJavaIdentifierPart(ch) ? ch : '_');
+        }
+        if (!sanitized.toString().endsWith("Task")) {
+            sanitized.append("Task");
+        }
+        return sanitized.toString();
+    }
+
+    private String toJavaIdentifier(String fileBase) {
+        String source = fileBase == null || fileBase.trim().isEmpty() ? "GeneratedTask" : fileBase.trim();
+        StringBuilder sanitized = new StringBuilder();
+        for (int i = 0; i < source.length(); i++) {
+            char ch = source.charAt(i);
+            sanitized.append(Character.isJavaIdentifierPart(ch) ? ch : '_');
+        }
+        while (!sanitized.isEmpty() && !Character.isJavaIdentifierStart(sanitized.charAt(0))) {
+            sanitized.deleteCharAt(0);
+        }
+        return sanitized.isEmpty() ? "GeneratedTask" : sanitized.toString();
+    }
+
+    private String stripBuilderExtension(String fileName) {
+        if (fileName != null && fileName.endsWith(".json")) {
+            return fileName.substring(0, fileName.length() - ".json".length());
+        }
+        return fileName;
     }
 }

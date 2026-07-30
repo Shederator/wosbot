@@ -10,7 +10,7 @@ dependency-reduced-pom.xml
 *.class
 
 # Runtime-extracted native libraries (regenerated on launch from the classpath)
-/lib/opencv/
+**/lib/opencv/
 
 # ── Logs ──
 *.log
@@ -43,6 +43,8 @@ fg-*/.settings
 # ── Analysis / misc caches ──
 .scannerwork/
 .cache/
+__pycache__/
+*.py[cod]
 
 # ── OS generated files ──
 .DS_Store

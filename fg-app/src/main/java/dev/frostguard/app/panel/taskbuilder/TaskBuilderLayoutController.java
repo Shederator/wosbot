@@ -40,8 +40,10 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.PrintWriter;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.function.UnaryOperator;
 
 import javax.imageio.ImageIO;
 
@@ -78,6 +80,7 @@ public class TaskBuilderLayoutController {
     @FXML private Label propNodeIcon;
     @FXML private Label propNodeTitle;
     @FXML private Label propStatusLabel;
+    @FXML private TextField nodeNameField;
     @FXML private VBox tapPropsBox;
     @FXML private TextField tapTlXField, tapTlYField, tapBrXField, tapBrYField;
     @FXML private VBox swipePropsBox;
@@ -178,6 +181,7 @@ public class TaskBuilderLayoutController {
         setupCanvasClipping();
         setupCanvasInteractions();
         setupPreviewPanelSizing();
+        setupNodeNameField();
         drawCanvasGrid();
         drawStartNode();
         if (templateComboBox != null) {
@@ -219,6 +223,25 @@ public class TaskBuilderLayoutController {
         }
         addAutoApplyListeners();
         setStatus("Ready — add nodes from the toolbox");
+    }
+
+    private void setupNodeNameField() {
+        if (nodeNameField == null) {
+            return;
+        }
+
+        UnaryOperator<TextFormatter.Change> lengthFilter = change -> {
+            String nextText = change.getControlNewText();
+            return nextText.length() <= AutomationStep.NODE_NAME_MAX_LENGTH ? change : null;
+        };
+        nodeNameField.setTextFormatter(new TextFormatter<>(lengthFilter));
+        nodeNameField.textProperty().addListener((obs, oldValue, newValue) -> {
+            if (selectedNode == null || isBinding) {
+                return;
+            }
+            selectedNode.setNodeName(newValue);
+            refreshCard(selectedNode);
+        });
     }
 
     private void addAutoApplyListeners() {
@@ -456,6 +479,156 @@ public class TaskBuilderLayoutController {
                 return;
             }
             setStatus("Exported Java class to: " + file.getName());
+        }
+    }
+
+    @FXML
+    private void handleSaveCustomTask(ActionEvent e) {
+        AutomationBlueprint def = builderService.getCurrentDefinition();
+        if (def == null || def.getNodes().isEmpty()) {
+            setStatus("Error: No task active or no nodes present.");
+            return;
+        }
+
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Save Custom Task Definition");
+        Path customDir = builderService.getCustomTasksDirectory();
+        if (customDir != null && customDir.toFile().isDirectory()) {
+            fileChooser.setInitialDirectory(customDir.toFile());
+        }
+        String safeName = sanitizeFileBase(taskNameField.getText());
+        fileChooser.setInitialFileName(safeName + ".json");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("JSON Files", "*.json"));
+
+        File file = fileChooser.showSaveDialog(rootPane.getScene().getWindow());
+        if (file == null) {
+            return;
+        }
+
+        try {
+            String name = taskNameField.getText();
+            TaskBuilderService.CustomTaskSaveResult saved =
+                    builderService.saveCurrentTaskToCustomTasks(name, ensureJsonExtension(file.toPath()));
+            setStatus("Saved custom task: " + saved.className() + " (" + saved.builderFile().getFileName() + ")");
+        } catch (Exception ex) {
+            setStatus("Save failed: " + ex.getMessage());
+        }
+    }
+
+    @FXML
+    private void handleImportBuilderTask(ActionEvent e) {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Import Task Builder Definition");
+        Path customDir = builderService.getCustomTasksDirectory();
+        if (customDir != null && customDir.toFile().isDirectory()) {
+            fileChooser.setInitialDirectory(customDir.toFile());
+        }
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("JSON Files", "*.json"));
+
+        File file = fileChooser.showOpenDialog(rootPane.getScene().getWindow());
+        if (file == null) {
+            return;
+        }
+
+        AccountDescriptor selected = profileComboBox.getValue();
+        String emulator = selected != null ? selected.getEmulatorNumber() : builderService.getActiveEmulatorNumber();
+        if (emulator == null) {
+            emulator = "0";
+        }
+
+        try {
+            AutomationBlueprint imported = builderService.loadDefinition(file, emulator);
+            renderImportedDefinition(imported);
+            setStatus("Imported builder task: " + imported.getName());
+        } catch (Exception ex) {
+            setStatus("Import failed: " + ex.getMessage());
+        }
+    }
+
+    private String sanitizeFileBase(String rawName) {
+        String sanitized = rawName == null ? "" : rawName.replaceAll("[^a-zA-Z0-9_]+", "_");
+        sanitized = sanitized.replaceAll("^_+|_+$", "");
+        return sanitized.isEmpty() ? "GeneratedTask" : sanitized;
+    }
+
+    private Path ensureJsonExtension(Path path) {
+        String fileName = path.getFileName().toString();
+        if (fileName.endsWith(".json")) {
+            return path;
+        }
+        Path parent = path.getParent();
+        Path withExtension = Paths.get(fileName + ".json");
+        return parent == null ? withExtension : parent.resolve(withExtension);
+    }
+
+    private void renderImportedDefinition(AutomationBlueprint definition) {
+        clearFlowNodesFromCanvas();
+        deselectNode();
+
+        taskNameField.setText(definition.getName() != null ? definition.getName() : "Untitled Task");
+        applyImportedStartLocation(definition.getStartLocation());
+
+        for (AutomationStep node : definition.getNodes()) {
+            createNodeCard(node);
+        }
+
+        Platform.runLater(() -> {
+            rebuildAllWires();
+            updateNodeCount();
+        });
+    }
+
+    private void clearFlowNodesFromCanvas() {
+        for (int id : new ArrayList<>(nodeCards.keySet())) {
+            flowCanvas.getChildren().removeAll(nodeCards.get(id), inputPorts.get(id), outputPorts.get(id));
+            Circle falsePort = outputPortsFalse.get(id);
+            if (falsePort != null) {
+                flowCanvas.getChildren().remove(falsePort);
+            }
+        }
+        nodeCards.clear();
+        inputPorts.clear();
+        outputPorts.clear();
+        outputPortsFalse.clear();
+
+        hoverMenus.values().forEach(menu -> flowCanvas.getChildren().remove(menu));
+        hoverMenus.clear();
+
+        connectionWires.values().forEach(wire -> flowCanvas.getChildren().remove(wire));
+        connectionWires.clear();
+        wireOverlays.forEach(overlay -> flowCanvas.getChildren().remove(overlay));
+        wireOverlays.clear();
+    }
+
+    private void applyImportedStartLocation(String startLocation) {
+        startLocationSetting = switch (startLocation != null ? startLocation : "ANY") {
+            case "WORLD" -> "World";
+            case "HOME" -> "City";
+            default -> null;
+        };
+        refreshStartLocationUi();
+        AutomationBlueprint def = builderService.getCurrentDefinition();
+        if (def != null) {
+            def.setStartLocation(startLocation != null ? startLocation : "ANY");
+        }
+    }
+
+    private void refreshStartLocationUi() {
+        String[] options = { "World", "City" };
+        for (int i = 0; i < startSegButtons.size(); i++) {
+            Button btn = startSegButtons.get(i);
+            boolean active = options[i].equals(startLocationSetting);
+            btn.getStyleClass().clear();
+            btn.getStyleClass().add(active ? "start-seg-btn-active" : "start-seg-btn");
+        }
+
+        String titleText = switch (startLocationSetting != null ? startLocationSetting : "") {
+            case "World" -> "▶ Start from World";
+            case "City" -> "▶ Start from City";
+            default -> "▶ Start from Any";
+        };
+        if (startTitleLabel != null) {
+            startTitleLabel.setText(titleText);
         }
     }
 
@@ -799,7 +972,13 @@ public class TaskBuilderLayoutController {
             title.getStyleClass().add("flow-node-type-label");
             Label idLbl = new Label("ID: #" + node.getId());
             idLbl.getStyleClass().add("flow-node-id-label");
-            titleBlock.getChildren().addAll(title, idLbl);
+            Label nameLbl = new Label(node.getNodeName());
+            nameLbl.setId("node-name-label");
+            nameLbl.getStyleClass().add("flow-node-name-label");
+            boolean hasName = !node.getNodeName().isEmpty();
+            nameLbl.setVisible(hasName);
+            nameLbl.setManaged(hasName);
+            titleBlock.getChildren().addAll(title, idLbl, nameLbl);
 
             Region sp = new Region(); HBox.setHgrow(sp, Priority.ALWAYS);
 
@@ -1366,6 +1545,9 @@ public class TaskBuilderLayoutController {
         propNodeIcon.setText(getIcon(node.getType()));
         propNodeTitle.setText(node.getType().getDisplayName() + " #" + node.getId());
         propStatusLabel.setText(node.isExecuted() ? "✅ Executed" : "⏳ Pending");
+        if (nodeNameField != null) {
+            nodeNameField.setText(node.getNodeName());
+        }
 
         tapPropsBox.setVisible(false); tapPropsBox.setManaged(false);
         if (swipePropsBox != null) { swipePropsBox.setVisible(false); swipePropsBox.setManaged(false); }
@@ -1947,4 +2129,3 @@ public class TaskBuilderLayoutController {
         catch (Exception e) { return null; }
     }
 }
-

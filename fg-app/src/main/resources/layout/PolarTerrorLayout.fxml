@@ -105,7 +105,7 @@
                             </HBox>
 
                             <Label styleClass="task-card-note"
-                                   text="Note: When using a flag or when limited mode is active, rallies will be called one by one."
+                                   text="Note: When using a flag or Special Rewards mode, rallies will be called one by one."
                                    wrapText="true" />
                         </VBox>
                     </Tab>

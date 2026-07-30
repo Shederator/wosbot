@@ -90,6 +90,9 @@ public class TaskBuilderNodeCardFactory {
         VBox card = nodeCards.get(node.getId());
         if (card == null) return;
 
+        // Update optional node name in header
+        updateNodeNameLabel(card, node);
+
         // Update summary label in body
         updateSummaryLabel(card, node);
 
@@ -110,6 +113,22 @@ public class TaskBuilderNodeCardFactory {
 
         // Template search result banner
         refreshTemplateBanner(node, card, inputPorts, outputPorts, outputPortsFalse, wireRebuildAction);
+    }
+
+    private static void updateNodeNameLabel(VBox card, AutomationStep node) {
+        if (card.getChildren().isEmpty() || !(card.getChildren().get(0) instanceof HBox header)) return;
+        if (header.getChildren().size() < 2 || !(header.getChildren().get(1) instanceof VBox titleBlock)) return;
+
+        for (javafx.scene.Node child : titleBlock.getChildren()) {
+            if ("node-name-label".equals(child.getId()) && child instanceof Label label) {
+                String nodeName = node.getNodeName();
+                boolean hasName = !nodeName.isEmpty();
+                label.setText(nodeName);
+                label.setVisible(hasName);
+                label.setManaged(hasName);
+                return;
+            }
+        }
     }
 
     private static void updateSummaryLabel(VBox card, AutomationStep node) {

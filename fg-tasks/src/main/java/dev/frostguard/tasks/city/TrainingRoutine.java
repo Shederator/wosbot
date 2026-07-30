@@ -7,6 +7,7 @@ import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.service.ConfigService;
+import dev.frostguard.engine.service.TaskManagementService;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.convert.RegexNumberParser;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
@@ -16,6 +17,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.List;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import static dev.frostguard.api.configs.ConfigurationKeyEnum.*;
 import static dev.frostguard.api.configs.TemplatesEnum.*;
 import static dev.frostguard.engine.nav.LeftMenuTextSettings.*;
@@ -171,6 +173,13 @@ protected void loadConfiguration() {
 
         List<QueueSlot> analyzedQueues = inspectAllQueues();
 
+        enabledTroopTypes.stream()
+                .map(type -> Map.entry(type, reservationUntil(type)))
+                .filter(entry -> entry.getValue().isPresent())
+                .forEach(entry -> logInfo(routineLogTrainingLine(
+                        "Skipping " + entry.getKey() + " training while reserved for construction; next check at "
+                                + entry.getValue().orElseThrow().format(DATETIME_FORMATTER))));
+
         if (manageSoonReadyQueue(analyzedQueues))
             return;
 
@@ -265,7 +274,10 @@ private void performLimitedTrainingForAppointment(QueueSlot queue) {
                 neededTime.toSecondsPart())));
 
 
-        chooseHighestTroopLevel(troopTypeBeingTrained);
+        if (selectHighestUnlockedTroopLevel(troopTypeBeingTrained) == -1) {
+            logWarning(routineLogTrainingLine("No unlocked troop level confirmed. Skipping limited training."));
+            return;
+        }
 
         emuManager.captureScreen(EMULATOR_NUMBER);
 
@@ -321,6 +333,7 @@ private void refreshMinistryAppointmentIfNeeded() {
 private List<LocalDateTime> extractExistingCompletionTimesFlow(List<QueueSlot> queues) {
         return queues.stream()
                 .filter(q -> q.status() == QueueMood.TRAINING)
+                .filter(q -> !isReservedForConstruction(q.type()))
                 .map(QueueSlot::readyAt)
                 .filter(Objects::nonNull)
                 .toList();
@@ -388,17 +401,14 @@ private LocalDateTime extractTrainingCompletionTimeFlow() {
 private void performPromotionPriorityTraining(QueueSlot queue) {
         logInfo(routineLogTrainingLine("Executing promotion-priority training for " + queue.type().name()));
 
-        resetTroopListToEndFlow();
-
-        int maxLevel = locateMaxAvailableTroopLevel(queue.type());
+        int maxLevel = selectHighestUnlockedTroopLevel(queue.type());
 
         if (maxLevel == -1) {
-            logWarning(routineLogTrainingLine("Zero troop levels detected. Falling back to normal training."));
-            pressTrainButton();
+            logWarning(routineLogTrainingLine("No unlocked troop level confirmed. Skipping training."));
             return;
         }
 
-        logInfo(routineLogTrainingLine("Maximum available troop level: " + maxLevel));
+        logInfo(routineLogTrainingLine("Maximum unlocked troop level: " + maxLevel));
         resetTroopListToStartFlow();
 
         boolean promotionExecuted = attemptTroopPromotionsFlow(queue.type(), maxLevel);
@@ -406,7 +416,13 @@ private void performPromotionPriorityTraining(QueueSlot queue) {
         if (promotionExecuted) {
             logInfo(routineLogTrainingLine("Promotion executed finished cleanly."));
         } else {
-            logInfo(routineLogTrainingLine("Zero promotable troops detected. Executing normal training."));
+            logInfo(routineLogTrainingLine("Zero promotable troops detected. Reselecting highest unlocked level for normal training."));
+            int selectedLevel = selectHighestUnlockedTroopLevel(queue.type());
+            if (selectedLevel == -1) {
+                logWarning(routineLogTrainingLine("Could not reselect an unlocked troop level. Skipping normal training."));
+                return;
+            }
+            logInfo(routineLogTrainingLine("Reselected level " + selectedLevel + " for normal training."));
             pressTrainButton();
         }
     }
@@ -433,6 +449,17 @@ private boolean attemptSingleTroopPromotionFlow(TemplatesEnum template) {
                 template,
                 SearchConfigConstants.DEFAULT_SINGLE);
 
+        if (!troop.isFound()) {
+            // The next tier can be just beyond the current five-card viewport. Advancing the list without
+            // retrying that same tier skipped the first promotable card on the newly visible page.
+            logDebug(routineLogTrainingLine("Template not visible before scroll: " + template.name()
+                    + ". Advancing troop list and retrying the same level."));
+            scrollToNextTroopTypeFlow();
+            troop = templateSearchHelper.locatePattern(
+                    template,
+                    SearchConfigConstants.STRICT_MATCHING);
+        }
+
         if (troop.isFound()) {
             tapPoint(troop.getPoint());
             sleepTask(300);
@@ -449,8 +476,7 @@ private boolean attemptSingleTroopPromotionFlow(TemplatesEnum template) {
                 logDebug(routineLogTrainingLine("Promotion not available for: " + template.name()));
             }
         } else {
-            logDebug(routineLogTrainingLine("Template not detected: " + template.name()));
-            scrollToNextTroopTypeFlow();
+            logDebug(routineLogTrainingLine("Template not detected after scroll retry: " + template.name()));
         }
 
         return false;
@@ -513,34 +539,6 @@ private LocalDateTime manageTrainingButtonNotFound(QueueSlot queue) {
 
 
         return null;
-    }
-
-private int locateMaxAvailableTroopLevel(TroopTypeShape troopType) {
-        List<TemplatesEnum> templates = resolveTroopsTemplates(troopType);
-        logDebug(routineLogTrainingLine("Scanning for max level among " + templates.size() + " templates."));
-
-        emuManager.captureScreen(EMULATOR_NUMBER);
-        for (TemplatesEnum template : templates) {
-            ImageSearchResultData troop = templateSearchHelper.locatePattern(
-                    template,
-                    SearchConfigConstants.STRICT_MATCHING);
-
-            if (troop.isFound()) {
-                int level = extractLevelFromTemplateNameFlow(template.name());
-                if (level > 0) {
-                    logInfo(routineLogTrainingLine("Detected highest level: " + level + " (" + template.name() + ")"));
-                    return level;
-                }
-            } else {
-                swipe(TROOP_SCROLL_END_VALUE, TROOP_SCROLL_START_VALUE);
-                sleepTask(200);
-
-                emuManager.captureScreen(EMULATOR_NUMBER);
-            }
-        }
-
-        logWarning(routineLogTrainingLine("Zero troop templates detected."));
-        return -1;
     }
 
 private void trainOptimalTroopCountFlow(Duration trainTime, int maxTroops, Duration neededTime) {
@@ -711,13 +709,16 @@ private List<Integer> locateUnknownQueueIndices(List<QueueSlot> results) {
     }
 
 private void deferToEarliestCompletion(List<LocalDateTime> completionTimes) {
-        if (completionTimes.isEmpty()) {
+        List<LocalDateTime> candidates = new ArrayList<>(completionTimes);
+        earliestReservationCheck().ifPresent(candidates::add);
+
+        if (candidates.isEmpty()) {
             logInfo(routineLogTrainingLine("Zero completion times extracted. Planning next run retry soon."));
             reschedule(LocalDateTime.now().plusMinutes(TRAINING_BUTTON_RETRY_MINUTES_VALUE));
             return;
         }
 
-        LocalDateTime earliest = completionTimes.stream()
+        LocalDateTime earliest = candidates.stream()
                 .filter(Objects::nonNull)
                 .min(LocalDateTime::compareTo)
                 .orElse(LocalDateTime.now().plusMinutes(TRAINING_BUTTON_RETRY_MINUTES_VALUE));
@@ -811,16 +812,23 @@ private boolean openUpTrainingInterface() {
 
 private boolean manageAllTrainingQueues(List<QueueSlot> queues) {
         boolean allTraining = queues.stream()
-                .allMatch(q -> q.status() == QueueMood.TRAINING);
+                .allMatch(q -> q.status() == QueueMood.TRAINING || isReservedForConstruction(q.type()));
 
         if (!allTraining) {
             return false;
         }
 
         Optional<LocalDateTime> nextReadyTime = queues.stream()
+                .filter(q -> !isReservedForConstruction(q.type()))
                 .map(QueueSlot::readyAt)
                 .filter(Objects::nonNull)
                 .min(LocalDateTime::compareTo);
+
+        Optional<LocalDateTime> reservationRelease = earliestReservationCheck();
+        if (reservationRelease.isPresent()
+                && (nextReadyTime.isEmpty() || reservationRelease.get().isBefore(nextReadyTime.get()))) {
+            nextReadyTime = reservationRelease;
+        }
 
         if (nextReadyTime.isPresent()) {
             logInfo(routineLogTrainingLine("All queues TRAINING. Planning next run to earliest completion: " +
@@ -890,40 +898,51 @@ private QueueSlot inspectForStateKeywords(
         return null;
     }
 
-private void chooseHighestTroopLevel(TroopTypeShape troopType) {
+private int selectHighestUnlockedTroopLevel(TroopTypeShape troopType) {
         List<TemplatesEnum> templates = resolveTroopsTemplates(troopType);
         resetTroopListToEndFlow();
         emuManager.captureScreen(EMULATOR_NUMBER);
-        for (TemplatesEnum template : templates) {
-            ImageSearchResultData troop = templateSearchHelper.locatePattern(
-                    template,
-                    SearchConfigConstants.STRICT_MATCHING);
+        Optional<TemplatesEnum> selected = TrainingTierSelector.findHighestUnlocked(
+                templates,
+                this::probeTroopTier);
 
-            if (troop.isFound()) {
-                tapPoint(troop.getPoint());
-                sleepTask(250);
-
-
-                emuManager.captureScreen(EMULATOR_NUMBER);
-                ImageSearchResultData lockedIndicator = templateSearchHelper.locatePattern(
-                        TRAINING_TROOP_LOCKED,
-                        SearchConfigConstants.DEFAULT_SINGLE);
-                if (lockedIndicator.isFound()) {
-                    logInfo(routineLogTrainingLine("Troop level locked: " + template.name() + ". Continuing search."));
-                    continue;
-                }
-
-                logInfo(routineLogTrainingLine("Selected highest troop level: " + template.name()));
-                return;
-            } else {
-                swipe(TROOP_SCROLL_END_VALUE, TROOP_SCROLL_START_VALUE);
-                sleepTask(200);
-
-                emuManager.captureScreen(EMULATOR_NUMBER);
-            }
+        if (selected.isPresent()) {
+            TemplatesEnum template = selected.get();
+            int level = extractLevelFromTemplateNameFlow(template.name());
+            logInfo(routineLogTrainingLine("Selected highest unlocked troop level: " + level + " (" + template.name() + ")"));
+            return level;
         }
 
-        logWarning(routineLogTrainingLine("Could not select highest troop level."));
+        logWarning(routineLogTrainingLine("Could not select an unlocked troop level."));
+        return -1;
+    }
+
+private TrainingTierSelector.TierState probeTroopTier(TemplatesEnum template) {
+        // Locked grayscale cards retain enough armour detail to match their tier template, so identity
+        // alone cannot prove that a tier is trainable. Confirm the selected card's lock state separately.
+        ImageSearchResultData troop = templateSearchHelper.locatePattern(
+                template,
+                SearchConfigConstants.STRICT_MATCHING);
+
+        if (!troop.isFound()) {
+            swipe(TROOP_SCROLL_END_VALUE, TROOP_SCROLL_START_VALUE);
+            sleepTask(200);
+            emuManager.captureScreen(EMULATOR_NUMBER);
+            return TrainingTierSelector.TierState.NOT_VISIBLE;
+        }
+
+        tapPoint(troop.getPoint());
+        sleepTask(250);
+        emuManager.captureScreen(EMULATOR_NUMBER);
+        ImageSearchResultData lockedIndicator = templateSearchHelper.locatePattern(
+                TRAINING_TROOP_LOCKED,
+                SearchConfigConstants.DEFAULT_SINGLE);
+        if (lockedIndicator.isFound()) {
+            logInfo(routineLogTrainingLine("Troop level locked: " + template.name() + ". Continuing search."));
+            return TrainingTierSelector.TierState.LOCKED;
+        }
+
+        return TrainingTierSelector.TierState.UNLOCKED;
     }
 
 private void trainMaximumTroopsFlow(String trainTimeStr, String neededTimeStr, int maxTroops) {
@@ -1017,8 +1036,11 @@ private void performMaximumTraining(QueueSlot queue) {
         if (!ministryAppointmentEnabled && prioritizePromotion) {
             performPromotionPriorityTraining(queue);
         } else {
-            chooseHighestTroopLevel(troopTypeBeingTrained);
-            pressTrainButton();
+            if (selectHighestUnlockedTroopLevel(troopTypeBeingTrained) != -1) {
+                pressTrainButton();
+            } else {
+                logWarning(routineLogTrainingLine("No unlocked troop level confirmed. Skipping normal training."));
+            }
         }
     }
 
@@ -1081,19 +1103,61 @@ private boolean manageUpgradingQueues(List<QueueSlot> queues) {
                 .anyMatch(q -> q.status() == QueueMood.UPGRADING);
 
         if (anyUpgrading) {
-            logInfo(routineLogTrainingLine("At least one queue UPGRADING. Planning next run check in " +
-                    UPGRADING_RESCHEDULE_MINUTES_VALUE + " minutes."));
+            LocalDateTime now = LocalDateTime.now();
+            List<LocalDateTime> trainingCompletions = queues.stream()
+                    .filter(q -> q.status() == QueueMood.TRAINING)
+                    .map(QueueSlot::readyAt)
+                    .filter(Objects::nonNull)
+                    .toList();
+            LocalDateTime cityBuildRun = nextCityBuildRun().orElse(null);
+            LocalDateTime constructionCheck = earliestReservationCheck().orElse(null);
+            LocalDateTime nextCheck = selectUpgradingWakeup(
+                    now, trainingCompletions, cityBuildRun, constructionCheck);
 
-            reschedule(LocalDateTime.now().plusMinutes(UPGRADING_RESCHEDULE_MINUTES_VALUE));
+            logInfo(routineLogTrainingLine(
+                    "At least one queue UPGRADING. Planning next run for: "
+                            + nextCheck.format(DATETIME_FORMATTER)
+                            + " (earliest known training/construction event; 10-minute fallback only if unknown)."));
+
+            reschedule(nextCheck);
             return true;
         }
 
         return false;
     }
 
+private Optional<LocalDateTime> nextCityBuildRun() {
+        if (profile == null || profile.getId() == null) {
+            return Optional.empty();
+        }
+
+        TaskStateData cityBuildState = TaskManagementService.shared().lookupTaskState(
+                profile.getId(), TpDailyTaskEnum.CITY_UPGRADE_FURNACE.getId());
+        if (cityBuildState == null || !cityBuildState.isScheduled()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(cityBuildState.getNextExecutionTime());
+    }
+
+static LocalDateTime selectUpgradingWakeup(
+        LocalDateTime now,
+        Collection<LocalDateTime> trainingCompletions,
+        LocalDateTime cityBuildRun,
+        LocalDateTime constructionCheck) {
+        LocalDateTime fallback = now.plusMinutes(UPGRADING_RESCHEDULE_MINUTES_VALUE);
+        return Stream.concat(
+                        trainingCompletions == null ? Stream.empty() : trainingCompletions.stream(),
+                        Stream.of(cityBuildRun, constructionCheck))
+                .filter(Objects::nonNull)
+                .filter(candidate -> candidate.isAfter(now))
+                .min(LocalDateTime::compareTo)
+                .orElse(fallback);
+    }
+
 private List<QueueSlot> filterReadyQueuesFlow(List<QueueSlot> queues) {
         return queues.stream()
                 .filter(q -> q.status() == QueueMood.COMPLETE || q.status() == QueueMood.IDLE)
+                .filter(q -> !isReservedForConstruction(q.type()))
                 .toList();
     }
 
@@ -1134,6 +1198,7 @@ private void resetTabPositionFlow() {
 private boolean manageSoonReadyQueue(List<QueueSlot> queues) {
         Optional<QueueSlot> soonReady = queues.stream()
                 .filter(q -> q.status() == QueueMood.TRAINING && q.readyAt() != null)
+                .filter(q -> !isReservedForConstruction(q.type()))
                 .filter(q -> Duration.between(LocalDateTime.now(), q.readyAt())
                         .toMinutes() <= SOON_READY_THRESHOLD_MINUTES_VALUE)
                 .findFirst();
@@ -1150,6 +1215,33 @@ private boolean manageSoonReadyQueue(List<QueueSlot> queues) {
         }
 
         return false;
+    }
+
+private boolean isReservedForConstruction(TroopTypeShape type) {
+        return reservationUntil(type).isPresent();
+    }
+
+private Optional<LocalDateTime> reservationUntil(TroopTypeShape type) {
+        ConstructionBlockerRegistry.Consumer consumer = switch (type) {
+            case INFANTRY -> ConstructionBlockerRegistry.Consumer.INFANTRY;
+            case LANCER -> ConstructionBlockerRegistry.Consumer.LANCER;
+            case MARKSMAN -> ConstructionBlockerRegistry.Consumer.MARKSMAN;
+        };
+        return ConstructionBlockerRegistry.reservationFor(profile, consumer)
+                .map(ConstructionBlockerRegistry.Reservation::retryAt)
+                .map(this::normalizeConstructionRetry);
+    }
+
+private LocalDateTime normalizeConstructionRetry(LocalDateTime retryAt) {
+        LocalDateTime minimumRetry = LocalDateTime.now().plusMinutes(TRAINING_BUTTON_RETRY_MINUTES_VALUE);
+        return retryAt.isAfter(minimumRetry) ? retryAt : minimumRetry;
+}
+
+private Optional<LocalDateTime> earliestReservationCheck() {
+        return enabledTroopTypes.stream()
+                .map(this::reservationUntil)
+                .flatMap(Optional::stream)
+                .min(LocalDateTime::compareTo);
     }
 
 private AreaData resolvePipelineArea(TroopTypeShape type) {
@@ -1244,7 +1336,7 @@ private void pressTrainButton() {
 
             emuManager.captureScreen(EMULATOR_NUMBER);
             ImageSearchResultData replenishAll = templateSearchHelper.locatePattern(
-                    TRAINING_REPLENISH_ALL,
+                    REPLENISH_ALL_BUTTON,
                     SearchConfigConstants.DEFAULT_SINGLE);
 
             if (replenishAll.isFound()) {

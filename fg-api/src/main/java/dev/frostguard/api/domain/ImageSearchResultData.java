@@ -15,6 +15,7 @@ public class ImageSearchResultData {
     private double matchScore;
     private int hitX;
     private int hitY;
+    private SizeData templateSize;
 
     /* ── static factories ── */
 
@@ -24,6 +25,12 @@ public class ImageSearchResultData {
         r.matchScore = score;
         r.hitX = x;
         r.hitY = y;
+        return r;
+    }
+
+    public static ImageSearchResultData hit(int x, int y, double score, SizeData templateSize) {
+        ImageSearchResultData r = hit(x, y, score);
+        r.templateSize = templateSize;
         return r;
     }
 
@@ -43,6 +50,11 @@ public class ImageSearchResultData {
         this.matchScore = score;
         this.hitX = point != null ? point.getX() : -1;
         this.hitY = point != null ? point.getY() : -1;
+    }
+
+    public ImageSearchResultData(boolean found, PointData point, double score, SizeData templateSize) {
+        this(found, point, score);
+        this.templateSize = templateSize;
     }
 
     /* ── no-arg for frameworks ── */
@@ -67,6 +79,9 @@ public class ImageSearchResultData {
     public int getHitY()                                { return hitY; }
     public void setHitY(int y)                          { this.hitY = y; }
 
+    public SizeData getTemplateSize()                   { return templateSize; }
+    public void setTemplateSize(SizeData s)              { this.templateSize = s; }
+
     /* ── legacy delegates ── */
 
     public boolean isFound()        { return isLocated(); }
@@ -86,16 +101,18 @@ public class ImageSearchResultData {
         if (!(o instanceof ImageSearchResultData that)) return false;
         return Double.compare(matchScore, that.matchScore) == 0
             && hitX == that.hitX && hitY == that.hitY
-            && outcome == that.outcome;
+            && outcome == that.outcome
+            && Objects.equals(templateSize, that.templateSize);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(outcome, matchScore, hitX, hitY);
+        return Objects.hash(outcome, matchScore, hitX, hitY, templateSize);
     }
 
     @Override
     public String toString() {
-        return outcome + " @(" + hitX + "," + hitY + ") score=" + String.format("%.3f", matchScore);
+        return outcome + " @(" + hitX + "," + hitY + ") score=" + String.format("%.3f", matchScore)
+                + (templateSize == null ? "" : " size=" + templateSize);
     }
 }

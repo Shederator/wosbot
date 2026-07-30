@@ -35,9 +35,14 @@
                         <CheckBox fx:id="checkBoxOverrideCurrentDeploy" mnemonicParsing="false"
                                   text="Override Current Deployment" />
 
+                        <HBox alignment="CENTER_LEFT" spacing="10">
+                            <Label minWidth="120.0" styleClass="task-field-label" text="Flag Selection" />
+                            <ComboBox fx:id="comboBoxFlag" prefWidth="150.0" />
+                        </HBox>
+
                         <Separator style="-fx-opacity: 0.25;" />
 
-                        <Label styleClass="task-field-label" text="Troop Mix Percentages" />
+                        <Label styleClass="task-field-label" text="Custom Troop Mix Percentages" />
                         
                         <HBox alignment="CENTER_LEFT" spacing="10">
                             <Label minWidth="120.0" styleClass="task-field-label" text="Infantry %" />
@@ -60,6 +65,8 @@
                 <TitledPane text="Quick Guide" expanded="false"
                             styleClass="content-card" collapsible="true">
                     <VBox spacing="6" style="-fx-padding: 10;">
+                        <Label styleClass="task-info-panel-bullet"
+                               text="Select Flag 1-8 for a saved formation, or No Flag for the custom troop mix." wrapText="true" />
                         <Label styleClass="task-info-panel-bullet"
                                text="• Select your preferred lane position (LEFT, CENTER, or RIGHT)." wrapText="true" />
                         <Label styleClass="task-info-panel-bullet"

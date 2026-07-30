@@ -2,6 +2,7 @@ package dev.frostguard.tasks.city;
 
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.*;
+import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -10,16 +11,22 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.jetbrains.annotations.NotNull;
 import static dev.frostguard.api.configs.TemplatesEnum.BUILDING_BUTTON_INFO;
+import static dev.frostguard.api.configs.TemplatesEnum.BUILDING_BUTTON_RESEARCH;
 import static dev.frostguard.api.configs.TemplatesEnum.BUILDING_BUTTON_SPEED;
 import static dev.frostguard.api.configs.TemplatesEnum.BUILDING_BUTTON_TRAIN;
 import static dev.frostguard.api.configs.TemplatesEnum.BUILDING_BUTTON_UPGRADE;
 import static dev.frostguard.api.configs.TemplatesEnum.BUILDING_SURVIVOR_BUTTON_UPGRADE;
 import static dev.frostguard.api.configs.TemplatesEnum.GAME_HOME_SHORTCUTS_HELP_REQUEST4;
 import static dev.frostguard.api.configs.TemplatesEnum.GAME_HOME_SHORTCUTS_OBTAIN;
+import static dev.frostguard.api.configs.TemplatesEnum.REPLENISH_ALL_BUTTON;
 import static dev.frostguard.engine.nav.ButtonConstants.*;
 import static dev.frostguard.engine.nav.LeftMenuTextSettings.*;
 
@@ -32,6 +39,27 @@ private static final AreaData QUEUE_AREA_2_VALUE = new AreaData(new PointData(95
 private static final AreaData BUILDING_ACTION_BUTTON_AREA_VALUE = new AreaData(new PointData(190, 1160), new PointData(530, 1250));
 
 private static final AreaData BUILDING_CONFIRM_BUTTON_AREA_VALUE = new AreaData(new PointData(489, 1034), new PointData(500, 1050));
+
+private static final AreaData BUILDING_NAME_AREA_VALUE = new AreaData(new PointData(260, 510), new PointData(510, 575));
+
+private static final int BLOCKER_RELEASE_GRACE_MINUTES = 5;
+
+private static final int COMPLETION_SETTLE_SECONDS = 2;
+
+private static final int MAX_RECOMMENDED_BUILDING_ATTEMPTS = 2;
+
+private static final int TEMPLATE_TAP_RADIUS = 8;
+
+private static final int MAX_RESOURCE_REPLENISHMENTS = 4;
+
+private static final PointData REPLENISH_CONFIRM_POINT = new PointData(511, 1056);
+
+private static final SearchConfig REPLENISH_BUTTON_RECHECK = SearchConfig.builder()
+        .withMaxAttempts(2)
+        .withDelay(300)
+        .withThreshold(90)
+        .withCoordinates(new PointData(180, 1070), new PointData(535, 1195))
+        .build();
 
 private final List<AreaData> queues = new ArrayList<>(Arrays.asList(QUEUE_AREA_1_VALUE, QUEUE_AREA_2_VALUE));
 
@@ -50,6 +78,7 @@ public UpgradeBuildingsRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDail
 
 
         logQueueSummaryFlow(queueResults);
+        clearConstructionReservationWhenStarted(queueResults);
 
 
         boolean hasIdleQueue = queueResults.stream()
@@ -59,18 +88,21 @@ public UpgradeBuildingsRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDail
         if (hasIdleQueue) {
 
 
-            List<LocalDateTime> troopTrainingTimes = new ArrayList<>();
+            List<ProductionBlocker> productionBlockers = new ArrayList<>();
+            Set<Integer> attemptedQueues = new java.util.HashSet<>();
 
 
             for (UpgradeBuildingsRoutine.QueueReadout result : queueResults) {
                 if (result.state.status == UpgradeBuildingsRoutine.QueueMood.IDLE ||
                         result.state.status == UpgradeBuildingsRoutine.QueueMood.IDLE_TEMP) {
                     logInfo(routineLogUpgradeBuildingsLine("Processing queue " + result.queueNumber + " (Status: " + result.state.status + ")"));
-                    LocalDateTime trainingTime = handleQueue(result);
+                    QueueHandlingResult handlingResult = handleQueue(result);
 
-
-                    if (trainingTime != null) {
-                        troopTrainingTimes.add(trainingTime);
+                    if (handlingResult.constructionAttempted()) {
+                        attemptedQueues.add(result.queueNumber());
+                    }
+                    if (handlingResult.blocker() != null) {
+                        productionBlockers.add(handlingResult.blocker());
                     }
                 }
             }
@@ -87,37 +119,35 @@ public UpgradeBuildingsRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDail
 
             logInfo(routineLogUpgradeBuildingsLine("=== Updated Queue Analysis After Processing ==="));
             logQueueSummaryFlow(updatedResults);
+            clearConstructionReservationWhenStarted(updatedResults);
 
 
-            if (!troopTrainingTimes.isEmpty()) {
-                logInfo(routineLogUpgradeBuildingsLine("Adding troop training times to scheduling calculation:"));
-                for (LocalDateTime trainingTime : troopTrainingTimes) {
-                    LocalDateTime now = LocalDateTime.now();
-                    Duration duration = Duration.between(now, trainingTime);
+            if (!productionBlockers.isEmpty()) {
+                LocalDateTime retryAt = productionBlockers.stream()
+                        .map(ProductionBlocker::completionTime)
+                        .min(LocalDateTime::compareTo)
+                        .orElse(LocalDateTime.now().plusMinutes(5))
+                        .plusSeconds(COMPLETION_SETTLE_SECONDS);
+                logInfo(routineLogUpgradeBuildingsLine(
+                        "Recommended building is blocked by production. Planning exact handoff retry for: " + retryAt));
+                this.reschedule(retryAt);
+                marchHelper.closeLeftMenu();
+                return;
+            }
 
-                    long totalMinutes = duration.toMinutes();
-                    logInfo(routineLogUpgradeBuildingsLine("- Training time: " + totalMinutes + " minutes"));
-
-                    int hours = (int) duration.toHours();
-                    int minutes = (int) (duration.toMinutes() % 60);
-                    int seconds = (int) (duration.getSeconds() % 60);
-                    String timeString = String.format("%02d%02d%02d", hours, minutes, seconds);
-
-                    UpgradeBuildingsRoutine.QueueSnapshot trainingState = new UpgradeBuildingsRoutine.QueueSnapshot(
-                            UpgradeBuildingsRoutine.QueueMood.BUSY, timeString);
-                    UpgradeBuildingsRoutine.QueueReadout trainingResult = new UpgradeBuildingsRoutine.QueueReadout(
-                            -1, null, trainingState);
-
-                    updatedResults.add(trainingResult);
-                }
+            if (rescheduleForRetainedReservation(attemptedQueues)) {
+                marchHelper.closeLeftMenu();
+                return;
             }
 
 
             deferBasedOnBusyQueues(updatedResults);
             marchHelper.closeLeftMenu();
         } else {
-
-
+            if (rescheduleForRetainedReservation(Set.of())) {
+                marchHelper.closeLeftMenu();
+                return;
+            }
             deferBasedOnBusyQueues(queueResults);
         }
     }
@@ -157,26 +187,80 @@ private record QueueReadout(int queueNumber, AreaData queueArea, UpgradeBuilding
         }
     }
 
+private record ProductionBlocker(Set<ConstructionBlockerRegistry.Consumer> consumers,
+        int constructionQueue, LocalDateTime completionTime) {
+    }
+
+private record QueueHandlingResult(boolean constructionAttempted, ProductionBlocker blocker) {
+    }
+
+private record QueueAttemptResult(boolean handled, ProductionBlocker blocker) {
+
+        private static QueueAttemptResult completed() {
+            return new QueueAttemptResult(true, null);
+        }
+
+        private static QueueAttemptResult blockedBy(ProductionBlocker blocker) {
+            return new QueueAttemptResult(true, blocker);
+        }
+
+        private static QueueAttemptResult unresolved() {
+            return new QueueAttemptResult(false, null);
+        }
+    }
+
 private String routineLogUpgradeBuildingsLine(String note) {
         return "UpgradeBuildingsRoutine | " + note;
     }
 
-private void refillResourcesIfNeededFlow() {
-        ImageSearchResultData result;
-        while ((result = templateSearchHelper.locatePattern(GAME_HOME_SHORTCUTS_OBTAIN,
-                SearchConfigConstants.DEFAULT_SINGLE)).isFound()) {
-            logInfo(routineLogUpgradeBuildingsLine("Refilling resources for the upgrade..."));
-            tapRandomPoint(result.getPoint(), result.getPoint());
-            sleepTask(500);
+private boolean refillResourcesIfNeededFlow() {
+        var result = RepeatedResourceReplenishmentFlow.run(
+                new RepeatedResourceReplenishmentFlow.Ui() {
+                    @Override
+                    public PointData findReplenishAll() {
+                        return foundPoint(templateSearchHelper.locatePattern(
+                                REPLENISH_ALL_BUTTON, REPLENISH_BUTTON_RECHECK));
+                    }
 
+                    @Override
+                    public PointData findObtain() {
+                        return foundPoint(templateSearchHelper.locatePattern(
+                                GAME_HOME_SHORTCUTS_OBTAIN, SearchConfigConstants.DEFAULT_SINGLE));
+                    }
 
-            tapPoint(new PointData(358, 1135));
-            sleepTask(300);
+                    @Override
+                    public void openObtain(PointData point) {
+                        tapPoint(point);
+                        sleepTask(500);
+                    }
 
+                    @Override
+                    public void replenishAndConfirm(PointData point) {
+                        logInfo(routineLogUpgradeBuildingsLine("Refilling one missing resource for the upgrade..."));
+                        tapPoint(point);
+                        sleepTask(300);
+                        tapPoint(REPLENISH_CONFIRM_POINT);
+                        sleepTask(1000);
+                    }
+                },
+                MAX_RESOURCE_REPLENISHMENTS);
 
-            tapPoint(new PointData(511, 1056));
-            sleepTask(1000);
+        if (result.ready()) {
+            if (result.replenishedResources() > 0) {
+                logInfo(routineLogUpgradeBuildingsLine(
+                        "Replenished " + result.replenishedResources() + " missing resource(s)."));
+            }
+            return true;
         }
+
+        logWarning(routineLogUpgradeBuildingsLine(
+                "Resource replenishment did not finish (" + result.outcome()
+                        + "). Skipping the building confirmation."));
+        return false;
+    }
+
+private PointData foundPoint(ImageSearchResultData result) {
+        return result != null && result.isFound() ? result.getPoint() : null;
     }
 
 private void handleSurvivorBuilding() {
@@ -199,7 +283,9 @@ private void handleSurvivorBuilding() {
         tapRandomPoint(survivorUpgrade.getPoint(), survivorUpgrade.getPoint(), 1, 1000);
 
 
-        refillResourcesIfNeededFlow();
+        if (!refillResourcesIfNeededFlow()) {
+            return;
+        }
 
 
         tapRandomPoint(new PointData(450, 1190), new PointData(600, 1230), 1, 1000);
@@ -264,40 +350,165 @@ private void logQueueSummaryFlow(List<UpgradeBuildingsRoutine.QueueReadout> queu
         }
     }
 
-private LocalDateTime handleTroopBuilding() {
+private ProductionBlocker handleProductionBlocker(int constructionQueue) {
         ImageSearchResultData train = templateSearchHelper.locatePattern(BUILDING_BUTTON_TRAIN,
                 SearchConfigConstants.DEFAULT_SINGLE);
+        ImageSearchResultData research = train.isFound()
+                ? null
+                : templateSearchHelper.locatePattern(BUILDING_BUTTON_RESEARCH,
+                        SearchConfigConstants.DEFAULT_SINGLE);
 
+        if (!train.isFound() && (research == null || !research.isFound())) {
+            return null;
+        }
+
+        Set<ConstructionBlockerRegistry.Consumer> consumers;
         if (train.isFound()) {
-            logInfo(routineLogUpgradeBuildingsLine("A troop training building was detected. Planning next run the task until the training is complete."));
-
-            ImageSearchResultData speedupButton = templateSearchHelper.locatePattern(BUILDING_BUTTON_SPEED,
-                    SearchConfigConstants.DEFAULT_SINGLE);
-
-            if (speedupButton.isFound()) {
-                tapRandomPoint(speedupButton.getPoint(), speedupButton.getPoint(), 1, 500);
-
-                Duration trainingTime = durationHelper.attemptRecognition(
-                        new PointData(292, 284),
-                        new PointData(432, 314),
-                        5,
-                        300,
-                        null,
-                        GameTimeUtils::isAcceptedFormat,
-                        GameTimeUtils::parseDuration);
-
-                if (trainingTime == null) {
-                    return null;
-                }
-
-                LocalDateTime completionTime = LocalDateTime.now().plus(trainingTime);
-
-                logInfo(routineLogUpgradeBuildingsLine("Building will complete training at approximately: " + completionTime));
-
-                return completionTime.minusSeconds(5);
+            String buildingName = readSelectedBuildingName();
+            ConstructionBlockerRegistry.Consumer identified = identifyTrainingConsumer(buildingName);
+            if (identified == null) {
+                consumers = EnumSet.of(
+                        ConstructionBlockerRegistry.Consumer.INFANTRY,
+                        ConstructionBlockerRegistry.Consumer.LANCER,
+                        ConstructionBlockerRegistry.Consumer.MARKSMAN);
+                logWarning(routineLogUpgradeBuildingsLine(
+                        "Training building name was unreadable. Reserving all training queues as a safe fallback."));
+            } else {
+                consumers = EnumSet.of(identified);
             }
+        } else {
+            consumers = EnumSet.of(ConstructionBlockerRegistry.Consumer.RESEARCH);
+        }
+
+        ImageSearchResultData speedupButton = templateSearchHelper.locatePattern(BUILDING_BUTTON_SPEED,
+                SearchConfigConstants.DEFAULT_SINGLE);
+        if (!speedupButton.isFound()) {
+            logWarning(routineLogUpgradeBuildingsLine(
+                    "Production blocker detected, but its speedup button was not found. Retrying in 5 minutes."));
+            LocalDateTime retryAt = LocalDateTime.now().plusMinutes(BLOCKER_RELEASE_GRACE_MINUTES);
+            reserveConsumers(consumers, constructionQueue, retryAt);
+            return new ProductionBlocker(consumers, constructionQueue, retryAt);
+        }
+
+        tapAround(speedupButton.getPoint(), TEMPLATE_TAP_RADIUS, 500);
+        Duration remaining = durationHelper.attemptRecognition(
+                new PointData(292, 284),
+                new PointData(432, 314),
+                5,
+                300,
+                null,
+                GameTimeUtils::isAcceptedFormat,
+                GameTimeUtils::parseDuration);
+
+        if (remaining == null) {
+            logWarning(routineLogUpgradeBuildingsLine(
+                    "Could not read the production blocker timer. Retrying in 5 minutes."));
+            LocalDateTime retryAt = LocalDateTime.now().plusMinutes(BLOCKER_RELEASE_GRACE_MINUTES);
+            reserveConsumers(consumers, constructionQueue, retryAt);
+            return new ProductionBlocker(consumers, constructionQueue, retryAt);
+        }
+
+        LocalDateTime completionTime = LocalDateTime.now().plus(remaining);
+        reserveConsumers(consumers, constructionQueue, completionTime);
+        logInfo(routineLogUpgradeBuildingsLine("Production blocker " + consumers
+                + " completes at approximately " + completionTime
+                + "; consumer remains reserved until construction start is verified"));
+        return new ProductionBlocker(consumers, constructionQueue, completionTime);
+    }
+
+private String readSelectedBuildingName() {
+        try {
+            String text = emuManager.readText(
+                    EMULATOR_NUMBER,
+                    BUILDING_NAME_AREA_VALUE.topLeft(),
+                    BUILDING_NAME_AREA_VALUE.bottomRight(),
+                    WHITE_SETTINGS).trim();
+            logInfo(routineLogUpgradeBuildingsLine("Selected building name OCR: '" + text + "'"));
+            return text;
+        } catch (Exception e) {
+            logWarning(routineLogUpgradeBuildingsLine("Could not read selected building name: " + e.getMessage()));
+            return "";
+        }
+    }
+
+static ConstructionBlockerRegistry.Consumer identifyTrainingConsumer(String buildingName) {
+        String normalized = buildingName == null
+                ? ""
+                : buildingName.toLowerCase(Locale.ROOT).replaceAll("[^a-z]", "");
+        if (normalized.contains("infantry")) {
+            return ConstructionBlockerRegistry.Consumer.INFANTRY;
+        }
+        if (normalized.contains("lancer")) {
+            return ConstructionBlockerRegistry.Consumer.LANCER;
+        }
+        if (normalized.contains("marksman")) {
+            return ConstructionBlockerRegistry.Consumer.MARKSMAN;
         }
         return null;
+    }
+
+private void reserveConsumers(Set<ConstructionBlockerRegistry.Consumer> consumers, int constructionQueue,
+        LocalDateTime retryAt) {
+        ConstructionBlockerRegistry.reserve(profile, consumers, constructionQueue, retryAt);
+}
+
+private void clearConstructionReservationWhenStarted(List<QueueReadout> queueResults) {
+        boolean hasIdleQueue = queueResults.stream()
+                .anyMatch(result -> result.state().status() == QueueMood.IDLE
+                        || result.state().status() == QueueMood.IDLE_TEMP);
+        Optional<QueueReadout> busyQueue = queueResults.stream()
+                .filter(result -> result.state().status() == QueueMood.BUSY)
+                .findFirst();
+        if (!shouldReleaseReservation(hasIdleQueue, busyQueue.isPresent())) {
+            return;
+        }
+
+        ConstructionBlockerRegistry.reservation(profile).ifPresent(reservation -> busyQueue
+                .ifPresent(result -> {
+                    logInfo(routineLogUpgradeBuildingsLine(
+                            "No construction queue is free and queue " + result.queueNumber()
+                                    + " is BUSY; clearing production consumer lock "
+                                    + reservation.consumers()));
+                    ConstructionBlockerRegistry.clear(profile);
+                }));
+    }
+
+static boolean shouldReleaseReservation(boolean hasIdleQueue, boolean hasBusyQueue) {
+        return !hasIdleQueue && hasBusyQueue;
+}
+
+private boolean rescheduleForRetainedReservation(Set<Integer> attemptedQueues) {
+        Optional<ConstructionBlockerRegistry.Reservation> retainedReservation =
+                ConstructionBlockerRegistry.reservation(profile);
+        if (retainedReservation.isEmpty()) {
+            return false;
+        }
+
+        ConstructionBlockerRegistry.Reservation reservation = retainedReservation.get();
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime retryAt = reservation.retryAt().isAfter(now)
+                ? reservation.retryAt()
+                : now.plusMinutes(BLOCKER_RELEASE_GRACE_MINUTES);
+        if (!retryAt.equals(reservation.retryAt())) {
+            ConstructionBlockerRegistry.reserve(profile, reservation.consumers(),
+                    reservation.constructionQueue(), retryAt);
+        }
+        String attemptEvidence = attemptedQueues.contains(reservation.constructionQueue())
+                ? "the construction attempt did not make the queue BUSY"
+                : "the reserved queue did not provide start evidence";
+        logWarning(routineLogUpgradeBuildingsLine(
+                "Keeping production consumer lock because " + attemptEvidence
+                        + ". Retrying construction at " + retryAt));
+        this.reschedule(retryAt);
+        return true;
+}
+
+private void tapAround(PointData center, int radius, int delayMs) {
+        tapRandomPoint(
+                new PointData(center.getX() - radius, center.getY() - radius),
+                new PointData(center.getX() + radius, center.getY() + radius),
+                1,
+                delayMs);
     }
 
 private long decodeTimeToMinutes(String timeString) {
@@ -395,7 +606,10 @@ private void handleCityBuilding() {
         }
 
 
-        startBuildingAction("upgrade", upgradeButton.getPoint(), upgradeButton.getPoint());
+        PointData center = upgradeButton.getPoint();
+        startBuildingAction("upgrade",
+                new PointData(center.getX() - TEMPLATE_TAP_RADIUS, center.getY() - TEMPLATE_TAP_RADIUS),
+                new PointData(center.getX() + TEMPLATE_TAP_RADIUS, center.getY() + TEMPLATE_TAP_RADIUS));
     }
 
 private void handleNewBuilding() {
@@ -416,7 +630,9 @@ private void startBuildingAction(String actionName, PointData buttonTopLeft, Poi
         sleepTask(1000);
 
 
-        refillResourcesIfNeededFlow();
+        if (!refillResourcesIfNeededFlow()) {
+            return;
+        }
 
 
         tapRandomPoint(BUILDING_CONFIRM_BUTTON_AREA_VALUE.topLeft(), BUILDING_CONFIRM_BUTTON_AREA_VALUE.bottomRight());
@@ -618,7 +834,26 @@ private void reachCityView() {
                 1000);
     }
 
-private LocalDateTime handleQueue(UpgradeBuildingsRoutine.QueueReadout queueResult) {
+private QueueHandlingResult handleQueue(UpgradeBuildingsRoutine.QueueReadout queueResult) {
+        for (int attempt = 1; attempt <= MAX_RECOMMENDED_BUILDING_ATTEMPTS; attempt++) {
+            QueueAttemptResult result = handleQueueAttempt(queueResult);
+            if (result.handled()) {
+                return new QueueHandlingResult(result.blocker() == null, result.blocker());
+            }
+            if (attempt < MAX_RECOMMENDED_BUILDING_ATTEMPTS) {
+                logInfo(routineLogUpgradeBuildingsLine(
+                        "Recommended building had no actionable button. Reopening it once in case the first tap claimed completed production."));
+                navigationHelper.ensureCorrectScreenLocation(LaunchPoint.HOME);
+                sleepTask(500);
+            }
+        }
+
+        logWarning(routineLogUpgradeBuildingsLine(
+                "Recommended building remained unresolved after " + MAX_RECOMMENDED_BUILDING_ATTEMPTS + " attempts."));
+        return new QueueHandlingResult(false, null);
+    }
+
+private QueueAttemptResult handleQueueAttempt(UpgradeBuildingsRoutine.QueueReadout queueResult) {
 
 
         reachCityView();
@@ -640,7 +875,7 @@ private LocalDateTime handleQueue(UpgradeBuildingsRoutine.QueueReadout queueResu
 
             tapPoint(new PointData(lowBuilding.getPoint().getX() + 100, lowBuilding.getPoint().getY()));
             handleSurvivorBuilding();
-            return null;
+            return QueueAttemptResult.completed();
         } else {
 
 
@@ -650,15 +885,18 @@ private LocalDateTime handleQueue(UpgradeBuildingsRoutine.QueueReadout queueResu
 
             if (upgradeButton.isFound()) {
                 handleCityBuilding();
-                return null;
+                return QueueAttemptResult.completed();
             } else {
 
                 if (isBuildButtonVisible()) {
                     handleNewBuilding();
-                    return null;
+                    return QueueAttemptResult.completed();
                 }
 
-                return handleTroopBuilding();
+                ProductionBlocker blocker = handleProductionBlocker(queueResult.queueNumber());
+                return blocker == null
+                        ? QueueAttemptResult.unresolved()
+                        : QueueAttemptResult.blockedBy(blocker);
             }
         }
     }

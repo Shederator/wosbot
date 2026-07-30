@@ -2,6 +2,7 @@ package dev.frostguard.engine.service;
 
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.engine.schedule.CustomTaskConfigurable;
 import dev.frostguard.engine.schedule.DelayedTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,8 +53,11 @@ public class CustomTaskService {
     /** Maps className → source .java File */
     private final Map<String, File> sourceFiles = new ConcurrentHashMap<>();
 
-    /** Maps className → enabled task configs */
+    /** Maps className → enabled task settings */
     private final Map<String, CustomTaskSettings> enabledTasks = new ConcurrentHashMap<>();
+
+    /** Maps className → persisted task settings regardless of enabled state. */
+    private final Map<String, CustomTaskSettings> savedTaskSettings = new ConcurrentHashMap<>();
 
     private URLClassLoader taskClassLoader;
 
@@ -70,18 +74,29 @@ public class CustomTaskService {
         private final String customName;
         private final int offsetMinutes;
         private final int priority;
+        private final String firstExecutionUtc;
+        private final Integer followUpDelayHours;
 
         public CustomTaskSettings(String className, String customName, int offsetMinutes, int priority) {
+            this(className, customName, offsetMinutes, priority, null, 8);
+        }
+
+        public CustomTaskSettings(String className, String customName, int offsetMinutes, int priority,
+                                  String firstExecutionUtc, Integer followUpDelayHours) {
             this.className = className;
             this.customName = customName;
             this.offsetMinutes = offsetMinutes;
             this.priority = priority;
+            this.firstExecutionUtc = firstExecutionUtc;
+            this.followUpDelayHours = followUpDelayHours != null ? followUpDelayHours : 8;
         }
 
         public String getClassName()   { return className; }
         public String getCustomName()  { return customName; }
         public int getOffsetMinutes()  { return offsetMinutes; }
         public int getPriority()       { return priority; }
+        public String getFirstExecutionUtc() { return firstExecutionUtc; }
+        public Integer getFollowUpDelayHours() { return followUpDelayHours; }
     }
 
     // ========================================================================
@@ -98,16 +113,25 @@ public class CustomTaskService {
         @JsonProperty("enabled")      private boolean enabled;
         @JsonProperty("offsetMinutes") private int offsetMinutes;
         @JsonProperty("priority")     private int priority;
+        @JsonProperty("firstExecutionUtc") private String firstExecutionUtc;
+        @JsonProperty("followUpDelayHours") private Integer followUpDelayHours;
 
         /** Default constructor for Jackson. */
         public SavedTaskEntry() {}
 
         public SavedTaskEntry(String className, String sourcePath, boolean enabled, int offsetMinutes, int priority) {
+            this(className, sourcePath, enabled, offsetMinutes, priority, null, 8);
+        }
+
+        public SavedTaskEntry(String className, String sourcePath, boolean enabled, int offsetMinutes, int priority,
+                              String firstExecutionUtc, Integer followUpDelayHours) {
             this.className = className;
             this.sourcePath = sourcePath;
             this.enabled = enabled;
             this.offsetMinutes = offsetMinutes;
             this.priority = priority;
+            this.firstExecutionUtc = firstExecutionUtc;
+            this.followUpDelayHours = followUpDelayHours != null ? followUpDelayHours : 8;
         }
 
         public String  getClassName()     { return className; }
@@ -120,6 +144,10 @@ public class CustomTaskService {
         public void    setOffsetMinutes(int v) { this.offsetMinutes = v; }
         public int     getPriority()      { return priority; }
         public void    setPriority(int v)      { this.priority = v; }
+        public String  getFirstExecutionUtc() { return firstExecutionUtc; }
+        public void    setFirstExecutionUtc(String v) { this.firstExecutionUtc = v; }
+        public Integer getFollowUpDelayHours() { return followUpDelayHours; }
+        public void    setFollowUpDelayHours(Integer v) { this.followUpDelayHours = v; }
     }
 
     // ========================================================================
@@ -302,6 +330,9 @@ public class CustomTaskService {
             task.setCustomPriority(configs.getPriority());
             task.setRepeatIntervalMinutes(configs.getOffsetMinutes());
             task.setCustomTaskIdentifier(configs.getClassName());
+            if (task instanceof CustomTaskConfigurable configurableTask) {
+                configurableTask.applyCustomTaskSettings(configs);
+            }
         }
         return task;
     }
@@ -317,6 +348,7 @@ public class CustomTaskService {
         loadedClasses.remove(className);
         sourceFiles.remove(className);
         enabledTasks.remove(className);
+        savedTaskSettings.remove(className);
 
         Path classFile = compiledDir.resolve(TASK_PACKAGE_PATH + "/" + className + ".class");
         try {
@@ -331,7 +363,18 @@ public class CustomTaskService {
      * Marks a custom task as enabled with the given configs.
      */
     public void enableTask(String className, String customName, int offsetMinutes, int priority) {
-        enabledTasks.put(className, new CustomTaskSettings(className, customName, offsetMinutes, priority));
+        enableTask(className, customName, offsetMinutes, priority, null, 8);
+    }
+
+    /**
+     * Marks a custom task as enabled with the given settings.
+     */
+    public void enableTask(String className, String customName, int offsetMinutes, int priority,
+                           String firstExecutionUtc, Integer followUpDelayHours) {
+        CustomTaskSettings settings = new CustomTaskSettings(className, customName, offsetMinutes, priority,
+                firstExecutionUtc, followUpDelayHours);
+        savedTaskSettings.put(className, settings);
+        enabledTasks.put(className, settings);
         saveTasks();
     }
 
@@ -340,6 +383,20 @@ public class CustomTaskService {
      */
     public void disableTask(String className) {
         enabledTasks.remove(className);
+        saveTasks();
+    }
+
+    /**
+     * Updates persisted settings for a loaded custom task without changing its enabled state.
+     */
+    public void saveTaskSettings(String className, String customName, int offsetMinutes, int priority,
+                                 String firstExecutionUtc, Integer followUpDelayHours) {
+        CustomTaskSettings settings = new CustomTaskSettings(className, customName, offsetMinutes, priority,
+                firstExecutionUtc, followUpDelayHours);
+        savedTaskSettings.put(className, settings);
+        if (enabledTasks.containsKey(className)) {
+            enabledTasks.put(className, settings);
+        }
         saveTasks();
     }
 
@@ -353,6 +410,11 @@ public class CustomTaskService {
 
     public Set<String> getLoadedClassNames() {
         return Collections.unmodifiableSet(loadedClasses.keySet());
+    }
+
+    public boolean supportsCustomTaskConfiguration(String className) {
+        Class<?> clazz = loadedClasses.get(className);
+        return clazz != null && CustomTaskConfigurable.class.isAssignableFrom(clazz);
     }
 
     public File getSourceFile(String className) {
@@ -412,10 +474,14 @@ public class CustomTaskService {
 
             if (entry.isEnabled()) {
                 enableTask(entry.getClassName(), entry.getClassName(),
-                        entry.getOffsetMinutes(), entry.getPriority());
+                        entry.getOffsetMinutes(), entry.getPriority(),
+                        entry.getFirstExecutionUtc(), entry.getFollowUpDelayHours());
                 logger.info("Restored enabled custom task: {} (offset={}m, priority={})",
                         entry.getClassName(), entry.getOffsetMinutes(), entry.getPriority());
             } else {
+                saveTaskSettings(entry.getClassName(), entry.getClassName(),
+                        entry.getOffsetMinutes(), entry.getPriority(),
+                        entry.getFirstExecutionUtc(), entry.getFollowUpDelayHours());
                 logger.info("Task {} is saved but not enabled, skipping", entry.getClassName());
             }
         }
@@ -432,11 +498,18 @@ public class CustomTaskService {
         for (Map.Entry<String, File> e : sourceFiles.entrySet()) {
             String className = e.getKey();
             CustomTaskSettings configs = enabledTasks.get(className);
+            CustomTaskSettings persistedSettings = savedTaskSettings.get(className);
             boolean enabled  = configs != null;
-            int offset       = enabled ? configs.getOffsetMinutes() : 60;
-            int priority     = enabled ? configs.getPriority() : 0;
+            int offset       = enabled ? configs.getOffsetMinutes()
+                    : persistedSettings != null ? persistedSettings.getOffsetMinutes() : 60;
+            int priority     = enabled ? configs.getPriority()
+                    : persistedSettings != null ? persistedSettings.getPriority() : 0;
+            String firstExecutionUtc = enabled ? configs.getFirstExecutionUtc()
+                    : persistedSettings != null ? persistedSettings.getFirstExecutionUtc() : null;
+            Integer followUpDelayHours = enabled ? configs.getFollowUpDelayHours()
+                    : persistedSettings != null ? persistedSettings.getFollowUpDelayHours() : 8;
             entries.add(new SavedTaskEntry(className, e.getValue().getAbsolutePath(),
-                    enabled, offset, priority));
+                    enabled, offset, priority, firstExecutionUtc, followUpDelayHours));
         }
 
         try {
@@ -456,11 +529,18 @@ public class CustomTaskService {
         for (Map.Entry<String, File> e : sourceFiles.entrySet()) {
             String className = e.getKey();
             CustomTaskSettings configs = enabledTasks.get(className);
+            CustomTaskSettings persistedSettings = savedTaskSettings.get(className);
             boolean enabled  = configs != null;
-            int offset       = enabled ? configs.getOffsetMinutes() : 60;
-            int priority     = enabled ? configs.getPriority() : 0;
+            int offset       = enabled ? configs.getOffsetMinutes()
+                    : persistedSettings != null ? persistedSettings.getOffsetMinutes() : 60;
+            int priority     = enabled ? configs.getPriority()
+                    : persistedSettings != null ? persistedSettings.getPriority() : 0;
+            String firstExecutionUtc = enabled ? configs.getFirstExecutionUtc()
+                    : persistedSettings != null ? persistedSettings.getFirstExecutionUtc() : null;
+            Integer followUpDelayHours = enabled ? configs.getFollowUpDelayHours()
+                    : persistedSettings != null ? persistedSettings.getFollowUpDelayHours() : 8;
             entries.add(new SavedTaskEntry(className, e.getValue().getAbsolutePath(),
-                    enabled, offset, priority));
+                    enabled, offset, priority, firstExecutionUtc, followUpDelayHours));
         }
         return entries;
     }

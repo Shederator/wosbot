@@ -361,38 +361,76 @@ public class ScheduleService {
 				"Custom tasks discovered: " + enabled.size());
 
 		for (CustomTaskService.CustomTaskSettings settings : enabled) {
-			DelayedTask task = customTasks.createTaskWithSettings(settings, account);
+			DailyTaskStatusData saved = findCustomTaskStatus(settings, progress);
+			DelayedTask task = scheduleCustomTask(account, queue, settings, saved, false, true);
 			if (task == null) {
 				log(TpMessageSeverityEnum.ERROR, "ScheduleService", account.getName(),
 						"Custom task could not be created: " + settings.getCustomName());
 				continue;
 			}
-			restoreCustomSchedule(task, settings, account, progress);
-			task.setRecurring(true);
-			TaskManagementService.shared().recordTaskState(account.getId(),
-					baseScheduledState(account.getId(), TpDailyTaskEnum.CUSTOM_TASK.getId(), settings.getClassName(), task.getScheduled()));
-			queue.enqueue(task);
 			log(TpMessageSeverityEnum.INFO, settings.getCustomName(), account.getName(),
 					"Custom task queued (offset=" + settings.getOffsetMinutes() + "m, priority=" + settings.getPriority() + ")");
 		}
 	}
 
-	private void restoreCustomSchedule(DelayedTask task, CustomTaskService.CustomTaskSettings settings,
-			AccountDescriptor account, List<DailyTaskStatusData> progress) {
-		DailyTaskStatusData saved = progress.stream()
+	public DelayedTask scheduleCustomTask(AccountDescriptor account, TaskQueue queue,
+			CustomTaskService.CustomTaskSettings settings, DailyTaskStatusData persistedStatus,
+			boolean executeNow, boolean recurring) {
+		if (account == null || queue == null || settings == null) {
+			return null;
+		}
+
+		queue.dequeueByKey(settings.getClassName());
+
+		DelayedTask customTask = CustomTaskService.getInstance().createTaskWithSettings(settings, account);
+		if (customTask == null) {
+			return null;
+		}
+		if (!applyCustomTaskSchedule(customTask, persistedStatus, executeNow)) {
+			return null;
+		}
+
+		customTask.setRecurring(recurring);
+		TaskManagementService.shared().recordTaskState(account.getId(),
+				baseScheduledState(account.getId(), TpDailyTaskEnum.CUSTOM_TASK.getId(),
+						settings.getClassName(), customTask.getScheduled()));
+		queue.enqueue(customTask);
+		return customTask;
+	}
+
+	private DailyTaskStatusData findCustomTaskStatus(CustomTaskService.CustomTaskSettings settings,
+			List<DailyTaskStatusData> progress) {
+		return progress.stream()
 				.filter(row -> row != null)
 				.filter(row -> row.getIdTpDailyTask() == TpDailyTaskEnum.CUSTOM_TASK.getId())
 				.filter(row -> settings.getClassName().equals(row.getCustomLabel()))
 				.findFirst()
 				.orElse(null);
-		if (saved == null || saved.getNextSchedule() == null) {
-			task.reschedule(LocalDateTime.now());
-			return;
+	}
+
+	private boolean applyCustomTaskSchedule(DelayedTask task, DailyTaskStatusData persistedStatus, boolean executeNow) {
+		if (persistedStatus != null) {
+			task.setLastExecutionTime(persistedStatus.getLastExecution());
+			LocalDateTime nextSchedule = persistedStatus.getNextSchedule();
+			if (nextSchedule != null) {
+				task.reschedule(nextSchedule);
+				return true;
+			}
+			if (persistedStatus.getLastExecution() != null) {
+				return false;
+			}
 		}
-		task.reschedule(saved.getNextSchedule());
-		task.setLastExecutionTime(saved.getLastExecution());
-		log(TpMessageSeverityEnum.INFO, settings.getCustomName(), account.getName(),
-				"Schedule restored: " + formatTime(saved.getNextSchedule()));
+
+		if (executeNow) {
+			task.reschedule(LocalDateTime.now());
+			return true;
+		}
+
+		LocalDateTime initialSchedule = task.getScheduled();
+		if (initialSchedule == null || initialSchedule.isBefore(LocalDateTime.now())) {
+			task.reschedule(LocalDateTime.now());
+		}
+		return true;
 	}
 
 	private TaskStateData baseScheduledState(Long accountId, int taskTypeId, String customName) {

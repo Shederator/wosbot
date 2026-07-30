@@ -60,6 +60,8 @@ private static final int DEFAULT_MARKSMEN_PERCENTAGE_VALUE = 30;
 
 private static final DeploymentPosition DEFAULT_POSITION_VALUE = DeploymentPosition.CENTER;
 
+private static final String DEFAULT_FLAG_VALUE = "No Flag";
+
 private boolean overrideDeploy;
 
 private int infantryPercentage;
@@ -69,6 +71,8 @@ private int lancersPercentage;
 private int markmenPercentage;
 
 private DeploymentPosition position;
+
+private Integer flagNumber;
 
 public AllianceChampionshipRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
         super(profile, tpTask);
@@ -197,14 +201,30 @@ private boolean openUpDeploymentConfiguration(boolean isUpdate) {
         sleepTask(200);
 
 
-        touchBalanceButton();
-
         return true;
     }
 
 private void configureTroopPercentagesFlow() {
+        touchBalanceButton();
         resetTroopInputsFlow();
         setTroopPercentagesFlow();
+        confirmTroopPercentagesFlow();
+    }
+
+private boolean configureFormationFlow() {
+        if (flagNumber == null) {
+            logInfo(routineLogAllianceChampionshipLine("Formation setup: no flag configured, using custom troop mix"));
+            configureTroopPercentagesFlow();
+            return true;
+        }
+
+        logInfo(routineLogAllianceChampionshipLine("Formation setup: selecting flag #" + flagNumber));
+        if (!marchHelper.selectFlag(flagNumber)) {
+            logWarning(routineLogAllianceChampionshipLine(
+                    "Formation setup: configured flag #" + flagNumber + " is locked on this profile"));
+            return false;
+        }
+        return true;
     }
 
 private void manageDeploymentByStatus(DeploymentStatusShape status) {
@@ -365,11 +385,12 @@ private AreaData resolveDeploymentArea(DeploymentPosition pos) {
         };
     }
 
-private void confirmDeploymentFlow() {
+private void confirmTroopPercentagesFlow() {
         tapRandomPoint(CONFIRM_TROOPS_BUTTON_TL_VALUE, CONFIRM_TROOPS_BUTTON_BR_VALUE, 1, 500);
         sleepTask(500);
+    }
 
-
+private void deployFormationFlow() {
         tapRandomPoint(DEPLOY_BUTTON_TL_VALUE, DEPLOY_BUTTON_BR_VALUE, 1, 500);
         sleepTask(1000);
 
@@ -408,9 +429,35 @@ private void hydrateConfiguration() {
                 DEFAULT_POSITION_VALUE.getValue());
         this.position = DeploymentPosition.fromString(positionValue);
 
+        String flagValue = resolveConfigString(
+                ConfigurationKeyEnum.ALLIANCE_CHAMPIONSHIP_FLAG_STRING,
+                DEFAULT_FLAG_VALUE);
+        this.flagNumber = parseFlagNumber(flagValue);
+        if (flagNumber == null && !isNoFlagValue(flagValue)) {
+            logWarning(routineLogAllianceChampionshipLine(
+                    "Invalid flag configuration '" + flagValue + "'. Using custom troop mix."));
+        }
+
         logDebug(routineLogAllianceChampionshipLine(String.format(
-                "Configuration loaded - Override: %s, Position: %s, Infantry: %d%%, Lancers: %d%%, Marksmen: %d%%",
-                overrideDeploy, position, infantryPercentage, lancersPercentage, markmenPercentage)));
+                "Configuration loaded - Override: %s, Position: %s, Flag: %s, Infantry: %d%%, Lancers: %d%%, Marksmen: %d%%",
+                overrideDeploy, position, flagNumber == null ? DEFAULT_FLAG_VALUE : flagNumber,
+                infantryPercentage, lancersPercentage, markmenPercentage)));
+    }
+
+static Integer parseFlagNumber(String value) {
+        if (isNoFlagValue(value)) {
+            return null;
+        }
+        try {
+            int flag = Integer.parseInt(value.trim());
+            return flag >= 1 && flag <= 8 ? flag : null;
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+private static boolean isNoFlagValue(String value) {
+        return value == null || value.isBlank() || DEFAULT_FLAG_VALUE.equalsIgnoreCase(value.trim());
     }
 
 private String resolveConfigString(ConfigurationKeyEnum key, String defaultValue) {
@@ -461,8 +508,10 @@ private boolean deployTroopsFlow(boolean isUpdate) {
             return false;
         }
 
-        configureTroopPercentagesFlow();
-        confirmDeploymentFlow();
+        if (!configureFormationFlow()) {
+            return false;
+        }
+        deployFormationFlow();
 
         return true;
     }

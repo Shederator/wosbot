@@ -18,6 +18,16 @@ import dev.frostguard.vision.logging.ProfileContextLogger;
 // primary game views and auxiliary menus.
 public class NavigationHelper {
 
+    private static final PointData EVENT_TAB_SEARCH_TOP_LEFT = new PointData(0, 80);
+    private static final PointData EVENT_TAB_SEARCH_BOTTOM_RIGHT = new PointData(720, 210);
+    private static final PointData EVENT_TAB_RESET_FROM = new PointData(80, 120);
+    private static final PointData EVENT_TAB_RESET_TO = new PointData(578, 130);
+    private static final PointData EVENT_TAB_SCAN_FROM = new PointData(630, 143);
+    private static final PointData EVENT_TAB_SCAN_TO = new PointData(400, 128);
+    private static final int EVENT_TAB_RESET_SWIPES = 3;
+    private static final int EVENT_TAB_SCAN_SWIPES = 7;
+    private static final long EVENT_TAB_SETTLE_MS = 1000L;
+
     private final TemplateSearchHelper searcher;
     private final EmulatorController emu;
     private final String device;
@@ -85,22 +95,20 @@ public class NavigationHelper {
             case TUNDRA_TRUCK -> TemplatesEnum.TUNDRA_TRUCK_TAB;
         };
 
-        // search with swipe-left reset then swipe-right scanning
-        ImageSearchResultData tab = searcher.locatePattern(tpl, SearchConfigConstants.DEFAULT_SINGLE);
+        // The horizontal event strip continues moving after the swipe gesture returns. Searching during
+        // that animation can miss even a 97% match, so settle fully and inspect only the header strip.
+        ImageSearchResultData tab = locateEventTab(tpl);
         if (!tab.isFound()) {
-            PointData swipeFrom = new PointData(80, 120);
-            PointData swipeTo = new PointData(578, 130);
-            for (int i = 0; i < 3; i++) { emu.swipeScreen(device, swipeFrom, swipeTo); interruptibleWait(400); }
+            for (int i = 0; i < EVENT_TAB_RESET_SWIPES && !tab.isFound(); i++) {
+                emu.swipeScreen(device, EVENT_TAB_RESET_FROM, EVENT_TAB_RESET_TO);
+                interruptibleWait(EVENT_TAB_SETTLE_MS);
+                tab = locateEventTab(tpl);
+            }
 
-            PointData rFrom = new PointData(630, 143);
-            PointData rTo = new PointData(400, 128);
-            int sweeps = 0;
-            while (sweeps < 5 && !tab.isFound()) {
-                tab = searcher.locatePattern(tpl, SearchConfigConstants.DEFAULT_SINGLE);
-                if (tab.isFound()) break;
-                emu.swipeScreen(device, rFrom, rTo);
-                interruptibleWait(400);
-                sweeps++;
+            for (int i = 0; i < EVENT_TAB_SCAN_SWIPES && !tab.isFound(); i++) {
+                emu.swipeScreen(device, EVENT_TAB_SCAN_FROM, EVENT_TAB_SCAN_TO);
+                interruptibleWait(EVENT_TAB_SETTLE_MS);
+                tab = locateEventTab(tpl);
             }
         }
 
@@ -120,6 +128,15 @@ public class NavigationHelper {
         interruptibleWait(1000);
         broadcastInfo("Reached " + event.name());
         return true;
+    }
+
+    private ImageSearchResultData locateEventTab(TemplatesEnum template) {
+        return searcher.locatePattern(template,
+                TemplateSearchHelper.SearchConfig.builder()
+                        .withMaxAttempts(1)
+                        .withThreshold(90)
+                        .withCoordinates(EVENT_TAB_SEARCH_TOP_LEFT, EVENT_TAB_SEARCH_BOTTOM_RIGHT)
+                        .build());
     }
 
     public void clearEventTabSelection() {

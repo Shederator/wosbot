@@ -531,7 +531,7 @@ public class TelegramWatcher {
               + "`/screenshot`  — Capture & send emulator screen\n"
               + "`/queue`       — Task queue (schedule / remove / run)\n"
               + "`/stats`       — Bot activity statistics per profile\n"
-              + "`/logs`        — Download log files (bot.log / CleanBot.log)\n"
+              + "`/logs`        — Download the Frostguard log\n"
               + "`/profiles`    — View & toggle profiles on/off\n\n"
               + "❓ *Help*\n"
               + "`/help`        — Show this message\n"
@@ -625,4 +625,3 @@ public class TelegramWatcher {
         return props;
     }
 }
-

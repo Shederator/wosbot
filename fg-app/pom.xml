@@ -146,19 +146,25 @@
 							<Built-By>${user.name}</Built-By>
 							<Build-Jdk>${java.version}</Build-Jdk>
 							<Build-Time>${maven.build.timestamp}</Build-Time>
+							<Enable-Native-Access>ALL-UNNAMED</Enable-Native-Access>
 						</manifestEntries>
 					</archive>
 				</configuration>
 			</plugin>
 
-			<!-- Collect runtime JARs -->
+			<!-- Collect runtime JARs.
+			     Bound to prepare-package rather than package so target/lib is fully
+			     populated before maven-assembly-plugin builds the distribution ZIP.
+			     Both plugins used to run in the package phase, where Maven honours
+			     POM declaration order: the assembly ran first and produced a ZIP with
+			     an empty lib/ unless an earlier build had already staged it. -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-dependency-plugin</artifactId>
 				<executions>
 					<execution>
 						<id>stage-runtime-dependencies</id>
-						<phase>package</phase>
+						<phase>prepare-package</phase>
 						<goals>
 							<goal>copy-dependencies</goal>
 						</goals>

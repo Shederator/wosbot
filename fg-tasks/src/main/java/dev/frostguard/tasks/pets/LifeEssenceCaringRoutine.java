@@ -104,7 +104,6 @@ public class LifeEssenceCaringRoutine extends DelayedTask {
 	 * 2. Switch to City tab
 	 * 3. Scroll down to reveal Life Essence option
 	 * 4. Tap Life Essence menu
-	 * 5. Back out twice to close overview (needed for claim detection)
 	 * 
 	 * @return true if navigation successful, false otherwise
 	 */
@@ -145,14 +144,6 @@ public class LifeEssenceCaringRoutine extends DelayedTask {
 		tapPoint(lifeEssenceMenu.getPoint());
 		sleepTask(3000); // Wait for menu to fully load
 
-		/** not required anymore - claim detection works without closing overview, and this was causing some issues with the caring flow
-		// Back out twice to close the overview screen
-		logDebug("Closing overview screen (2x back button)");
-		pressBack();
-		sleepTask(500); // Short delay between backs
-		pressBack();
-		sleepTask(1000); // Wait for UI to settle
-		*/
 		logInfo("Successfully navigated to Life Essence area");
 		return true;
 	}
@@ -161,9 +152,8 @@ public class LifeEssenceCaringRoutine extends DelayedTask {
 	 * Check if daily caring attempts are available
 	 * 
 	 * UI Navigation:
-	 * 1. Close the Life Essence overview (back button twice)
-	 * 2. Open the Caring tab (top-right icon)
-	 * 3. Search for "Daily Caring Available" indicator
+	 * 1. Open the Caring tab (top-right icon)
+	 * 2. Search for "Daily Caring Available" indicator
 	 * 
 	 * @return true if attempts available, false if exhausted
 	 */

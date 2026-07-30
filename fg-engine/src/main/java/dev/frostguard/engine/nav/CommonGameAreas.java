@@ -105,6 +105,10 @@ public final class CommonGameAreas {
     // Polar Terror search panel: the level number sits in the pill right of the slider, not on the
     // slider bar itself.
     public static final AreaData POLAR_LEVEL_DISPLAY = region(565, 1030, 665, 1078);
+    public static final AreaData POLAR_SEARCH_BUTTON = region(301, 1200, 412, 1229);
+    // A newly revealed section heading enters this strip before more reward rows are swiped into view.
+    public static final AreaData POLAR_SPECIAL_REWARDS_HEADER = region(35, 1090, 685, 1185);
+    public static final PointData POLAR_REWARD_DETAILS_CLOSE = point(665, 195);
 
     // ── stamina "Obtain more" dialog ─────────────────────────────────
     //

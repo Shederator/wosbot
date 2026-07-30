@@ -154,7 +154,6 @@ public class LifeEssenceRoutine extends DelayedTask {
 	 * 2. Switch to City tab
 	 * 3. Scroll down to reveal Life Essence option
 	 * 4. Tap Life Essence menu
-	 * 5. Back out twice to close overview (needed for claim detection)
 	 * 
 	 * @return true if navigation successful, false otherwise
 	 */
@@ -195,15 +194,6 @@ public class LifeEssenceRoutine extends DelayedTask {
 		tapPoint(lifeEssenceMenu.getPoint());
 		sleepTask(3000); // Wait for menu to fully load
 
-		/** not required anymore - claim detection works without closing overview, and this was causing some issues with the caring flow
-		// Back out twice to close the overview screen
-		// This is necessary because the overview blocks detection of claimable essence
-		logDebug("Closing overview screen (2x back button)");
-		pressBack();
-		sleepTask(500); // Short delay between backs
-		pressBack();
-		sleepTask(1000); // Wait for UI to settle
-		*/
 		logInfo("Successfully navigated to Life Essence area");
 		return true;
 	}

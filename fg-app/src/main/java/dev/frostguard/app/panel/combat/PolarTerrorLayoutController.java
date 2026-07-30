@@ -2,6 +2,8 @@ package dev.frostguard.app.panel.combat;
 
 import dev.frostguard.app.shared.AbstractProfileController;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
+import dev.frostguard.api.configs.PolarTerrorMode;
+import dev.frostguard.app.panel.profile.ProfileAux;
 import javafx.fxml.FXML;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
@@ -139,7 +141,9 @@ public class PolarTerrorLayoutController extends AbstractProfileController {
         for (int i = 1; i <= MAX_POLAR_TERROR_LEVEL; i++) {
             comboBoxPolarTerrorLevel.getItems().addAll(i);
         }
-        comboBoxPolarTerrorMode.getItems().addAll("Limited (10)", "Unlimited");
+        comboBoxPolarTerrorMode.getItems().addAll(
+                PolarTerrorMode.SPECIAL_REWARDS.getDisplayName(),
+                PolarTerrorMode.UNLIMITED.getDisplayName());
 
         // Manual Rally Join combos
         @SuppressWarnings("unchecked")
@@ -211,6 +215,23 @@ public class PolarTerrorLayoutController extends AbstractProfileController {
         updatePolarTerrorMarchFlagsVisibility(1);
         textFieldPolarStaminaItemReserve.disableProperty().bind(checkBoxPolarUseStaminaItems.selectedProperty().not());
         comboBoxPolarTerrorLevel.disableProperty().bind(checkBoxPolarHighestLevel.selectedProperty());
+    }
+
+    @Override
+    public void onProfileLoad(ProfileAux profile) {
+        super.onProfileLoad(profile);
+
+        String storedMode = profile.getConfiguration(ConfigurationKeyEnum.POLAR_TERROR_MODE_STRING);
+        if (!PolarTerrorMode.isLegacyValue(storedMode)) {
+            return;
+        }
+
+        isLoadingProfile = true;
+        try {
+            comboBoxPolarTerrorMode.setValue(PolarTerrorMode.SPECIAL_REWARDS.getDisplayName());
+        } finally {
+            isLoadingProfile = false;
+        }
     }
 
     private void updateMarchFlagsVisibility(Integer marches) {

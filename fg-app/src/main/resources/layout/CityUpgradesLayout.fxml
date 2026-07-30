@@ -27,6 +27,12 @@
                         <VBox spacing="10">
                             <CheckBox fx:id="checkBoxUpgradeFurnace" mnemonicParsing="false"
                                       text="Upgrade Furnace" />
+                            <CheckBox fx:id="checkBoxReserveProduction" mnemonicParsing="false"
+                                      text="Reserve training/research for required upgrades">
+                                <tooltip>
+                                    <Tooltip text="When a required camp or Research Center is busy, pause only that production queue until construction can start. The reservation remains active after resource or build failures." />
+                                </tooltip>
+                            </CheckBox>
                             <CheckBox fx:id="checkBoxPrioritiseFurnace" mnemonicParsing="false"
                                       text="Prioritise Furnace" />
                         </VBox>

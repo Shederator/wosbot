@@ -37,6 +37,11 @@ public final class CommonOCRSettings {
                     .setTextColor(new Color(66, 84, 108))
                     .build();
 
+    // special rewards heading: "Special Rewards (8 left)" in white on a blue section bar
+    public static final TesseractSettingsData POLAR_SPECIAL_REWARDS_SETTINGS =
+            buildLstmConfig("SpecialRewardsleft0123456789() ", true,
+                    255, 255, 255, PageAnalysis.SINGLE_LINE);
+
     // extraction pattern for pulling first integer from noisy OCR text
     public static final Pattern NUMBER_PATTERN = Pattern.compile(".*?(\\d+).*");
 

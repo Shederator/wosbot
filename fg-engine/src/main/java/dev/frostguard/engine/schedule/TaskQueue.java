@@ -60,7 +60,9 @@ public class TaskQueue {
 
     private final TaskPriorityProvider rankingStrategy = new DefaultTaskPriorityProvider();
     private final PriorityBlockingQueue<DelayedTask> taskBacklog =
-            new PriorityBlockingQueue<>(11, Comparator.comparing(DelayedTask::getScheduled));
+            new PriorityBlockingQueue<>(11, Comparator.comparing(
+                    DelayedTask::getScheduled,
+                    Comparator.nullsLast(Comparator.naturalOrder())));
 
     protected final EmulatorController deviceBridge = EmulatorController.getInstance();
 
@@ -459,7 +461,9 @@ public class TaskQueue {
                 forceInitialInitialize = false;
             }
             long elapsed = (System.currentTimeMillis() - t0) / 1000;
-            emitInfoTask(task, "Completed: " + task.getTaskName() + " scheduled=" + task.getScheduled().format(TS_FMT));
+            LocalDateTime scheduledAfterRun = task.getScheduled();
+            emitInfoTask(task, "Completed: " + task.getTaskName() + " scheduled="
+                    + (scheduledAfterRun != null ? scheduledAfterRun.format(TS_FMT) : "none"));
             AnalyticsService.getInstance().trackTaskCompleted(task.getTaskName(), "success", elapsed);
             ok = true;
             checkDailyMissionFollow(task);
@@ -520,11 +524,13 @@ public class TaskQueue {
         s.setLastExecutionTime(LocalDateTime.now()); s.setNextExecutionTime(task.getScheduled());
         Object k = task.getDistinctKey(); if (k != null) s.setCustomTaskName(k.toString());
         TaskManagementService.shared().recordTaskState(profile.getId(), s);
-        ScheduleService.obtain().persistDailyCompletion(profile, task.getTpTask(), task.getScheduled(), s.getCustomTaskName());
+        if (task.getScheduled() != null) {
+            ScheduleService.obtain().persistDailyCompletion(profile, task.getTpTask(), task.getScheduled(), s.getCustomTaskName());
+        }
     }
 
     private void handleReschedule(DelayedTask task, LocalDateTime before) {
-        if (before.equals(task.getScheduled()) && task.isRecurring()) task.reschedule(LocalDateTime.now());
+        if (Objects.equals(before, task.getScheduled()) && task.isRecurring()) task.reschedule(LocalDateTime.now());
         if (task.isRecurring()) { emitInfoTask(task, "Next run in: " + GameTimeUtils.formatCountdown(task.getScheduled())); enqueue(task); }
         else emitInfoTask(task, "Task removed from queue");
     }

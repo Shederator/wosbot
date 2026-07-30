@@ -1,0 +1,218 @@
+name: Daily Windows Bundle
+
+on:
+  push:
+    branches:
+      - "ci/**"
+  pull_request:
+    paths:
+      - "**/pom.xml"
+      - "**/src/**"
+      - "tools/**"
+      - "custom_tasks/**"
+      - "ci/**"
+      - "fg-watcher.bat"
+      - ".gitattributes"
+      - ".github/workflows/daily-windows-bundle.yml"
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-windows-bundle-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # Keeps `mvn` output readable in the Actions log and avoids a 200 MB download
+  # log on a cold cache.
+  MAVEN_ARGS: "-B --no-transfer-progress -Dstyle.color=never"
+
+jobs:
+  build-windows-bundle:
+    name: Build Windows desktop bundle on Linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      # The Windows OpenCV .dll, adb.exe and the .traineddata OCR models are all
+      # tracked with Git LFS. If any of them is still a pointer stub the build
+      # silently produces a bundle that only fails on a user's machine, so fail
+      # loudly here instead.
+      - name: Verify Git LFS assets are real binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          git lfs pull
+
+          mapfile -t assets < <(git lfs ls-files --name-only)
+
+          # An empty list would make every check below vacuously succeed, which
+          # is exactly the failure mode this step exists to prevent.
+          if [[ "${#assets[@]}" -eq 0 ]]; then
+            echo "::error::git lfs ls-files returned no assets. LFS tracking or" \
+                 "the checkout is broken; the bundle would ship pointer stubs."
+            exit 1
+          fi
+
+          # These are the assets the shipped bundle cannot work without.
+          required=(
+            "fg-vision/src/main/resources/native/opencv/opencv_java4110.dll"
+            "tools/adb/adb.exe"
+            "tools/adb/AdbWinApi.dll"
+            "tools/tesseract/eng.traineddata"
+          )
+          for want in "${required[@]}"; do
+            found=0
+            for asset in "${assets[@]}"; do
+              [[ "${asset}" == "${want}" ]] && found=1 && break
+            done
+            if [[ "${found}" -ne 1 ]]; then
+              echo "::error::Expected LFS-tracked asset is not tracked: ${want}"
+              exit 1
+            fi
+          done
+
+          failed=0
+          for asset in "${assets[@]}"; do
+            [[ -z "${asset}" ]] && continue
+            if [[ ! -f "${asset}" ]]; then
+              echo "::error file=${asset}::LFS asset is missing from the checkout."
+              failed=1
+              continue
+            fi
+            # A pointer stub is a ~130 byte text file starting with this URL.
+            if head -c 45 "${asset}" | grep -q 'git-lfs.github.com/spec'; then
+              echo "::error file=${asset}::LFS asset was not materialised (still a pointer stub)."
+              failed=1
+              continue
+            fi
+            # Every real asset here is far larger than any stub could be.
+            size="$(stat -c%s "${asset}")"
+            if [[ "${size}" -lt 10240 ]]; then
+              echo "::error file=${asset}::LFS asset is implausibly small (${size} bytes)."
+              failed=1
+            fi
+          done
+
+          if [[ "${failed}" -ne 0 ]]; then
+            exit 1
+          fi
+          echo "All ${#assets[@]} Git LFS assets were materialised."
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # The saved-frame vision tests run OCR through tess4j, which binds the host
+      # libtesseract/libleptonica at runtime. OpenCV itself needs no system
+      # package: the openpnp artifact ships the Linux native image.
+      - name: Install Tesseract native libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            tesseract-ocr libtesseract-dev libleptonica-dev
+
+      # Guards the bundle verifier itself. A verification script that cannot fail
+      # would turn a broken release artifact into a green check mark.
+      - name: Test the bundle verifier
+        run: python3 ci/test_verify_bundle.py
+
+      - name: Resolve project version
+        id: version
+        run: |
+          set -euo pipefail
+          version="$(mvn ${MAVEN_ARGS} -q help:evaluate \
+            -Dexpression=project.version -DforceStdout)"
+          if [[ -z "${version}" ]]; then
+            echo "::error::Could not resolve the Maven project version."
+            exit 1
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "Project version: ${version}"
+
+      # Tests are intentionally NOT skipped. The vision/OCR suites are the ones
+      # most likely to regress, and they run correctly on Linux now that the
+      # OpenCV native image is selected per platform.
+      - name: Build Windows desktop bundle
+        run: mvn ${MAVEN_ARGS} clean install -Djavafx.platform=win
+
+      - name: Locate the desktop bundle
+        id: bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          zip_path="$(find fg-app/target -maxdepth 1 -type f \
+            -name '*-desktop-bundle.zip' | sort | tail -n 1)"
+          if [[ -z "${zip_path}" ]]; then
+            echo "::error::No desktop bundle ZIP found under fg-app/target."
+            exit 1
+          fi
+          echo "path=${zip_path}" >> "${GITHUB_OUTPUT}"
+          echo "Bundle: ${zip_path} ($(du -h "${zip_path}" | cut -f1))"
+
+      # Structural verification: the right files, at the right paths, and every
+      # manifest Class-Path entry really present.
+      - name: Verify Windows bundle contents
+        run: python3 ci/verify_bundle.py "${{ steps.bundle.outputs.path }}" --platform win
+
+      # Launch verification: the staged JARs actually link together. Catches the
+      # dropped-dependency class of breakage that a file listing cannot see.
+      - name: Smoke test the desktop bundle
+        run: ci/smoke_test_bundle.sh "${{ steps.bundle.outputs.path }}"
+
+      - name: Summarise the build
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          zip_path="${{ steps.bundle.outputs.path }}"
+          {
+            echo "### Windows desktop bundle"
+            echo
+            if [[ -n "${zip_path}" && -f "${zip_path}" ]]; then
+              echo "- Archive: \`$(basename "${zip_path}")\`"
+              echo "- Version: \`${{ steps.version.outputs.version }}\`"
+              echo "- Size: $(du -h "${zip_path}" | cut -f1)"
+              echo "- Runtime JARs under \`lib/\`: $(unzip -Z1 "${zip_path}" \
+                | grep -Ec '^lib/[^/]+\.jar$' || true)"
+              echo "- Verified: structure, manifest classpath, launch smoke test"
+            else
+              echo "- :x: No bundle was produced."
+            fi
+            echo
+            echo "Tests run:"
+            grep -rhoE 'tests="[0-9]+"' --include='*.xml' \
+              */target/surefire-reports 2>/dev/null \
+              | grep -oE '[0-9]+' \
+              | awk '{total += $1} END {print "- JUnit tests executed: " total+0}'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload Windows desktop bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostguard-windows-desktop-bundle-${{ steps.version.outputs.version }}
+          path: ${{ steps.bundle.outputs.path }}
+          if-no-files-found: error
+          # A ZIP does not recompress usefully; skipping it saves several minutes.
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: "**/target/surefire-reports/*.xml"
+          if-no-files-found: ignore
+          retention-days: 7

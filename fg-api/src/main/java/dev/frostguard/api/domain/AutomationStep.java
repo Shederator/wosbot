@@ -22,6 +22,8 @@ import java.util.Map;
  * </ul>
  */
 public class AutomationStep {
+    public static final String PARAM_NODE_NAME = "nodeName";
+    public static final int NODE_NAME_MAX_LENGTH = 30;
 
     private int stepId;
     private FlowStepKind kind;
@@ -71,6 +73,31 @@ public class AutomationStep {
 
     public void putAttribute(String key, String value)  { attributes.put(key, value); }
     public String getAttribute(String key)              { return attributes.get(key); }
+
+    public String getNodeName() {
+        String value = getAttribute(PARAM_NODE_NAME);
+        return value != null ? value : "";
+    }
+
+    public void setNodeName(String nodeName) {
+        String sanitized = sanitizeNodeName(nodeName);
+        if (sanitized.isEmpty()) {
+            attributes.remove(PARAM_NODE_NAME);
+        } else {
+            attributes.put(PARAM_NODE_NAME, sanitized);
+        }
+    }
+
+    public static String sanitizeNodeName(String nodeName) {
+        if (nodeName == null) {
+            return "";
+        }
+        String sanitized = nodeName.replace('\r', ' ').replace('\n', ' ').trim();
+        if (sanitized.length() > NODE_NAME_MAX_LENGTH) {
+            sanitized = sanitized.substring(0, NODE_NAME_MAX_LENGTH);
+        }
+        return sanitized;
+    }
 
     /**
      * Reads an attribute as an integer, returning the supplied

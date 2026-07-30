@@ -454,8 +454,15 @@ public abstract class DelayedTask implements Runnable, Delayed {
         scheduledTime = LocalDateTime.now().plus(Duration.ofMillis(gapMs));
     }
 
+    public void clearSchedule() {
+        scheduledTime = null;
+    }
+
     @Override
     public long getDelay(TimeUnit unit) {
+        if (scheduledTime == null) {
+            return Long.MAX_VALUE;
+        }
         long diffSec = scheduledTime.toEpochSecond(ZoneOffset.UTC)
                 - LocalDateTime.now().toEpochSecond(ZoneOffset.UTC);
         return unit.convert(diffSec, TimeUnit.SECONDS);
@@ -465,6 +472,9 @@ public abstract class DelayedTask implements Runnable, Delayed {
     public int compareTo(Delayed o) {
         if (this == o) return 0;
         if (o instanceof DelayedTask other) {
+            if (this.scheduledTime == null && other.scheduledTime == null) return 0;
+            if (this.scheduledTime == null) return 1;
+            if (other.scheduledTime == null) return -1;
             return this.scheduledTime.compareTo(other.scheduledTime);
         }
         return Long.compare(this.getDelay(TimeUnit.MILLISECONDS), o.getDelay(TimeUnit.MILLISECONDS));

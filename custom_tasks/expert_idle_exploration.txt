@@ -1,0 +1,11 @@
+Title: Empty the Exploration bag using idle mode
+When: Execute at startup, twice a day.
+
+Flow:
+- Expand Dashboard.
+- Swipe up twice.
+- Click go to trek supplies.
+- Open bag and close bag preview.
+- Click Tundra Trek panel.
+- Click idle.
+- Confirm quantity; this should return to the world screen automatically.

@@ -290,7 +290,7 @@
 .tb-preview-screen {
     -fx-background-color: #000;
     -fx-min-height: 0;
-    -fx-alignment: center;
+    -fx-alignment: top-center;
 }
 .image-view-preview { /* clean display */ }
 
@@ -504,6 +504,7 @@
 
 .flow-node-type-label { -fx-text-fill: #fff; -fx-font-weight: 700; -fx-font-size: 12px; }
 .flow-node-id-label   { -fx-text-fill: rgba(255,255,255,0.5); -fx-font-weight: 500; -fx-font-size: 10px; }
+.flow-node-name-label { -fx-text-fill: rgba(255,255,255,0.78); -fx-font-weight: 600; -fx-font-size: 11px; }
 .flow-node-body       { -fx-padding: 10 14; -fx-background-color: transparent; }
 .flow-node-param-label {
     -fx-text-fill: -vfx-fg-secondary;

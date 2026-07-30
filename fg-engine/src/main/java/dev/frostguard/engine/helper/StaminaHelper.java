@@ -19,8 +19,6 @@ import java.time.LocalDateTime;
 // availability gating, item top-ups, and travel time parsing.
 public class StaminaHelper {
 
-    private static final int STAMINA_ITEM_VALUE = 10;
-
     @FunctionalInterface
     public interface RescheduleCallback {
         void reschedule(LocalDateTime time);
@@ -36,6 +34,7 @@ public class StaminaHelper {
     private final MarchHelper marchSupport;
     private final String accountLabel;
     private final LoggingService centralLog;
+    private final StaminaItemTopUpFlow itemTopUpFlow;
 
     public StaminaHelper(EmulatorController emuManager, String emulatorNumber,
                          ResilientOcrExecutor<Integer> integerHelper,
@@ -51,6 +50,11 @@ public class StaminaHelper {
         this.marchSupport = marchHelper;
         this.accountLabel = profile.getName();
         this.centralLog = LoggingService.obtain();
+        this.itemTopUpFlow = new StaminaItemTopUpFlow(observed -> {
+            int tracked = persistence.getCurrentStamina(accountKey);
+            persistence.setStamina(accountKey, observed);
+            emitInfo("Obtain-more dialog: synchronized tracked stamina " + tracked + " -> " + observed);
+        });
     }
 
     // Opens avatar screen, reads stamina via OCR, persists, then navigates back.
@@ -142,12 +146,12 @@ public class StaminaHelper {
 
     /**
      * Uses Chief Stamina items until the profile holds at least {@code targetStamina}, opening the
-     * Obtain-more dialog from the profile stamina bar. Anything unexpected leaves the dialog and
-     * reports failure, so the caller can fall back to waiting for regeneration.
+     * Obtain-more dialog from the profile stamina bar. The structured result distinguishes a
+     * confirmed item shortage from transient OCR or UI failures so callers can schedule safely.
      *
      * @param itemReserve number of items never to spend
      */
-    public boolean topUpFromProfile(int targetStamina, int itemReserve) {
+    public StaminaTopUpResult topUpFromProfile(int targetStamina, int itemReserve) {
         device.touchArea(deviceSlot, CommonGameAreas.PROFILE_AVATAR.topLeft(),
                 CommonGameAreas.PROFILE_AVATAR.bottomRight(), 1, 200);
         pause(800);
@@ -155,61 +159,79 @@ public class StaminaHelper {
                 CommonGameAreas.STAMINA_BUTTON.bottomRight(), 1, 200);
         pause(1000);
 
-        boolean toppedUp = useItemsInOpenDialog(targetStamina, itemReserve);
+        StaminaTopUpResult result = useItemsInOpenDialog(targetStamina, itemReserve);
         device.pressBack(deviceSlot);
         pause(500);
         device.pressBack(deviceSlot);
         pause(500);
-        return toppedUp;
+        return result;
     }
 
     /** Same, but for the dialog the game opens itself when a red deploy cost is pressed. */
-    public boolean refillFromOpenDialog(int targetStamina, int itemReserve) {
-        boolean toppedUp = useItemsInOpenDialog(targetStamina, itemReserve);
+    public StaminaTopUpResult refillFromOpenDialog(int targetStamina, int itemReserve) {
+        StaminaTopUpResult result = useItemsInOpenDialog(targetStamina, itemReserve);
         emitInfo("Closing obtain-more dialog");
         device.touchPoint(deviceSlot, CommonGameAreas.STAMINA_DIALOG_CLOSE);
         pause(800);
-        return toppedUp;
+        return result;
     }
 
-    private boolean useItemsInOpenDialog(int targetStamina, int itemReserve) {
+    private StaminaTopUpResult useItemsInOpenDialog(int targetStamina, int itemReserve) {
         var useButton = device.locatePattern(deviceSlot, dev.frostguard.api.configs.TemplatesEnum.STAMINA_ITEM_USE_BUTTON,
                 CommonGameAreas.STAMINA_DIALOG_USE_BUTTON.topLeft(),
                 CommonGameAreas.STAMINA_DIALOG_USE_BUTTON.bottomRight(), 85);
         if (!useButton.isFound()) {
             emitWarn("Chief Stamina Use button not found in the obtain-more dialog");
-            return false;
+            return StaminaTopUpResult.uiNotFound();
         }
 
-        Integer current = readDialogNumber(CommonGameAreas.STAMINA_DIALOG_CURRENT,
-                CommonOCRSettings.STAMINA_FRACTION_SETTINGS, "current stamina");
-        Integer itemCount = readDialogNumber(CommonGameAreas.STAMINA_DIALOG_ITEM_COUNT,
-                CommonOCRSettings.SPENT_STAMINA_SETTINGS, "chief stamina item count");
-        if (current == null || itemCount == null) {
-            emitWarn("Could not read stamina or item count from the obtain-more dialog");
-            return false;
+        StaminaTopUpResult result = itemTopUpFlow.topUp(new StaminaItemTopUpFlow.Dialog() {
+            @Override
+            public Integer readCurrentStamina() {
+                return readDialogNumber(CommonGameAreas.STAMINA_DIALOG_CURRENT,
+                        CommonOCRSettings.STAMINA_FRACTION_SETTINGS, "current stamina");
+            }
+
+            @Override
+            public Integer readItemCount() {
+                return readDialogNumber(CommonGameAreas.STAMINA_DIALOG_ITEM_COUNT,
+                        CommonOCRSettings.SPENT_STAMINA_SETTINGS, "chief stamina item count");
+            }
+
+            @Override
+            public boolean useItem() {
+                var currentUseButton = device.locatePattern(
+                        deviceSlot,
+                        dev.frostguard.api.configs.TemplatesEnum.STAMINA_ITEM_USE_BUTTON,
+                        CommonGameAreas.STAMINA_DIALOG_USE_BUTTON.topLeft(),
+                        CommonGameAreas.STAMINA_DIALOG_USE_BUTTON.bottomRight(),
+                        85);
+                if (!currentUseButton.isFound()) {
+                    emitWarn("Chief Stamina Use button disappeared during top-up");
+                    return false;
+                }
+                device.touchPoint(deviceSlot, currentUseButton.getPoint());
+                pause(600);
+                return true;
+            }
+        }, targetStamina, itemReserve);
+        logTopUpResult(result, targetStamina, itemReserve);
+        return result;
+    }
+
+    private void logTopUpResult(StaminaTopUpResult result, int targetStamina, int itemReserve) {
+        String evidence = "status=" + result.status()
+                + " observed=" + result.observedStamina()
+                + " target=" + targetStamina
+                + " itemCount=" + result.itemCount()
+                + " reserve=" + itemReserve
+                + " needed=" + result.itemsNeeded()
+                + " final=" + result.finalStamina();
+        if (result.successful()) {
+            emitInfo("Stamina top-up result: " + evidence);
+        } else {
+            emitWarn("Stamina top-up result: " + evidence);
         }
-
-        int deficit = targetStamina - current;
-        if (deficit <= 0) return true;
-
-        int itemsNeeded = (deficit + STAMINA_ITEM_VALUE - 1) / STAMINA_ITEM_VALUE;
-        int usableItems = Math.max(0, itemCount - itemReserve);
-        emitInfo("Stamina top-up: current=" + current + " target=" + targetStamina
-                + " itemCount=" + itemCount + " reserve=" + itemReserve + " needed=" + itemsNeeded);
-
-        if (usableItems < itemsNeeded) {
-            emitWarn("Need " + itemsNeeded + " Chief Stamina item(s), only " + usableItems
-                    + " usable after reserve " + itemReserve);
-            return false;
-        }
-
-        for (int used = 0; used < itemsNeeded; used++) {
-            device.touchPoint(deviceSlot, useButton.getPoint());
-            pause(600);
-        }
-        addStamina(itemsNeeded * STAMINA_ITEM_VALUE);
-        return true;
     }
 
     private Integer readDialogNumber(dev.frostguard.api.domain.AreaData area,

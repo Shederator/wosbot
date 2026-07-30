@@ -38,7 +38,11 @@
                            styleClass="tb-field-compact" minWidth="-Infinity"/>
                 <Button text="New" onAction="#handleNewSession"
                         styleClass="tb-btn-toolbar-accent" minWidth="-Infinity"/>
-                <Button text="Export" onAction="#handleExportJson"
+                <Button text="Save JSON" onAction="#handleSaveCustomTask"
+                        styleClass="tb-btn-toolbar" minWidth="-Infinity"/>
+                <Button text="Import JSON" onAction="#handleImportBuilderTask"
+                        styleClass="tb-btn-toolbar" minWidth="-Infinity"/>
+                <Button text="Export Java" onAction="#handleExportJson"
                         styleClass="tb-btn-toolbar" minWidth="-Infinity"/>
                 <Separator orientation="VERTICAL" styleClass="tb-toolbar-sep"/>
             </HBox>

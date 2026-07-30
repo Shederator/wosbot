@@ -21,6 +21,8 @@ import org.kordamp.ikonli.javafx.FontIcon;
 
 import java.io.File;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 
 /**
@@ -42,6 +44,12 @@ public class CustomTasksLayoutController {
     private final Map<String, Integer> taskOffsets = new HashMap<>();
     private final Map<String, Integer> taskPriorities = new HashMap<>();
     private final Map<String, Boolean> taskEnabled = new HashMap<>();
+    private final Map<String, String> taskFirstExecutionUtc = new HashMap<>();
+    private final Map<String, Integer> taskFollowUpDelayHours = new HashMap<>();
+
+    private static final DateTimeFormatter UTC_INPUT_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final String DEFAULT_SHIELD_FIRST_EXECUTION_UTC = "2026-06-20 09:00";
+    private static final int DEFAULT_FOLLOW_UP_DELAY_HOURS = 8;
 
     @FXML
     public void initialize() {
@@ -62,8 +70,12 @@ public class CustomTasksLayoutController {
             taskEnabled.put(entry.getClassName(), entry.isEnabled());
             taskOffsets.put(entry.getClassName(), entry.getOffsetMinutes());
             taskPriorities.put(entry.getClassName(), entry.getPriority());
+            taskFirstExecutionUtc.put(entry.getClassName(), getInitialExecutionUtcValue(entry));
+            taskFollowUpDelayHours.put(entry.getClassName(), getFollowUpDelayValue(entry));
 
-            addTaskCard(entry.getClassName(), new java.io.File(entry.getSourcePath()), entry.isEnabled(), entry.getOffsetMinutes(), entry.getPriority());
+            addTaskCard(entry.getClassName(), new java.io.File(entry.getSourcePath()), entry.isEnabled(),
+                    entry.getOffsetMinutes(), entry.getPriority(), getInitialExecutionUtcValue(entry),
+                    getFollowUpDelayValue(entry));
         }
     }
 
@@ -103,7 +115,12 @@ public class CustomTasksLayoutController {
                         taskOffsets.put(className, 60);
                         taskPriorities.put(className, 0);
                         taskEnabled.put(className, false);
-                        addTaskCard(className, javaFile, false, 60, 0);
+                        taskFirstExecutionUtc.put(className, getDefaultFirstExecutionUtc(className));
+                        taskFollowUpDelayHours.put(className, DEFAULT_FOLLOW_UP_DELAY_HOURS);
+                        customTaskService.saveTaskSettings(className, className, 60, 0,
+                                taskFirstExecutionUtc.get(className), taskFollowUpDelayHours.get(className));
+                        addTaskCard(className, javaFile, false, 60, 0,
+                                taskFirstExecutionUtc.get(className), taskFollowUpDelayHours.get(className));
                         setStatus("✅ Imported: " + className);
                     }
                     updateEmptyState();
@@ -120,7 +137,8 @@ public class CustomTasksLayoutController {
         compileThread.start();
     }
 
-    private void addTaskCard(String className, File sourceFile, boolean initialEnabled, int initialOffset, int initialPriority) {
+    private void addTaskCard(String className, File sourceFile, boolean initialEnabled, int initialOffset,
+                             int initialPriority, String initialFirstExecutionUtc, int initialFollowUpDelayHours) {
         VBox card = new VBox(0);
         card.getStyleClass().add("custom-task-card");
         card.setMaxWidth(Double.MAX_VALUE);
@@ -148,6 +166,8 @@ public class CustomTasksLayoutController {
         taskOffsets.put(className, initialOffset);
         taskPriorities.put(className, initialPriority);
         taskEnabled.put(className, initialEnabled);
+        taskFirstExecutionUtc.put(className, initialFirstExecutionUtc);
+        taskFollowUpDelayHours.put(className, initialFollowUpDelayHours);
 
         // Status badge
         Label statusBadge = new Label(initialEnabled ? "Enabled" : "Ready");
@@ -176,11 +196,65 @@ public class CustomTasksLayoutController {
             statusBadge.getStyleClass().add(newVal ? "custom-task-badge-enabled" : "custom-task-badge-ready");
 
             if (newVal) {
-                scheduleTask(className);
+                if (!scheduleTask(className)) {
+                    enableCheck.setSelected(false);
+                }
             } else {
                 unscheduleTask(className);
             }
         });
+
+        VBox enableBox = new VBox(8);
+        enableBox.getChildren().add(enableCheck);
+
+        if (customTaskService.supportsCustomTaskConfiguration(className)) {
+            VBox firstExecutionBox = new VBox(4);
+            Label firstExecutionLabel = new Label("First execution (UTC)");
+            firstExecutionLabel.getStyleClass().add("custom-task-field-label");
+            TextField firstExecutionField = new TextField(initialFirstExecutionUtc);
+            firstExecutionField.getStyleClass().add("custom-task-field");
+            firstExecutionField.setPrefWidth(170);
+            firstExecutionField.setMaxWidth(170);
+            firstExecutionField.setPromptText("yyyy-MM-dd HH:mm");
+
+            TextField followUpDelayField = new TextField(String.valueOf(initialFollowUpDelayHours));
+            Runnable commitTimingChange = () -> {
+                if (!commitTimingSettings(className, firstExecutionField.getText(), followUpDelayField.getText())) {
+                    firstExecutionField.setText(taskFirstExecutionUtc.getOrDefault(
+                            className, getDefaultFirstExecutionUtc(className)));
+                }
+            };
+            firstExecutionField.setOnAction(e -> commitTimingChange.run());
+            firstExecutionField.focusedProperty().addListener((obs, oldVal, newVal) -> {
+                if (!newVal) {
+                    commitTimingChange.run();
+                }
+            });
+            firstExecutionBox.getChildren().addAll(firstExecutionLabel, firstExecutionField);
+
+            VBox followUpDelayBox = new VBox(4);
+            Label followUpDelayLabel = new Label("Follow-up delay (hours)");
+            followUpDelayLabel.getStyleClass().add("custom-task-field-label");
+            followUpDelayField.getStyleClass().add("custom-task-field");
+            followUpDelayField.setPrefWidth(120);
+            followUpDelayField.setMaxWidth(120);
+            followUpDelayField.setPromptText(String.valueOf(DEFAULT_FOLLOW_UP_DELAY_HOURS));
+            Runnable commitDelayChange = () -> {
+                if (!commitTimingSettings(className, firstExecutionField.getText(), followUpDelayField.getText())) {
+                    followUpDelayField.setText(String.valueOf(taskFollowUpDelayHours.getOrDefault(
+                            className, DEFAULT_FOLLOW_UP_DELAY_HOURS)));
+                }
+            };
+            followUpDelayField.setOnAction(e -> commitDelayChange.run());
+            followUpDelayField.focusedProperty().addListener((obs, oldVal, newVal) -> {
+                if (!newVal) {
+                    commitDelayChange.run();
+                }
+            });
+            followUpDelayBox.getChildren().addAll(followUpDelayLabel, followUpDelayField);
+
+            enableBox.getChildren().addAll(firstExecutionBox, followUpDelayBox);
+        }
 
         // Offset field
         VBox offsetBox = new VBox(4);
@@ -198,6 +272,11 @@ public class CustomTasksLayoutController {
                 }
             } catch (NumberFormatException ignored) {}
         });
+        offsetField.focusedProperty().addListener((obs, oldVal, newVal) -> {
+            if (!newVal) {
+                persistCurrentSettings(className);
+            }
+        });
         offsetBox.getChildren().addAll(offsetLabel, offsetField);
 
         // Priority field
@@ -214,6 +293,11 @@ public class CustomTasksLayoutController {
                 int priority = Integer.parseInt(newVal.trim());
                 taskPriorities.put(className, priority);
             } catch (NumberFormatException ignored) {}
+        });
+        priorityField.focusedProperty().addListener((obs, oldVal, newVal) -> {
+            if (!newVal) {
+                persistCurrentSettings(className);
+            }
         });
         priorityBox.getChildren().addAll(priorityLabel, priorityField);
 
@@ -235,7 +319,7 @@ public class CustomTasksLayoutController {
 
         actionsBox.getChildren().addAll(btnRemove);
 
-        body.getChildren().addAll(enableCheck, offsetBox, priorityBox, spacer, actionsBox);
+        body.getChildren().addAll(enableBox, offsetBox, priorityBox, spacer, actionsBox);
 
         card.getChildren().addAll(header, divider, body);
         taskCards.put(className, card);
@@ -270,50 +354,47 @@ public class CustomTasksLayoutController {
         taskOffsets.remove(className);
         taskPriorities.remove(className);
         taskEnabled.remove(className);
+        taskFirstExecutionUtc.remove(className);
+        taskFollowUpDelayHours.remove(className);
         customTaskService.removeTask(className);
         updateEmptyState();
         setStatus("Removed: " + className);
     }
 
-    private void scheduleTask(String className) {
+    private boolean scheduleTask(String className) {
         int offsetMin = taskOffsets.getOrDefault(className, 60);
         int priority = taskPriorities.getOrDefault(className, 0);
+        String firstExecutionUtc = taskFirstExecutionUtc.getOrDefault(className, getDefaultFirstExecutionUtc(className));
+        int followUpDelayHours = taskFollowUpDelayHours.getOrDefault(className, DEFAULT_FOLLOW_UP_DELAY_HOURS);
+        if (customTaskService.supportsCustomTaskConfiguration(className)
+                && (!isValidUtcDateTime(firstExecutionUtc) || followUpDelayHours <= 0)) {
+            taskEnabled.put(className, false);
+            setStatus("❌ Invalid custom timing settings for " + className);
+            showAlert("Invalid Custom Task Settings",
+                    "Use UTC format yyyy-MM-dd HH:mm and a positive follow-up delay in hours.");
+            return false;
+        }
 
         // Register with CustomTaskService so bot startup picks it up
-        customTaskService.enableTask(className, className, offsetMin, priority);
+        customTaskService.enableTask(className, className, offsetMin, priority, firstExecutionUtc, followUpDelayHours);
 
         // Also try to add to live queues if bot is already running
         List<AccountDescriptor> profiles = ProfileService.obtain().fetchAllAccounts();
         if (profiles == null || profiles.isEmpty()) {
             setStatus("📋 " + className + " enabled — will be scheduled when bot starts");
-            return;
+            return true;
         }
 
         boolean addedToAny = false;
         CustomTaskService.CustomTaskSettings configs =
-                new CustomTaskService.CustomTaskSettings(className, className, offsetMin, priority);
+                new CustomTaskService.CustomTaskSettings(className, className, offsetMin, priority,
+                        firstExecutionUtc, followUpDelayHours);
         for (AccountDescriptor profile : profiles) {
             TaskQueue queue = ScheduleService.obtain().getCoordinator().getQueue(profile.getId());
             if (queue != null) {
-                // Remove any existing instance first to avoid duplicates
-                queue.dequeueByKey(className);
-
-                DelayedTask task = customTaskService.createTaskWithSettings(configs, profile);
+                DelayedTask task = ScheduleService.obtain()
+                        .scheduleCustomTask(profile, queue, configs, null, false, true);
                 if (task != null) {
-                    task.reschedule(LocalDateTime.now()); 
-                    task.setRecurring(true);
-                    
-                    // Register initial task state for Task Manager UI
-                    TaskStateData taskState = new TaskStateData();
-                    taskState.setProfileId(profile.getId());
-                    taskState.setTaskId(TpDailyTaskEnum.CUSTOM_TASK.getId());
-                    taskState.setCustomTaskName(className);
-                    taskState.setScheduled(true);
-                    taskState.setExecuting(false);
-                    taskState.setNextExecutionTime(task.getScheduled());
-                    TaskManagementService.shared().recordTaskState(profile.getId(), taskState);
-                    
-                    queue.enqueue(task);
                     addedToAny = true;
                     setStatus("📋 Scheduled " + className + " for " + profile.getName()
                             + " (offset: " + offsetMin + "m, priority: " + priority + ")");
@@ -324,6 +405,7 @@ public class CustomTasksLayoutController {
         if (!addedToAny) {
             setStatus("📋 " + className + " enabled — will be scheduled when bot starts");
         }
+        return true;
     }
 
     private void unscheduleTask(String className) {
@@ -351,6 +433,73 @@ public class CustomTasksLayoutController {
             }
         }
         setStatus("⏹ Unscheduled " + className);
+    }
+
+    private boolean commitTimingSettings(String className, String firstExecutionUtcText, String followUpDelayHoursText) {
+        String normalizedFirstExecutionUtc = normalizeFirstExecutionUtc(firstExecutionUtcText, className);
+        Integer normalizedFollowUpDelayHours = parsePositiveHours(followUpDelayHoursText);
+        if (normalizedFirstExecutionUtc == null || normalizedFollowUpDelayHours == null) {
+            setStatus("❌ Invalid UTC date or follow-up delay for " + className);
+            return false;
+        }
+
+        taskFirstExecutionUtc.put(className, normalizedFirstExecutionUtc);
+        taskFollowUpDelayHours.put(className, normalizedFollowUpDelayHours);
+        customTaskService.saveTaskSettings(className, className,
+                taskOffsets.getOrDefault(className, 60),
+                taskPriorities.getOrDefault(className, 0),
+                normalizedFirstExecutionUtc,
+                normalizedFollowUpDelayHours);
+
+        if (Boolean.TRUE.equals(taskEnabled.get(className))) {
+            return scheduleTask(className);
+        }
+        return true;
+    }
+
+    private void persistCurrentSettings(String className) {
+        customTaskService.saveTaskSettings(className, className,
+                taskOffsets.getOrDefault(className, 60),
+                taskPriorities.getOrDefault(className, 0),
+                taskFirstExecutionUtc.getOrDefault(className, getDefaultFirstExecutionUtc(className)),
+                taskFollowUpDelayHours.getOrDefault(className, DEFAULT_FOLLOW_UP_DELAY_HOURS));
+    }
+
+    private String normalizeFirstExecutionUtc(String value, String className) {
+        String candidate = value != null && !value.trim().isEmpty() ? value.trim() : getDefaultFirstExecutionUtc(className);
+        try {
+            return UTC_INPUT_FORMATTER.format(LocalDateTime.parse(candidate, UTC_INPUT_FORMATTER));
+        } catch (DateTimeParseException e) {
+            return null;
+        }
+    }
+
+    private Integer parsePositiveHours(String value) {
+        String candidate = value != null && !value.trim().isEmpty() ? value.trim() : String.valueOf(DEFAULT_FOLLOW_UP_DELAY_HOURS);
+        try {
+            int hours = Integer.parseInt(candidate);
+            return hours > 0 ? hours : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private boolean isValidUtcDateTime(String value) {
+        return normalizeFirstExecutionUtc(value, "shield") != null;
+    }
+
+    private String getDefaultFirstExecutionUtc(String className) {
+        return "shield".equals(className) ? DEFAULT_SHIELD_FIRST_EXECUTION_UTC : "";
+    }
+
+    private String getInitialExecutionUtcValue(CustomTaskService.SavedTaskEntry entry) {
+        String savedValue = entry.getFirstExecutionUtc();
+        return savedValue != null && !savedValue.isBlank() ? savedValue : getDefaultFirstExecutionUtc(entry.getClassName());
+    }
+
+    private int getFollowUpDelayValue(CustomTaskService.SavedTaskEntry entry) {
+        Integer savedValue = entry.getFollowUpDelayHours();
+        return savedValue != null && savedValue > 0 ? savedValue : DEFAULT_FOLLOW_UP_DELAY_HOURS;
     }
 
     private void updateEmptyState() {

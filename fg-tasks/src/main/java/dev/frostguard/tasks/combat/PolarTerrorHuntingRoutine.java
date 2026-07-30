@@ -1,6 +1,7 @@
 package dev.frostguard.tasks.combat;
 
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
+import dev.frostguard.api.configs.PolarTerrorMode;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
@@ -10,6 +11,7 @@ import dev.frostguard.api.domain.PointData;
 import dev.frostguard.data.entity.DailyTask;
 import dev.frostguard.data.repository.DailyTaskRepository;
 import dev.frostguard.engine.helper.MarchSlotAvailabilityEstimator;
+import dev.frostguard.engine.helper.StaminaTopUpResult;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.engine.nav.SearchConfigConstants;
@@ -63,6 +65,7 @@ private static final MarchSlotAvailabilityEstimator.Settings MARCH_SLOT_ESTIMATE
 private static final int TARGET_TAKEN_MAX_RETRIES = 3;
 private static final int TARGET_TAKEN_RETRY_MINUTES = 1;
 private static final int RALLY_FAILURE_RETRY_MINUTES = 5;
+private static final int STAMINA_TOP_UP_RETRY_MINUTES = 5;
 // Holds the march slot when the travel time could not be read.
 private static final int UNKNOWN_TRAVEL_HOLD_MINUTES = 10;
 
@@ -101,9 +104,10 @@ public PolarTerrorHuntingRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTa
         super(profile, tpTask);
     }
 
-private enum RallyLaunchOutcome {
+    private enum RallyLaunchOutcome {
         SUCCESS,
         SEARCH_FAILED,
+        NO_SPECIAL_REWARDS,
         RALLY_BUTTON_MISSING,
         HOLD_RALLY_MISSING,
         FLAG_NOT_AVAILABLE,
@@ -113,7 +117,14 @@ private enum RallyLaunchOutcome {
         MARCH_QUEUE_FULL,
         NO_TROOPS_AVAILABLE,
         STAMINA_ITEMS_DISABLED,
+        STAMINA_ITEMS_INSUFFICIENT,
         STAMINA_REFILL_FAILED
+    }
+
+    private enum SpecialRewardsStatus {
+        AVAILABLE,
+        EXHAUSTED,
+        READ_FAILED
     }
 
 private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
@@ -149,15 +160,13 @@ private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
         logInfo(routineLogPolarTerrorHuntingLine(String.format(
                 "Configuration: level=%s mode=%s marches=%d staminaReserve=%d useStaminaItems=%s itemReserve=%d",
                 huntHighestLevel ? "highest available" : Integer.toString(polarTerrorLevel),
-                limitedHunting ? "Limited (10)" : "Unlimited",
+                limitedHunting
+                        ? PolarTerrorMode.SPECIAL_REWARDS.getDisplayName()
+                        : PolarTerrorMode.UNLIMITED.getDisplayName(),
                 maxMarches,
                 minStaminaLevel,
                 useStaminaItems,
                 staminaItemReserve)));
-
-        if (limitedHunting && !polarsRemainingFlow(polarTerrorLevel)) {
-            return;
-        }
 
         int deployedCount = resolveActiveDeploymentsCount(profile.getId());
 
@@ -174,10 +183,6 @@ private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
                         deployedCount,
                         GameTimeUtils.formatCountdown(retryAt))));
                 reschedule(retryAt);
-                return;
-            }
-
-            if (limitedHunting && !polarsRemainingFlow(polarTerrorLevel)) {
                 return;
             }
 
@@ -203,7 +208,8 @@ private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
             logInfo(routineLogPolarTerrorHuntingLine("Launching rally " + (deployedCount + 1) + " of " + maxMarches +
                     (useFlag ? " with flag #" + currentFlagNumber : " (Equalize fallback)")));
 
-            RallyLaunchResult result = launchSingleRallyFlow(polarTerrorLevel, useFlag, currentFlagNumber);
+            RallyLaunchResult result = launchSingleRallyFlow(
+                    polarTerrorLevel, useFlag, currentFlagNumber, limitedHunting);
 
             // Cancelling costs no stamina and the search hands out a different creature, so the
             // cheapest answer to a contested target is to look again right away.
@@ -213,7 +219,14 @@ private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
                         "Target was taken by another player; searching for a different polar terror (retry %d/%d)",
                         attempt, TARGET_TAKEN_MAX_RETRIES)));
                 sleepTask(1000);
-                result = launchSingleRallyFlow(polarTerrorLevel, useFlag, currentFlagNumber);
+                result = launchSingleRallyFlow(polarTerrorLevel, useFlag, currentFlagNumber, false);
+            }
+
+            if (result.outcome() == RallyLaunchOutcome.NO_SPECIAL_REWARDS) {
+                logInfo(routineLogPolarTerrorHuntingLine(
+                        "Zero special rewards left. Planning next run after daily reset."));
+                reschedule(GameTimeUtils.dailyResetTime().plusMinutes(30));
+                return;
             }
 
             if (result.outcome() == RallyLaunchOutcome.TARGET_ALREADY_TAKEN) {
@@ -227,6 +240,13 @@ private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
             if (result.outcome() == RallyLaunchOutcome.MARCH_QUEUE_FULL) {
                 logInfo(routineLogPolarTerrorHuntingLine("March queue popup detected after Rally. Waiting for a march slot to return."));
                 reschedule(LocalDateTime.now().plusMinutes(UNKNOWN_MARCH_RETRY_MINUTES));
+                return;
+            }
+
+            if (result.outcome() == RallyLaunchOutcome.STAMINA_ITEMS_INSUFFICIENT) {
+                logInfo(routineLogPolarTerrorHuntingLine(
+                        "Confirmed usable stamina items cannot fund the rally; waiting for regeneration."));
+                rescheduleForStaminaRegen();
                 return;
             }
 
@@ -313,7 +333,8 @@ private static void registerDeploymentFlow(long profileId, LocalDateTime returnT
                 .add(returnTime);
     }
 
-private RallyLaunchResult launchSingleRallyFlow(int polarLevel, boolean useFlag, int flagNumber) {
+private RallyLaunchResult launchSingleRallyFlow(int polarLevel, boolean useFlag, int flagNumber,
+                                                boolean checkSpecialRewards) {
         navigationHelper.ensureCorrectScreenLocation(getRequiredStartLocation());
 
         logInfo(routineLogPolarTerrorHuntingLine(String.format("Opening Polar Terror search: level=%s",
@@ -321,6 +342,24 @@ private RallyLaunchResult launchSingleRallyFlow(int polarLevel, boolean useFlag,
         if (!openUpPolarsMenu(polarLevel)) {
             logError(routineLogPolarTerrorHuntingLine("Could not open polars menu."));
             return fail(RallyLaunchOutcome.SEARCH_FAILED, "Polar tab/search result was not verified");
+        }
+
+        if (checkSpecialRewards) {
+            SpecialRewardsStatus rewardsStatus = inspectSpecialRewards();
+            if (rewardsStatus == SpecialRewardsStatus.EXHAUSTED) {
+                return fail(RallyLaunchOutcome.NO_SPECIAL_REWARDS,
+                        "The reward details show zero special rewards left");
+            }
+            if (rewardsStatus == SpecialRewardsStatus.READ_FAILED) {
+                return fail(RallyLaunchOutcome.SEARCH_FAILED,
+                        "Special rewards could not be checked from the Polar Terror result");
+            }
+            logInfo(routineLogPolarTerrorHuntingLine(
+                    "Special rewards remain; searching from the retained Polar Terror panel."));
+            tapRandomPoint(
+                    CommonGameAreas.POLAR_SEARCH_BUTTON.topLeft(),
+                    CommonGameAreas.POLAR_SEARCH_BUTTON.bottomRight());
+            sleepTask(1500);
         }
 
         logInfo(routineLogPolarTerrorHuntingLine("Opening rally dialog"));
@@ -374,9 +413,13 @@ private RallyLaunchResult launchSingleRallyFlow(int polarLevel, boolean useFlag,
             tapPoint(deploy.getPoint());
             sleepTask(1000);
 
-            if (!staminaHelper.refillFromOpenDialog(rallyStaminaCost, staminaItemReserve)) {
-                return fail(RallyLaunchOutcome.STAMINA_REFILL_FAILED,
-                        "Could not refill stamina from the obtain-more dialog");
+            StaminaTopUpResult refill = staminaHelper.refillFromOpenDialog(
+                    rallyStaminaCost, staminaItemReserve);
+            if (!refill.successful()) {
+                RallyLaunchOutcome outcome = refill.confirmedItemShortage()
+                        ? RallyLaunchOutcome.STAMINA_ITEMS_INSUFFICIENT
+                        : RallyLaunchOutcome.STAMINA_REFILL_FAILED;
+                return fail(outcome, "Stamina refill ended with " + refill.status());
             }
 
             deploy = templateSearchHelper.locatePattern(
@@ -501,6 +544,14 @@ private void rescheduleForStaminaRegen() {
         reschedule(retryAt);
     }
 
+private void rescheduleForStaminaTopUpRetry(StaminaTopUpResult result) {
+        LocalDateTime retryAt = LocalDateTime.now().plusMinutes(STAMINA_TOP_UP_RETRY_MINUTES);
+        logWarning(routineLogPolarTerrorHuntingLine(String.format(
+                "Stamina gate: top-up ended with %s; retrying UI/OCR in %d min at %s",
+                result.status(), STAMINA_TOP_UP_RETRY_MINUTES, GameTimeUtils.formatCountdown(retryAt))));
+        reschedule(retryAt);
+    }
+
 // Cheap in-memory guard before any navigation: when items cannot bridge the gap, opening the march
 // panel only to discover the rally is unaffordable wastes a wake-up and a profile switch.
 private boolean staminaCouldSupportRally() {
@@ -524,8 +575,18 @@ private boolean ensureStaminaForRally() {
                 "Stamina gate: current=%d required=%d (reserve %d + rally %d) useItems=%s",
                 current, required, minStaminaLevel, MAX_POLAR_RALLY_STAMINA_COST, useStaminaItems)));
 
-        if (useStaminaItems && staminaHelper.topUpFromProfile(required, staminaItemReserve))
-            return true;
+        if (useStaminaItems) {
+            StaminaTopUpResult result = staminaHelper.topUpFromProfile(required, staminaItemReserve);
+            switch (PolarStaminaTopUpPolicy.decide(result)) {
+                case CONTINUE:
+                    return true;
+                case RETRY_SOON:
+                    rescheduleForStaminaTopUpRetry(result);
+                    return false;
+                case WAIT_FOR_REGENERATION:
+                    break;
+            }
+        }
 
         rescheduleForStaminaRegen();
         return false;
@@ -536,7 +597,7 @@ private void hydrateConfiguration() {
         this.polarTerrorLevel = configuredLevel != null ? configuredLevel : MIN_POLAR_LEVEL;
 
         String mode = profile.getConfig(ConfigurationKeyEnum.POLAR_TERROR_MODE_STRING, String.class);
-        this.limitedHunting = "Limited (10)".equals(mode);
+        this.limitedHunting = PolarTerrorMode.fromStoredValue(mode) == PolarTerrorMode.SPECIAL_REWARDS;
 
         Integer configuredMarches = profile.getConfig(ConfigurationKeyEnum.POLAR_TERROR_MARCHES_INT, Integer.class);
         this.maxMarches = configuredMarches != null ? configuredMarches : 1;
@@ -576,42 +637,56 @@ private void hydrateConfiguration() {
         return Math.max(1, Math.min(6, normalized));
     }
 
-private boolean polarsRemainingFlow(int polarLevel) {
-        if (!openUpPolarsMenu(polarLevel)) {
-            return false;
-        }
-
+private SpecialRewardsStatus inspectSpecialRewards() {
         ImageSearchResultData magnifyingGlass = templateSearchHelper.locatePattern(
                 TemplatesEnum.POLAR_TERROR_TAB_MAGNIFYING_GLASS_ICON,
                 SearchConfigConstants.SINGLE_WITH_RETRIES);
         sleepTask(500);
 
         if (!magnifyingGlass.isFound()) {
-            return false;
+            return SpecialRewardsStatus.READ_FAILED;
         }
 
         tapPoint(magnifyingGlass.getPoint());
         sleepTask(2000);
 
-        ImageSearchResultData specialRewardsCompleted = templateSearchHelper.locatePattern(
+        PolarSpecialRewardsScanner.Result result = PolarSpecialRewardsScanner.scan(
+                this::readVisibleSpecialRewardsCount,
+                () -> swipe(new PointData(363, 1088), new PointData(363, 1030)),
+                this::sleepTask);
+        tapPoint(CommonGameAreas.POLAR_REWARD_DETAILS_CLOSE);
+        sleepTask(500);
+        return switch (result) {
+            case AVAILABLE -> SpecialRewardsStatus.AVAILABLE;
+            case EXHAUSTED -> SpecialRewardsStatus.EXHAUSTED;
+            case NOT_FOUND -> SpecialRewardsStatus.READ_FAILED;
+        };
+    }
+
+private Integer readVisibleSpecialRewardsCount() {
+        if (templateSearchHelper.locatePattern(
                 TemplatesEnum.POLAR_TERROR_TAB_SPECIAL_REWARDS,
-                SearchConfigConstants.QUICK_SEARCH);
-        for (int i = 0; i < 5 && !specialRewardsCompleted.isFound(); i++) {
-            specialRewardsCompleted = templateSearchHelper.locatePattern(
-                    TemplatesEnum.POLAR_TERROR_TAB_SPECIAL_REWARDS,
-                    SearchConfigConstants.QUICK_SEARCH);
-            if (specialRewardsCompleted.isFound()) {
-                logWarning(routineLogPolarTerrorHuntingLine("Zero special rewards left, meaning there's no hunts left for today. Planning next run task for reset"));
-                reschedule(GameTimeUtils.dailyResetTime().plusMinutes(30));
-                return false;
-            }
-            swipe(new PointData(363, 1088), new PointData(363, 1030));
-            sleepTask(300);
+                SearchConfigConstants.QUICK_SEARCH).isFound()) {
+            logInfo(routineLogPolarTerrorHuntingLine("Special rewards counter: 0 left"));
+            return 0;
         }
 
-        pressBack();
-        sleepTask(500);
-        return true;
+        Integer count = integerHelper.attemptRecognition(
+                CommonGameAreas.POLAR_SPECIAL_REWARDS_HEADER,
+                1,
+                0L,
+                CommonOCRSettings.POLAR_SPECIAL_REWARDS_SETTINGS,
+                text -> text != null && text.toLowerCase().matches(
+                        ".*special\\s*rewards\\s*\\(?\\s*\\d+\\s*left.*"),
+                text -> {
+                    String countText = text.toLowerCase().replaceFirst(
+                            ".*special\\s*rewards\\s*\\(?\\s*(\\d+)\\s*left.*", "$1");
+                    return Integer.parseInt(countText);
+                });
+        if (count != null) {
+            logInfo(routineLogPolarTerrorHuntingLine("Special rewards counter: " + count + " left"));
+        }
+        return count;
     }
 
 private boolean openUpPolarsMenu(int polarLevel) {
@@ -666,7 +741,9 @@ private boolean openUpPolarsMenu(int polarLevel) {
             }
         }
 
-        tapRandomPoint(new PointData(301, 1200), new PointData(412, 1229));
+        tapRandomPoint(
+                CommonGameAreas.POLAR_SEARCH_BUTTON.topLeft(),
+                CommonGameAreas.POLAR_SEARCH_BUTTON.bottomRight());
         sleepTask(1500);
         return true;
     }

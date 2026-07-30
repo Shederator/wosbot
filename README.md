@@ -208,13 +208,30 @@
 
 <br/>
 
+### ⚡ Prefer a ready-made build?
+
+A Windows desktop bundle is built automatically every night and after every pull
+request, so you can test the latest code without installing Java or Maven.
+
+1. Open the **[Actions tab](../../actions/workflows/daily-windows-bundle.yml)**
+2. Click the most recent green **Daily Windows Bundle** run
+3. Download the **`frostguard-windows-desktop-bundle-<version>`** artifact
+4. Extract it anywhere and run `frostguard-<version>.jar`
+
+> [!IMPORTANT]
+> GitHub requires you to be **signed in** to download workflow artifacts, and
+> they are retained for **14 days**. Every bundle is verified in CI (structure,
+> classpath, and a real launch smoke test) before it is published.
+
+<br/>
+
 ### 1️⃣ Prerequisites
 
 <div align="center">
 
 | Requirement | Version | Download |
 |:-----------:|:-------:|:--------:|
-| ![Java](https://img.shields.io/badge/Java_JDK-ED8B00?style=flat-square&logo=openjdk&logoColor=white) | `17` or newer | **[Adoptium Temurin](https://adoptium.net/)** |
+| ![Java](https://img.shields.io/badge/Java_JDK-ED8B00?style=flat-square&logo=openjdk&logoColor=white) | `21` | **[Adoptium Temurin](https://adoptium.net/)** |
 | ![Maven](https://img.shields.io/badge/Apache_Maven-C71A36?style=flat-square&logo=apache-maven&logoColor=white) | `3.8+` | **[Download Maven](https://maven.apache.org/install.html)** |
 
 </div>
@@ -228,7 +245,7 @@
 3. Under **System variables**, select `Path` and click **Edit**
 4. Add the `bin` directories of your Java and Maven installations:
    ```
-   C:\Program Files\Eclipse Adoptium\jdk-17\bin
+   C:\Program Files\Eclipse Adoptium\jdk-21\bin
    C:\apache-maven-3.9.9\bin
    ```
 5. Click **OK** and restart your terminal
@@ -274,6 +291,19 @@ fg-build.bat
 - ✅ Displays clear success/error messages
 
 This script is especially useful after code changes or when local packaging occasionally fails due to transient file-lock/resource-copy issues.
+
+<br/>
+
+#### Verifying a build the way CI does
+
+The same checks that guard the nightly bundle can be run locally on Windows,
+Linux or macOS. See **[`ci/README.md`](ci/README.md)** for details.
+
+```sh
+mvn clean install -Djavafx.platform=win
+python3 ci/verify_bundle.py fg-app/target/frostguard-*-desktop-bundle.zip
+ci/smoke_test_bundle.sh fg-app/target/frostguard-*-desktop-bundle.zip
+```
 
 <br/>
 
@@ -529,4 +559,3 @@ Any contributions you make are **greatly appreciated**.
 </div>
 
 <!-- SEO Keywords: Whiteout Survival Automation, Frostguard, Whiteout Survival Macro, Whiteout Survival Auto Script, Open Source Automation, Auto Join Rallies, Whiteout Survival PC Bot, Auto Farm, Whiteout Survival Helper, Multi Account Bot -->
-
