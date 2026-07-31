@@ -210,18 +210,28 @@
 
 ### ⚡ Prefer a ready-made build?
 
-A Windows desktop bundle is built automatically every night and after every pull
-request, so you can test the latest code without installing Java or Maven.
+A Windows desktop bundle is built automatically every night, so you can test the
+latest code without installing Java or Maven. No GitHub account is needed:
 
-1. Open the **[Actions tab](../../actions/workflows/daily-windows-bundle.yml)**
-2. Click the most recent green **Daily Windows Bundle** run
-3. Download the **`frostguard-windows-desktop-bundle-<version>`** artifact
-4. Extract it anywhere and run `frostguard-<version>.jar`
+**[⬇ Download the nightly bundle](../../releases/download/nightly/frostguard-windows-desktop-bundle.zip)**
+
+Extract it anywhere and run `java -jar frostguard-*.jar` (Java 21+). Every bundle
+is verified in CI — structure, manifest classpath and a real launch smoke test —
+before that link is updated, and the same message is posted to Discord.
+
+> [!TIP]
+> Need a build of a change that is still an **open pull request**? Comment
+> `/build-pr 47 48` on any issue or pull request and a temporary bundle is built
+> from it — stacked pull requests included. See
+> **[docs/PR_TEST_BUILDS.md](docs/PR_TEST_BUILDS.md)**, which also covers the
+> one-time installation step a maintainer performs first.
 
 > [!IMPORTANT]
-> GitHub requires you to be **signed in** to download workflow artifacts, and
-> they are retained for **14 days**. Every bundle is verified in CI (structure,
-> classpath, and a real launch smoke test) before it is published.
+> `nightly` is replaced by every build and is not a stable release. The
+> per-run artifact under the
+> **[Actions tab](../../actions/workflows/daily-windows-bundle.yml)** is still
+> available for 14 days, but downloading an artifact requires being signed in to
+> GitHub.
 
 <br/>
 
@@ -303,6 +313,18 @@ Linux or macOS. See **[`ci/README.md`](ci/README.md)** for details.
 mvn clean install -Djavafx.platform=win
 python3 ci/verify_bundle.py fg-app/target/frostguard-*-desktop-bundle.zip
 ci/smoke_test_bundle.sh fg-app/target/frostguard-*-desktop-bundle.zip
+```
+
+The CI tooling has its own fast self-tests (no network, no build required):
+
+```sh
+python3 ci/test_verify_bundle.py
+python3 ci/test_discord_notify.py
+python3 ci/test_pr_build_plan.py
+python3 ci/test_pr_build_combine.py
+python3 ci/test_pr_build_notify.py
+python3 ci/test_pr_build_command.py
+python3 ci/test_pr_build_cleanup.py
 ```
 
 <br/>

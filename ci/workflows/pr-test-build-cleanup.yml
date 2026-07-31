@@ -1,0 +1,68 @@
+name: PR Test Build Cleanup
+
+# Retires the temporary `pr-test-*` prereleases created by the PR Test Build
+# workflow. Without this, unreviewed builds would stay downloadable forever and
+# would eventually be found — and trusted — by people who never saw the thread
+# they were built for.
+#
+# A build is retired when it is older than the TTL, or as soon as every pull
+# request it contains is closed or merged. Releases whose tag does not start with
+# `pr-test-` are never touched, so a real release and the rolling `nightly`
+# prerelease are safe from a bug in here.
+
+on:
+  schedule:
+    - cron: "41 4 * * *"
+  workflow_dispatch:
+    inputs:
+      ttl_days:
+        description: "Delete test builds older than this many days"
+        required: false
+        default: "7"
+        type: string
+      dry_run:
+        description: "List what would be deleted without deleting it"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr-test-build-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Retire expired test builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out the default branch
+        uses: actions/checkout@v4
+
+      # The rules decide what gets deleted, so they are unit-tested before they
+      # are given a write-capable token.
+      - name: Test the cleanup rules
+        run: python3 ci/test_pr_build_cleanup.py
+
+      - name: Retire expired test builds
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TTL_DAYS: ${{ inputs.ttl_days || '7' }}
+          # A scheduled run deletes for real; a manual run defaults to a dry run
+          # so the effect can be inspected before it happens.
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          extra=()
+          if [[ "${DRY_RUN}" == "true" ]]; then
+            extra+=(--dry-run)
+          fi
+          python3 ci/pr_build_cleanup.py \
+            --repository "${GITHUB_REPOSITORY}" \
+            --ttl-days "${TTL_DAYS}" \
+            "${extra[@]}"

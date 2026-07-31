@@ -1,11 +1,41 @@
 # Continuous Integration
 
-Frostguard builds on GitHub Actions from
-[`.github/workflows/daily-windows-bundle.yml`](../.github/workflows/daily-windows-bundle.yml).
-No manual activation step is needed — the workflow is live as soon as it lands on
-`main`, and the first scheduled run happens at the next 03:17 UTC.
+Three workflows:
 
-## When it runs
+| Workflow | Purpose |
+|---|---|
+| `daily-windows-bundle.yml` | the nightly Windows bundle from `main`, published as the rolling `nightly` prerelease |
+| `pr-test-build.yml` | temporary bundles built from **unmerged** pull requests, on request |
+| `pr-test-build-cleanup.yml` | expiry of those temporary builds |
+
+## Installing the workflows
+
+All three currently live in [`workflows/`](workflows) instead of
+`.github/workflows/`, because GitHub rejects a push that touches
+`.github/workflows/` unless the pushing credential holds the `workflows`
+permission — which the automation that opened this change does not have. Files in
+`ci/workflows/` are inert: Actions never reads them.
+
+A repository owner installs them once, from a normal clone:
+
+```sh
+bash ci/install_workflows.sh            # dry run, lists what would move
+bash ci/install_workflows.sh --apply    # git mv into .github/workflows/
+git commit -m "ci(actions): install pull request test build workflows"
+git push
+```
+
+`daily-windows-bundle.yml` replaces the existing nightly workflow; the only
+changes are the extracted LFS check and the new test step. The script is
+idempotent — after the move `ci/workflows/` no longer exists and a second run
+does nothing.
+
+Once installed, the nightly needs no further activation; the first scheduled run
+happens at the next 03:17 UTC. The PR test build is documented for testers in
+[`docs/PR_TEST_BUILDS.md`](../docs/PR_TEST_BUILDS.md); the notes below cover the
+implementation.
+
+## When the nightly runs
 
 | Trigger | Purpose |
 |---|---|
@@ -121,6 +151,62 @@ Test the payload without posting anything:
 python3 ci/test_discord_notify.py     # 21 self-tests, no network
 python3 ci/discord_notify.py --status success --version 2.1.0 \
   --download-url https://example.com/bundle.zip --dry-run
+```
+
+## Unmerged pull request test builds
+
+`/build-pr 47 48 49 65`, typed as a comment on any issue or pull request (or run
+from the Actions tab), produces a temporary Windows bundle built from those pull
+requests. Tester-facing documentation is in
+[`docs/PR_TEST_BUILDS.md`](../docs/PR_TEST_BUILDS.md). The parts worth knowing
+when changing the code:
+
+| Script | Responsibility |
+|---|---|
+| [`pr_build_command.py`](pr_build_command.py) | parse the command, authorize the requester, enforce the cooldown |
+| [`pr_build_plan.py`](pr_build_plan.py) | reject unbuildable pull requests, pin head commits, drop contained stack entries, derive the merge order, render the plan and the release notes |
+| [`pr_build_combine.py`](pr_build_combine.py) | merge the pinned commits on a throwaway branch, report conflicts, optionally propose a both-sides resolution |
+| [`pr_build_notify.py`](pr_build_notify.py) | the Discord message for plan, conflict, success and failure |
+| [`pr_build_cleanup.py`](pr_build_cleanup.py) | retire `pr-test-*` prereleases by age or when every included pull request is closed |
+| [`verify_lfs_assets.sh`](verify_lfs_assets.sh) | the Git LFS materialisation guard, shared by both build workflows |
+| [`install_workflows.sh`](install_workflows.sh) | move the staged workflow files into `.github/workflows/`, once |
+
+Design decisions that are easy to undo by accident:
+
+- **The build job references no secret.** It compiles unreviewed code, including
+  its `pom.xml` plugins. Adding `secrets.*` to that job — or widening its
+  `permissions` beyond `contents: read` — would hand the webhook and a write
+  token to whatever a pull request wants to execute. The publish job is where
+  credentials belong, and it runs only default-branch code.
+- **Commits are pinned, then re-verified.** `pr_build_plan.py verify` runs again
+  after the ~30 minute build. A pull request that was closed, merged or
+  force-pushed in the meantime stops the publication instead of producing a
+  download whose notes are wrong.
+- **Conflicts never pick a side.** `--ours`/`--theirs` would silently drop half a
+  pull request. The only automatic resolution offered is `--union`, which keeps
+  both sides, writes the diff out for review, and is refused outright for binary
+  and delete/modify conflicts.
+- **Nothing is pushed.** `pr_build_combine.py` raises if a `git push` ever
+  appears in its arguments, and the combined commit only exists in the build
+  job's workspace. The published tag points at the base commit — a new ref, not a
+  moved branch.
+- **The build key is the identity of a build.** It hashes the base commit and the
+  ordered head commits, which is what makes reuse safe: a different order or a
+  single new commit yields a different key, tag and asset name.
+- **The release notes carry a hidden marker** (`<!-- frostguard-pr-test … -->`)
+  listing the included pull requests. The cleanup reads it back, which is why no
+  state has to be stored anywhere else — and why the notes must not be edited by
+  hand.
+
+Run the whole tool suite in about two seconds:
+
+```sh
+python3 ci/test_pr_build_plan.py       # 41 tests
+python3 ci/test_pr_build_combine.py    # 13 tests, real throwaway repositories
+python3 ci/test_pr_build_notify.py     # 18 tests
+python3 ci/test_pr_build_command.py    # 23 tests
+python3 ci/test_pr_build_cleanup.py    # 13 tests
+node tools/discord-build-command/test-worker.mjs   # optional Discord endpoint
 ```
 
 ## Why two verification layers

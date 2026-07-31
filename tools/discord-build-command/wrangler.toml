@@ -1,0 +1,19 @@
+name = "frostguard-build-command"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# Public configuration. Neither of these is a credential: the repository is
+# public, and the ref is only the branch the workflow is dispatched from.
+[vars]
+GITHUB_REPOSITORY = "Shederator/wosbot"
+GITHUB_REF = "main"
+
+# Optional guardrails. Leave a value empty to disable that restriction.
+#   ALLOWED_CHANNEL_IDS  the command only answers in these channels
+#   ALLOWED_ROLE_IDS     only members holding one of these roles may build
+# Set them the same way as the vars above, or with `wrangler secret put` if you
+# would rather keep the IDs out of the repository.
+#
+# The two real secrets are set once, interactively, and never committed:
+#   wrangler secret put DISCORD_PUBLIC_KEY
+#   wrangler secret put GITHUB_TOKEN

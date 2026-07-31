@@ -1,0 +1,766 @@
+name: PR Test Build
+
+# Builds a temporary Windows bundle from one or more *unmerged* pull requests so
+# testers can try changes before they land, including stacked pull requests.
+#
+# Two ways to start it:
+#   * comment `/build-pr 47 48 49 65` on any issue or pull request;
+#   * Actions tab → this workflow → "Run workflow" with the same list.
+#
+# The first run only plans: it prints the pinned commits and the merge order and
+# stops. Add `confirm` (comment) or tick "Build and publish" (dispatch) to spend
+# runner time. Nothing here ever writes to `main` or to a pull request branch.
+#
+# Job layout, and why it is split this way:
+#
+#   plan     trusted code only, reads the API, decides what may be built
+#   build    checks out and compiles UNTRUSTED pull request code — therefore it
+#            has a read-only token and references no secret at all
+#   publish  trusted code only, holds `contents: write` and the Discord webhook,
+#            and never runs anything that came out of a pull request
+#
+# That split is the whole point: the untrusted step cannot reach the webhook, the
+# release credentials or a write-capable token, no matter what a pull request's
+# `pom.xml` tries to execute.
+
+on:
+  workflow_dispatch:
+    inputs:
+      prs:
+        description: 'Open PR numbers, e.g. "47 48 49 65"'
+        required: true
+        type: string
+      confirm:
+        description: "Build and publish (off = plan only)"
+        required: false
+        default: false
+        type: boolean
+      conflict_resolution:
+        description: "On conflict: stop, or propose keeping both sides"
+        required: false
+        default: stop
+        type: choice
+        options:
+          - stop
+          - union
+      order:
+        description: 'Optional merge order override, e.g. "48,47,49"'
+        required: false
+        default: ""
+        type: string
+  issue_comment:
+    types: [created]
+
+# Read-only by default. Only the publishing job widens this, and it never runs
+# pull request code.
+permissions:
+  contents: read
+
+# One test build at a time. Combined with the per-requester cooldown in the plan
+# job, this keeps an accidental burst of comments from occupying every runner.
+concurrency:
+  group: pr-test-build
+  cancel-in-progress: false
+
+env:
+  MAVEN_ARGS: "-B --no-transfer-progress -Dstyle.color=never"
+  # How long a published test build stays downloadable. The cleanup workflow
+  # enforces it; the number is repeated in the messages so testers know.
+  TEST_BUILD_TTL_DAYS: "7"
+
+jobs:
+  plan:
+    name: Validate and plan
+    # `issue_comment` fires for every comment in the repository, so filter here
+    # rather than spending a runner on unrelated conversation.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.comment != null &&
+       contains(github.event.comment.body, '/build-pr'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      # Needed to answer in the thread the command was typed in. Both jobs that
+      # comment run trusted code from the default branch only.
+      issues: write
+    outputs:
+      should_build: ${{ steps.decide.outputs.should_build }}
+      reuse_url: ${{ steps.reuse.outputs.download_url }}
+      build_key: ${{ steps.plan.outputs.build_key }}
+      tag: ${{ steps.plan.outputs.tag }}
+      asset_name: ${{ steps.plan.outputs.asset_name }}
+      pr_list: ${{ steps.plan.outputs.pr_list }}
+      resolution: ${{ steps.request.outputs.resolution }}
+      requester: ${{ steps.request.outputs.requester }}
+      thread_number: ${{ steps.request.outputs.thread_number }}
+
+    steps:
+      - name: Check out the default branch
+        uses: actions/checkout@v4
+        with:
+          # No LFS and no pull request code here: this job only reads metadata.
+          fetch-depth: 0
+
+      # A comment body and a dispatch input are both attacker-controlled text.
+      # Neither is ever interpolated into a shell command: the text goes to disk
+      # and the parser reads it, so the only things that reach later steps are
+      # the digits, keywords and order list it recognised. Both entry points go
+      # through the same parser, so they cannot disagree about what a request
+      # means.
+      - name: Read the request
+        id: request
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          DISPATCH_PRS: ${{ inputs.prs }}
+          DISPATCH_CONFIRM: ${{ inputs.confirm }}
+          DISPATCH_RESOLUTION: ${{ inputs.conflict_resolution }}
+          DISPATCH_ORDER: ${{ inputs.order }}
+          COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+          THREAD_NUMBER: ${{ github.event.issue.number }}
+          THREAD_URL: ${{ github.event.comment.html_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "issue_comment" ]]; then
+            printf '%s' "${COMMENT_BODY}" > request.txt
+            {
+              echo "requester=${COMMENT_AUTHOR}"
+              echo "thread_number=${THREAD_NUMBER}"
+              echo "thread_url=${THREAD_URL}"
+            } >> "${GITHUB_OUTPUT}"
+          else
+            # Rebuilt as a command line so the dispatch path is validated by the
+            # very same parser instead of a second, divergent implementation.
+            {
+              printf '/build-pr %s' "${DISPATCH_PRS}"
+              if [[ "${DISPATCH_CONFIRM}" == "true" ]]; then printf ' confirm'; fi
+              if [[ "${DISPATCH_RESOLUTION}" == "union" ]]; then printf ' union'; fi
+              if [[ -n "${DISPATCH_ORDER}" ]]; then
+                printf ' order=%s' "${DISPATCH_ORDER}"
+              fi
+              printf '\n'
+            } > request.txt
+            {
+              echo "requester=${GITHUB_ACTOR}"
+              echo "thread_number="
+              echo "thread_url="
+            } >> "${GITHUB_OUTPUT}"
+          fi
+          python3 ci/pr_build_command.py parse --body-file request.txt
+
+      - name: Post the usage when help was asked for
+        if: steps.request.outputs.help == 'true' && steps.request.outputs.thread_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          USAGE: ${{ steps.request.outputs.usage }}
+        run: |
+          printf '%s' "${USAGE}" > usage.md
+          gh issue comment "${{ steps.request.outputs.thread_number }}" \
+            --body-file usage.md
+
+      - name: Stop after the usage message
+        if: steps.request.outputs.help == 'true'
+        run: |
+          echo "::notice::Usage was requested; nothing to build."
+          echo "SKIP_REST=true" >> "${GITHUB_ENV}"
+
+      # Who may spend the repository's Actions minutes. `author_association`
+      # alone is not enough (it says nothing for an org member with read
+      # access), so the collaborator permission is read from the API.
+      - name: Authorize the requester
+        id: auth
+        if: env.SKIP_REST != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ALLOWLIST: ${{ vars.PR_TEST_BUILD_ALLOWLIST }}
+          ASSOCIATION: ${{ github.event.comment.author_association }}
+          REQUESTER: ${{ steps.request.outputs.requester }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          permission="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/collaborators/${REQUESTER}/permission" \
+            --jq '.permission' 2>/dev/null || echo "")"
+          python3 ci/pr_build_command.py authorize \
+            --permission "${permission}" \
+            --association "${ASSOCIATION:-}" \
+            --actor "${REQUESTER}" \
+            --allowlist "${ALLOWLIST:-}"
+
+      - name: Explain a rejected request
+        if: env.SKIP_REST != 'true' && steps.auth.outputs.authorized != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REASON: ${{ steps.auth.outputs.reason }}
+        run: |
+          if [[ -n "${{ steps.request.outputs.thread_number }}" ]]; then
+            printf '%s\n' "${REASON}" > rejected.md
+            gh issue comment "${{ steps.request.outputs.thread_number }}" \
+              --body-file rejected.md
+          fi
+          echo "::error::${REASON}"
+          exit 1
+
+      # Only builds count against the quota; planning is cheap and must stay
+      # usable even when somebody is iterating on a request.
+      - name: Check the cooldown
+        id: cooldown
+        if: env.SKIP_REST != 'true' && steps.request.outputs.confirm == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUESTER: ${{ steps.request.outputs.requester }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/pr-test-build.yml/runs?per_page=50" \
+            > runs.json 2>/dev/null || echo '{"workflow_runs":[]}' > runs.json
+          python3 ci/pr_build_command.py cooldown \
+            --runs runs.json --actor "${REQUESTER}"
+
+      - name: Resolve, pin and order the pull requests
+        id: plan
+        if: env.SKIP_REST != 'true' && steps.auth.outputs.authorized == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRS: ${{ steps.request.outputs.prs }}
+          REQUESTER: ${{ steps.request.outputs.requester }}
+          ORDER: ${{ steps.request.outputs.order }}
+          RESOLUTION: ${{ steps.request.outputs.resolution }}
+          BASE_REF: ${{ github.event.repository.default_branch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 ci/pr_build_plan.py plan \
+            --repository "${GITHUB_REPOSITORY}" \
+            --request "${PRS}" \
+            --requester "${REQUESTER}" \
+            --order "${ORDER}" \
+            --conflict-resolution "${RESOLUTION}" \
+            --base-ref "${BASE_REF:-main}" \
+            --output plan.json \
+            --markdown plan.md
+
+      # A plan is worthless if the bundle it describes already exists: the same
+      # commits in the same order produce the same build key, so an earlier
+      # download can simply be handed out again.
+      - name: Look for an existing build of exactly these commits
+        id: reuse
+        if: steps.plan.outputs.buildable == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          tag="${{ steps.plan.outputs.tag }}"
+          asset="${{ steps.plan.outputs.asset_name }}"
+          url="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" \
+            --jq ".assets[] | select(.name == \"${asset}\") | .browser_download_url" \
+            2>/dev/null || true)"
+          if [[ -n "${url}" ]]; then
+            echo "download_url=${url}" >> "${GITHUB_OUTPUT}"
+            echo "::notice::Reusing the existing build at ${url}"
+          fi
+
+      - name: Decide whether to build
+        id: decide
+        if: env.SKIP_REST != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          should_build=false
+          if [[ "${{ steps.plan.outputs.buildable }}" == "true" \
+             && "${{ steps.request.outputs.confirm }}" == "true" \
+             && "${{ steps.cooldown.outputs.blocked }}" != "true" \
+             && -z "${{ steps.reuse.outputs.download_url }}" ]]; then
+            should_build=true
+          fi
+          echo "should_build=${should_build}" >> "${GITHUB_OUTPUT}"
+          echo "Build requested: ${{ steps.request.outputs.confirm }}; will build: ${should_build}"
+
+      - name: Publish the plan artifact
+        if: steps.plan.outputs.buildable == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-test-build-plan
+          path: |
+            plan.json
+            plan.md
+          if-no-files-found: error
+          retention-days: 7
+
+      # Everything the requester needs in order to decide, in the thread they
+      # asked in. The Discord message carries the same facts for the channel.
+      - name: Report the plan in the thread
+        if: >-
+          always() && env.SKIP_REST != 'true' &&
+          steps.auth.outputs.authorized == 'true' &&
+          steps.request.outputs.thread_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COOLDOWN_REASON: ${{ steps.cooldown.outputs.reason }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          {
+            if [[ -f plan.md ]]; then cat plan.md; else
+              echo "The request could not be planned. See the workflow log."
+            fi
+            echo
+            if [[ -n "${COOLDOWN_REASON}" ]]; then
+              echo "> [!WARNING]"
+              echo "> ${COOLDOWN_REASON}"
+            elif [[ -n "${{ steps.reuse.outputs.download_url }}" ]]; then
+              echo "A build of exactly these commits already exists:"
+              echo "${{ steps.reuse.outputs.download_url }}"
+              echo
+              echo "It is an **unmerged test build**. Push to any of the pull"
+              echo "requests and a new build will be planned."
+            elif [[ "${{ steps.decide.outputs.should_build }}" == "true" ]]; then
+              echo "Building now — this takes roughly 30 minutes."
+              echo "[Follow the run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})."
+            else
+              echo "Nothing has been built yet. Reply with:"
+              echo
+              echo '```'
+              echo "/build-pr ${{ steps.plan.outputs.pr_list }} confirm"
+              echo '```'
+              echo
+              echo "to start the build, or add \`order=...\` to change the merge"
+              echo "order. Every download is an unmerged test build and is"
+              echo "deleted after ${TEST_BUILD_TTL_DAYS} days."
+            fi
+          } > thread.md
+          gh issue comment "${{ steps.request.outputs.thread_number }}" \
+            --body-file thread.md
+
+      # A request where everything was rejected is the most confusing outcome to
+      # leave silent: the tester sees no build and no reason. The plan file is
+      # written even then, so the channel gets the explanation too.
+      - name: Report a fully rejected request to Discord
+        if: always() && steps.plan.outcome == 'failure' && hashFiles('plan.json') != ''
+        continue-on-error: true
+        env:
+          DISCORD_PR_BUILD_WEBHOOK_URL: ${{ secrets.DISCORD_PR_BUILD_WEBHOOK_URL }}
+          DISCORD_NIGHTLY_WEBHOOK_URL: ${{ secrets.DISCORD_NIGHTLY_WEBHOOK_URL }}
+        run: |
+          python3 ci/pr_build_notify.py \
+            --status rejected \
+            --plan plan.json \
+            --reason "None of the requested pull requests could be built. See the plan for the reason per pull request." \
+            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --run-number "${GITHUB_RUN_NUMBER}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --requester "@${{ steps.request.outputs.requester }}"
+
+      - name: Report the plan to Discord
+        if: always() && env.SKIP_REST != 'true' && steps.plan.outputs.buildable == 'true'
+        continue-on-error: true
+        env:
+          DISCORD_PR_BUILD_WEBHOOK_URL: ${{ secrets.DISCORD_PR_BUILD_WEBHOOK_URL }}
+          DISCORD_NIGHTLY_WEBHOOK_URL: ${{ secrets.DISCORD_NIGHTLY_WEBHOOK_URL }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          if [[ -n "${{ steps.reuse.outputs.download_url }}" ]]; then
+            python3 ci/pr_build_notify.py \
+              --status reused \
+              --plan plan.json \
+              --download-url "${{ steps.reuse.outputs.download_url }}" \
+              --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+              --run-number "${GITHUB_RUN_NUMBER}" \
+              --repository "${GITHUB_REPOSITORY}" \
+              --requester "@${{ steps.request.outputs.requester }}" \
+              --expires "after ${TEST_BUILD_TTL_DAYS} days"
+          elif [[ "${{ steps.decide.outputs.should_build }}" != "true" ]]; then
+            python3 ci/pr_build_notify.py \
+              --status plan \
+              --plan plan.json \
+              --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+              --run-number "${GITHUB_RUN_NUMBER}" \
+              --repository "${GITHUB_REPOSITORY}" \
+              --requester "@${{ steps.request.outputs.requester }}" \
+              --confirm-hint "Confirm with \`/build-pr ${{ steps.plan.outputs.pr_list }} confirm\` on GitHub."
+          fi
+
+  build:
+    name: Combine and build (untrusted code)
+    needs: plan
+    if: needs.plan.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Deliberately minimal, and deliberately the only permissions this job has.
+    # It compiles code from pull requests, which means it runs `pom.xml` plugins
+    # nobody has reviewed. No secret is referenced anywhere in this job, so none
+    # is available to that code.
+    permissions:
+      contents: read
+    outputs:
+      combine_status: ${{ steps.combine.outputs.status }}
+      bundle_name: ${{ steps.metrics.outputs.bundle_name }}
+      bundle_bytes: ${{ steps.metrics.outputs.bundle_bytes }}
+      test_count: ${{ steps.metrics.outputs.test_count }}
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          # The merge needs real history, not a shallow clone.
+          fetch-depth: 0
+
+      - name: Verify Git LFS assets are real binaries
+        run: ci/verify_lfs_assets.sh
+
+      - name: Download the plan
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-test-build-plan
+
+      # `refs/pull/<n>/head` is fetched from this repository, so a fork's commit
+      # is pinned without ever adding the fork as a remote.
+      - name: Fetch the pinned pull request commits
+        env:
+          PR_LIST: ${{ needs.plan.outputs.pr_list }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          IFS=',' read -ra numbers <<< "${PR_LIST}"
+          for number in "${numbers[@]}"; do
+            [[ -z "${number}" ]] && continue
+            git fetch --no-tags origin \
+              "+refs/pull/${number}/head:refs/pr-test/${number}"
+          done
+
+          # The plan pinned a base commit that may no longer be the branch tip
+          # if main moved while the request was being confirmed. Fetch it
+          # explicitly so the combination is reproducible either way.
+          base_sha="$(python3 -c "import json;print(json.load(open('plan.json'))['base_sha'])")"
+          if ! git cat-file -e "${base_sha}^{commit}" 2>/dev/null; then
+            git fetch --no-tags origin "${base_sha}"
+          fi
+
+      - name: Combine the pull requests in a disposable workspace
+        id: combine
+        env:
+          RESOLUTION: ${{ needs.plan.outputs.resolution }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+          python3 ci/pr_build_combine.py \
+            --plan plan.json \
+            --report combine-report.json \
+            --markdown combine-report.md \
+            --proposal-diff proposal.diff \
+            --resolution "${RESOLUTION}"
+          code=$?
+          status="$(python3 -c \
+            "import json;print(json.load(open('combine-report.json')).get('status','unknown'))" \
+            2>/dev/null || echo unknown)"
+          echo "status=${status}" >> "${GITHUB_OUTPUT}"
+          # The step fails on a conflict on purpose, so the publish job never
+          # runs. The report was already written, and the reporting job posts it.
+          exit "${code}"
+
+      # Uploaded even (especially) when the merge failed: the conflict report is
+      # what the requester needs, and the publish job posts it from here.
+      - name: Upload the combine report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-test-build-combine-report
+          path: |
+            combine-report.json
+            combine-report.md
+            proposal.diff
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Install Tesseract native libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            tesseract-ocr libtesseract-dev libleptonica-dev
+
+      - name: Test the bundle verifier
+        run: python3 ci/test_verify_bundle.py
+
+      - name: Build the Windows desktop bundle
+        run: mvn ${MAVEN_ARGS} clean install -Djavafx.platform=win
+
+      - name: Locate the desktop bundle
+        id: bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          zip_path="$(find fg-app/target -maxdepth 1 -type f \
+            -name '*-desktop-bundle.zip' | sort | tail -n 1)"
+          if [[ -z "${zip_path}" ]]; then
+            echo "::error::No desktop bundle ZIP found under fg-app/target."
+            exit 1
+          fi
+          echo "path=${zip_path}" >> "${GITHUB_OUTPUT}"
+
+      - name: Verify Windows bundle contents
+        run: python3 ci/verify_bundle.py "${{ steps.bundle.outputs.path }}" --platform win
+
+      - name: Smoke test the desktop bundle
+        run: ci/smoke_test_bundle.sh "${{ steps.bundle.outputs.path }}"
+
+      # The asset is renamed here, in the job that produced it, so the publish
+      # job never has to guess which file it received.
+      - name: Stage the download under its final name
+        id: metrics
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p upload
+          cp "${{ steps.bundle.outputs.path }}" \
+            "upload/${{ needs.plan.outputs.asset_name }}"
+          bytes="$(stat -c%s "upload/${{ needs.plan.outputs.asset_name }}")"
+          tests="$(grep -rhoE 'tests="[0-9]+"' --include='*.xml' \
+            */target/surefire-reports 2>/dev/null \
+            | grep -oE '[0-9]+' | awk '{t += $1} END {print t+0}' || true)"
+          {
+            echo "bundle_name=${{ needs.plan.outputs.asset_name }}"
+            echo "bundle_bytes=${bytes}"
+            echo "test_count=${tests:-0}"
+          } >> "${GITHUB_OUTPUT}"
+          {
+            echo "### Unmerged test build"
+            echo
+            echo "- pull requests: ${{ needs.plan.outputs.pr_list }}"
+            echo "- build key: \`${{ needs.plan.outputs.build_key }}\`"
+            echo "- size: $(du -h "upload/${{ needs.plan.outputs.asset_name }}" | cut -f1)"
+            echo "- JUnit tests executed: ${tests:-0}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload the test bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-test-build-bundle
+          path: upload/${{ needs.plan.outputs.asset_name }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  publish:
+    name: Publish the temporary test release
+    needs: [plan, build]
+    if: needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # The only job with write access and the only job that sees the webhook. It
+    # runs no pull request code: the checkout is the default branch and the
+    # bundle is treated purely as a file to upload.
+    permissions:
+      contents: write
+      issues: write
+
+    steps:
+      - name: Check out the default branch
+        uses: actions/checkout@v4
+
+      - name: Download the plan
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-test-build-plan
+
+      - name: Download the test bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-test-build-bundle
+          path: upload
+
+      # The build took half an hour. A pull request may have been merged, closed
+      # or force-pushed in that time, and publishing a download that claims to
+      # contain a commit it does not is exactly the confusion to avoid.
+      - name: Re-check that every pull request is still open and unchanged
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 ci/pr_build_plan.py verify --plan plan.json
+
+      # The notes, the tag and the asset name all come out of the plan file, so
+      # the release page cannot describe a different build than the one that was
+      # verified. The renderer is unit-tested; a heredoc in YAML would not be.
+      - name: Render the release notes
+        run: |
+          python3 ci/pr_build_plan.py notes \
+            --plan plan.json --output notes.md \
+            --ttl-days "${TEST_BUILD_TTL_DAYS}"
+        # `notes` writes base_sha, tag, asset_name and pr_list as step outputs,
+        # so the release below cannot describe a different build than the plan.
+        id: notes
+
+      - name: Create the temporary prerelease
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.notes.outputs.tag }}
+          ASSET: ${{ steps.notes.outputs.asset_name }}
+          BASE_SHA: ${{ steps.notes.outputs.base_sha }}
+          PR_LIST: ${{ steps.notes.outputs.pr_list }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # The tag points at the base commit the build was made from. The
+          # combined commit only ever existed in the build job's workspace, and
+          # pushing it would mean writing a branch to this repository — which
+          # this feature must never do. A tag is a new ref, not a moved branch.
+          # Recreate rather than edit: `gh release edit --target` does not move
+          # an existing tag, so editing in place could leave the tag pointing at
+          # a commit the notes do not describe.
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release delete "${TAG}" --yes --cleanup-tag
+          fi
+          gh release create "${TAG}" "upload/${ASSET}" \
+            --title "Unmerged test build — PRs ${PR_LIST}" \
+            --notes-file notes.md \
+            --prerelease \
+            --target "${BASE_SHA}"
+
+          # Read the URL back from the API and actually fetch it: a predicted
+          # URL is how a dead link ends up in the channel.
+          url="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" \
+            --jq ".assets[] | select(.name == \"${ASSET}\") | .browser_download_url")"
+          if [[ -z "${url}" ]]; then
+            echo "::error::Asset ${ASSET} is not attached to ${TAG}."
+            exit 1
+          fi
+          code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 120 \
+            --retry 3 --retry-delay 5 -r 0-1023 "${url}")"
+          if [[ "${code}" != "200" && "${code}" != "206" ]]; then
+            echo "::error::Download URL ${url} returned HTTP ${code}."
+            exit 1
+          fi
+          echo "download_url=${url}" >> "${GITHUB_OUTPUT}"
+
+      - name: Announce the download in the thread
+        if: needs.plan.outputs.thread_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "### Unmerged test build ready"
+            echo
+            echo "${{ steps.release.outputs.download_url }}"
+            echo
+            echo "Pull requests: ${{ needs.plan.outputs.pr_list }} — build key"
+            echo "\`${{ needs.plan.outputs.build_key }}\`."
+            echo
+            echo "> [!CAUTION]"
+            echo "> Unreviewed, unmerged code. Use a test profile. The download"
+            echo "> disappears after ${TEST_BUILD_TTL_DAYS} days."
+          } > announce.md
+          gh issue comment "${{ needs.plan.outputs.thread_number }}" \
+            --body-file announce.md
+
+      - name: Announce the download in Discord
+        continue-on-error: true
+        env:
+          DISCORD_PR_BUILD_WEBHOOK_URL: ${{ secrets.DISCORD_PR_BUILD_WEBHOOK_URL }}
+          DISCORD_NIGHTLY_WEBHOOK_URL: ${{ secrets.DISCORD_NIGHTLY_WEBHOOK_URL }}
+        run: |
+          python3 ci/pr_build_notify.py \
+            --status success \
+            --plan plan.json \
+            --download-url "${{ steps.release.outputs.download_url }}" \
+            --bundle-bytes "${{ needs.build.outputs.bundle_bytes }}" \
+            --test-count "${{ needs.build.outputs.test_count }}" \
+            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --run-number "${GITHUB_RUN_NUMBER}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --requester "@${{ needs.plan.outputs.requester }}" \
+            --expires "after ${TEST_BUILD_TTL_DAYS} days"
+
+  report_failure:
+    name: Report a conflict or a failed build
+    needs: [plan, build]
+    if: always() && needs.plan.outputs.should_build == 'true' && needs.build.result != 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Check out the default branch
+        uses: actions/checkout@v4
+
+      - name: Download the plan
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-test-build-plan
+
+      - name: Download the combine report
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-test-build-combine-report
+
+      - name: Classify the failure
+        id: why
+        shell: bash
+        run: |
+          set -uo pipefail
+          status="failure"
+          if [[ -f combine-report.json ]]; then
+            reported="$(python3 -c "import json;print(json.load(open('combine-report.json')).get('status',''))" 2>/dev/null || true)"
+            if [[ "${reported}" == "conflict" || "${reported}" == "error" ]]; then
+              status="conflict"
+            fi
+          fi
+          echo "status=${status}" >> "${GITHUB_OUTPUT}"
+
+      - name: Report in the thread
+        if: needs.plan.outputs.thread_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          {
+            if [[ -f combine-report.md ]]; then
+              cat combine-report.md
+            else
+              echo "### The test build failed"
+              echo
+              echo "The pull requests were combined, but the build or one of"
+              echo "its verification steps failed."
+            fi
+            echo
+            echo "[Workflow log](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
+            echo
+            echo "No branch in this repository was changed and nothing was"
+            echo "published."
+          } > failure.md
+          gh issue comment "${{ needs.plan.outputs.thread_number }}" \
+            --body-file failure.md
+
+      - name: Report in Discord
+        continue-on-error: true
+        env:
+          DISCORD_PR_BUILD_WEBHOOK_URL: ${{ secrets.DISCORD_PR_BUILD_WEBHOOK_URL }}
+          DISCORD_NIGHTLY_WEBHOOK_URL: ${{ secrets.DISCORD_NIGHTLY_WEBHOOK_URL }}
+        run: |
+          python3 ci/pr_build_notify.py \
+            --status "${{ steps.why.outputs.status }}" \
+            --plan plan.json \
+            --report combine-report.json \
+            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --run-number "${GITHUB_RUN_NUMBER}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --requester "@${{ needs.plan.outputs.requester }}"
