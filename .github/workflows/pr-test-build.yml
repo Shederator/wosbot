@@ -229,16 +229,24 @@ jobs:
           java-version: "21"
           cache: maven
 
-      - name: Install Tesseract native libraries
+      - name: Install Linux test runtimes
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            tesseract-ocr libtesseract-dev libleptonica-dev
+            tesseract-ocr libtesseract-dev libleptonica-dev xvfb
 
-      # Tests are intentionally NOT skipped: a combined build that fails its
-      # own suite is exactly what the requester needs to know.
+      # Test the combined tree with host-native Linux dependencies. Selecting
+      # Windows JavaFX during this phase prevents controller tests from starting
+      # a toolkit on the Linux runner, even when a virtual display is present.
+      - name: Test the combined tree on Linux
+        run: |
+          read -r -a maven_args <<< "${MAVEN_ARGS}"
+          xvfb-run --auto-servernum mvn "${maven_args[@]}" clean test
+
       - name: Build Windows desktop bundle from the merged tree
-        run: mvn ${MAVEN_ARGS} clean install -Djavafx.platform=win
+        run: |
+          read -r -a maven_args <<< "${MAVEN_ARGS}"
+          mvn "${maven_args[@]}" install -DskipTests -Djavafx.platform=win
 
       - name: Locate the desktop bundle
         id: bundle
