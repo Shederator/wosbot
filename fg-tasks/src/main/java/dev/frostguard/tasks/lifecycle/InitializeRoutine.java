@@ -129,13 +129,19 @@ public class InitializeRoutine extends DelayedTask {
 			return;
 		}
 
+		refreshStaminaForCurrentProfile();
 		detectAndPersistMarchCapacity();
 		
 		// All checks passed - complete initialization
 		handleInitializationSuccess();
 	}
 
-	private void detectAndPersistMarchCapacity() {
+	protected void refreshStaminaForCurrentProfile() {
+		logInfo("Refreshing stamina for the active profile during initialization.");
+		staminaHelper.updateStaminaFromProfile();
+	}
+
+	protected void detectAndPersistMarchCapacity() {
 		try {
 			int detectedMarches = marchHelper.detectUsableMarchSlots();
 			int occupiedMarches = marchHelper.countOccupiedUsableMarchSlots();
@@ -167,7 +173,7 @@ public class InitializeRoutine extends DelayedTask {
 	 * The {@code isStarted} flag prevents redundant checks on subsequent
 	 * calls within the same execution.
 	 */
-	private void ensureEmulatorRunning() {
+	protected void ensureEmulatorRunning() {
 		logInfo("Checking emulator status...");
 
 		while (!isStarted) {
@@ -192,7 +198,7 @@ public class InitializeRoutine extends DelayedTask {
 	 * 
 	 * @throws StopExecutionException if game is not installed
 	 */
-	private void ensureGameInstalled() {
+	protected void ensureGameInstalled() {
 		if (!emuManager.isGameInstalled(EMULATOR_NUMBER)) {
 			logError("Whiteout Survival is not installed. Stopping the task queue.");
 			throw new StopExecutionException("Game not installed");
@@ -206,7 +212,7 @@ public class InitializeRoutine extends DelayedTask {
 	 * Checks if Whiteout Survival is currently running. If not, launches
 	 * the game and waits for it to start.
 	 */
-	private void ensureGameRunning() {
+	protected void ensureGameRunning() {
 		if (!emuManager.isPackageRunning(EMULATOR_NUMBER, EmulatorController.GAME.getPackageName())) {
 			logInfo("Whiteout Survival is not running. Launching the game...");
 			emuManager.launchApp(EMULATOR_NUMBER, EmulatorController.GAME.getPackageName());
@@ -239,7 +245,7 @@ public class InitializeRoutine extends DelayedTask {
 	 * @return true if home screen was found, false if not found after max attempts
 	 * @throws ProfileInReconnectStateException if reconnect popup detected
 	 */
-	private boolean waitForHomeScreen() {
+	protected boolean waitForHomeScreen() {
 		int attempts = 0;
 		boolean homeScreenFound = false;
 
@@ -388,7 +394,7 @@ public class InitializeRoutine extends DelayedTask {
 	 * 
 	 * @return true if character verification/switching succeeded, false if failed
 	 */
-	private boolean verifyAndSwitchCharacter() {
+	protected boolean verifyAndSwitchCharacter() {
 		// Check if character configuration is set
 		String characterName = profile.getCharacterName();
 		String characterId = profile.getCharacterId();
@@ -446,10 +452,9 @@ public class InitializeRoutine extends DelayedTask {
 	 * After this method completes, the task ends without rescheduling
 	 * (recurring=false is already set at the start of execute()).
 	 */
-	private void handleInitializationSuccess() {
+	protected void handleInitializationSuccess() {
 		consecutiveInitFailures = 0;
-		logInfo("Initialization successful. Reading initial stamina value.");
-		staminaHelper.updateStaminaFromProfile();
+		logInfo("Initialization successful. Profile stamina has been refreshed.");
 		logInfo("Initialization task completed successfully.");
 	}
 
