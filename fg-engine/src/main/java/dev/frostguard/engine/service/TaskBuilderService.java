@@ -4,6 +4,7 @@ import dev.frostguard.vision.ocr.TesseractOcrProvider;
 import dev.frostguard.api.configs.FlowStepKind;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.api.platform.AppPaths;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.RawImageData;
@@ -48,7 +49,7 @@ public class TaskBuilderService {
 
     public TaskBuilderService() {
         this.emuManager = EmulatorController.getInstance();
-        this.customTasksDir = Paths.get(System.getProperty("user.dir"), "custom_tasks");
+        this.customTasksDir = AppPaths.customTasksDirectory();
         this.mapper = new ObjectMapper()
                 .enable(SerializationFeature.INDENT_OUTPUT)
                 .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);

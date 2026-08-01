@@ -2,6 +2,7 @@ package dev.frostguard.engine.service;
 
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.api.platform.AppPaths;
 import dev.frostguard.engine.schedule.CustomTaskConfigurable;
 import dev.frostguard.engine.schedule.DelayedTask;
 import org.slf4j.Logger;
@@ -155,7 +156,7 @@ public class CustomTaskService {
     // ========================================================================
 
     private CustomTaskService() {
-        compiledDir = Paths.get(System.getProperty("user.dir"), "custom_tasks");
+        compiledDir = AppPaths.customTasksDirectory();
         jsonFile = compiledDir.resolve("custom_tasks.json");
         try {
             Files.createDirectories(compiledDir);

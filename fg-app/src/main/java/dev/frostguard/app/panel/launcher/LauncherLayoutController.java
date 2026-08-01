@@ -445,14 +445,17 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Select Emulator Executable for " + selectedEmulator.getDisplayName());
 
-        FileChooser.ExtensionFilter exeFilter = new FileChooser.ExtensionFilter(selectedEmulator.getDisplayName() + " Executable (" + selectedEmulator.getExecutableName() + ")", selectedEmulator.getExecutableName());
+        String expectedName = selectedEmulator.getExecutableName();
+        String expectedWindowsName = selectedEmulator.getExecutableName("Windows 11");
+        FileChooser.ExtensionFilter exeFilter = new FileChooser.ExtensionFilter(selectedEmulator.getDisplayName() + " Executable (" + expectedName + ")", expectedName, expectedWindowsName);
         fileChooser.getExtensionFilters().add(exeFilter);
         fileChooser.setInitialDirectory(new File(System.getProperty("user.home")));
 
         File selectedFile = fileChooser.showOpenDialog(stage);
 
         if (null != selectedFile) {
-            if (selectedFile.getName().equals(selectedEmulator.getExecutableName())) {
+            String selectedName = selectedFile.getName();
+            if (selectedName.equals(expectedName) || selectedName.equals(expectedWindowsName)) {
                 ScheduleService.obtain().persistEmulatorPath(selectedEmulator.getConfigKey(), selectedFile.getParent());
                 ScheduleService.obtain().persistEmulatorPath(ConfigurationKeyEnum.CURRENT_EMULATOR_STRING.name(),
                         selectedEmulator.name());

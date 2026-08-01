@@ -1,6 +1,7 @@
 package dev.frostguard.engine.emulator;
 
 import java.io.*;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantLock;
@@ -9,6 +10,7 @@ import java.util.function.Function;
 import dev.frostguard.vision.ocr.TesseractOcrProvider;
 import dev.frostguard.api.configs.GameVersionEnum;
 import dev.frostguard.engine.error.ADBConnectionException;
+import dev.frostguard.engine.platform.PlatformRuntime;
 import dev.frostguard.api.domain.*;
 import com.android.ddmlib.*;
 import net.sourceforge.tess4j.TesseractException;
@@ -72,11 +74,12 @@ public abstract class EmulatorInstance {
 
     private String adbPath() {
         String wd = System.getProperty("user.dir");
+        String adbExecutable = PlatformRuntime.executableName("adb.exe", "adb", PlatformRuntime.osName());
         for (String sub : new String[]{"tools", "fg-app"}) {
-            File f = new File(wd, sub + File.separator + "adb" + File.separator + "adb.exe");
+            File f = PlatformRuntime.join(Path.of(wd), sub, "adb", adbExecutable).toFile();
             if (f.exists()) return f.getAbsolutePath();
         }
-        return consolePath + File.separator + "adb.exe";
+        return PlatformRuntime.join(Path.of(consolePath), adbExecutable).toString();
     }
 
     private void killAdb() {

@@ -1,6 +1,7 @@
 package dev.frostguard.engine.emulator;
 
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
+import dev.frostguard.engine.platform.PlatformRuntime;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
@@ -31,13 +32,16 @@ public enum EmulatorType {
     public String getDisplayName()   { return label; }
     public String getConfigKey()     { return cfgKey.name(); }
     public ConfigurationKeyEnum getConfigEnum() { return cfgKey; }
-    public String getExecutableName(){ return exe; }
+    public String getExecutableName(){ return getExecutableName(PlatformRuntime.osName()); }
+    public String getExecutableName(String osName){ return PlatformRuntime.executableName(exe, exe.replaceFirst("\\.exe$", ""), osName); }
 
-    public String getDefaultPath()   { return Paths.get(fallbackDir, exe).toString(); }
+    public String getDefaultPath() {
+        return Paths.get(fallbackDir, getExecutableName()).toString();
+    }
 
     public String resolvePath(String override) {
         return (override == null || override.isBlank())
                 ? getDefaultPath()
-                : Paths.get(override, exe).toString();
+                : Paths.get(override, getExecutableName()).toString();
     }
 }

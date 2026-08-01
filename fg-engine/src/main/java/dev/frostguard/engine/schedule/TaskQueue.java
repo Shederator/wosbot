@@ -40,6 +40,7 @@ import dev.frostguard.engine.schedule.priority.DefaultTaskPriorityProvider;
 import dev.frostguard.engine.schedule.priority.TaskPriorityProvider;
 import dev.frostguard.engine.service.AnalyticsService;
 import dev.frostguard.engine.service.ConfigService;
+import dev.frostguard.engine.platform.PlatformRuntime;
 import dev.frostguard.engine.service.LoggingService;
 import dev.frostguard.engine.service.ProfileService;
 import dev.frostguard.engine.service.ScheduleService;
@@ -798,25 +799,27 @@ public class TaskQueue {
         try {
             deviceBridge.closeEmulator(profile.getEmulatorNumber());
             deviceBridge.releaseEmulatorSlot(profile);
-            LocalDateTime wake = wakeAt.minusMinutes(1);
-            if (wake.isBefore(LocalDateTime.now())) wake = LocalDateTime.now().plusMinutes(1);
-            String tm = DateTimeFormatter.ofPattern("HH:mm").format(wake);
-            String dt = DateTimeFormatter.ofPattern("MM/dd/yyyy").format(wake);
-            String jar = System.getProperty("user.dir") + "\\fg-app\\target\\frostguard.jar";
-            new ProcessBuilder("schtasks","/create","/TN","Frostguard_AutoStart","/TR",
-                    "javaw.exe -jar \""+jar+"\" --autostart","/SC","ONCE","/ST",tm,"/SD",dt,"/RL","HIGHEST","/F")
-                    .redirectErrorStream(true).start().waitFor();
-            java.nio.file.Path ws = java.nio.file.Paths.get(System.getProperty("user.dir"),"fg_wake.ps1");
-            java.nio.file.Files.writeString(ws,
-                    "$s=New-ScheduledTaskSettingsSet -WakeToRun -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -Priority 1\n"+
-                    "Set-ScheduledTask -TaskName 'Frostguard_AutoStart' -Settings $s\n");
-            new ProcessBuilder("powershell.exe","-NoProfile","-ExecutionPolicy","Bypass","-File",ws.toString())
-                    .redirectErrorStream(true).start().waitFor();
-            java.nio.file.Path ss = java.nio.file.Paths.get(System.getProperty("user.dir"),"fg_sleep.ps1");
-            java.nio.file.Files.writeString(ss,
-                    "Start-Sleep -Seconds 2\nAdd-Type -AssemblyName System.Windows.Forms\n"+
-                    "[System.Windows.Forms.Application]::SetSuspendState('Suspend',$false,$false)\n");
-            new ProcessBuilder("powershell.exe","-NoProfile","-ExecutionPolicy","Bypass","-File",ss.toString()).start();
+            if (PlatformRuntime.isWindows(PlatformRuntime.osName())) {
+                LocalDateTime wake = wakeAt.minusMinutes(1);
+                if (wake.isBefore(LocalDateTime.now())) wake = LocalDateTime.now().plusMinutes(1);
+                String tm = DateTimeFormatter.ofPattern("HH:mm").format(wake);
+                String dt = DateTimeFormatter.ofPattern("MM/dd/yyyy").format(wake);
+                String jar = System.getProperty("user.dir") + "\\fg-app\\target\\frostguard.jar";
+                new ProcessBuilder("schtasks","/create","/TN","Frostguard_AutoStart","/TR",
+                        "javaw.exe -jar \""+jar+"\" --autostart","/SC","ONCE","/ST",tm,"/SD",dt,"/RL","HIGHEST","/F")
+                        .redirectErrorStream(true).start().waitFor();
+                java.nio.file.Path ws = java.nio.file.Paths.get(System.getProperty("user.dir"),"fg_wake.ps1");
+                java.nio.file.Files.writeString(ws,
+                        "$s=New-ScheduledTaskSettingsSet -WakeToRun -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -Priority 1\n"+
+                        "Set-ScheduledTask -TaskName 'Frostguard_AutoStart' -Settings $s\n");
+                new ProcessBuilder("powershell.exe","-NoProfile","-ExecutionPolicy","Bypass","-File",ws.toString())
+                        .redirectErrorStream(true).start().waitFor();
+                java.nio.file.Path ss = java.nio.file.Paths.get(System.getProperty("user.dir"),"fg_sleep.ps1");
+                java.nio.file.Files.writeString(ss,
+                        "Start-Sleep -Seconds 2\nAdd-Type -AssemblyName System.Windows.Forms\n"+
+                        "[System.Windows.Forms.Application]::SetSuspendState('Suspend',$false,$false)\n");
+                new ProcessBuilder("powershell.exe","-NoProfile","-ExecutionPolicy","Bypass","-File",ss.toString()).start();
+            }
             System.exit(0);
         } catch (Exception ex) { emitError("PC sleep scheduling error: " + ex.getMessage()); }
     }
