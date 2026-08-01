@@ -1,29 +1,104 @@
-# Repository Guidelines
+# Frostguard Project Guidance
 
-## Project Structure & Module Organization
+This is the shared contract for humans and coding agents working in this
+repository. Keep it limited to rules that apply to every contributor.
 
-Frostguard is a Java 21 multi-module Maven project. The parent `pom.xml` defines shared versions and builds these modules in order: `fg-api`, `fg-data`, `fg-vision`, `fg-engine`, `fg-tasks`, `fg-watcher`, and `fg-app`. Source code follows standard Maven layout under each module's `src/main/java`; resources live in `src/main/resources`. JavaFX UI files and styles are in `fg-app/src/main/resources/layout` and `fg-app/src/main/resources/styles`. Image templates and native vision assets are in `fg-vision/src/main/resources/templates` and `fg-vision/src/main/resources/native`. Tests currently live mainly in `fg-engine/src/test` and `fg-tasks/src/test`.
+Before planning work or running commands, check whether `AGENTS.local.md` exists
+at the repository root and, if it does, read it completely. It contains
+untracked personal workflow preferences and may refine local choices, but it
+must not weaken the shared quality or verification rules here.
 
-## Build, Test, and Development Commands
+## Read Before Editing
 
-- `mvn clean install` compiles all modules and runs JUnit 5 tests.
-- `mvn clean install package` builds, tests, and packages the desktop app and distribution ZIP.
-- `mvn -pl fg-engine test` runs tests for one module; add `-am` when dependencies must be built.
-- `fg-build.bat` is the Windows packaging helper; it retries known transient packaging failures and validates the app JAR.
-- `java -jar fg-app/target/frostguard-2.1.0.jar` runs the packaged desktop application after a successful build.
+- Before changing module boundaries, runtime ownership, scheduling internals,
+  or task lifecycle behavior, read `docs/architecture.md`.
+- Before changing automation routines, navigation, screen interaction, OCR,
+  templates, colors, pixels, or timing assumptions, read
+  `docs/design-guidelines.md` and any relevant note under `docs/task/`.
+- For source setup and packaging, use `docs/installation.md`; for Windows
+  runtime or autostart behavior, also use `docs/windows.md`.
+- When preparing a pull request, use `.github/pull_request_template.md` as a
+  review guide and adapt it when another structure communicates the change more
+  clearly.
 
-## Coding Style & Naming Conventions
+## Build And Test
 
-Use Java 21 language features conservatively and keep package names under `dev.frostguard`. Follow the existing style: 4-space indentation in Java, braces on the same line, descriptive method names, and JUnit test methods written as behavior statements such as `rejectsMalformedPersistedReservationsConservatively`. Keep Maven XML indentation consistent with surrounding POMs. Do not commit generated `target/` output.
+Choose the command based on the purpose of the build:
 
-## Testing Guidelines
+- `mvn package` builds and tests the current reactor state without deleting
+  existing output first.
+- `mvn -pl <module> -am test` runs focused module tests plus required upstream
+  modules.
+- `mvn clean install` is appropriate for reproducible clean verification, CI,
+  and release preparation when deleting generated output is intentional.
+- `mvn clean install package` produces the fully clean packaged desktop
+  distribution.
+- `fg-build.bat` is the Windows packaging helper; it validates the app JAR and
+  retries known transient packaging failures.
 
-Tests use JUnit Jupiter via Maven Surefire. Name test classes `*Test` and place fixtures in the matching module under `src/test/resources` when image or OCR evidence is needed. Add focused regression tests for scheduler, vision, task, and parsing changes. Run at least the affected module's tests before opening a PR; run `mvn clean install` for cross-module changes.
+Generated `target/` output must not be committed. A local `AGENTS.local.md` may
+select a preferred non-clean command for day-to-day work.
 
-## Commit & Pull Request Guidelines
+Tests use JUnit Jupiter. Name test classes `*Test` and behavior-focused methods
+such as `rejectsMalformedPersistedReservationsConservatively`. Put saved image
+or OCR fixtures in the affected module's `src/test/resources`. Run at least the
+affected module tests; use a full reactor build for cross-module or packaging
+changes.
 
-Recent history uses concise, scoped messages such as `fix(research): handle completion and resource refill`, plus merge commits from feature/fix branches. Prefer `fix(area): summary` or `feat(area): summary` for new work. Pull requests should describe the behavior change, list tests run, link related issues, and include screenshots or sample logs for UI, emulator, or vision changes.
+## Shared Engineering Rules
 
-## Security & Configuration Tips
+- Use Java 21 conservatively, keep packages under `dev.frostguard`, use 4-space
+  indentation and same-line braces, and match surrounding style.
+- Keep game-specific automation in `fg-tasks`, reusable game interactions in
+  `fg-engine`, and low-level image/OCR primitives in `fg-vision`.
+- Put shared screen regions and OCR presets in `CommonGameAreas` and
+  `CommonOCRSettings`; do not hide reusable detection logic inside one task.
+- Prefer maintainable fixes over one-off patches. Do not leave dead code,
+  commented-out experiments, or task-local copies of reusable helpers.
+- Code comments and log messages must be English. Comments explain non-obvious
+  rationale, not control flow, and must not contain author/date changelogs.
+- Keep agent-facing documentation concise. Preserve constraints, decisions,
+  evidence, fragile assumptions, fallbacks, and unsupported states; do not
+  restate information that is clear from code and tests.
 
-The app interacts with Android emulators through ADB and ships native OCR/vision assets. Avoid committing local profile data, credentials, emulator-specific paths, or private logs. Keep large binary/runtime changes intentional and verify Git LFS expectations before moving CI workflows.
+## Logging And Verification
+
+Logs should make decisions explainable: include relevant profile context,
+evidence, the chosen outcome, and retry or fallback reasons without flooding hot
+loops. Runtime evidence is normally under `fg-app/target`: account logs in
+`logs/`, the global log in `log/frostguard.log`, archives in `log/archive/`, and
+debug screenshots in `temp/`.
+
+State the evidence level whenever reporting a behavioral fix:
+
+- automated tests;
+- saved real-frame verification;
+- live account-log confirmation;
+- plausible but still unverified.
+
+Vision, OCR, and pattern changes should normally have saved-frame coverage and
+live-log confirmation before merge readiness. Missing evidence must remain
+explicit in the handoff or pull request.
+
+## Git And Pull Requests
+
+Start feature and fix branches from `main` unless a stacked dependency is
+intentional and documented. Keep commits reviewable and do not commit
+credentials, profile databases, emulator-specific paths, private logs, runtime
+artifacts, or generated output.
+
+Shape commits around coherent changes, not an arbitrary commit count. Keep
+independently reviewable changes separate; fold fixups, naming cleanup, and
+follow-up corrections into the commit they belong to before review when
+rewriting the branch is safe. Do not squash distinct changes only to minimize
+the number of commits.
+
+Use concise English commit subjects and PR titles in the form
+`type(scope): imperative summary`, ideally at most 72 characters. Choose the
+smallest durable area as the scope, such as `research` or `guidance`; do not omit
+the scope merely because a change spans multiple files. Treat type and scope
+names as a consistency guide rather than a mechanical acceptance rule.
+
+Use the PR template as a starting point. Adapt it for unusual changes when that
+improves reviewability, but always explain what changed, why, actual validation,
+and remaining risk. Never imply that an unperformed check passed.

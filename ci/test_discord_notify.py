@@ -1,0 +1,231 @@
+#!/usr/bin/env python3
+"""Self-tests for ci/discord_notify.py.
+
+The notifier runs once per nightly build, in a step that is deliberately
+non-blocking. That means a bug in it produces either no message at all or a
+message Discord rejects with a 400 — both of which look like "the pipeline is
+fine" from the Actions tab. These tests pin the payload contract (Discord's
+documented limits, no mass pings, no leaked webhook token) without touching the
+network.
+
+Run with:  python3 ci/test_discord_notify.py
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+import tempfile
+import unittest
+import urllib.error
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import discord_notify  # noqa: E402
+
+WEBHOOK = "https://discord.com/api/webhooks/123456789/abcdefTOKEN-value_x"
+
+BASE_ARGS = [
+    "--status", "success",
+    "--version", "2.1.0",
+    "--bundle-name", "frostguard-2.1.0-desktop-bundle.zip",
+    "--bundle-bytes", str(231 * 1024 * 1024),
+    "--jar-count", "76",
+    "--test-count", "412",
+    "--download-url",
+    "https://github.com/Shederator/wosbot/releases/download/nightly/"
+    "frostguard-2.1.0-desktop-bundle.zip",
+    "--run-url", "https://github.com/Shederator/wosbot/actions/runs/1",
+    "--run-number", "42",
+    "--repository", "Shederator/wosbot",
+    "--branch", "main",
+    "--commit", "b962083c0ffee1234567890abcdefabcdefabcde",
+    "--commit-message", "fix(intel): claim final rewards\n\nbody line ignored",
+    "--actor", "Shederator",
+]
+
+
+def payload(extra: list[str] | None = None) -> dict:
+    args = discord_notify.parse_args(BASE_ARGS + (extra or []))
+    return discord_notify.build_payload(args)
+
+
+class PayloadTest(unittest.TestCase):
+
+    def test_success_payload_carries_the_download_link_as_content(self):
+        # The bare URL in `content` is what stays tappable in the mobile client
+        # and in the notification preview; embed links are easy to miss there.
+        result = payload()
+        self.assertIn("releases/download/nightly", result["content"])
+
+    def test_success_embed_is_green_and_names_the_version(self):
+        embed = payload()["embeds"][0]
+        self.assertEqual(0x2ECC71, embed["color"])
+        self.assertIn("2.1.0", embed["title"])
+
+    def test_failure_payload_is_red_and_links_the_log_not_a_download(self):
+        result = payload(["--status", "failure"])
+        embed = result["embeds"][0]
+        self.assertEqual(0xE74C3C, embed["color"])
+        self.assertNotIn("content", result)
+        self.assertIn("workflow log", embed["description"])
+
+    def test_never_pings_the_channel(self):
+        # A commit subject is attacker-influencable via a PR branch, so mentions
+        # must be disabled structurally rather than by sanitising the text.
+        result = payload(["--commit-message", "@everyone please test this"])
+        self.assertEqual({"parse": []}, result["allowed_mentions"])
+
+    def test_uses_only_the_commit_subject(self):
+        fields = payload()["embeds"][0]["fields"]
+        commit = next(f for f in fields if f["name"] == "Commit")
+        self.assertIn("fix(intel): claim final rewards", commit["value"])
+        self.assertNotIn("body line ignored", commit["value"])
+
+    def test_reports_size_in_human_units(self):
+        fields = payload()["embeds"][0]["fields"]
+        size = next(f for f in fields if f["name"] == "Download size")
+        self.assertEqual("231.0 MB", size["value"])
+
+    def test_omits_metrics_that_were_not_measured(self):
+        # A zero test count means the summary grep found nothing, not that zero
+        # tests passed. Printing "0 passed" would be a lie in a release notice.
+        result = payload(["--test-count", "0", "--jar-count", "0"])
+        names = {f["name"] for f in result["embeds"][0]["fields"]}
+        self.assertNotIn("JUnit tests", names)
+        self.assertNotIn("Runtime JARs", names)
+
+    def test_respects_every_discord_length_limit(self):
+        long = "x" * 6000
+        result = payload([
+            "--commit-message", long,
+            "--version", long,
+            "--repository", long,
+        ])
+        embed = result["embeds"][0]
+        self.assertLessEqual(len(result.get("content", "")), discord_notify.CONTENT_LIMIT)
+        self.assertLessEqual(len(embed["title"]), discord_notify.EMBED_TITLE_LIMIT)
+        self.assertLessEqual(
+            len(embed["description"]), discord_notify.EMBED_DESCRIPTION_LIMIT
+        )
+        self.assertLessEqual(
+            len(embed["footer"]["text"]), discord_notify.EMBED_FOOTER_LIMIT
+        )
+        for field in embed["fields"]:
+            self.assertLessEqual(len(field["name"]), discord_notify.EMBED_FIELD_NAME_LIMIT)
+            self.assertLessEqual(
+                len(field["value"]), discord_notify.EMBED_FIELD_VALUE_LIMIT
+            )
+
+    def test_embed_stays_within_the_ten_field_ceiling_of_a_readable_card(self):
+        self.assertLessEqual(len(payload()["embeds"][0]["fields"]), 10)
+
+    def test_payload_is_json_serialisable(self):
+        json.dumps(payload())
+
+    def test_survives_empty_step_outputs(self):
+        # When the build fails early, every `steps.*.outputs.*` interpolates to
+        # an empty string. int("") would crash and lose the failure notice.
+        result = payload([
+            "--status", "failure",
+            "--bundle-bytes", "",
+            "--jar-count", "",
+            "--test-count", "",
+            "--version", "",
+            "--download-url", "",
+        ])
+        self.assertEqual(0xE74C3C, result["embeds"][0]["color"])
+        self.assertIn("unknown", result["embeds"][0]["title"])
+
+    def test_ignores_a_malformed_download_url(self):
+        # A dead link posted to the channel is worse than no link: testers click
+        # it, get a 404 and report the release as broken.
+        result = payload(["--download-url", "frostguard.zip"])
+        self.assertNotIn("content", result)
+        self.assertIn("workflow run", result["embeds"][0]["description"])
+
+    def test_success_without_a_release_falls_back_to_the_run_link(self):
+        # Branch builds skip the release publish, so there is no public URL.
+        result = payload(["--download-url", ""])
+        self.assertNotIn("content", result)
+        self.assertIn("workflow run", result["embeds"][0]["description"])
+
+
+class WebhookHandlingTest(unittest.TestCase):
+
+    def test_missing_secret_warns_but_does_not_fail_the_build(self):
+        # A build that produced a good artifact must not be marked failed just
+        # because the channel notification could not be addressed.
+        code = discord_notify.main(BASE_ARGS + ["--webhook-env", "FG_ABSENT_VAR"])
+        self.assertEqual(0, code)
+
+    def test_rejects_a_secret_that_is_not_a_discord_webhook(self):
+        import os
+        os.environ["FG_TEST_WEBHOOK"] = "https://example.com/not-a-webhook"
+        try:
+            code = discord_notify.main(
+                BASE_ARGS + ["--webhook-env", "FG_TEST_WEBHOOK"]
+            )
+        finally:
+            del os.environ["FG_TEST_WEBHOOK"]
+        self.assertEqual(1, code)
+
+    def test_redacts_the_webhook_token_from_diagnostics(self):
+        # Actions logs are public on a public repository; a leaked webhook lets
+        # anyone post to the Discord channel.
+        message = discord_notify.redact(f"POST {WEBHOOK} failed")
+        self.assertNotIn("abcdefTOKEN-value_x", message)
+        self.assertIn("<redacted>", message)
+
+    def test_honours_the_rate_limit_hint_from_the_response_body(self):
+        error = urllib.error.HTTPError(WEBHOOK, 429, "Too Many Requests", {}, None)
+        delay = discord_notify.retry_after_seconds(error, '{"retry_after": 3.5}')
+        self.assertEqual(3.5, delay)
+
+    def test_clamps_an_absurd_rate_limit_hint(self):
+        error = urllib.error.HTTPError(WEBHOOK, 429, "Too Many Requests", {}, None)
+        self.assertEqual(
+            60.0, discord_notify.retry_after_seconds(error, '{"retry_after": 99999}')
+        )
+
+
+class AttachmentTest(unittest.TestCase):
+
+    def test_small_file_is_uploaded_as_multipart(self):
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as handle:
+            handle.write(b"small payload")
+        body, content_type = discord_notify.encode_multipart(payload(), handle.name)
+        self.assertTrue(content_type.startswith("multipart/form-data; boundary="))
+        self.assertIn(b'name="payload_json"', body)
+        self.assertIn(b'name="files[0]"', body)
+        self.assertIn(b"small payload", body)
+
+    def test_the_upload_ceiling_is_below_discords_webhook_limit(self):
+        # A ~220 MB bundle must never be attempted as an attachment: the failed
+        # upload would swallow the notification entirely.
+        self.assertLessEqual(discord_notify.ATTACHMENT_LIMIT_BYTES, 8 * 1024 * 1024)
+
+
+class LenientIntTest(unittest.TestCase):
+
+    def test_parses_numbers_and_absorbs_junk(self):
+        self.assertEqual(76, discord_notify.lenient_int("76"))
+        self.assertEqual(76, discord_notify.lenient_int(" 76 "))
+        self.assertEqual(0, discord_notify.lenient_int(""))
+        self.assertEqual(0, discord_notify.lenient_int("not-a-number"))
+        self.assertEqual(0, discord_notify.lenient_int(None))
+
+
+class HumanSizeTest(unittest.TestCase):
+
+    def test_formats_common_magnitudes(self):
+        self.assertEqual("unknown", discord_notify.human_size(0))
+        self.assertEqual("512 B", discord_notify.human_size(512))
+        self.assertEqual("1.0 KB", discord_notify.human_size(1024))
+        self.assertEqual("1.0 MB", discord_notify.human_size(1024 * 1024))
+        self.assertEqual("2.0 GB", discord_notify.human_size(2 * 1024**3))
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

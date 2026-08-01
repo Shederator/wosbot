@@ -1,0 +1,35 @@
+name: Feature request
+description: Propose a focused improvement or new automation capability.
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What limitation or recurring workflow should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the expected user-visible or automation behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include current workarounds or simpler approaches when applicable.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Supporting context
+      description: Add sanitized screenshots, game-state variants, constraints, or examples that would help implementation.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety and scope
+      options:
+        - label: I have not included credentials, account identifiers, private messages, or unrelated personal data.
+          required: true

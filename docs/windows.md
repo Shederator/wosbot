@@ -70,7 +70,7 @@ java -jar fg-app\target\frostguard-<version>.jar --autostart
 
 ## Scheduled Automation
 
-Optional Task Scheduler templates are in `docs/schedule_autostart/`.
+Optional Task Scheduler templates are in `docs/schedule-autostart/`.
 
 Use them when the machine should wake, run Frostguard for a fixed window, stop the emulator, and return to standby. Edit imported task actions before enabling them:
 
