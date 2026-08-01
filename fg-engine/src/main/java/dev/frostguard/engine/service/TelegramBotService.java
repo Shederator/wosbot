@@ -31,6 +31,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.api.platform.AppPaths;
 import dev.frostguard.api.domain.BotStateData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.RawImageData;
@@ -155,7 +156,7 @@ public class TelegramBotService implements BotStateListener {
     /** Read localPort from the shared watcher properties file (default 8765). */
     private static int readLocalPort() {
         try {
-            Path cfg = Paths.get(System.getProperty("user.home"), ".frostguard", "telegram-watcher.properties");
+            Path cfg = AppPaths.watcherConfigFile();
             if (Files.exists(cfg)) {
                 Properties props = new Properties();
                 try (FileInputStream fis = new FileInputStream(cfg.toFile())) { props.load(fis); }

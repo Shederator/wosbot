@@ -23,6 +23,8 @@ import java.net.URL;
 import java.util.Objects;
 import java.util.prefs.Preferences;
 
+import dev.frostguard.engine.platform.PlatformRuntime;
+
 public class FXApp extends Application {
 
     private static final Logger logger = LoggerFactory.getLogger(FXApp.class);
@@ -149,10 +151,14 @@ public class FXApp extends Application {
 
     private void terminateAdbProcess() {
         try {
-            new ProcessBuilder("taskkill", "/F", "/IM", "adb.exe").start();
-            logger.info("adb.exe shutdown requested");
+            if (PlatformRuntime.isWindows(PlatformRuntime.osName())) {
+                new ProcessBuilder("taskkill", "/F", "/IM", "adb.exe").start();
+            } else {
+                new ProcessBuilder("sh", "-c", "pkill -f adb || true").start();
+            }
+            logger.info("adb shutdown requested");
         } catch (IOException e) {
-            logger.warn("Unable to stop adb.exe cleanly", e);
+            logger.warn("Unable to stop adb cleanly", e);
         }
     }
 }

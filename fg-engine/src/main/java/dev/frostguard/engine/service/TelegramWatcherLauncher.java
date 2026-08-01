@@ -7,6 +7,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Properties;
 
+import dev.frostguard.api.platform.AppPaths;
+import dev.frostguard.engine.platform.PlatformRuntime;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,15 +28,20 @@ public class TelegramWatcherLauncher {
 
         if (batFile != null && batFile.exists()) {
             try {
-                ProcessBuilder pb = new ProcessBuilder("cmd", "/c", "start", "\"FG-TG-Watcher\"", "/b", batFile.getName());
+                ProcessBuilder pb;
+                if (PlatformRuntime.isWindows(PlatformRuntime.osName())) {
+                    pb = new ProcessBuilder("cmd", "/c", "start", "\"FG-TG-Watcher\"", "/b", batFile.getName());
+                } else {
+                    pb = new ProcessBuilder("bash", "-lc", "cd '" + batFile.getParentFile().getAbsolutePath() + "' && ./fg-watcher.sh");
+                }
                 pb.directory(batFile.getParentFile());
                 pb.start();
                 logger.info("Executed {}", batFile.getAbsolutePath());
             } catch (IOException e) {
-                logger.error("Failed to start Telegram Watcher bat file", e);
+                logger.error("Failed to start Telegram Watcher launcher", e);
             }
         } else {
-            logger.warn("Could not locate fg-watcher.bat to launch Telegram Watcher.");
+            logger.warn("Could not locate fg-watcher launcher to launch Telegram Watcher.");
         }
     }
 
@@ -60,7 +68,7 @@ public class TelegramWatcherLauncher {
     private static File resolveBatFile() {
         // Try to load the jar path from ~/.frostguard/telegram-watcher.properties
         try {
-            Path cfg = Paths.get(System.getProperty("user.home"), ".frostguard", "telegram-watcher.properties");
+            Path cfg = AppPaths.watcherConfigFile();
             if (Files.exists(cfg)) {
                 Properties props = new Properties();
                 try (java.io.FileInputStream fis = new java.io.FileInputStream(cfg.toFile())) {

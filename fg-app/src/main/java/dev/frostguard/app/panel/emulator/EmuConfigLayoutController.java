@@ -12,6 +12,7 @@ import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.BotStartupScreenEnum;
 import dev.frostguard.api.configs.HelpOnlyModeSettings;
 import dev.frostguard.engine.emulator.EmulatorType;
+import dev.frostguard.api.platform.AppPaths;
 import dev.frostguard.api.configs.GameVersionEnum;
 import dev.frostguard.api.configs.IdleBehaviorEnum;
 import dev.frostguard.api.configs.StopBehaviorEnum;
@@ -225,8 +226,12 @@ public class EmuConfigLayoutController {
 						return;
 					}
 
-					if (!picked.getName().equalsIgnoreCase(target.getEmulatorType().getExecutableName())) {
-						displayError("File not valid, please select: " + target.getEmulatorType().getExecutableName());
+					String expectedName = target.getEmulatorType().getExecutableName();
+					String legacyWindowsName = target.getEmulatorType().getExecutableName("Windows 11");
+					String selectedName = picked.getName();
+					if (!selectedName.equalsIgnoreCase(expectedName)
+							&& !selectedName.equalsIgnoreCase(legacyWindowsName)) {
+						displayError("File not valid, please select: " + expectedName);
 						return;
 					}
 
@@ -638,7 +643,7 @@ public class EmuConfigLayoutController {
 				return parent;
 			}
 		}
-		return new File(System.getProperty("user.dir"));
+		return AppPaths.workingDirectory().toFile();
 	}
 
 	private void persistOcrDebugPath(String rawPath) {
