@@ -25,6 +25,11 @@ database.db-wal
 # ── Environment configs ──
 .env*
 
+# Local agent workflow
+AGENTS.local.md
+TODO.md
+.claude/settings.local.json
+
 # ── IDEs ──
 .idea/
 *.iml
@@ -57,3 +62,6 @@ Thumbs.db
 *.bak
 *.swp
 *~
+
+# Python bytecode from the CI helper scripts
+ci/__pycache__/

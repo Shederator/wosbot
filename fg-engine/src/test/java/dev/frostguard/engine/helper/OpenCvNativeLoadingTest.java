@@ -88,6 +88,65 @@ class OpenCvNativeLoadingTest {
     }
 
     /**
+     * No test may bind OpenCV by naming the bundled Windows DLL directly.
+     *
+     * <p>{@code extractAndLoadNative("/native/opencv/opencv_java4110.dll")} works
+     * on a Windows developer machine and fails with {@link UnsatisfiedLinkError}
+     * on the Linux CI runner, so a test written that way passes review, passes
+     * locally, and then breaks the nightly Windows bundle for everyone. Two
+     * saved-frame tests had drifted into exactly that shape.</p>
+     *
+     * <p>Scanning the sources keeps the rule enforced for tests that do not exist
+     * yet, which a per-test assertion cannot do.</p>
+     */
+    @Test
+    void noTestBindsOpenCvByNamingTheWindowsDllDirectly() throws Exception {
+        // Walk up from the module directory to the repository root so this works
+        // regardless of which module Surefire is running.
+        java.nio.file.Path root = java.nio.file.Path.of("").toAbsolutePath();
+        while (root != null && !java.nio.file.Files.isDirectory(root.resolve("fg-engine"))) {
+            root = root.getParent();
+        }
+        assertNotNull(root, "Could not locate the repository root from the working directory");
+
+        java.util.List<String> offenders = new java.util.ArrayList<>();
+        for (String module : java.util.List.of(
+                "fg-api", "fg-data", "fg-vision", "fg-engine", "fg-tasks",
+                "fg-watcher", "fg-app")) {
+            java.nio.file.Path tests = root.resolve(module).resolve("src/test/java");
+            if (!java.nio.file.Files.isDirectory(tests)) {
+                continue;
+            }
+            try (var paths = java.nio.file.Files.walk(tests)) {
+                for (java.nio.file.Path file : paths
+                        .filter(p -> p.toString().endsWith(".java"))
+                        .toList()) {
+                    String source = java.nio.file.Files.readString(file);
+                    // Ignore the mention inside this guard's own documentation.
+                    if (file.getFileName().toString().equals("OpenCvNativeLoadingTest.java")) {
+                        continue;
+                    }
+                    for (String line : source.split("\n")) {
+                        String code = line.trim();
+                        if (code.startsWith("//") || code.startsWith("*")) {
+                            continue;
+                        }
+                        if (code.contains("extractAndLoadNative")) {
+                            offenders.add(root.relativize(file).toString());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        assertTrue(offenders.isEmpty(),
+                "These tests bind the Windows-only OpenCV DLL directly and will fail "
+                        + "on non-Windows CI runners. Call "
+                        + "OpenCvPatternLocator.loadNativeLibrary() instead: " + offenders);
+    }
+
+    /**
      * Callers treat a successful return as "OpenCV is usable". If no native image
      * could be bound the method must throw rather than return quietly, otherwise
      * the failure would surface much later as a confusing {@link UnsatisfiedLinkError}

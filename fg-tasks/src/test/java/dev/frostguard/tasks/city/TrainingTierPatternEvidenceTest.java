@@ -23,7 +23,13 @@ class TrainingTierPatternEvidenceTest {
     @BeforeAll
     static void loadOpenCv() throws IOException {
         try {
-            OpenCvPatternLocator.extractAndLoadNative("/native/opencv/opencv_java4110.dll");
+            // Must be loadNativeLibrary(), not extractAndLoadNative(...dll):
+            // the bundled DLL is a Windows image, so naming it directly makes
+            // this test fail with UnsatisfiedLinkError on the Linux CI runner
+            // and takes the whole nightly bundle down with it. This selects the
+            // native image for the host platform, exactly like every sibling
+            // frame test does.
+            OpenCvPatternLocator.loadNativeLibrary();
         } catch (UnsatisfiedLinkError ignored) {
             // The app and other tests may already have loaded the native library in this JVM.
         }

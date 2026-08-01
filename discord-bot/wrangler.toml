@@ -1,0 +1,28 @@
+# Cloudflare Worker config for the /build-pr Discord command.
+#
+# Deploy with:  npx wrangler deploy
+# Secrets (never put these in this file):
+#   npx wrangler secret put DISCORD_PUBLIC_KEY
+#   npx wrangler secret put GITHUB_TOKEN
+#
+# Plain vars below are safe to commit: they are identifiers, not credentials.
+
+name = "frostguard-build-pr"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+# The repository whose PRs are built and whose workflow is dispatched.
+GITHUB_REPO = "Shederator/wosbot"
+GITHUB_DEFAULT_BRANCH = "main"
+# Discord application (client) ID from the Developer Portal.
+# Replace after creating the application.
+DISCORD_APPLICATION_ID = "1532693190879215767"
+# Comma-separated Discord channel IDs where /build-pr is allowed.
+# Empty = every channel the command is visible in.
+ALLOWED_CHANNEL_IDS = ""
+# Comma-separated Discord role IDs allowed to request builds.
+# Empty = everyone in the allowed channels.
+ALLOWED_ROLE_IDS = ""
+# Minutes to wait between test builds (flood control).
+COOLDOWN_MINUTES = "10"

@@ -25,20 +25,9 @@ flowchart TD
 
 The main design rule is: UI code configures and observes automation; engine code schedules and coordinates it; task code contains game-specific business behavior; vision/data modules provide lower-level capabilities.
 
-## Maven Modules
+## Dependency Direction
 
-```text
-frostguard (root pom)
-+-- fg-api      shared DTOs, enums, template catalogue, task/config keys
-+-- fg-data     SQLite/Hibernate entities, repositories, database bootstrap
-+-- fg-vision   OpenCV, OCR, image conversion, template resources
-+-- fg-engine   scheduler, emulator control, helpers, services, task runtime
-+-- fg-tasks    concrete game automation routines
-+-- fg-watcher  standalone Telegram watcher jar
-+-- fg-app      JavaFX desktop app, packaging, runtime tool staging
-```
-
-Dependency direction should stay mostly downward:
+Dependencies should stay mostly downward:
 
 ```mermaid
 flowchart LR
@@ -161,102 +150,15 @@ sequenceDiagram
     end
 ```
 
-Each `TaskQueue` repeatedly chooses runnable tasks by priority and schedule, executes `DelayedTask.run()`, records `TaskStateData`, persists next execution through `ScheduleService`, and re-enqueues recurring tasks.
-
-Runtime ownership is split like this:
-
-```mermaid
-flowchart TD
-    ScheduleService --> TaskDispatcher
-    TaskDispatcher --> QueueA[TaskQueue<br/>profile A]
-    TaskDispatcher --> QueueB[TaskQueue<br/>profile B]
-    TaskDispatcher --> QueueN[TaskQueue<br/>profile N]
-
-    QueueA --> DelayedTaskA[DelayedTask instance]
-    QueueB --> DelayedTaskB[DelayedTask instance]
-    QueueN --> DelayedTaskN[DelayedTask instance]
-
-    DelayedTaskA --> Helpers[Engine helpers]
-    DelayedTaskB --> Helpers
-    DelayedTaskN --> Helpers
-
-    Helpers --> EmulatorController
-    Helpers --> TemplateSearchHelper
-    Helpers --> BotOcrEngine
-    TemplateSearchHelper --> OpenCV[OpenCvPatternLocator]
-    BotOcrEngine --> Tesseract[TesseractOcrProvider]
-```
+Each `TaskQueue` chooses runnable tasks by priority and schedule, executes
+`DelayedTask.run()`, records state, persists the next execution through
+`ScheduleService`, and re-enqueues recurring tasks. Task-facing helpers wrap
+emulator control, template matching, and OCR so routines do not depend directly
+on low-level providers.
 
 ## Task Contract
 
-Built-in tasks extend `DelayedTask`:
-
-```mermaid
-classDiagram
-    class Runnable {
-        <<interface>>
-        +run()
-    }
-
-    class Delayed {
-        <<interface>>
-        +getDelay(unit)
-        +compareTo(other)
-    }
-
-    class DelayedTask {
-        <<abstract>>
-        #execute()
-        #getRequiredStartLocation()
-        #consumesStamina()
-        #acceptsInjections()
-        #getDistinctKey()
-        +run()
-        +reschedule(time)
-        +setRecurring(value)
-        +clearSchedule()
-    }
-
-    class CustomTaskConfigurable {
-        <<interface>>
-        +applyCustomTaskSettings(settings)
-    }
-
-    class BuiltInRoutine {
-        +execute()
-    }
-
-    class RuntimeCustomTask {
-        +execute()
-        +applyCustomTaskSettings(settings)
-    }
-
-    Runnable <|.. DelayedTask
-    Delayed <|.. DelayedTask
-    DelayedTask <|-- BuiltInRoutine
-    DelayedTask <|-- RuntimeCustomTask
-    CustomTaskConfigurable <|.. RuntimeCustomTask
-```
-
-```java
-public final class ExampleRoutine extends DelayedTask {
-    public ExampleRoutine(AccountDescriptor profile, TpDailyTaskEnum taskType) {
-        super(profile, taskType);
-    }
-
-    @Override
-    protected LaunchPoint getRequiredStartLocation() {
-        return LaunchPoint.WORLD;
-    }
-
-    @Override
-    protected void execute() {
-        // Game-specific taps, OCR, template searches, and helper calls.
-    }
-}
-```
-
-Important hooks:
+Built-in and runtime-loaded tasks extend `DelayedTask`. Important hooks:
 
 - `execute()` contains task-specific business logic.
 - `getRequiredStartLocation()` tells `NavigationHelper` where the game should be before execution.
@@ -264,24 +166,10 @@ Important hooks:
 - `getDistinctKey()` differentiates custom tasks or multiple logical tasks with the same enum.
 - `reschedule(...)`, `setRecurring(...)`, and `clearSchedule()` control future execution.
 
-Runtime-loaded custom tasks are compiled and loaded by `CustomTaskService`. Optional extra settings are exposed by implementing `CustomTaskConfigurable`; live and startup scheduling should go through `ScheduleService.scheduleCustomTask(...)`.
-
-Task creation paths:
-
-```mermaid
-flowchart LR
-    BuiltInEnum[TpDailyTaskEnum] --> Registry[DelayedTaskRegistry]
-    Registry --> Factory[TaskRegistrations]
-    Factory --> BuiltIn[fg-tasks routine]
-
-    JavaFile[custom_tasks/*.java] --> CustomTaskService
-    CustomTaskService --> Compiler[JavaCompiler]
-    Compiler --> LoadedClass[URLClassLoader task class]
-    LoadedClass --> CustomTask[DelayedTask custom instance]
-
-    BuiltIn --> Queue[TaskQueue]
-    CustomTask --> Queue
-```
+Built-in tasks are created through `DelayedTaskRegistry` and
+`TaskRegistrations`. Runtime custom tasks are compiled and loaded by
+`CustomTaskService`; optional settings use `CustomTaskConfigurable`. Live and
+startup scheduling should go through `ScheduleService.scheduleCustomTask(...)`.
 
 ## Cross-Cutting Runtime Features
 
@@ -316,14 +204,6 @@ flowchart TD
     Tools[tools/adb and tools/tesseract] --> AppBundle
     Templates[fg-vision templates] --> AppBundle
     CustomTasks[custom_tasks examples] --> AppBundle
-```
-
-Common commands:
-
-```sh
-mvn clean install package
-mvn -pl fg-engine -am test
-mvn -pl fg-app -am -DskipTests test
 ```
 
 `fg-app` builds the desktop artifact:

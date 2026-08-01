@@ -1,0 +1,60 @@
+name: Bug report
+description: Report reproducible Frostguard behavior that is broken or unsafe.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Frostguard. Remove credentials, account identifiers, private messages, and unrelated log content before attaching evidence.
+  - type: input
+    id: version
+    attributes:
+      label: Frostguard version or commit
+      placeholder: "Release version or commit SHA"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include OS, emulator and version, resolution, DPI, and relevant game settings.
+      placeholder: |
+        OS:
+        Emulator:
+        Resolution / DPI:
+        Game language and graphics settings:
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Actual behavior
+      description: What happened, and what task or screen was active?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Provide the smallest repeatable sequence you know.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence
+      description: Add relevant log excerpts, screenshots, template scores, OCR output, or timestamps. Drag files here if needed.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed credentials, account identifiers, private messages, and unrelated personal data.
+          required: true
