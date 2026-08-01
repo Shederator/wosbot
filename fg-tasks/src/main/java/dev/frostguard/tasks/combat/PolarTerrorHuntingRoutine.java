@@ -8,10 +8,12 @@ import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.MarchSlotState;
 import dev.frostguard.api.domain.PointData;
+import dev.frostguard.api.domain.TaskStateData;
 import dev.frostguard.data.entity.DailyTask;
 import dev.frostguard.data.repository.DailyTaskRepository;
 import dev.frostguard.engine.helper.MarchSlotAvailabilityEstimator;
 import dev.frostguard.engine.helper.StaminaTopUpResult;
+import dev.frostguard.tasks.dailies.IntelligenceRoutine;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.engine.nav.SearchConfigConstants;
@@ -145,16 +147,11 @@ private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
             return;
         }
 
-        if (profile.getConfig(ConfigurationKeyEnum.INTEL_BOOL, Boolean.class)
-                && profile.getConfig(ConfigurationKeyEnum.POLAR_TERROR_ENABLED_BOOL, Boolean.class)
-                && taskManagementService.lookupTaskState(profile.getId(), TpDailyTaskEnum.INTEL.getId()).isScheduled()) {
-
-            DailyTask intel = iDailyTaskRepository.findByAccountIdAndTaskType(profile.getId(), TpDailyTaskEnum.INTEL);
-            if (ChronoUnit.MINUTES.between(LocalDateTime.now(), intel.getScheduledAt()) < 5) {
-                reschedule(LocalDateTime.now().plusMinutes(5));
-                logWarning(routineLogPolarTerrorHuntingLine("Intel task is scheduled to run soon. Planning next run Polar Hunt to run 5 min after intel."));
-                return;
-            }
+        if (Boolean.TRUE.equals(profile.getConfig(ConfigurationKeyEnum.POLAR_TERROR_ENABLED_BOOL, Boolean.class))
+                && shouldDeferToIntel()) {
+            reschedule(LocalDateTime.now().plusMinutes(5));
+            logWarning(routineLogPolarTerrorHuntingLine("Intel task is scheduled to run soon or needs stamina priority. Deferring Polar Terror hunt for 5 minutes."));
+            return;
         }
 
         logInfo(routineLogPolarTerrorHuntingLine(String.format(
@@ -560,6 +557,23 @@ private boolean staminaCouldSupportRally() {
 
         rescheduleForStaminaRegen();
         return false;
+    }
+
+private boolean shouldDeferToIntel() {
+        if (!Boolean.TRUE.equals(profile.getConfig(ConfigurationKeyEnum.INTEL_BOOL, Boolean.class))) {
+            return false;
+        }
+        TaskStateData intelTaskState = taskManagementService.lookupTaskState(profile.getId(), TpDailyTaskEnum.INTEL.getId());
+        if (intelTaskState == null || !intelTaskState.isScheduled()) {
+            return false;
+        }
+        DailyTask intel = iDailyTaskRepository.findByAccountIdAndTaskType(profile.getId(), TpDailyTaskEnum.INTEL);
+        return IntelligenceRoutine.shouldDeferTaskToIntel(
+                true,
+                true,
+                intel != null ? intel.getScheduledAt() : null,
+                staminaHelper.getCurrentStamina(),
+                IntelligenceRoutine.MIN_STAMINA_REQUIRED_FLOOR);
     }
 
 // A rally must not push stamina below the configured reserve, which is held back for Intel and

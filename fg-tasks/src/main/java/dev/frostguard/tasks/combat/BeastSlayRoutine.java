@@ -17,6 +17,7 @@ import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.engine.service.TaskManagementService;
+import dev.frostguard.tasks.dailies.IntelligenceRoutine;
 
 public class BeastSlayRoutine extends DelayedTask {
 
@@ -192,12 +193,17 @@ public class BeastSlayRoutine extends DelayedTask {
 		if (!Boolean.TRUE.equals(profile.getConfig(ConfigurationKeyEnum.INTEL_BOOL, Boolean.class))) {
 			return false;
 		}
-		if (!taskManagementService.lookupTaskState(profile.getId(), TpDailyTaskEnum.INTEL.getId()).isScheduled()) {
+		var intelTaskState = taskManagementService.lookupTaskState(profile.getId(), TpDailyTaskEnum.INTEL.getId());
+		if (intelTaskState == null || !intelTaskState.isScheduled()) {
 			return false;
 		}
 		DailyTask intel = iDailyTaskRepository.findByAccountIdAndTaskType(profile.getId(), TpDailyTaskEnum.INTEL);
-		return intel != null
-				&& ChronoUnit.MINUTES.between(LocalDateTime.now(), intel.getScheduledAt()) < 5;
+		return IntelligenceRoutine.shouldDeferTaskToIntel(
+				true,
+				true,
+				intel != null ? intel.getScheduledAt() : null,
+				staminaHelper.getCurrentStamina(),
+				IntelligenceRoutine.MIN_STAMINA_REQUIRED_FLOOR);
 	}
 
 	// ========================================================================

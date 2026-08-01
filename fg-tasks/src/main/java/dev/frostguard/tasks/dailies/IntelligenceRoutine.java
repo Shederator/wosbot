@@ -11,6 +11,7 @@ import dev.frostguard.api.domain.TaskStateData;
 import dev.frostguard.api.domain.TesseractSettingsData;
 import dev.frostguard.data.entity.DailyTask;
 import dev.frostguard.data.repository.DailyTaskRepository;
+import dev.frostguard.engine.helper.StaminaTopUpResult;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.SearchConfigConstants;
@@ -25,6 +26,7 @@ import dev.frostguard.vision.ocr.ResilientOcrExecutor;
 import java.awt.Color;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -40,7 +42,7 @@ import net.sourceforge.tess4j.TesseractException;
 
 public class IntelligenceRoutine extends DelayedTask {
 
-private static final int MIN_STAMINA_REQUIRED_FLOOR = 30;
+public static final int MIN_STAMINA_REQUIRED_FLOOR = 30;
 
 private static final int SURVIVOR_STAMINA_COST_VALUE = 12;
 
@@ -971,15 +973,26 @@ private void hydrateConfiguration() {
 private boolean hasEnoughStaminaFlow() {
 		int staminaValue = StaminaService.getServices().getCurrentStamina(profile.getId());
 
-		if (staminaValue < MIN_STAMINA_REQUIRED_FLOOR) {
-			logWarning(routineLogIntelligenceLine("Not enough stamina to process intel. Current stamina: " + staminaValue +
-					". Required: " + MIN_STAMINA_REQUIRED_FLOOR + "."));
-			long minutesToRegen = (long) (MIN_STAMINA_REQUIRED_FLOOR - staminaValue) * 5L;
-			LocalDateTime rescheduleTime = LocalDateTime.now().plusMinutes(minutesToRegen);
-			reschedule(rescheduleTime);
-			return false;
+		if (staminaValue >= MIN_STAMINA_REQUIRED_FLOOR) {
+			return true;
 		}
-		return true;
+
+		logWarning(routineLogIntelligenceLine("Intel is stamina-starved. Attempting a stamina claim before continuing. Current stamina: "
+				+ staminaValue + ". Required: " + MIN_STAMINA_REQUIRED_FLOOR + "."));
+		StaminaTopUpResult topUp = staminaHelper.topUpFromProfile(MIN_STAMINA_REQUIRED_FLOOR, 0);
+		if (topUp.successful()) {
+			int refreshedStamina = StaminaService.getServices().getCurrentStamina(profile.getId());
+			logInfo(routineLogIntelligenceLine("Stamina claim succeeded. Resuming Intel with refreshed stamina: "
+					+ refreshedStamina));
+			return true;
+		}
+
+		logWarning(routineLogIntelligenceLine("Stamina claim could not restore Intel stamina. Deferring Intel until the next claim window. Result="
+				+ topUp.status()));
+		long minutesToRegen = (long) (MIN_STAMINA_REQUIRED_FLOOR - staminaValue) * 5L;
+		LocalDateTime rescheduleTime = LocalDateTime.now().plusMinutes(Math.max(5, minutesToRegen));
+		reschedule(rescheduleTime);
+		return false;
 	}
 
 private void manageRescheduling(boolean anyIntelProcessed,
@@ -1402,6 +1415,20 @@ private void manageRescheduling(boolean anyIntelProcessed,
 
 	static boolean shouldAbortBeastDeployForLockedFlag(boolean useFlag, boolean flagSelected) {
 		return useFlag && !flagSelected;
+	}
+
+	public static boolean shouldDeferTaskToIntel(boolean intelEnabled, boolean intelScheduled,
+			LocalDateTime intelRunAt, int staminaValue, int minRequiredFloor) {
+		if (!intelEnabled || !intelScheduled) {
+			return false;
+		}
+		if (intelRunAt != null) {
+			long minutesUntilIntel = ChronoUnit.MINUTES.between(LocalDateTime.now(), intelRunAt);
+			if (minutesUntilIntel <= 5) {
+				return true;
+			}
+		}
+		return staminaValue < minRequiredFloor;
 	}
 
 private void handleSurvivor(ImageSearchResultData result) {
