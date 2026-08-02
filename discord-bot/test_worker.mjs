@@ -111,19 +111,13 @@ test("parses valid hex and rejects everything else", () => {
 // --- accessError -------------------------------------------------------------
 
 test("wrong channel is refused when channels are configured", () => {
-  const env = { ALLOWED_CHANNEL_IDS: "111,222", ALLOWED_ROLE_IDS: "" };
+  const env = { ALLOWED_CHANNEL_IDS: "111,222" };
   assert.ok(accessError(env, { channel_id: "333", member: { roles: [] } }));
   assert.equal(accessError(env, { channel_id: "222", member: { roles: [] } }), "");
 });
 
-test("missing role is refused when roles are configured", () => {
-  const env = { ALLOWED_CHANNEL_IDS: "", ALLOWED_ROLE_IDS: "rrr" };
-  assert.ok(accessError(env, { channel_id: "1", member: { roles: ["other"] } }));
-  assert.equal(accessError(env, { channel_id: "1", member: { roles: ["rrr"] } }), "");
-});
-
 test("no configuration means open access", () => {
-  const env = { ALLOWED_CHANNEL_IDS: "", ALLOWED_ROLE_IDS: "" };
+  const env = { ALLOWED_CHANNEL_IDS: "" };
   assert.equal(accessError(env, { channel_id: "1", member: { roles: [] } }), "");
 });
 

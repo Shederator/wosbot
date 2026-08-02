@@ -201,7 +201,7 @@ it into `.github/workflows/`) with four jobs that enforce a strict trust split:
 | `plan` | trusted | [`pr_build_plan.py plan`](pr_build_plan.py): rejects closed/merged/non-numeric PRs with reasons, pins every head SHA, drops PRs already contained in another requested head or in `main` (stacked PRs), orders base-to-tip, trial-merges on a detached HEAD and reports conflicting files (binary conflicts flagged). Never executes PR code. |
 | `build` | **untrusted** | `pr_build_plan.py merge` reproduces the planned merge and fails unless the tree is bit-identical to the planned one, then runs the full Maven build. Read-only token, **no secrets**. Its verification is advisory only. |
 | `publish` | trusted | Fresh runner, pristine `main`: re-verifies the bundle with the trusted `verify_bundle.py` + `smoke_test_bundle.sh`, re-checks (`pr_build_plan.py recheck`) that every PR is still open and unchanged, then publishes the `pr-test-<digest>` prerelease. The digest covers base SHA + ordered pinned heads, so identical requests reuse the existing release. |
-| `notify` | trusted | [`pr_test_notify.py`](pr_test_notify.py) posts the outcome to the existing `DISCORD_NIGHTLY_WEBHOOK_URL`: download link (marked **UNMERGED TEST BUILD**), conflict report, rejection reasons, staleness explanation, or failure link. |
+| `notify` | trusted | [`pr_test_notify.py`](pr_test_notify.py) validates the Discord guild/channel context, replies to the original `/build-pr` status through the bot API and mentions only the requester. Manual dispatches without Discord context do not notify. |
 
 No job ever pushes to `main` or a PR branch; the merged tree exists only
 inside the runners. [`pr-test-cleanup.yml`](../setup/github-workflows/pr-test-cleanup.yml)

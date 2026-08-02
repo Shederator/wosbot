@@ -19,7 +19,7 @@
  *   key, so nobody can forge build requests by POSTing to the worker URL.
  *
  * Guardrails:
- * - Requests are limited to configured channels and roles.
+ * - Requests are limited to configured channels.
  * - PR numbers are deduplicated; non-numeric, closed and merged entries are
  *   rejected with a per-entry explanation.
  * - Head SHAs are pinned at confirmation time and passed to the workflow,
@@ -179,7 +179,7 @@ async function checkCooldownAndConcurrency(env) {
   return "";
 }
 
-async function dispatchWorkflow(env, { prs, order, pinned, requester }) {
+async function dispatchWorkflow(env, { prs, order, pinned, requester, discordContext }) {
   const response = await fetch(
     `https://api.github.com/repos/${env.GITHUB_REPO}/actions/workflows/pr-test-build.yml/dispatches`,
     {
@@ -187,7 +187,17 @@ async function dispatchWorkflow(env, { prs, order, pinned, requester }) {
       headers: { ...githubHeaders(env), "Content-Type": "application/json" },
       body: JSON.stringify({
         ref: env.GITHUB_DEFAULT_BRANCH || "main",
-        inputs: { prs, order, pinned, requester },
+        inputs: {
+          prs,
+          order,
+          pinned,
+          requester,
+          discord_guild_id: discordContext.guildId,
+          discord_channel_id: discordContext.channelId,
+          discord_requester_id: discordContext.requesterId,
+          discord_message_id: discordContext.messageId,
+          discord_request_id: discordContext.requestId,
+        },
       }),
     },
   );
@@ -257,13 +267,6 @@ export function accessError(env, interaction) {
   const channels = csv(env.ALLOWED_CHANNEL_IDS);
   if (channels.length && !channels.includes(String(interaction.channel_id))) {
     return "`/build-pr` only works in the designated test-build channel.";
-  }
-  const roles = csv(env.ALLOWED_ROLE_IDS);
-  if (roles.length) {
-    const memberRoles = (interaction.member && interaction.member.roles) || [];
-    if (!memberRoles.some((r) => roles.includes(String(r)))) {
-      return "You need the tester role to request test builds. Ask a moderator.";
-    }
   }
   return "";
 }
@@ -420,6 +423,13 @@ async function handleButton(env, interaction) {
       order: state.order.join(","),
       pinned,
       requester: `${requester.name} (Discord)`,
+      discordContext: {
+        guildId: String(interaction.guild_id || ""),
+        channelId: String(interaction.channel_id || ""),
+        requesterId: requester.id,
+        messageId: String(message.id || ""),
+        requestId: String(interaction.id || ""),
+      },
     });
   } catch (error) {
     return ephemeralReply(`Could not start the build: ${String(error.message).slice(0, 300)}`);
@@ -435,8 +445,7 @@ async function handleButton(env, interaction) {
           `Building PRs ${state.order.map((n) => `#${n}`).join(", ")} with pinned heads.`,
           "",
           "The result (download link, conflict report or failure) will be",
-          "posted in this channel when the workflow finishes — typically",
-          "30–45 minutes. Progress: " +
+          "posted as a reply here when the workflow finishes. Progress: " +
           `<https://github.com/${env.GITHUB_REPO}/actions/workflows/pr-test-build.yml>`,
         ].join("\n"),
         footer: undefined,
