@@ -16,16 +16,18 @@ from discord_notify import post, truncate  # noqa: E402
 
 def build_payload(args: argparse.Namespace) -> dict:
     description = (
-        f"**[Download Frostguard {args.version}]({args.download_url})**\n\n"
-        "This is the recommended stable Windows version. Extract the complete "
-        "ZIP and double-click `Start Frostguard.bat` (Java 21+ required).\n\n"
-        f"[Release notes]({args.release_url})"
+        "This is the tested version recommended for normal use.\n\n"
+        f"**[⬇️ Download Frostguard {args.version} for Windows]"
+        f"({args.download_url})**\n\n"
+        "Extract the complete archive and use the included Frostguard launcher. "
+        "Java 21 or newer is "
+        f"required.\n\n[📋 View release notes]({args.release_url})"
     )
     return {
         "content": "@everyone",
         "username": "Frostguard Releases",
         "embeds": [{
-            "title": f"Frostguard {args.version} is available",
+            "title": f"✅ Frostguard {args.version} is now available",
             "description": truncate(description, 4096),
             "color": 0x2ECC71,
         }],

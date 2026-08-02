@@ -10,7 +10,7 @@ class StablePayloadTest(unittest.TestCase):
     def args(self):
         return notify.parse_args([
             "--version", "2.1.0",
-            "--download-url", "https://github.com/Shederator/wosbot/releases/download/v2.1.0/frostguard-windows-desktop-bundle.zip",
+            "--download-url", "https://github.com/Shederator/wosbot/releases/latest/download/frostguard-windows-desktop-bundle.zip",
             "--release-url", "https://github.com/Shederator/wosbot/releases/tag/v2.1.0",
             "--dry-run",
         ])
@@ -23,7 +23,8 @@ class StablePayloadTest(unittest.TestCase):
     def test_contains_only_stable_release_facts(self):
         text = str(notify.build_payload(self.args()))
         self.assertIn("2.1.0", text)
-        self.assertIn("Start Frostguard.bat", text)
+        self.assertIn("included Frostguard launcher", text)
+        self.assertIn("releases/latest/download", text)
         self.assertNotIn("commit", text.lower())
 
     def test_rejects_non_semantic_version(self):

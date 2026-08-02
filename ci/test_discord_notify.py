@@ -43,6 +43,7 @@ BASE_ARGS = [
     "--commit", "b962083c0ffee1234567890abcdefabcdefabcde",
     "--commit-message", "fix(intel): claim final rewards\n\nbody line ignored",
     "--actor", "Shederator",
+    "--changes", "• [#79](https://github.com/Shederator/wosbot/pull/79) Cleaner downloads",
 ]
 
 
@@ -53,16 +54,16 @@ def payload(extra: list[str] | None = None) -> dict:
 
 class PayloadTest(unittest.TestCase):
 
-    def test_success_payload_carries_the_download_link_as_content(self):
-        # The bare URL in `content` is what stays tappable in the mobile client
-        # and in the notification preview; embed links are easy to miss there.
+    def test_success_payload_has_no_bare_url_content(self):
         result = payload()
-        self.assertIn("releases/download/nightly", result["content"])
+        self.assertNotIn("content", result)
+        self.assertIn("releases/download/nightly", result["embeds"][0]["description"])
 
     def test_success_embed_is_green_and_names_the_version(self):
         embed = payload()["embeds"][0]
         self.assertEqual(0x2ECC71, embed["color"])
         self.assertIn("2.1.0", embed["title"])
+        self.assertIn("Latest Nightly", embed["title"])
 
     def test_failure_payload_is_red_and_links_the_log_not_a_download(self):
         result = payload(["--status", "failure"])
@@ -77,24 +78,22 @@ class PayloadTest(unittest.TestCase):
         result = payload(["--commit-message", "@everyone please test this"])
         self.assertEqual({"parse": []}, result["allowed_mentions"])
 
-    def test_uses_only_the_commit_subject(self):
+    def test_lists_changes_since_the_previous_nightly(self):
         fields = payload()["embeds"][0]["fields"]
-        commit = next(f for f in fields if f["name"] == "Commit")
-        self.assertIn("fix(intel): claim final rewards", commit["value"])
-        self.assertNotIn("body line ignored", commit["value"])
+        changes = next(
+            field for field in fields
+            if field["name"] == "Changes since the previous Nightly"
+        )
+        self.assertIn("#79", changes["value"])
 
-    def test_reports_size_in_human_units(self):
-        fields = payload()["embeds"][0]["fields"]
-        size = next(f for f in fields if f["name"] == "Download size")
-        self.assertEqual("231.0 MB", size["value"])
-
-    def test_omits_metrics_that_were_not_measured(self):
-        # A zero test count means the summary grep found nothing, not that zero
-        # tests passed. Printing "0 passed" would be a lie in a release notice.
-        result = payload(["--test-count", "0", "--jar-count", "0"])
+    def test_omits_internal_ci_metrics(self):
+        result = payload()
         names = {f["name"] for f in result["embeds"][0]["fields"]}
         self.assertNotIn("JUnit tests", names)
         self.assertNotIn("Runtime JARs", names)
+        self.assertNotIn("Trigger", names)
+        self.assertNotIn("Branch", names)
+        self.assertNotIn("Commit", names)
 
     def test_respects_every_discord_length_limit(self):
         long = "x" * 6000

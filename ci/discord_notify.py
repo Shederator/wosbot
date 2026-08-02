@@ -3,10 +3,9 @@
 
 The nightly bundle is ~220 MB, far above Discord's per-message upload ceiling,
 and a GitHub Actions artifact link only works for signed-in users with access to
-the repository. So the message this script posts carries the **public release
-asset URL** as plain message content (tappable on mobile, no login required)
-plus an embed with the facts a tester needs before downloading: version, size,
-staged runtime JAR count, executed test count, trigger, branch and commit.
+the repository. The maintained Nightly message therefore links the public
+release asset from a compact user-facing embed and lists the PRs or direct
+commits added since the previous Nightly. CI-only metrics stay in Actions.
 
 The webhook URL is read from the environment rather than argv, because anything
 passed on a command line shows up in the process list and in `set -x` traces.
@@ -99,53 +98,10 @@ def redact(text: str) -> str:
 
 def build_payload(args: argparse.Namespace) -> dict:
     color, headline = STATUS_STYLE.get(args.status, STATUS_STYLE["failure"])
-
     version = args.version or "unknown"
-    title = (
-        f"Frostguard {version} — Windows desktop bundle"
-        if args.status == "success"
-        else f"Frostguard {version} — {headline.lower()}"
-    )
-
+    description_parts: list[str] = []
     fields: list[dict] = []
 
-    def add_field(name: str, value: str, inline: bool = True) -> None:
-        value = truncate(value, EMBED_FIELD_VALUE_LIMIT)
-        if value:
-            fields.append(
-                {
-                    "name": truncate(name, EMBED_FIELD_NAME_LIMIT),
-                    "value": value,
-                    "inline": inline,
-                }
-            )
-
-    add_field("Version", f"`{version}`")
-    if args.bundle_bytes > 0:
-        add_field("Download size", human_size(args.bundle_bytes))
-    if args.jar_count > 0:
-        add_field("Runtime JARs", str(args.jar_count))
-    if args.test_count > 0:
-        add_field("JUnit tests", f"{args.test_count} passed")
-    if args.trigger:
-        add_field("Trigger", f"`{args.trigger}`")
-    if args.branch:
-        add_field("Branch", f"`{args.branch}`")
-
-    if args.commit:
-        short = args.commit[:7]
-        subject = first_line(args.commit_message)
-        commit_url = (
-            f"https://github.com/{args.repository}/commit/{args.commit}"
-            if args.repository
-            else ""
-        )
-        link = f"[`{short}`]({commit_url})" if commit_url else f"`{short}`"
-        if subject:
-            link += f" {truncate(subject, 200)}"
-        add_field("Commit", link, inline=False)
-
-    description_parts: list[str] = []
     if args.status == "success":
         if args.download_url and not args.download_url.startswith("http"):
             # A half-populated URL means the release step was skipped or failed.
@@ -157,18 +113,23 @@ def build_payload(args: argparse.Namespace) -> dict:
             args.download_url = ""
         if args.download_url:
             description_parts.append(
-                f"**[⬇ Download {args.bundle_name or 'the bundle'}]"
+                "The newest automated development build. It may contain "
+                "unfinished or unstable changes."
+            )
+            description_parts.append(
+                f"**[⬇️ Download Frostguard {version} for Windows]"
                 f"({args.download_url})**"
             )
-            # The assembly ships no launcher .bat for the app itself (only
-            # fg-watcher.bat), so `java -jar` is the real entry point. Naming a
-            # script that is not in the ZIP would send every tester into a
-            # support question.
             description_parts.append(
-                "Verified: bundle structure, manifest classpath and launch "
-                "smoke test. Extract the complete ZIP, then double-click "
-                "`Start Frostguard.bat` (Java 21+ required)."
+                "Extract the complete archive and use the included Frostguard "
+                "launcher. Java 21 or newer is required."
             )
+            if args.changes:
+                fields.append({
+                    "name": "Changes since the previous Nightly",
+                    "value": truncate(args.changes, EMBED_FIELD_VALUE_LIMIT),
+                    "inline": False,
+                })
         elif args.run_url:
             description_parts.append(
                 f"Build passed. The artifact is attached to "
@@ -182,28 +143,22 @@ def build_payload(args: argparse.Namespace) -> dict:
         )
 
     embed = {
-        "title": truncate(title, EMBED_TITLE_LIMIT),
+        "title": truncate(
+            f"Latest Nightly — Frostguard {version}"
+            if args.status == "success"
+            else f"Frostguard {version} — {headline.lower()}",
+            EMBED_TITLE_LIMIT,
+        ),
         "color": color,
         "description": truncate("\n\n".join(description_parts), EMBED_DESCRIPTION_LIMIT),
         "fields": fields,
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
-    if args.run_url:
-        embed["url"] = args.run_url
-
-    footer = args.repository or ""
-    if args.run_number:
-        footer = f"{footer} • run #{args.run_number}".strip(" •")
-    if args.actor:
-        footer = f"{footer} • {args.actor}".strip(" •")
-    if footer:
-        embed["footer"] = {"text": truncate(footer, EMBED_FOOTER_LIMIT)}
-
-    # The bare URL as message content stays tappable in the mobile client and in
-    # notification previews, where embed links are easy to miss.
-    content = ""
     if args.status == "success" and args.download_url:
-        content = truncate(args.download_url, CONTENT_LIMIT)
+        embed["url"] = args.download_url
+        embed["footer"] = {"text": "Nightly • updated automatically"}
+    elif args.run_url:
+        embed["url"] = args.run_url
 
     payload = {
         "username": args.username,
@@ -211,8 +166,6 @@ def build_payload(args: argparse.Namespace) -> dict:
         # Never let a commit subject containing @everyone ping the channel.
         "allowed_mentions": {"parse": []},
     }
-    if content:
-        payload["content"] = content
     return payload
 
 
@@ -332,6 +285,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--commit", default="")
     parser.add_argument("--commit-message", default="")
     parser.add_argument("--actor", default="")
+    parser.add_argument("--changes", default="")
     parser.add_argument("--username", default="Frostguard Builds")
     parser.add_argument(
         "--attach",

@@ -24,41 +24,56 @@ re-runs structural and launch verification, creates the immutable `vX.Y.Z`
 release, verifies its public download URL and then sends the one permitted
 `@everyone` release announcement. Existing stable tags are never replaced.
 
-## Discord `#downloads`
+## Discord `#download`
 
-Keep the channel read-only for regular users. It should contain two maintained
-messages rather than a chronological build log.
+Keep the channel read-only for regular users. Pin one short guide, keep
+permanent Stable announcements as release history, and maintain exactly one
+Nightly message that is edited in place.
 
-### Stable message
+### Pinned guide
 
 ```text
-✅ Frostguard Stable — Recommended
+📥 Frostguard Downloads
 
-The latest tested Windows version for regular use.
-Download: <latest stable release URL>
+Stable — recommended
+The tested version for normal use:
+https://github.com/Shederator/wosbot/releases/latest/download/frostguard-windows-desktop-bundle.zip
 
-Install Java 21+, extract the complete ZIP, then double-click
-Start Frostguard.bat.
+Nightly — testing
+The newest automated development build. It may contain unfinished changes:
+https://github.com/Shederator/wosbot/releases/download/nightly/frostguard-windows-desktop-bundle.zip
+
+Extract the complete archive and use the included Frostguard launcher.
+Java 21 or newer is required.
 ```
 
-Replace this message only when a new stable release is published. The release
-workflow sends the one-time server notification separately.
+The Stable URL is deliberately a direct, version-independent asset URL. GitHub
+redirects it to the asset on the latest non-prerelease release.
 
-### Daily message
+### Nightly message
 
 ```text
-🧪 Frostguard Daily — Latest Development Build
+Latest Nightly — Frostguard <version>
 
-Includes the newest changes from main and may be less stable.
-Download: https://github.com/Shederator/wosbot/releases/download/nightly/frostguard-windows-desktop-bundle.zip
+The newest automated development build. It may contain unfinished or unstable
+changes.
 
-No GitHub login is required. Install Java 21+, extract the complete ZIP, then
-double-click Start Frostguard.bat.
+Download Frostguard <version> for Windows
+
+Changes since the previous Nightly
+- <linked PR title or direct commit subject>
+
+Extract the complete archive and use the included Frostguard launcher.
+Java 21 or newer is required.
 ```
 
 The URL is deliberately version-independent. Do not post a new Discord message
-for every daily build. Build failures belong in a maintainer channel, not in
-`#downloads`.
+for every daily build. Store the webhook-owned message ID in the repository
+variable `DISCORD_DAILY_MESSAGE_ID`; successful builds edit that message. Show
+at most five linked first-parent changes since the previous Nightly and collapse
+older entries into a count.
+Build failures remain visible in Actions and do not replace the last working
+public download.
 
 ## Migration
 

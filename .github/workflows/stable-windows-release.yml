@@ -151,8 +151,16 @@ jobs:
             echo "::error::Published stable download returned HTTP ${code}."
             exit 1
           fi
+          latest_download_url="https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/${asset}"
+          latest_code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 120 \
+            --fail --retry 12 --retry-delay 5 --retry-all-errors \
+            -r 0-1023 "${latest_download_url}" || true)"
+          if [[ "${latest_code}" != "200" && "${latest_code}" != "206" ]]; then
+            echo "::error::Latest stable download returned HTTP ${latest_code}."
+            exit 1
+          fi
           echo "release_url=${release_url}" >> "${GITHUB_OUTPUT}"
-          echo "download_url=${download_url}" >> "${GITHUB_OUTPUT}"
+          echo "download_url=${latest_download_url}" >> "${GITHUB_OUTPUT}"
 
       - name: Announce the stable release to everyone
         env:
