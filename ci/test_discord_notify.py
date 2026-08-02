@@ -14,10 +14,12 @@ Run with:  python3 ci/test_discord_notify.py
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import unittest
 import urllib.error
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -154,6 +156,76 @@ class PayloadTest(unittest.TestCase):
 
 class WebhookHandlingTest(unittest.TestCase):
 
+    def test_existing_daily_message_uses_patch(self):
+        env_var = "FG_TEST_DAILY_WEBHOOK"
+        os.environ[env_var] = WEBHOOK
+        try:
+            with mock.patch.object(discord_notify, "post") as sender:
+                code = discord_notify.main(
+                    BASE_ARGS + ["--webhook-env", env_var, "--message-id",
+                                 "1490710978805895298"]
+                )
+        finally:
+            del os.environ[env_var]
+        self.assertEqual(0, code)
+        self.assertEqual(
+            f"{WEBHOOK}/messages/1490710978805895298",
+            sender.call_args.args[0],
+        )
+        self.assertEqual("PATCH", sender.call_args.kwargs["method"])
+
+    def test_new_daily_message_writes_its_id(self):
+        env_var = "FG_TEST_DAILY_WEBHOOK"
+        os.environ[env_var] = WEBHOOK
+        with tempfile.NamedTemporaryFile(mode="r+", delete=False) as output:
+            output_path = output.name
+        try:
+            with mock.patch.object(
+                discord_notify,
+                "post",
+                return_value=b'{"id":"1533475915571527701"}',
+            ) as sender:
+                code = discord_notify.main(
+                    BASE_ARGS + ["--webhook-env", env_var,
+                                 "--message-id-output", output_path]
+                )
+            with open(output_path, encoding="utf-8") as output:
+                written = output.read()
+        finally:
+            del os.environ[env_var]
+            os.unlink(output_path)
+        self.assertEqual(0, code)
+        self.assertEqual("message_id=1533475915571527701\n", written)
+        self.assertEqual(f"{WEBHOOK}?wait=true", sender.call_args.args[0])
+        self.assertEqual("POST", sender.call_args.kwargs["method"])
+
+    def test_rejects_missing_id_in_create_response(self):
+        env_var = "FG_TEST_DAILY_WEBHOOK"
+        os.environ[env_var] = WEBHOOK
+        with tempfile.NamedTemporaryFile(delete=False) as output:
+            output_path = output.name
+        try:
+            with mock.patch.object(discord_notify, "post", return_value=b'{}'):
+                code = discord_notify.main(
+                    BASE_ARGS + ["--webhook-env", env_var,
+                                 "--message-id-output", output_path]
+                )
+        finally:
+            del os.environ[env_var]
+            os.unlink(output_path)
+        self.assertEqual(1, code)
+
+    def test_rejects_non_numeric_daily_message_id(self):
+        env_var = "FG_TEST_DAILY_WEBHOOK"
+        os.environ[env_var] = WEBHOOK
+        try:
+            code = discord_notify.main(
+                BASE_ARGS + ["--webhook-env", env_var, "--message-id", "bad"]
+            )
+        finally:
+            del os.environ[env_var]
+        self.assertEqual(1, code)
+
     def test_missing_secret_warns_but_does_not_fail_the_build(self):
         # A build that produced a good artifact must not be marked failed just
         # because the channel notification could not be addressed.
@@ -161,7 +233,6 @@ class WebhookHandlingTest(unittest.TestCase):
         self.assertEqual(0, code)
 
     def test_rejects_a_secret_that_is_not_a_discord_webhook(self):
-        import os
         os.environ["FG_TEST_WEBHOOK"] = "https://example.com/not-a-webhook"
         try:
             code = discord_notify.main(
