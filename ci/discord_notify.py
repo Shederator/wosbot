@@ -166,8 +166,8 @@ def build_payload(args: argparse.Namespace) -> dict:
             # support question.
             description_parts.append(
                 "Verified: bundle structure, manifest classpath and launch "
-                "smoke test. Unzip anywhere, then run "
-                "`java -jar frostguard-*.jar` (Java 21+ required)."
+                "smoke test. Extract the complete ZIP, then double-click "
+                "`Start Frostguard.bat` (Java 21+ required)."
             )
         elif args.run_url:
             description_parts.append(

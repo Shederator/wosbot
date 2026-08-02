@@ -12,6 +12,7 @@ on:
       - "custom_tasks/**"
       - "ci/**"
       - "fg-watcher.bat"
+      - "Start Frostguard.bat"
       - ".gitattributes"
       - ".github/workflows/daily-windows-bundle.yml"
   schedule:
@@ -227,7 +228,8 @@ jobs:
             "Built from \`${GITHUB_SHA}\` on $(date -u '+%Y-%m-%d %H:%M UTC')." \
             "Verified: bundle structure, manifest classpath and launch smoke test." \
             "" \
-            "**Install:** unzip anywhere, then run \`java -jar frostguard-*.jar\`" \
+            "**Install:** extract the complete ZIP, then double-click" \
+            "\`Start Frostguard.bat\`" \
             "(Java 21+ required)." \
             "" \
             "This tag is replaced by every nightly build; it is not a stable release.")"

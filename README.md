@@ -203,25 +203,19 @@
 
 ## 🛠️ Installation & Setup
 
-> [!NOTE]
-> Follow these steps to compile and run the bot from source code.
-
-<br/>
-
 ### ⚡ Prefer a ready-made build?
 
-A Windows desktop bundle is built automatically every night and after every pull
-request, so you can test the latest code without installing Java or Maven.
+A verified Windows desktop bundle is built automatically every night. It does
+not require Maven or a Git checkout, but Java 21 or newer must be installed.
 
-1. Open the **[Actions tab](../../actions/workflows/daily-windows-bundle.yml)**
-2. Click the most recent green **Daily Windows Bundle** run
-3. Download the **`frostguard-windows-desktop-bundle-<version>`** artifact
-4. Extract it anywhere and run `frostguard-<version>.jar`
+1. **[Download the latest daily Windows bundle](https://github.com/Shederator/wosbot/releases/download/nightly/frostguard-windows-desktop-bundle.zip)**
+2. Extract the complete ZIP into an empty folder.
+3. Double-click **`Start Frostguard.bat`**.
 
 > [!IMPORTANT]
-> GitHub requires you to be **signed in** to download workflow artifacts, and
-> they are retained for **14 days**. Every bundle is verified in CI (structure,
-> classpath, and a real launch smoke test) before it is published.
+> Daily builds contain the latest development changes and may be less stable.
+> The public download needs no GitHub sign-in. Every bundle is checked for its
+> structure, classpath and basic startup behavior before publication.
 
 <br/>
 
@@ -263,15 +257,16 @@ request, so you can test the latest code without installing Java or Maven.
 
 ```sh
 # Clone the repository
-git clone https://github.com/Shederator/frostguard.git
-cd frostguard
+git clone https://github.com/Shederator/wosbot.git
+cd wosbot
 
 # Build the project
 mvn clean install package
 ```
 
 > [!TIP]
-> Once completed, the compiled `.jar` file will be in the `fg-app/target` directory (e.g., `frostguard-1.7.1.jar`).
+> The build produces `fg-app/target/frostguard-<version>.jar` and a complete
+> `fg-app/target/frostguard-<version>-desktop-bundle.zip`.
 
 <br/>
 
@@ -313,8 +308,8 @@ ci/smoke_test_bundle.sh fg-app/target/frostguard-*-desktop-bundle.zip
 # Navigate to the target directory
 cd fg-app/target
 
-# Run the compiled jar
-java -jar frostguard-1.7.1.jar
+# Run the compiled JAR; replace <version> with the version from pom.xml
+java -jar frostguard-<version>.jar
 ```
 
 > [!IMPORTANT]

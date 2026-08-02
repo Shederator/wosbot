@@ -84,11 +84,21 @@ On Windows, the helper script performs the same build with one retry for transie
 fg-build.bat
 ```
 
-Build outputs are written under `fg-app/target`, including `frostguard-<version>.jar` and the desktop bundle ZIP.
+Build outputs are written under `fg-app/target`, including
+`frostguard-<version>.jar` and the desktop bundle ZIP. End users should extract
+the ZIP and launch `Start Frostguard.bat`; the `target` path is only for source
+builds.
 
 ## Run
 
-From the repository root:
+For a downloaded desktop bundle, extract the complete ZIP into an empty folder
+and double-click:
+
+```text
+Start Frostguard.bat
+```
+
+For a source build, run from the repository root:
 
 ```sh
 java -jar fg-app/target/frostguard-<version>.jar

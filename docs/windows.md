@@ -56,7 +56,11 @@ The application currently packages Windows ADB and Tesseract assets from `tools/
 
 ## Starting Frostguard
 
-From the repository root:
+After downloading a desktop bundle, extract the complete ZIP into an empty
+folder and double-click `Start Frostguard.bat`. The launcher locates the
+versioned application JAR and reports a clear error if Java 21 is missing.
+
+For a source build, run from the repository root:
 
 ```powershell
 java -jar fg-app\target\frostguard-<version>.jar
