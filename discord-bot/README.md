@@ -108,13 +108,18 @@ npx wrangler secret put GITHUB_TOKEN         # from step 2
 Wrangler prints the worker URL, e.g.
 `https://frostguard-build-pr.<your-subdomain>.workers.dev`.
 
+For repeatable deployments, add `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID` as GitHub repository secrets, then run **Deploy Discord
+Build PR Worker** from the Actions tab. Existing Worker secrets remain stored
+at Cloudflare and are not committed or printed by the workflow.
+
 ### 4. Point Discord at the worker
 
 Developer Portal → your application → **General Information** →
 **Interactions Endpoint URL** → paste the worker URL → Save. Discord sends a
 signed PING; if the save succeeds, signature verification works.
 
-### 5. Register the slash command
+### 5. Synchronise the slash command
 
 ```bash
 cd discord-bot
@@ -122,8 +127,14 @@ DISCORD_BOT_TOKEN=... DISCORD_APPLICATION_ID=... \
 DISCORD_GUILD_ID=<your server id> node register-command.mjs
 ```
 
-With `DISCORD_GUILD_ID` the command appears instantly; without it Discord
-takes up to an hour to propagate it globally.
+The script requires a guild ID, upserts that guild's `/build-pr`, and removes
+any global `/build-pr` registered for the same application. This intentionally
+leaves one command in the Frostguard server instead of a duplicate global and
+guild entry.
+
+Alternatively, store the bot token as the GitHub repository secret
+`DISCORD_BOT_TOKEN` and run **Sync Discord Build PR Command** from the Actions
+tab. The secret value is never printed.
 
 ### 6. Configure result routing
 
@@ -142,6 +153,23 @@ Discord context again before it uses the bot token:
 3. Watch the run under Actions → *PR Test Build*.
 4. The result arrives as a reply to the original status message and mentions
    only the requester.
+
+## Maintainer handoff
+
+The committed configuration targets application `1532693190879215767`, server
+`1475434539495981137`, and `#request-a-build`
+(`1533460326111117322`). To make repository changes live, the application owner
+only needs to:
+
+1. Add `DISCORD_BOT_TOKEN`, `CLOUDFLARE_API_TOKEN`, and
+   `CLOUDFLARE_ACCOUNT_ID` as GitHub repository secrets.
+2. Confirm the existing Cloudflare Worker still has `DISCORD_PUBLIC_KEY` and
+   its fine-grained `GITHUB_TOKEN` Worker secrets.
+3. Install the Frostguard bot user in the server if final Actions results should
+   be posted to Discord.
+4. Run **Deploy Discord Build PR Worker**.
+5. Run **Sync Discord Build PR Command**.
+6. Test `/build-pr` in `#request-a-build` with a non-admin account.
 
 ## Configuration reference
 

@@ -20,6 +20,6 @@ GITHUB_DEFAULT_BRANCH = "main"
 DISCORD_APPLICATION_ID = "1532693190879215767"
 # Comma-separated Discord channel IDs where /build-pr is allowed.
 # Empty = every channel the command is visible in.
-ALLOWED_CHANNEL_IDS = "1490710978805895298"
+ALLOWED_CHANNEL_IDS = "1533460326111117322"
 # Minutes to wait between test builds (flood control).
 COOLDOWN_MINUTES = "10"
