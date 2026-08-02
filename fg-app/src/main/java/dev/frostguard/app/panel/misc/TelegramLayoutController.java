@@ -222,9 +222,7 @@ public class TelegramLayoutController {
      * Attempts to locate the running bot JAR automatically.
      * Priority:
      *   1. The running JAR itself (getCodeSource) — works in production.
-     *   2. fg-app/target/frostguard-*.jar relative to the working directory works
-     *      when launched from the project root (IDE / quick_build.bat).
-     *   3. Any frostguard-*.jar in the current working directory.
+     *   2. The application directory resolved from the code source.
      */
     private static String autoDetectBotJar() {
         // 1. Detect own JAR path (works when running as a packaged JAR)
@@ -237,13 +235,9 @@ public class TelegramLayoutController {
             }
         } catch (Exception ignored) {}
 
-        // 2. Relative path from working directory (project layout: fg-app/target/)
-        File targetDir = new File(System.getProperty("user.dir"), "fg-app" + File.separator + "target");
-        String found = findFrostguardJar(targetDir);
-        if (found != null) return found;
-
-        // 3. Current working directory itself
-        found = findFrostguardJar(new File(System.getProperty("user.dir")));
+        File appDirectory = dev.frostguard.api.runtime.FrostguardPaths.resolve(TelegramLayoutController.class)
+                .codeSource().toFile().getParentFile();
+        String found = findFrostguardJar(appDirectory);
         if (found != null) return found;
 
         return "";
@@ -372,8 +366,9 @@ public class TelegramLayoutController {
             }
         } catch (Exception ignored) {}
 
-        // 3. Walk up from user.dir (works when launched from IDE / project root)
-        File dir = new File(System.getProperty("user.dir"));
+        // 3. Walk up from the resolved application home.
+        File dir = dev.frostguard.api.runtime.FrostguardPaths.resolve(TelegramLayoutController.class)
+                .applicationHome().toFile();
         for (int i = 0; i < 5 && dir != null; i++) {
             File bat = new File(dir, "fg-watcher.bat");
             if (bat.exists()) return bat;

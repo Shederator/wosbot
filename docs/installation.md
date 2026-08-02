@@ -96,7 +96,7 @@ git lfs pull
 Run the full build from the repository root:
 
 ```sh
-mvn clean install package
+mvn clean package
 ```
 
 On Windows, the helper script performs the same build with one retry for transient file-lock issues:
@@ -105,17 +105,24 @@ On Windows, the helper script performs the same build with one retry for transie
 fg-build.bat
 ```
 
-Build outputs are written under `fg-app/target`, including
-`frostguard-<version>.jar` and the desktop bundle ZIP. End users should extract
-the ZIP and launch `Start Frostguard.bat`; the `target` path is only for source
-builds.
+The executable application remains under `fg-app/target`. The verified portable
+tree and Windows archive are written under `fg-distribution/target`, and the
+same managed program files are refreshed under `.frostguard`. Builds preserve
+`.frostguard/data`.
 
 ### Run a source build
 
-Run the generated application JAR from the repository root:
+For a downloaded Windows bundle, extract the complete ZIP into an empty folder
+and double-click:
+
+```text
+Frostguard.bat
+```
+
+For a source build, run the generated local installation from the repository root:
 
 ```sh
-java -jar fg-app/target/frostguard-<version>.jar
+java -jar .frostguard/app/frostguard-<version>.jar
 ```
 
 Replace `<version>` with the generated version, for example `2.1.0`.
@@ -123,6 +130,21 @@ Replace `<version>` with the generated version, for example `2.1.0`.
 ## Migrating an older installation
 
 Do not overwrite a new installation with an entire old Frostguard folder.
-Migration of legacy configuration and database files is not yet automated; keep
-a backup and copy individual `database.*` files only when intentionally carrying
-existing settings forward.
+Before starting automation, open the Configuration screen and set the emulator executable path.
+
+Common MuMu path:
+
+```text
+C:\Program Files\Netease\MuMuPlayer\nx_main\MuMuManager.exe
+```
+
+Runtime data is under `.frostguard/data` for a source checkout and `data` beside
+an extracted portable installation. Use the entire directory as the backup and
+restore unit. An explicit location can be selected with
+`-Dfrostguard.data=C:\absolute\path\to\data`.
+
+Before moving legacy `database.db`, `database.db-wal`, `database.db-shm`, logs,
+or `custom_tasks`, stop Frostguard and back up all files together. Do not copy a
+database without its WAL/SHM companions. If multiple legacy databases exist,
+keep them separate and select the intended source manually; Frostguard must not
+guess or merge them.

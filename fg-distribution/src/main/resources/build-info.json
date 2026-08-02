@@ -1,0 +1,7 @@
+{
+  "version": "${project.version}",
+  "channel": "${frostguard.channel}",
+  "platform": "${frostguard.platform}",
+  "commit": "${frostguard.commit}",
+  "buildTime": "${maven.build.timestamp}"
+}

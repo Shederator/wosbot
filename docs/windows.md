@@ -45,7 +45,9 @@ Or use the Windows helper:
 fg-build.bat
 ```
 
-The helper stops leftover Java and ADB processes, retries once after transient resource-copy failures, verifies the packaged application JAR, and opens the generated bundle location.
+The helper retries known transient packaging failures, verifies the packaged
+application JAR, and opens the generated bundle location. It must not stop
+unrelated Java or ADB processes.
 
 ## Runtime Requirements
 
@@ -63,19 +65,19 @@ The application currently packages Windows ADB and Tesseract assets from `tools/
 ## Starting Frostguard
 
 After downloading a desktop bundle, extract the complete ZIP into an empty
-folder and double-click `Start Frostguard.bat`. The launcher locates the
+folder and double-click `Frostguard.bat`. The launcher locates the
 versioned application JAR and reports a clear error if Java 21 is missing.
 
 For a source build, run from the repository root:
 
 ```powershell
-java -jar fg-app\target\frostguard-<version>.jar
+java -jar .frostguard\app\frostguard-<version>.jar
 ```
 
 For automatic startup through scripts or Task Scheduler:
 
 ```powershell
-java -jar fg-app\target\frostguard-<version>.jar --autostart
+java -jar .frostguard\app\frostguard-<version>.jar --autostart
 ```
 
 ## Scheduled Automation

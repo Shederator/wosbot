@@ -20,8 +20,8 @@ class TaskBuilderServiceTest {
 
     @Test
     void savesBuilderJsonAndGeneratedJavaBesideIt() throws Exception {
-        String originalUserDir = System.getProperty("user.dir");
-        System.setProperty("user.dir", tempDir.toString());
+        String originalData = System.getProperty("frostguard.data");
+        System.setProperty("frostguard.data", tempDir.toString());
         try {
             TaskBuilderService service = new TaskBuilderService();
             service.startSession("Expert Idle Exploration", "0");
@@ -31,7 +31,7 @@ class TaskBuilderServiceTest {
             step.setParam("durationMs", "200");
             service.addNode(step);
 
-            Path builderFile = tempDir.resolve("custom_tasks").resolve("expert_idle_exploration.json");
+            Path builderFile = tempDir.resolve("custom-tasks").resolve("expert_idle_exploration.json");
             TaskBuilderService.CustomTaskSaveResult saved =
                     service.saveCurrentTaskToCustomTasks("Expert Idle Exploration", builderFile);
 
@@ -47,7 +47,8 @@ class TaskBuilderServiceTest {
             assertEquals("Pause before bag", loaded.getNodes().get(0).getNodeName());
             assertEquals("1", service.getActiveEmulatorNumber());
         } finally {
-            System.setProperty("user.dir", originalUserDir);
+            if (originalData == null) System.clearProperty("frostguard.data");
+            else System.setProperty("frostguard.data", originalData);
         }
     }
 }

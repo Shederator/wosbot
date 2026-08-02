@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>dev.frostguard</groupId>
+        <artifactId>frostguard</artifactId>
+        <version>${revision}</version>
+    </parent>
+    <artifactId>fg-distribution</artifactId>
+    <packaging>pom</packaging>
+    <name>Frostguard Portable Distribution</name>
+
+    <properties>
+        <frostguard.platform>win</frostguard.platform>
+        <frostguard.channel>development</frostguard.channel>
+        <frostguard.commit>unknown</frostguard.commit>
+        <staging.root>${project.build.directory}/staging/Frostguard</staging.root>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>dev.frostguard</groupId>
+            <artifactId>fg-app</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>dev.frostguard</groupId>
+            <artifactId>fg-watcher</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>stage-application-artifacts</id>
+                        <phase>prepare-package</phase>
+                        <goals><goal>copy</goal></goals>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>dev.frostguard</groupId><artifactId>fg-app</artifactId><version>${project.version}</version>
+                                    <outputDirectory>${staging.root}/app</outputDirectory><destFileName>frostguard-${project.version}.jar</destFileName>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>dev.frostguard</groupId><artifactId>fg-watcher</artifactId><version>${project.version}</version>
+                                    <outputDirectory>${staging.root}/app</outputDirectory><destFileName>fg-watcher-${project.version}.jar</destFileName>
+                                </artifactItem>
+                            </artifactItems>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>stage-runtime-dependencies</id>
+                        <phase>prepare-package</phase>
+                        <goals><goal>copy-dependencies</goal></goals>
+                        <configuration>
+                            <outputDirectory>${staging.root}/app/lib</outputDirectory>
+                            <includeScope>runtime</includeScope>
+                            <excludeArtifactIds>fg-app,fg-watcher</excludeArtifactIds>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>stage-portable-layout</id>
+                        <phase>prepare-package</phase>
+                        <goals><goal>copy-resources</goal></goals>
+                        <configuration>
+                            <outputDirectory>${staging.root}</outputDirectory>
+                            <resources>
+                                <resource><directory>${project.basedir}/src/main/resources</directory><filtering>true</filtering></resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>stage-runtime-assets</id>
+                        <phase>prepare-package</phase>
+                        <goals><goal>copy-resources</goal></goals>
+                        <configuration>
+                            <outputDirectory>${staging.root}/app/lib</outputDirectory>
+                            <resources>
+                                <resource><directory>${maven.multiModuleProjectDirectory}/tools</directory><filtering>false</filtering></resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>stage-templates</id>
+                        <phase>prepare-package</phase>
+                        <goals><goal>copy-resources</goal></goals>
+                        <configuration>
+                            <outputDirectory>${staging.root}/resources/templates</outputDirectory>
+                            <resources><resource><directory>${maven.multiModuleProjectDirectory}/fg-vision/src/main/resources/templates</directory><filtering>false</filtering></resource></resources>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>stage-default-custom-tasks</id>
+                        <phase>prepare-package</phase>
+                        <goals><goal>copy-resources</goal></goals>
+                        <configuration>
+                            <outputDirectory>${staging.root}/resources/defaults/custom-tasks</outputDirectory>
+                            <resources><resource><directory>${maven.multiModuleProjectDirectory}/custom_tasks</directory><filtering>false</filtering></resource></resources>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>stage-documentation</id>
+                        <phase>prepare-package</phase>
+                        <goals><goal>copy-resources</goal></goals>
+                        <configuration>
+                            <outputDirectory>${staging.root}/docs</outputDirectory>
+                            <resources>
+                                <resource><directory>${maven.multiModuleProjectDirectory}</directory><filtering>false</filtering><includes><include>README.md</include><include>PRIVACY.md</include></includes></resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>archive-portable-layout</id>
+                        <phase>package</phase>
+                        <goals><goal>single</goal></goals>
+                        <configuration>
+                            <finalName>frostguard-${project.version}-${frostguard.platform}</finalName>
+                            <appendAssemblyId>false</appendAssemblyId>
+                            <descriptors><descriptor>src/main/assembly/distribution.xml</descriptor></descriptors>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>clear-staging</id>
+                        <phase>initialize</phase>
+                        <goals><goal>run</goal></goals>
+                        <configuration><target><delete dir="${staging.root}" quiet="true"/></target></configuration>
+                    </execution>
+                    <execution>
+                        <id>verify-staging</id>
+                        <phase>prepare-package</phase>
+                        <goals><goal>run</goal></goals>
+                        <configuration>
+                            <target>
+                                <available file="${staging.root}/Frostguard.bat" property="launcher.present"/>
+                                <available file="${staging.root}/build-info.json" property="metadata.present"/>
+                                <available file="${staging.root}/app/frostguard-${project.version}.jar" property="app.present"/>
+                                <available file="${staging.root}/app/fg-watcher-${project.version}.jar" property="watcher.present"/>
+                                <available file="${staging.root}/data/README.txt" property="data.placeholder.present"/>
+                                <fail unless="launcher.present" message="Staging has no platform launcher"/>
+                                <fail unless="metadata.present" message="Staging has no build-info.json"/>
+                                <fail unless="app.present" message="Staging has no Frostguard application JAR"/>
+                                <fail unless="watcher.present" message="Staging has no watcher JAR"/>
+                                <fail unless="data.placeholder.present" message="Staging has no safe data placeholder"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>refresh-local-installation</id>
+                        <phase>package</phase>
+                        <goals><goal>run</goal></goals>
+                        <configuration>
+                            <target>
+                                <mkdir dir="${maven.multiModuleProjectDirectory}/.frostguard/data"/>
+                                <delete dir="${maven.multiModuleProjectDirectory}/.frostguard.next" quiet="true"/>
+                                <copy todir="${maven.multiModuleProjectDirectory}/.frostguard.next">
+                                    <fileset dir="${staging.root}"><exclude name="data/**"/></fileset>
+                                </copy>
+                                <delete dir="${maven.multiModuleProjectDirectory}/.frostguard/app" quiet="true"/>
+                                <delete dir="${maven.multiModuleProjectDirectory}/.frostguard/resources" quiet="true"/>
+                                <delete dir="${maven.multiModuleProjectDirectory}/.frostguard/docs" quiet="true"/>
+                                <delete file="${maven.multiModuleProjectDirectory}/.frostguard/Frostguard.bat" quiet="true"/>
+                                <delete file="${maven.multiModuleProjectDirectory}/.frostguard/build-info.json" quiet="true"/>
+                                <move todir="${maven.multiModuleProjectDirectory}/.frostguard"><fileset dir="${maven.multiModuleProjectDirectory}/.frostguard.next"/></move>
+                                <delete dir="${maven.multiModuleProjectDirectory}/.frostguard.next" quiet="true"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

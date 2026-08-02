@@ -120,27 +120,6 @@
 		<finalName>${project.build.outputName}</finalName>
 
 		<plugins>
-			<!-- Distribution archive -->
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-assembly-plugin</artifactId>
-				<executions>
-					<execution>
-						<id>build-desktop-zip</id>
-						<phase>package</phase>
-						<goals>
-							<goal>single</goal>
-						</goals>
-						<configuration>
-							<finalName>${project.build.outputName}</finalName>
-							<descriptors>
-								<descriptor>src/main/assembly/zip.xml</descriptor>
-							</descriptors>
-						</configuration>
-					</execution>
-				</executions>
-			</plugin>
-
 			<!-- Executable JAR manifest -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
@@ -166,75 +145,22 @@
 					</archive>
 				</configuration>
 			</plugin>
-
-			<!-- Collect runtime JARs.
-			     Bound to prepare-package rather than package so target/lib is fully
-			     populated before maven-assembly-plugin builds the distribution ZIP.
-			     Both plugins used to run in the package phase, where Maven honours
-			     POM declaration order: the assembly ran first and produced a ZIP with
-			     an empty lib/ unless an earlier build had already staged it. -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-dependency-plugin</artifactId>
 				<executions>
 					<execution>
-						<id>stage-runtime-dependencies</id>
+						<id>stage-direct-jar-runtime</id>
 						<phase>prepare-package</phase>
-						<goals>
-							<goal>copy-dependencies</goal>
-						</goals>
+						<goals><goal>copy-dependencies</goal></goals>
 						<configuration>
 							<outputDirectory>${project.build.directory}/lib</outputDirectory>
 							<includeScope>runtime</includeScope>
-							<overWriteReleases>false</overWriteReleases>
-							<overWriteSnapshots>false</overWriteSnapshots>
-							<overWriteIfNewer>true</overWriteIfNewer>
 						</configuration>
 					</execution>
 				</executions>
 			</plugin>
 
-			<!-- Bundle external tool runtimes -->
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-resources-plugin</artifactId>
-				<executions>
-					<!-- ADB binaries -->
-					<execution>
-						<id>stage-adb-runtime</id>
-						<phase>process-resources</phase>
-						<goals>
-							<goal>copy-resources</goal>
-						</goals>
-						<configuration>
-							<outputDirectory>${project.build.directory}/lib/adb</outputDirectory>
-							<resources>
-								<resource>
-									<directory>${project.parent.basedir}/tools/adb</directory>
-									<filtering>false</filtering>
-								</resource>
-							</resources>
-						</configuration>
-					</execution>
-					<!-- Tesseract OCR binaries -->
-					<execution>
-						<id>stage-tesseract-runtime</id>
-						<phase>process-resources</phase>
-						<goals>
-							<goal>copy-resources</goal>
-						</goals>
-						<configuration>
-							<outputDirectory>${project.build.directory}/lib/tesseract</outputDirectory>
-							<resources>
-								<resource>
-									<directory>${project.parent.basedir}/tools/tesseract</directory>
-									<filtering>false</filtering>
-								</resource>
-							</resources>
-						</configuration>
-					</execution>
-				</executions>
-			</plugin>
 		</plugins>
 	</build>
 </project>

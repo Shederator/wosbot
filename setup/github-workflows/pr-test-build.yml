@@ -238,17 +238,20 @@ jobs:
       # Tests are intentionally NOT skipped: a combined build that fails its
       # own suite is exactly what the requester needs to know.
       - name: Build Windows desktop bundle from the merged tree
-        run: mvn ${MAVEN_ARGS} clean install -Djavafx.platform=win
+        run: >-
+          mvn ${MAVEN_ARGS} clean install -Djavafx.platform=win
+          -Dfrostguard.platform=win -Dfrostguard.channel=pr-test
+          -Dfrostguard.commit=${GITHUB_SHA}
 
       - name: Locate the desktop bundle
         id: bundle
         shell: bash
         run: |
           set -euo pipefail
-          zip_path="$(find fg-app/target -maxdepth 1 -type f \
-            -name '*-desktop-bundle.zip' | sort | tail -n 1)"
+          zip_path="$(find fg-distribution/target -maxdepth 1 -type f \
+            -name '*-win.zip' | sort | tail -n 1)"
           if [[ -z "${zip_path}" ]]; then
-            echo "::error::No desktop bundle ZIP found under fg-app/target."
+            echo "::error::No Windows distribution ZIP found under fg-distribution/target."
             exit 1
           fi
           echo "path=${zip_path}" >> "${GITHUB_OUTPUT}"

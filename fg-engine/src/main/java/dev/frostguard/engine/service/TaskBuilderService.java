@@ -2,6 +2,7 @@ package dev.frostguard.engine.service;
 
 import dev.frostguard.vision.ocr.TesseractOcrProvider;
 import dev.frostguard.api.configs.FlowStepKind;
+import dev.frostguard.api.runtime.FrostguardPaths;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.api.domain.ImageSearchResultData;
@@ -20,7 +21,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 
 /**
  * Service that manages a Task Builder recording session.
@@ -48,7 +48,7 @@ public class TaskBuilderService {
 
     public TaskBuilderService() {
         this.emuManager = EmulatorController.getInstance();
-        this.customTasksDir = Paths.get(System.getProperty("user.dir"), "custom_tasks");
+        this.customTasksDir = FrostguardPaths.resolve(TaskBuilderService.class).customTasks();
         this.mapper = new ObjectMapper()
                 .enable(SerializationFeature.INDENT_OUTPUT)
                 .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);

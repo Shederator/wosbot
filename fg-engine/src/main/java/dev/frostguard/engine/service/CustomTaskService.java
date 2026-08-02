@@ -155,7 +155,7 @@ public class CustomTaskService {
     // ========================================================================
 
     private CustomTaskService() {
-        compiledDir = Paths.get(System.getProperty("user.dir"), "custom_tasks");
+        compiledDir = dev.frostguard.api.runtime.FrostguardPaths.resolve(CustomTaskService.class).customTasks();
         jsonFile = compiledDir.resolve("custom_tasks.json");
         try {
             Files.createDirectories(compiledDir);
@@ -272,8 +272,9 @@ public class CustomTaskService {
 
     private String buildClasspath() {
         StringBuilder cp = new StringBuilder(System.getProperty("java.class.path"));
-        addJarsFromDir(cp, Paths.get(System.getProperty("user.dir"), "lib"));
-        addJarsFromDir(cp, Paths.get(System.getProperty("user.dir")));
+        Path appHome = dev.frostguard.api.runtime.FrostguardPaths.resolve(CustomTaskService.class).applicationHome();
+        addJarsFromDir(cp, appHome.resolve("app/lib"));
+        addJarsFromDir(cp, appHome.resolve("app"));
         cp.append(File.pathSeparator).append(compiledDir.toAbsolutePath());
         return cp.toString();
     }

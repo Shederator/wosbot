@@ -36,8 +36,13 @@ trap 'rm -rf "${workdir}"' EXIT
 unzip -qn "${bundle_zip}" -d "${workdir}"
 cd "${workdir}"
 
-app_jar="$(find . -maxdepth 1 -name 'frostguard-*.jar' | head -n 1)"
-watcher_jar="$(find . -maxdepth 1 -name 'fg-watcher-*.jar' | head -n 1)"
+if [[ -d Frostguard ]]; then
+  cd Frostguard
+fi
+
+app_jar="$(find app . -maxdepth 1 -name 'frostguard-*.jar' 2>/dev/null | head -n 1)"
+watcher_jar="$(find app . -maxdepth 1 -name 'fg-watcher-*.jar' 2>/dev/null | head -n 1)"
+app_lib="$(dirname "${app_jar}")/lib"
 
 if [[ -z "${app_jar}" || -z "${watcher_jar}" ]]; then
   echo "::error::Bundle is missing the app or watcher JAR."
@@ -85,8 +90,8 @@ public class Probe {
 PROBE
 
 echo "Resolving launcher entry points against the bundle classpath..."
-javac -nowarn -cp "${app_jar}:lib/*" -d . Probe.java
-java -cp "${app_jar}:lib/*:." Probe
+javac -nowarn -cp "${app_jar}:${app_lib}/*" -d . Probe.java
+java -cp "${app_jar}:${app_lib}/*:." Probe
 
 # ── 2. The manifest Class-Path must be usable without an explicit -cp ──
 # `java -jar` honours only the manifest, so this proves the Class-Path really

@@ -7,7 +7,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -17,6 +16,7 @@ import javax.imageio.ImageIO;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.TesseractSettingsData;
+import dev.frostguard.api.runtime.FrostguardPaths;
 import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
 import org.slf4j.Logger;
@@ -224,11 +224,11 @@ public final class TesseractOcrProvider {
 
     private static List<Path> candidatePaths() {
         List<Path> paths = new ArrayList<>();
-        Path cwd = Paths.get(System.getProperty("user.dir")).toAbsolutePath().normalize();
-        for (Path ancestor = cwd; ancestor != null; ancestor = ancestor.getParent()) {
-            paths.add(ancestor.resolve("lib").resolve("tesseract"));
-            paths.add(ancestor.resolve("tools").resolve("tesseract"));
-        }
+        FrostguardPaths runtime = FrostguardPaths.resolve(TesseractOcrProvider.class);
+        paths.add(runtime.applicationHome().resolve("app/lib/tesseract"));
+        paths.add(runtime.applicationHome().resolve("lib/tesseract"));
+        Path repository = runtime.applicationHome().getParent();
+        if (repository != null) paths.add(repository.resolve("tools/tesseract"));
         return paths;
     }
 
@@ -371,7 +371,7 @@ public final class TesseractOcrProvider {
             TesseractSettingsData cfg, String text) {
         long t0 = System.currentTimeMillis();
         try {
-            Path tempDir = Paths.get(System.getProperty("user.dir")).resolve("temp");
+            Path tempDir = FrostguardPaths.resolve(TesseractOcrProvider.class).temp();
             Files.createDirectories(tempDir);
 
             String summary = formatSettingsSummary(cfg, text);

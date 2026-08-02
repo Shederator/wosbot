@@ -111,7 +111,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          path="$(find "${RUNNER_TEMP}/stable" -type f -name '*-desktop-bundle.zip' | head -n 1)"
+          path="$(find "${RUNNER_TEMP}/stable" -type f -name '*-win.zip' | head -n 1)"
           if [[ -z "${path}" ]]; then
             echo "::error::The selected run has no desktop bundle artifact."
             exit 1

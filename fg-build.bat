@@ -5,15 +5,8 @@ echo      Frostguard Quick Recompile Script
 echo ==========================================
 
 echo.
-echo Stopping any running Java and ADB processes...
-taskkill /F /IM java.exe >nul 2>&1
-taskkill /F /IM javaw.exe >nul 2>&1
-taskkill /F /IM adb.exe >nul 2>&1
-timeout /t 2 >nul
-
-echo.
-echo Building project (clean + install)...
-call mvn clean install package
+echo Building verified portable distribution...
+call mvn clean package -Dfrostguard.platform=win -Djavafx.platform=win
 if errorlevel 1 (
     echo [WARN] First build attempt failed. Applying quick cleanup for transient resource-copy issues...
     if exist "fg-vision\target" rmdir /S /Q "fg-vision\target"
@@ -21,7 +14,7 @@ if errorlevel 1 (
 
     echo.
     echo Retrying build once...
-    call mvn clean install package
+    call mvn clean package -Dfrostguard.platform=win -Djavafx.platform=win
     if errorlevel 1 (
         echo [ERROR] Build failed after retry!
         pause
@@ -71,9 +64,9 @@ echo BUILD SUCCESSFUL!
 echo ==========================================
 echo.
 
-set "OUTPUT_DIR=%CD%\fg-app\target"
+set "OUTPUT_DIR=%CD%\fg-distribution\target"
 set "BUNDLE_ZIP="
-for %%F in ("fg-app\target\*desktop-bundle.zip") do set "BUNDLE_ZIP=%%~fF"
+for %%F in ("fg-distribution\target\*-win.zip") do set "BUNDLE_ZIP=%%~fF"
 
 if defined BUNDLE_ZIP (
     echo Opening desktop bundle ZIP: %BUNDLE_ZIP%

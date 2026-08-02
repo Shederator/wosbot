@@ -33,7 +33,6 @@ MINIMUM_RUNTIME_JARS = 50
 # Exact entries that must be present at these exact paths.
 REQUIRED_FILES = [
     "Start Frostguard.bat",
-    "fg-watcher.bat",
     "lib/adb/adb.exe",
     "lib/adb/AdbWinApi.dll",
     "lib/adb/AdbWinUsbApi.dll",
@@ -148,7 +147,9 @@ def check_runtime_jar_floor(names: set[str]) -> tuple[list[str], int]:
     return [], len(jars)
 
 
-def check_manifest_class_path(bundle: zipfile.ZipFile, names: set[str]) -> tuple[list[str], int]:
+def check_manifest_class_path(
+    bundle: zipfile.ZipFile, names: set[str], archive_names: dict[str, str] | None = None
+) -> tuple[list[str], int]:
     """Every Class-Path entry of the launcher JAR must exist inside the ZIP."""
     launchers = sorted(
         name for name in names if re.match(r"^frostguard-[^/]+\.jar$", name)
@@ -158,7 +159,8 @@ def check_manifest_class_path(bundle: zipfile.ZipFile, names: set[str]) -> tuple
 
     launcher = launchers[-1]
     try:
-        with bundle.open(launcher) as jar_stream, zipfile.ZipFile(jar_stream) as jar:
+        archive_launcher = (archive_names or {}).get(launcher, launcher)
+        with bundle.open(archive_launcher) as jar_stream, zipfile.ZipFile(jar_stream) as jar:
             manifest_text = jar.read("META-INF/MANIFEST.MF").decode("utf-8", "replace")
     except (KeyError, zipfile.BadZipFile) as error:
         return [f"Could not read the manifest of {launcher}: {error}"], 0
@@ -202,7 +204,39 @@ def main(argv: list[str] | None = None) -> int:
         if bundle.testzip() is not None:
             fail(f"Bundle {args.bundle} contains a corrupt entry.")
             return 1
-        names = {name for name in bundle.namelist() if not name.endswith("/")}
+        raw_names = {name for name in bundle.namelist() if not name.endswith("/")}
+        portable = any(name.endswith("/build-info.json") for name in raw_names)
+        if portable:
+            roots = {name.split("/", 1)[0] for name in raw_names if "/" in name}
+            if len(roots) != 1:
+                fail("Portable archive must contain exactly one Frostguard root directory.")
+                return 1
+            prefix = next(iter(roots)) + "/"
+            relative = {name[len(prefix):] for name in raw_names if name.startswith(prefix)}
+            visible_launchers = sorted(
+                name for name in relative if "/" not in name and name.lower().endswith((".bat", ".exe", ".app"))
+            )
+            if visible_launchers != ["Frostguard.bat"]:
+                fail("Windows portable archive must expose exactly Frostguard.bat as its launcher.")
+                return 1
+            names = set()
+            archive_names = {}
+            for name in relative:
+                if name == "Frostguard.bat":
+                    canonical = "Start Frostguard.bat"
+                elif name.startswith("app/"):
+                    canonical = name[len("app/"):]
+                elif name.startswith("resources/templates/"):
+                    canonical = "templates/" + name[len("resources/templates/"):]
+                elif name.startswith("resources/defaults/custom-tasks/"):
+                    canonical = "custom_tasks/" + name[len("resources/defaults/custom-tasks/"):]
+                else:
+                    canonical = name
+                names.add(canonical)
+                archive_names[canonical] = prefix + name
+        else:
+            names = raw_names
+            archive_names = {}
 
         problems: list[str] = []
         problems += check_required_files(names)
@@ -212,7 +246,7 @@ def main(argv: list[str] | None = None) -> int:
         floor_problems, jar_count = check_runtime_jar_floor(names)
         problems += floor_problems
 
-        manifest_problems, class_path_count = check_manifest_class_path(bundle, names)
+        manifest_problems, class_path_count = check_manifest_class_path(bundle, names, archive_names)
         problems += manifest_problems
 
     if problems:

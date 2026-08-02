@@ -78,8 +78,9 @@ public class TelegramWatcherLauncher {
             }
         } catch (Exception ignored) {}
 
-        // Fallback: walk up from current working dir
-        File dir = new File(System.getProperty("user.dir"));
+        // Fallback: resolve from the verified application home, never the caller CWD.
+        File dir = dev.frostguard.api.runtime.FrostguardPaths.resolve(TelegramWatcherLauncher.class)
+                .applicationHome().toFile();
         for (int i = 0; i < 5 && dir != null; i++) {
             File bat = new File(dir, "fg-watcher.bat");
             if (bat.exists()) return bat;

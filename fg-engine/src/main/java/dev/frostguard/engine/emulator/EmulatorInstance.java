@@ -1,6 +1,7 @@
 package dev.frostguard.engine.emulator;
 
 import java.io.*;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantLock;
@@ -8,6 +9,7 @@ import java.util.function.Function;
 
 import dev.frostguard.vision.ocr.TesseractOcrProvider;
 import dev.frostguard.api.configs.GameVersionEnum;
+import dev.frostguard.api.runtime.FrostguardPaths;
 import dev.frostguard.engine.error.ADBConnectionException;
 import dev.frostguard.api.domain.*;
 import com.android.ddmlib.*;
@@ -71,10 +73,13 @@ public abstract class EmulatorInstance {
     }
 
     private String adbPath() {
-        String wd = System.getProperty("user.dir");
-        for (String sub : new String[]{"tools", "fg-app"}) {
-            File f = new File(wd, sub + File.separator + "adb" + File.separator + "adb.exe");
-            if (f.exists()) return f.getAbsolutePath();
+        FrostguardPaths paths = FrostguardPaths.resolve(EmulatorInstance.class);
+        File bundled = paths.applicationHome().resolve("app/lib/adb/adb.exe").toFile();
+        if (bundled.exists()) return bundled.getAbsolutePath();
+        Path repository = paths.applicationHome().getParent();
+        if (repository != null) {
+            File sourceTool = repository.resolve("tools/adb/adb.exe").toFile();
+            if (sourceTool.exists()) return sourceTool.getAbsolutePath();
         }
         return consolePath + File.separator + "adb.exe";
     }

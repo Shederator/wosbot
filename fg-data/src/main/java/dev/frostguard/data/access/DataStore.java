@@ -1,9 +1,12 @@
 package dev.frostguard.data.access;
 
 import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
+
+import dev.frostguard.api.runtime.FrostguardPaths;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,9 +34,15 @@ public final class DataStore implements AutoCloseable {
 
 	private DataStore(Map<String, Object> overrides) {
 		try {
-			this.emf = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, overrides);
+			FrostguardPaths paths = FrostguardPaths.resolve(DataStore.class);
+			paths.createDataDirectories();
+			String url = "jdbc:sqlite:" + paths.dataHome().resolve("frostguard.db")
+					+ "?busy_timeout=1000&journal_mode=WAL";
+			Map<String, Object> properties = new HashMap<>(overrides);
+			properties.putIfAbsent("jakarta.persistence.jdbc.url", url);
+			this.emf = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, properties);
 			DataSeeder.populate(this);
-			LOG.info("Frostguard data store initialized");
+			LOG.info("Frostguard data store initialized at {}", paths.dataHome());
 		} catch (Exception cause) {
 			LOG.error("Data store initialization failed: {}", cause.getMessage(), cause);
 			throw new ExceptionInInitializerError(cause);

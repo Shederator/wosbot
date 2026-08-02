@@ -1,5 +1,7 @@
 # ── Maven build output ──
 target/
+.frostguard/
+.frostguard.next/
 **/target/
 dependency-reduced-pom.xml
 

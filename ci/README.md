@@ -155,11 +155,11 @@ substitution really took effect in both directions.
 - Reproduce the whole pipeline locally on Linux or Windows with:
 
   ```sh
-  mvn clean install -Djavafx.platform=win
+  mvn clean package -Djavafx.platform=win -Dfrostguard.platform=win
   python3 ci/test_verify_bundle.py
   python3 ci/test_discord_notify.py
-  python3 ci/verify_bundle.py fg-app/target/frostguard-*-desktop-bundle.zip
-  ci/smoke_test_bundle.sh fg-app/target/frostguard-*-desktop-bundle.zip
+  python3 ci/verify_bundle.py fg-distribution/target/frostguard-*-win.zip
+  ci/smoke_test_bundle.sh fg-distribution/target/frostguard-*-win.zip
   ```
 
 ## Stable Windows releases

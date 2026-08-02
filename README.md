@@ -250,13 +250,15 @@ git clone https://github.com/Shederator/wosbot.git
 cd wosbot
 git lfs install
 git lfs pull
-mvn clean install package
-java -jar fg-app/target/frostguard-<version>.jar
+mvn clean package
+java -jar .frostguard/app/frostguard-<version>.jar
 ```
 
-The build creates the application JAR and Windows desktop bundle under
-`fg-app/target`. For the complete source setup, Windows helper and verification
-commands, see:
+The build creates the application JAR under `fg-app/target`, the verified
+Windows archive under `fg-distribution/target`, and a runnable local installation
+under `.frostguard`. Persistent files remain under `.frostguard/data`.
+
+For the complete source setup, Windows helper and verification commands, see:
 
 - **[Installation and source build](docs/installation.md)**
 - **[Windows-specific setup](docs/windows.md)**

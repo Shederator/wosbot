@@ -145,9 +145,9 @@ class VerifyBundleTest(unittest.TestCase):
         files = [f for f in OTHER_FILES if not f.endswith(".traineddata")]
         self.assertEqual(1, run(build_bundle(other_files=files)))
 
-    def test_rejects_bundle_without_the_watcher_launcher(self):
+    def test_accepts_bundle_without_a_second_visible_watcher_launcher(self):
         files = [f for f in OTHER_FILES if f != "fg-watcher.bat"]
-        self.assertEqual(1, run(build_bundle(other_files=files)))
+        self.assertEqual(0, run(build_bundle(other_files=files)))
 
     def test_rejects_bundle_without_the_app_launcher(self):
         files = [f for f in OTHER_FILES if f != "Start Frostguard.bat"]

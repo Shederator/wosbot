@@ -1,16 +1,18 @@
 package dev.frostguard.app.bootstrap;
 
-import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import dev.frostguard.api.runtime.FrostguardPaths;
 import dev.frostguard.engine.service.AnalyticsService;
 import dev.frostguard.tasks.TaskRegistrations;
 import dev.frostguard.vision.logging.ProfileContextLogger;
 
 public class Main {
-	private static final Logger logger = LoggerFactory.getLogger(Main.class);
-
 	public static void main(String[] args) {
+		FrostguardPaths paths = FrostguardPaths.resolve(Main.class);
+		paths.createDataDirectories();
+		System.setProperty("frostguard.log.dir", paths.logs().toString());
+		var logger = LoggerFactory.getLogger(Main.class);
 		try {
 			boolean isHeadless = false;
 			for (String arg : args) {

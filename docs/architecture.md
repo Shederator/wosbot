@@ -206,11 +206,15 @@ flowchart TD
     CustomTasks[custom_tasks examples] --> AppBundle
 ```
 
-`fg-app` builds the desktop artifact:
+`fg-app` builds the executable application artifact. `fg-distribution` owns the
+portable layout, launchers, metadata, staging verification, archive, and local
+installation refresh:
 
 - executable jar: `fg-app/target/frostguard-<version>.jar`
-- desktop zip: `fg-app/target/frostguard-<version>-desktop-bundle.zip`
-- runtime dependencies staged under `fg-app/target/lib`
+- Windows zip: `fg-distribution/target/frostguard-<version>-win.zip`
+- clean staging: `fg-distribution/target/staging/Frostguard`
+- local installation: `.frostguard` (with persistent `.frostguard/data`)
+- runtime dependencies staged under `Frostguard/app/lib`
 - ADB/Tesseract files staged from `tools/`
 - custom task examples staged from root `custom_tasks/`
 - template PNGs staged from `fg-vision/src/main/resources/templates`
@@ -226,4 +230,4 @@ flowchart TD
 - Add or rename a template: resource under `fg-vision/src/main/resources/templates`, mapping in `templates.properties`, enum in `TemplatesEnum`.
 - Change persisted config/profile/task state: `fg-data` entities/repositories and engine services.
 - Change UI controls or panels: `fg-app/src/main/java/dev/frostguard/app/panel/*` plus matching FXML/CSS.
-- Change runtime packaging: `fg-app/pom.xml` or `fg-app/src/main/assembly/zip.xml`.
+- Change runtime packaging: `fg-distribution/pom.xml` or its assembly descriptor.

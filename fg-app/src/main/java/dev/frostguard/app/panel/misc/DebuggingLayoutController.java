@@ -398,15 +398,13 @@ public class DebuggingLayoutController {
 
     private void loadTemplates() {
         List<File> possibleTemplateDirs = new ArrayList<>();
-        possibleTemplateDirs.add(new File("fg-vision/src/main/resources/templates"));
-        possibleTemplateDirs.add(new File("../fg-vision/src/main/resources/templates"));
-        possibleTemplateDirs.add(new File("../../fg-vision/src/main/resources/templates"));
-        possibleTemplateDirs.add(new File("templates"));
-
-        File currentDir = new File(System.getProperty("user.dir")).getAbsoluteFile();
-        while (currentDir != null && currentDir.exists()) {
-            possibleTemplateDirs.add(new File(currentDir, "fg-vision/src/main/resources/templates"));
-            currentDir = currentDir.getParentFile();
+        dev.frostguard.api.runtime.FrostguardPaths runtime =
+                dev.frostguard.api.runtime.FrostguardPaths.resolve(DebuggingLayoutController.class);
+        possibleTemplateDirs.add(runtime.resources().resolve("templates").toFile());
+        File repository = runtime.applicationHome().getParent() == null
+                ? null : runtime.applicationHome().getParent().toFile();
+        if (repository != null) {
+            possibleTemplateDirs.add(new File(repository, "fg-vision/src/main/resources/templates"));
         }
 
         File templateDir = null;
@@ -423,7 +421,7 @@ public class DebuggingLayoutController {
             log("Found " + allTemplates.size() + " templates.");
         } else {
             log("Template directory not found. Please verify location.");
-            log("User Dir: " + System.getProperty("user.dir"));
+            log("Application home: " + runtime.applicationHome());
         }
 
         templateListView.getItems().setAll(allTemplates);

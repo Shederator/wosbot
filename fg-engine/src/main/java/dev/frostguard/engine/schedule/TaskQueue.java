@@ -25,6 +25,7 @@ import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.ProfileStatusData;
 import dev.frostguard.api.domain.TaskQueueStatusData;
 import dev.frostguard.api.domain.TaskStateData;
+import dev.frostguard.api.runtime.FrostguardPaths;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.emulator.QueuePositionListener;
 import dev.frostguard.engine.error.ADBConnectionException;
@@ -693,17 +694,23 @@ public class TaskQueue {
             if (wake.isBefore(LocalDateTime.now())) wake = LocalDateTime.now().plusMinutes(1);
             String tm = DateTimeFormatter.ofPattern("HH:mm").format(wake);
             String dt = DateTimeFormatter.ofPattern("MM/dd/yyyy").format(wake);
-            String jar = System.getProperty("user.dir") + "\\fg-app\\target\\frostguard.jar";
+            FrostguardPaths runtime = FrostguardPaths.resolve(TaskQueue.class);
+            java.nio.file.Path jarPath = runtime.codeSource();
+            if (!java.nio.file.Files.isRegularFile(jarPath)) {
+                throw new IllegalStateException("PC sleep scheduling requires a packaged Frostguard JAR");
+            }
+            String jar = jarPath.toString();
             new ProcessBuilder("schtasks","/create","/TN","Frostguard_AutoStart","/TR",
                     "javaw.exe -jar \""+jar+"\" --autostart","/SC","ONCE","/ST",tm,"/SD",dt,"/RL","HIGHEST","/F")
                     .redirectErrorStream(true).start().waitFor();
-            java.nio.file.Path ws = java.nio.file.Paths.get(System.getProperty("user.dir"),"fg_wake.ps1");
+            java.nio.file.Path ws = runtime.temp().resolve("fg_wake.ps1");
+            java.nio.file.Files.createDirectories(runtime.temp());
             java.nio.file.Files.writeString(ws,
                     "$s=New-ScheduledTaskSettingsSet -WakeToRun -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -Priority 1\n"+
                     "Set-ScheduledTask -TaskName 'Frostguard_AutoStart' -Settings $s\n");
             new ProcessBuilder("powershell.exe","-NoProfile","-ExecutionPolicy","Bypass","-File",ws.toString())
                     .redirectErrorStream(true).start().waitFor();
-            java.nio.file.Path ss = java.nio.file.Paths.get(System.getProperty("user.dir"),"fg_sleep.ps1");
+            java.nio.file.Path ss = runtime.temp().resolve("fg_sleep.ps1");
             java.nio.file.Files.writeString(ss,
                     "Start-Sleep -Seconds 2\nAdd-Type -AssemblyName System.Windows.Forms\n"+
                     "[System.Windows.Forms.Application]::SetSuspendState('Suspend',$false,$false)\n");

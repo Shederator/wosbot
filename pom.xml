@@ -74,6 +74,7 @@
 		<maven.assembly.plugin.version>3.7.1</maven.assembly.plugin.version>
 		<maven.shade.plugin.version>3.5.1</maven.shade.plugin.version>
 		<maven.antrun.plugin.version>3.1.0</maven.antrun.plugin.version>
+		<maven.clean.plugin.version>3.3.2</maven.clean.plugin.version>
 	</properties>
 
 	<!-- ──────────────────────────────────────────────
@@ -87,6 +88,7 @@
 		<module>fg-tasks</module>
 		<module>fg-watcher</module>
 		<module>fg-app</module>
+		<module>fg-distribution</module>
 	</modules>
 
 	<!-- ──────────────────────────────────────────────
