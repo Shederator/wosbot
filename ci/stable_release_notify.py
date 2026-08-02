@@ -16,7 +16,7 @@ from discord_notify import post, truncate  # noqa: E402
 
 def build_payload(args: argparse.Namespace) -> dict:
     description = (
-        "This is the tested version recommended for normal use.\n\n"
+        "A tested, versioned build that changes only when a new Stable is published.\n\n"
         f"**[⬇️ Download Frostguard {args.version} for Windows]"
         f"({args.download_url})**\n\n"
         "Extract the complete archive and use the included Frostguard launcher. "

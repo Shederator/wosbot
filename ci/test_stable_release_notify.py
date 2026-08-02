@@ -32,6 +32,7 @@ class StablePayloadTest(unittest.TestCase):
         self.assertIn("included Frostguard launcher", text)
         self.assertIn("releases/latest/download", text)
         self.assertIn("Previous stable releases", text)
+        self.assertNotIn("recommended", text.lower())
         self.assertNotIn("commit", text.lower())
 
     def test_names_the_maintained_stable_download(self):

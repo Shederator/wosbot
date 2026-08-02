@@ -203,117 +203,64 @@
 
 ## 🛠️ Installation & Setup
 
-### ⚡ Prefer a ready-made build?
+Choose the path that matches what you want to do:
 
-A verified Windows desktop bundle is built automatically every night. It does
-not require Maven or a Git checkout, but Java 21 or newer must be installed.
+| Path | What it provides | Update model |
+|:-----|:-----------------|:-------------|
+| **Stable** | A tested, versioned release | Changes only when a new Stable is published |
+| **Nightly** | The latest development state; may be unstable | Rebuilt daily from `main` |
+| **PR build** | A temporary build containing selected open pull requests | Expires automatically |
+| **Source build** | A local Maven build from the repository | Built on demand from the checked-out commit |
 
-1. **[Download the latest daily Windows bundle](https://github.com/Shederator/wosbot/releases/download/nightly/frostguard-windows-desktop-bundle.zip)**
-2. Extract the complete ZIP into an empty folder.
-3. Double-click **`Start Frostguard.bat`**.
+### ⬇️ Download a Windows bundle
+
+Frostguard currently provides verified Windows desktop bundles. Java 21 or
+newer is required; Git and Maven are not.
+
+- **[Stable for Windows](https://github.com/Shederator/wosbot/releases/latest/download/frostguard-windows-desktop-bundle.zip)**
+- **[Nightly for Windows](https://github.com/Shederator/wosbot/releases/download/nightly/frostguard-windows-desktop-bundle.zip)**
+
+After choosing a build:
+
+1. Extract the complete ZIP into an empty folder. Do not run it from inside the ZIP.
+2. Double-click **`Start Frostguard.bat`**.
+3. Open **Configuration** and select your emulator's command-line controller.
 
 > [!IMPORTANT]
-> Daily builds contain the latest development changes and may be less stable.
-> The public download needs no GitHub sign-in. Every bundle is checked for its
-> structure, classpath and basic startup behavior before publication.
+> Keep the extracted folder together. The launcher, application JAR, runtime
+> libraries, OCR data and templates are all part of the installation.
 
-<br/>
+See the **[complete installation guide](docs/installation.md)** for Java,
+emulator and game settings.
 
-### 1️⃣ Prerequisites
+### 🧪 Test pull requests
 
-<div align="center">
+Request a temporary build of one or more open pull requests with `/build-pr` in
+the Discord `#request-a-build` channel.
 
-| Requirement | Version | Download |
-|:-----------:|:-------:|:--------:|
-| ![Java](https://img.shields.io/badge/Java_JDK-ED8B00?style=flat-square&logo=openjdk&logoColor=white) | `21` | **[Adoptium Temurin](https://adoptium.net/)** |
-| ![Maven](https://img.shields.io/badge/Apache_Maven-C71A36?style=flat-square&logo=apache-maven&logoColor=white) | `3.8+` | **[Download Maven](https://maven.apache.org/install.html)** |
+PR builds use the same Windows bundle format as Stable and Nightly, but contain
+unmerged code and expire automatically.
 
-</div>
+### 🛠️ Build from source
 
-<details>
-<summary><b>💡 Windows Users: Adding Java & Maven to PATH</b></summary>
-<br/>
-
-1. Press <kbd>Win</kbd> + <kbd>R</kbd>, type `sysdm.cpl`, and press <kbd>Enter</kbd>
-2. Go to **Advanced** → **Environment Variables**
-3. Under **System variables**, select `Path` and click **Edit**
-4. Add the `bin` directories of your Java and Maven installations:
-   ```
-   C:\Program Files\Eclipse Adoptium\jdk-21\bin
-   C:\apache-maven-3.9.9\bin
-   ```
-5. Click **OK** and restart your terminal
-6. Verify with:
-   ```sh
-   java -version
-   mvn -version
-   ```
-
-</details>
-
-<br/>
-
-### 2️⃣ Compilation
+Developers need Java 21, Maven 3.8+, Git and Git LFS:
 
 ```sh
-# Clone the repository
 git clone https://github.com/Shederator/wosbot.git
 cd wosbot
-
-# Build the project
+git lfs install
+git lfs pull
 mvn clean install package
+java -jar fg-app/target/frostguard-<version>.jar
 ```
 
-> [!TIP]
-> The build produces `fg-app/target/frostguard-<version>.jar` and a complete
-> `fg-app/target/frostguard-<version>-desktop-bundle.zip`.
+The build creates the application JAR and Windows desktop bundle under
+`fg-app/target`. For the complete source setup, Windows helper and verification
+commands, see:
 
-<br/>
-
-#### Quick Build Script (Windows)
-
-For Windows users, use the **`fg-build.bat`** script for easier compilation:
-
-```batch
-fg-build.bat
-```
-
-**What it does:**
-- ✅ Stops any running Java and ADB processes
-- ✅ Runs full build (`mvn clean install package`) with one automatic retry for transient `fg-vision` copy/package issues
-- ✅ Verifies packaged app JAR integrity (`LauncherLayoutController.class` check) and triggers one focused `fg-app` fallback rebuild if needed
-- ✅ Opens the generated desktop-bundle ZIP in Explorer after success (fallback: opens `fg-app/target`)
-- ✅ Displays clear success/error messages
-
-This script is especially useful after code changes or when local packaging occasionally fails due to transient file-lock/resource-copy issues.
-
-<br/>
-
-#### Verifying a build the way CI does
-
-The same checks that guard the nightly bundle can be run locally on Windows,
-Linux or macOS. See **[`ci/README.md`](ci/README.md)** for details.
-
-```sh
-mvn clean install -Djavafx.platform=win
-python3 ci/verify_bundle.py fg-app/target/frostguard-*-desktop-bundle.zip
-ci/smoke_test_bundle.sh fg-app/target/frostguard-*-desktop-bundle.zip
-```
-
-<br/>
-
-### 3️⃣ Running the Bot
-
-```sh
-# Navigate to the target directory
-cd fg-app/target
-
-# Run the compiled JAR; replace <version> with the version from pom.xml
-java -jar frostguard-<version>.jar
-```
-
-> [!IMPORTANT]
-> We highly recommend running via command line to access real-time logs for easier debugging. Double-clicking the `.jar` works, but console logs won't be visible.
+- **[Installation and source build](docs/installation.md)**
+- **[Windows-specific setup](docs/windows.md)**
+- **[CI and bundle verification](ci/README.md)**
 
 <br/>
 

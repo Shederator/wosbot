@@ -36,8 +36,8 @@ in place; GitHub Releases remains the permanent release history.
 ```text
 📥 Frostguard Downloads
 
-Stable — recommended
-The tested version for normal use:
+Stable — versioned
+A tested build that changes only when a new Stable is published:
 https://github.com/Shederator/wosbot/releases/latest/download/frostguard-windows-desktop-bundle.zip
 
 Nightly — testing
@@ -82,7 +82,7 @@ public download.
 ## Migration
 
 1. Create `#download` and post the Stable and Nightly messages.
-2. Publish the first real stable release before calling it recommended.
+2. Publish the first real Stable release before presenting the Stable download.
 3. Store both maintained webhook message IDs as repository variables.
 4. Move `/build-pr` results to `#request-a-build`.
 5. Archive redundant legacy release channels after their links are replaced.
