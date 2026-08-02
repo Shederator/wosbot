@@ -45,7 +45,9 @@ EMBED_FOOTER_LIMIT = 2048
 ATTACHMENT_LIMIT_BYTES = 8 * 1024 * 1024
 
 STATUS_STYLE = {
-    "success": (0x2ECC71, "Build succeeded"),
+    # Amber distinguishes an intentionally unstable Nightly from the green
+    # Stable announcement without making a successful build look like a fault.
+    "success": (0xF1C40F, "Build succeeded"),
     "failure": (0xE74C3C, "Build failed"),
     "cancelled": (0x95A5A6, "Build cancelled"),
     "skipped": (0x95A5A6, "Build skipped"),
@@ -144,7 +146,7 @@ def build_payload(args: argparse.Namespace) -> dict:
 
     embed = {
         "title": truncate(
-            f"Latest Nightly — Frostguard {version}"
+            f"🧪 Frostguard Nightly {version}"
             if args.status == "success"
             else f"Frostguard {version} — {headline.lower()}",
             EMBED_TITLE_LIMIT,
@@ -156,11 +158,15 @@ def build_payload(args: argparse.Namespace) -> dict:
     }
     if args.status == "success" and args.download_url:
         embed["url"] = args.download_url
-        embed["footer"] = {"text": "Nightly • updated automatically"}
+        build_identity = f"Nightly #{args.run_number}" if args.run_number else "Nightly"
+        embed["footer"] = {"text": f"{build_identity} • updated automatically"}
     elif args.run_url:
         embed["url"] = args.run_url
 
     payload = {
+        # PATCH preserves omitted fields. Explicitly clear content so the raw
+        # URL from the original version of the maintained message disappears.
+        "content": "",
         "username": args.username,
         "embeds": [embed],
         # Never let a commit subject containing @everyone ping the channel.

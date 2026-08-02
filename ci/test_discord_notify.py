@@ -56,20 +56,21 @@ class PayloadTest(unittest.TestCase):
 
     def test_success_payload_has_no_bare_url_content(self):
         result = payload()
-        self.assertNotIn("content", result)
+        self.assertEqual("", result["content"])
         self.assertIn("releases/download/nightly", result["embeds"][0]["description"])
 
-    def test_success_embed_is_green_and_names_the_version(self):
+    def test_success_embed_is_amber_and_names_the_version(self):
         embed = payload()["embeds"][0]
-        self.assertEqual(0x2ECC71, embed["color"])
+        self.assertEqual(0xF1C40F, embed["color"])
         self.assertIn("2.1.0", embed["title"])
-        self.assertIn("Latest Nightly", embed["title"])
+        self.assertIn("Frostguard Nightly", embed["title"])
+        self.assertEqual("Nightly #42 • updated automatically", embed["footer"]["text"])
 
     def test_failure_payload_is_red_and_links_the_log_not_a_download(self):
         result = payload(["--status", "failure"])
         embed = result["embeds"][0]
         self.assertEqual(0xE74C3C, embed["color"])
-        self.assertNotIn("content", result)
+        self.assertEqual("", result["content"])
         self.assertIn("workflow log", embed["description"])
 
     def test_never_pings_the_channel(self):
@@ -141,13 +142,13 @@ class PayloadTest(unittest.TestCase):
         # A dead link posted to the channel is worse than no link: testers click
         # it, get a 404 and report the release as broken.
         result = payload(["--download-url", "frostguard.zip"])
-        self.assertNotIn("content", result)
+        self.assertEqual("", result["content"])
         self.assertIn("workflow run", result["embeds"][0]["description"])
 
     def test_success_without_a_release_falls_back_to_the_run_link(self):
         # Branch builds skip the release publish, so there is no public URL.
         result = payload(["--download-url", ""])
-        self.assertNotIn("content", result)
+        self.assertEqual("", result["content"])
         self.assertIn("workflow run", result["embeds"][0]["description"])
 
 

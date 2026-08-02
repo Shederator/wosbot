@@ -88,6 +88,10 @@ jobs:
             echo "::error::Requested ${VERSION}, but pom.xml declares ${project_version}."
             exit 1
           fi
+          if [[ ! -f ".github/release-notes/v${VERSION}.md" ]]; then
+            echo "::error::Missing curated release notes for v${VERSION}."
+            exit 1
+          fi
           python3 ci/test_verify_bundle.py
           python3 ci/test_stable_release_notify.py
 
@@ -137,7 +141,7 @@ jobs:
           gh release create "${tag}" "${staged}" \
             --target "${SOURCE_SHA}" \
             --title "Frostguard ${VERSION}" \
-            --generate-notes \
+            --notes-file ".github/release-notes/v${VERSION}.md" \
             --latest
           release_url="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${tag}"
           download_url="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" \
@@ -168,8 +172,10 @@ jobs:
           VERSION: ${{ inputs.version }}
           DOWNLOAD_URL: ${{ steps.release.outputs.download_url }}
           RELEASE_URL: ${{ steps.release.outputs.release_url }}
+          ARCHIVE_URL: https://github.com/${{ github.repository }}/releases
         run: |
           python3 ci/stable_release_notify.py \
             --version "${VERSION}" \
             --download-url "${DOWNLOAD_URL}" \
-            --release-url "${RELEASE_URL}"
+            --release-url "${RELEASE_URL}" \
+            --archive-url "${ARCHIVE_URL}"

@@ -21,7 +21,8 @@ def build_payload(args: argparse.Namespace) -> dict:
         f"({args.download_url})**\n\n"
         "Extract the complete archive and use the included Frostguard launcher. "
         "Java 21 or newer is "
-        f"required.\n\n[📋 View release notes]({args.release_url})"
+        f"required.\n\n[📋 Release notes]({args.release_url})"
+        f" • [🗂️ Previous stable releases]({args.archive_url})"
     )
     return {
         "content": "@everyone",
@@ -42,6 +43,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--version", required=True)
     parser.add_argument("--download-url", required=True)
     parser.add_argument("--release-url", required=True)
+    parser.add_argument("--archive-url", required=True)
     parser.add_argument("--webhook-env", default="DISCORD_NIGHTLY_WEBHOOK_URL")
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument("--dry-run", action="store_true")
@@ -54,7 +56,8 @@ def main(argv: list[str] | None = None) -> int:
         print("::error::Stable version must use X.Y.Z format.")
         return 1
     for label, value in (("download", args.download_url),
-                         ("release", args.release_url)):
+                         ("release", args.release_url),
+                         ("archive", args.archive_url)):
         if not value.startswith("https://github.com/"):
             print(f"::error::Stable {label} URL must be a GitHub HTTPS URL.")
             return 1

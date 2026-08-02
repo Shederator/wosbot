@@ -12,6 +12,7 @@ class StablePayloadTest(unittest.TestCase):
             "--version", "2.1.0",
             "--download-url", "https://github.com/Shederator/wosbot/releases/latest/download/frostguard-windows-desktop-bundle.zip",
             "--release-url", "https://github.com/Shederator/wosbot/releases/tag/v2.1.0",
+            "--archive-url", "https://github.com/Shederator/wosbot/releases",
             "--dry-run",
         ])
 
@@ -25,12 +26,14 @@ class StablePayloadTest(unittest.TestCase):
         self.assertIn("2.1.0", text)
         self.assertIn("included Frostguard launcher", text)
         self.assertIn("releases/latest/download", text)
+        self.assertIn("Previous stable releases", text)
         self.assertNotIn("commit", text.lower())
 
     def test_rejects_non_semantic_version(self):
         argv = [
             "--version", "nightly", "--download-url", "https://github.com/a",
             "--release-url", "https://github.com/b", "--dry-run",
+            "--archive-url", "https://github.com/a/releases",
         ]
         self.assertEqual(1, notify.main(argv))
 
