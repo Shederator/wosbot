@@ -5,7 +5,7 @@ notifications or download locations.
 
 | Type | Audience | Lifetime | Discord notification |
 |---|---|---|---|
-| Stable `vX.Y.Z` | Regular users | Permanent | Notify everyone once |
+| Stable `vX.Y.Z` | Regular users | Permanent | Update the maintained Stable message |
 | Daily `nightly` | Testers | Replaced daily | Update the daily download, no mass mention |
 | PR test `pr-test-*` | Requester/testers | Temporary | Reply only to the requester |
 
@@ -21,14 +21,15 @@ manually with:
 
 The workflow pins the run's exact commit, downloads its versioned artifact,
 re-runs structural and launch verification, creates the immutable `vX.Y.Z`
-release, verifies its public download URL and then sends the one permitted
-`@everyone` release announcement. Existing stable tags are never replaced.
+release, verifies its public download URL and then updates the maintained
+Stable download without mentioning users. Existing stable tags are never
+replaced.
 
 ## Discord `#download`
 
-Keep the channel read-only for regular users. Pin one short guide, keep
-permanent Stable announcements as release history, and maintain exactly one
-Nightly message that is edited in place.
+Keep the channel read-only for regular users. Pin the maintained Stable message
+and keep exactly one Nightly message directly below it. Both cards are edited
+in place; GitHub Releases remains the permanent release history.
 
 ### Pinned guide
 
@@ -48,7 +49,10 @@ Java 21 or newer is required.
 ```
 
 The Stable URL is deliberately a direct, version-independent asset URL. GitHub
-redirects it to the asset on the latest non-prerelease release.
+redirects it to the asset on the latest non-prerelease release. Store the
+webhook-owned card ID in `DISCORD_STABLE_MESSAGE_ID`. A Stable promotion updates
+the card automatically; `Refresh Stable Discord Message` repairs it manually
+from GitHub's Latest release when necessary.
 
 ### Nightly message
 
@@ -77,9 +81,8 @@ public download.
 
 ## Migration
 
-1. Create `#downloads` and post the Stable and Daily messages.
+1. Create `#download` and post the Stable and Nightly messages.
 2. Publish the first real stable release before calling it recommended.
-3. Point the nightly webhook away from the public downloads channel or change
-   it to edit the maintained Daily message.
+3. Store both maintained webhook message IDs as repository variables.
 4. Move `/build-pr` results to `#request-a-build`.
-5. Archive `#release` and `#download` after their links have been replaced.
+5. Archive redundant legacy release channels after their links are replaced.

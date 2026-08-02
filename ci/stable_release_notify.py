@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Notify Discord once when a verified Frostguard stable release is published."""
+"""Create or update the maintained Discord Stable download message."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def build_payload(args: argparse.Namespace) -> dict:
         "content": "",
         "username": "Frostguard Releases",
         "embeds": [{
-            "title": f"✅ Frostguard {args.version} is now available",
+            "title": f"✅ Frostguard Stable {args.version}",
             "description": truncate(description, 4096),
             "color": 0x2ECC71,
         }],
@@ -42,6 +42,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--download-url", required=True)
     parser.add_argument("--release-url", required=True)
     parser.add_argument("--archive-url", required=True)
+    parser.add_argument(
+        "--message-id",
+        default="",
+        help="edit this maintained webhook message instead of creating a new one",
+    )
     parser.add_argument("--webhook-env", default="DISCORD_NIGHTLY_WEBHOOK_URL")
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument("--dry-run", action="store_true")
@@ -59,6 +64,9 @@ def main(argv: list[str] | None = None) -> int:
         if not value.startswith("https://github.com/"):
             print(f"::error::Stable {label} URL must be a GitHub HTTPS URL.")
             return 1
+    if not args.message_id.isdigit():
+        print("::error::Stable Discord message ID must be numeric.")
+        return 1
 
     payload = build_payload(args)
     if args.dry_run:
@@ -72,7 +80,18 @@ def main(argv: list[str] | None = None) -> int:
     if not re.match(r"^https://(canary\.|ptb\.)?discord(app)?\.com/api/webhooks/", webhook):
         print(f"::error::{args.webhook_env} is not a Discord webhook URL.")
         return 1
-    post(webhook, json.dumps(payload).encode(), "application/json", args.timeout)
+    destination = webhook
+    method = "POST"
+    if args.message_id:
+        destination = f"{webhook.rstrip('/')}/messages/{args.message_id}"
+        method = "PATCH"
+    post(
+        destination,
+        json.dumps(payload).encode(),
+        "application/json",
+        args.timeout,
+        method=method,
+    )
     return 0
 
 

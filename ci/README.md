@@ -171,11 +171,12 @@ daily run ID. The workflow validates the source run and Maven version, pins its
 commit, downloads and re-verifies its bundle, creates an immutable `vX.Y.Z`
 release and checks the public URL before announcing it.
 
-[`stable_release_notify.py`](stable_release_notify.py) is the only notification
-path allowed to mention `@everyone`. Its payload contains fixed release facts,
-not contributor-controlled PR titles or commit messages. Stable releases use
-the same `DISCORD_NIGHTLY_WEBHOOK_URL` credential but are announced only once;
-daily builds must not mass-mention users.
+[`stable_release_notify.py`](stable_release_notify.py) updates one maintained
+Stable message without mentioning users. Its payload contains fixed release
+facts, not contributor-controlled PR titles or commit messages. Stable releases
+use the same `DISCORD_NIGHTLY_WEBHOOK_URL` credential and the message stored in
+`DISCORD_STABLE_MESSAGE_ID`. `Refresh Stable Discord Message` can reconcile the
+card with GitHub's current Latest release without publishing a new release.
 
 Release policy and the `#downloads` channel templates live in
 [`docs/releases.md`](../docs/releases.md).
