@@ -166,7 +166,7 @@ jobs:
           echo "release_url=${release_url}" >> "${GITHUB_OUTPUT}"
           echo "download_url=${latest_download_url}" >> "${GITHUB_OUTPUT}"
 
-      - name: Announce the stable release to everyone
+      - name: Announce the stable release
         env:
           DISCORD_NIGHTLY_WEBHOOK_URL: ${{ secrets.DISCORD_NIGHTLY_WEBHOOK_URL }}
           VERSION: ${{ inputs.version }}

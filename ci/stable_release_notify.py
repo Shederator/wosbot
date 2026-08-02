@@ -25,16 +25,14 @@ def build_payload(args: argparse.Namespace) -> dict:
         f" • [🗂️ Previous stable releases]({args.archive_url})"
     )
     return {
-        "content": "@everyone",
+        "content": "",
         "username": "Frostguard Releases",
         "embeds": [{
             "title": f"✅ Frostguard {args.version} is now available",
             "description": truncate(description, 4096),
             "color": 0x2ECC71,
         }],
-        # This workflow is the one intentional mass-notification path. No
-        # contributor-controlled text is included in content or mentions.
-        "allowed_mentions": {"parse": ["everyone"]},
+        "allowed_mentions": {"parse": []},
     }
 
 

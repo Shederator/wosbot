@@ -16,10 +16,10 @@ class StablePayloadTest(unittest.TestCase):
             "--dry-run",
         ])
 
-    def test_mentions_everyone_explicitly(self):
+    def test_does_not_ping_anyone(self):
         payload = notify.build_payload(self.args())
-        self.assertEqual(payload["content"], "@everyone")
-        self.assertEqual(payload["allowed_mentions"], {"parse": ["everyone"]})
+        self.assertEqual(payload["content"], "")
+        self.assertEqual(payload["allowed_mentions"], {"parse": []})
 
     def test_contains_only_stable_release_facts(self):
         text = str(notify.build_payload(self.args()))
