@@ -215,6 +215,15 @@ installation refresh:
 - clean staging: `fg-distribution/target/staging/Frostguard`
 - local installation: `.frostguard` (with persistent `.frostguard/data`)
 - runtime dependencies staged under `Frostguard/app/lib`
+
+The first implementation intentionally packages Windows only. Linux launchers,
+archives and macOS application bundles are follow-up platform work; they must
+reuse the same staging, metadata, application-home and data-home contracts.
+
+Local deployment prepares all replacement files outside `.frostguard`, moves
+the current managed paths to a transaction backup, and restores them if any
+replacement move fails. Neither deployment nor `mvn clean` manages anything
+below `.frostguard/data`.
 - ADB/Tesseract files staged from `tools/`
 - custom task examples staged from root `custom_tasks/`
 - template PNGs staged from `fg-vision/src/main/resources/templates`

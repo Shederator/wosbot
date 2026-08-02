@@ -143,8 +143,22 @@ an extracted portable installation. Use the entire directory as the backup and
 restore unit. An explicit location can be selected with
 `-Dfrostguard.data=C:\absolute\path\to\data`.
 
-Before moving legacy `database.db`, `database.db-wal`, `database.db-shm`, logs,
-or `custom_tasks`, stop Frostguard and back up all files together. Do not copy a
-database without its WAL/SHM companions. If multiple legacy databases exist,
-keep them separate and select the intended source manually; Frostguard must not
-guess or merge them.
+On first start, Frostguard detects legacy `database.db`, `database.db-wal`,
+`database.db-shm`, logs, temp output and `custom_tasks` relative to the checkout
+or old installation. Stop every Frostguard process before migrating. If exactly
+one source exists, Frostguard backs it up under
+`data/migration-backups/<timestamp>`, copies the SQLite files as one group, and
+records completion under `data/config/legacy-migration.properties`. The legacy
+source remains intact for the transition period.
+
+If multiple sources exist, startup stops before changing files and lists every
+candidate. Restart with the intended exact source, for example:
+
+```powershell
+java -Dfrostguard.migrate.from=C:\old\Frostguard -jar app\frostguard-<version>.jar
+```
+
+Never choose a source while another Frostguard process has its database open.
+Restore by stopping Frostguard and copying the complete timestamped backup back
+to the selected data directory. The complete `data` directory remains the
+normal backup and machine-to-machine transfer unit.

@@ -75,6 +75,7 @@
 		<maven.shade.plugin.version>3.5.1</maven.shade.plugin.version>
 		<maven.antrun.plugin.version>3.1.0</maven.antrun.plugin.version>
 		<maven.clean.plugin.version>3.3.2</maven.clean.plugin.version>
+		<exec.maven.plugin.version>3.5.0</exec.maven.plugin.version>
 	</properties>
 
 	<!-- ──────────────────────────────────────────────
@@ -329,7 +330,34 @@
 					<artifactId>maven-antrun-plugin</artifactId>
 					<version>${maven.antrun.plugin.version}</version>
 				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-clean-plugin</artifactId>
+					<version>${maven.clean.plugin.version}</version>
+				</plugin>
 			</plugins>
 		</pluginManagement>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-clean-plugin</artifactId>
+				<inherited>false</inherited>
+				<configuration>
+					<filesets>
+						<fileset>
+							<directory>${maven.multiModuleProjectDirectory}/.frostguard</directory>
+							<includes>
+								<include>Frostguard.bat</include>
+								<include>app/**</include>
+								<include>resources/**</include>
+								<include>docs/**</include>
+								<include>build-info.json</include>
+							</includes>
+							<followSymlinks>false</followSymlinks>
+						</fileset>
+					</filesets>
+				</configuration>
+			</plugin>
+		</plugins>
 	</build>
 </project>

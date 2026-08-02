@@ -110,6 +110,8 @@ jobs:
       # launches the toolkit, which fails before the bundle can be assembled.
       - name: Test on Linux
         run: |
+          mkdir -p .frostguard/data
+          printf 'preserve-across-clean-and-deploy\n' > .frostguard/data/ci-preservation-sentinel
           read -r -a maven_args <<< "${MAVEN_ARGS}"
           xvfb-run --auto-servernum mvn "${maven_args[@]}" clean test
 
@@ -119,6 +121,7 @@ jobs:
           mvn "${maven_args[@]}" install -DskipTests -Djavafx.platform=win \
             -Dfrostguard.platform=win -Dfrostguard.channel=nightly \
             -Dfrostguard.commit="${GITHUB_SHA}"
+          grep -Fx 'preserve-across-clean-and-deploy' .frostguard/data/ci-preservation-sentinel
 
       - name: Locate the desktop bundle
         id: bundle

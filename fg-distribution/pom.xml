@@ -8,7 +8,7 @@
         <version>${revision}</version>
     </parent>
     <artifactId>fg-distribution</artifactId>
-    <packaging>pom</packaging>
+    <packaging>jar</packaging>
     <name>Frostguard Portable Distribution</name>
 
     <properties>
@@ -23,6 +23,11 @@
             <groupId>dev.frostguard</groupId>
             <artifactId>fg-app</artifactId>
             <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>dev.frostguard</groupId>
@@ -168,25 +173,23 @@
                             </target>
                         </configuration>
                     </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>${exec.maven.plugin.version}</version>
+                <executions>
                     <execution>
                         <id>refresh-local-installation</id>
                         <phase>package</phase>
-                        <goals><goal>run</goal></goals>
+                        <goals><goal>java</goal></goals>
                         <configuration>
-                            <target>
-                                <mkdir dir="${maven.multiModuleProjectDirectory}/.frostguard/data"/>
-                                <delete dir="${maven.multiModuleProjectDirectory}/.frostguard.next" quiet="true"/>
-                                <copy todir="${maven.multiModuleProjectDirectory}/.frostguard.next">
-                                    <fileset dir="${staging.root}"><exclude name="data/**"/></fileset>
-                                </copy>
-                                <delete dir="${maven.multiModuleProjectDirectory}/.frostguard/app" quiet="true"/>
-                                <delete dir="${maven.multiModuleProjectDirectory}/.frostguard/resources" quiet="true"/>
-                                <delete dir="${maven.multiModuleProjectDirectory}/.frostguard/docs" quiet="true"/>
-                                <delete file="${maven.multiModuleProjectDirectory}/.frostguard/Frostguard.bat" quiet="true"/>
-                                <delete file="${maven.multiModuleProjectDirectory}/.frostguard/build-info.json" quiet="true"/>
-                                <move todir="${maven.multiModuleProjectDirectory}/.frostguard"><fileset dir="${maven.multiModuleProjectDirectory}/.frostguard.next"/></move>
-                                <delete dir="${maven.multiModuleProjectDirectory}/.frostguard.next" quiet="true"/>
-                            </target>
+                            <mainClass>dev.frostguard.distribution.LocalInstallationDeployer</mainClass>
+                            <arguments>
+                                <argument>${staging.root}</argument>
+                                <argument>${maven.multiModuleProjectDirectory}/.frostguard</argument>
+                            </arguments>
                         </configuration>
                     </execution>
                 </executions>

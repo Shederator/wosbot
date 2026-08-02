@@ -7,6 +7,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import dev.frostguard.api.runtime.FrostguardPaths;
+import dev.frostguard.data.migration.LegacyDataMigrator;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,13 +30,20 @@ public final class DataStore implements AutoCloseable {
 	private final EntityManagerFactory emf;
 
 	private static final class Holder {
-		private static final DataStore INSTANCE = new DataStore(Map.of());
+		private static final DataStore INSTANCE = new DataStore(Map.of(), true);
 	}
 
-	private DataStore(Map<String, Object> overrides) {
+	private DataStore(Map<String, Object> overrides, boolean migrateLegacyData) {
 		try {
 			FrostguardPaths paths = FrostguardPaths.resolve(DataStore.class);
 			paths.createDataDirectories();
+			if (migrateLegacyData) {
+				LegacyDataMigrator.MigrationResult migration = LegacyDataMigrator.migrate(paths);
+				if (migration.migrated()) {
+					LOG.info("Migrated legacy Frostguard data from {} after backing it up to {}",
+							migration.source(), migration.backup());
+				}
+			}
 			String url = "jdbc:sqlite:" + paths.dataHome().resolve("frostguard.db")
 					+ "?busy_timeout=1000&journal_mode=WAL";
 			Map<String, Object> properties = new HashMap<>(overrides);
@@ -50,7 +58,7 @@ public final class DataStore implements AutoCloseable {
 	}
 
 	public static DataStore openIsolated(Map<String, Object> overrides) {
-		return new DataStore(overrides == null ? Map.of() : overrides);
+		return new DataStore(overrides == null ? Map.of() : overrides, false);
 	}
 
 	public static DataStore getInstance() {

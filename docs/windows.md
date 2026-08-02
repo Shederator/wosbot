@@ -80,6 +80,11 @@ For automatic startup through scripts or Task Scheduler:
 java -jar .frostguard\app\frostguard-<version>.jar --autostart
 ```
 
+If a build cannot replace `.frostguard` because Frostguard is running, close
+that Frostguard process and retry. Deployment restores the previous managed
+program files after a failed replacement and never terminates Java or ADB
+processes globally.
+
 ## Scheduled Automation
 
 Optional Task Scheduler templates are in `docs/schedule-autostart/`.
