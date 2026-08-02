@@ -162,6 +162,24 @@ substitution really took effect in both directions.
   ci/smoke_test_bundle.sh fg-app/target/frostguard-*-desktop-bundle.zip
   ```
 
+## Stable Windows releases
+
+[`stable-windows-release.yml`](../.github/workflows/stable-windows-release.yml)
+promotes a successful Daily Windows Bundle run from `main` instead of rebuilding
+a potentially different tree. A maintainer supplies the `X.Y.Z` version and
+daily run ID. The workflow validates the source run and Maven version, pins its
+commit, downloads and re-verifies its bundle, creates an immutable `vX.Y.Z`
+release and checks the public URL before announcing it.
+
+[`stable_release_notify.py`](stable_release_notify.py) is the only notification
+path allowed to mention `@everyone`. Its payload contains fixed release facts,
+not contributor-controlled PR titles or commit messages. Stable releases use
+the same `DISCORD_NIGHTLY_WEBHOOK_URL` credential but are announced only once;
+daily builds must not mass-mention users.
+
+Release policy and the `#downloads` channel templates live in
+[`docs/releases.md`](../docs/releases.md).
+
 ## Combined PR test builds (`/build-pr`)
 
 Testers can request a temporary Windows bundle that combines one or more
