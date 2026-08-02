@@ -142,8 +142,11 @@ jobs:
           release_url="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${tag}"
           download_url="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" \
             --jq ".assets[] | select(.name == \"${asset}\") | .browser_download_url")"
+          # GitHub's release API can expose the asset before its CDN download
+          # route has propagated. Treat the initial 404 as retryable.
           code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 120 \
-            --retry 3 --retry-delay 5 -r 0-1023 "${download_url}")"
+            --fail --retry 12 --retry-delay 5 --retry-all-errors \
+            -r 0-1023 "${download_url}" || true)"
           if [[ "${code}" != "200" && "${code}" != "206" ]]; then
             echo "::error::Published stable download returned HTTP ${code}."
             exit 1
