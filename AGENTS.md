@@ -82,6 +82,11 @@ explicit in the handoff or pull request.
 
 ## Git And Pull Requests
 
+Use the GitHub Project workboard as the source of truth for planned work and
+work status. Before starting implementation, check for an existing work item
+and keep its status aligned with actual progress. Link related issues and pull
+requests instead of duplicating their details in the board.
+
 Start feature and fix branches from `main` unless a stacked dependency is
 intentional and documented. Keep commits reviewable and do not commit
 credentials, profile databases, emulator-specific paths, private logs, runtime
