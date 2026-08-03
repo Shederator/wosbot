@@ -679,29 +679,63 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
     @Override
     public void onEnergyLevelChanged(Long profileId, int newStamina) { /* bind */
-        if (currentProfile != null && currentProfile.getId().equals(profileId)) {
-            updateWindowTitle();
-        }
+        updateWindowTitle();
     }
 
     private void updateWindowTitle() { /* internal */
-        if (null == currentProfile) {
+        if (!Platform.isFxApplicationThread()) {
+            Platform.runLater(this::updateWindowTitle);
+            return;
+        }
+
+        String profileSegment = buildWindowTitleProfileSegment();
+        if (profileSegment.isBlank()) {
             return;
         }
 
         String version = getVersion();
-        int stamina = StaminaService.getServices().getCurrentStamina(currentProfile.getId());
-        String title = String.format("Whiteout Survival Bot v%s - %s [Stamina: %d]",
-                version,
-                currentProfile.getName(),
-                stamina);
+        String title = String.format("Whiteout Survival Bot v%s - %s", version, profileSegment);
 
-        Platform.runLater(() -> {
-            stage.setTitle(title);
-            if (null != labelWindowTitle) {
-                labelWindowTitle.setText(title);
+        stage.setTitle(title);
+        if (null != labelWindowTitle) {
+            labelWindowTitle.setText(title);
+        }
+    }
+
+    private String buildWindowTitleProfileSegment() { /* internal */
+        List<QueueProfileStateData> queueStates = new ArrayList<>(activeQueueStates.values());
+        queueStates.sort(Comparator.comparing(QueueProfileStateData::getProfileName, String.CASE_INSENSITIVE_ORDER));
+
+        List<Long> profileIds = new ArrayList<>();
+        for (QueueProfileStateData state : queueStates) {
+            if (state != null && state.getProfileId() != null) {
+                profileIds.add(state.getProfileId());
             }
-        });
+        }
+
+        if (profileIds.isEmpty() && currentProfile != null && currentProfile.getId() != null) {
+            profileIds.add(currentProfile.getId());
+        }
+
+        List<String> parts = new ArrayList<>();
+        for (Long profileId : profileIds) {
+            ProfileAux profile = findProfileById(profileId);
+            String profileName = profile != null && profile.getName() != null && !profile.getName().isBlank()
+                    ? profile.getName()
+                    : resolveQueueProfileName(profileId);
+            int stamina = StaminaService.getServices().getCurrentStamina(profileId);
+            parts.add(String.format("%s [Stamina: %d]", profileName, stamina));
+        }
+
+        return String.join(" | ", parts);
+    }
+
+    private String resolveQueueProfileName(Long profileId) { /* internal */
+        QueueProfileStateData state = activeQueueStates.get(profileId);
+        if (state != null && state.getProfileName() != null && !state.getProfileName().isBlank()) {
+            return state.getProfileName();
+        }
+        return String.valueOf(profileId);
     }
 
     public void onEngineStateTransition(BotStateData botState) { /* bind */
@@ -776,6 +810,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
         refreshPauseMenuItems();
         updatePauseButtonState();
+        updateWindowTitle();
     }
 
     // Changed by pernerch | Date: 2026-07-02 | Why: keep UI profile identity and title in sync
