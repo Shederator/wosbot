@@ -144,6 +144,8 @@ public class GatherRoutine extends DelayedTask {
         int activeCount = countOccupiedMarchSlotsFlow();
         logInfo(String.format("Active Marches: %d / %d", activeCount, activeQueues));
 
+        reconcileRotationPool(activeMarches);
+
         // Changed by pernerch | Date: 2026-07-02 | Why: continuously self-heal gather state
         // by recalling duplicate gather marches when active gathers exceed configured queue limit.
         int recalledOverflow = recallDuplicateOverflowGatherMarchesFlow();
@@ -379,6 +381,30 @@ public class GatherRoutine extends DelayedTask {
         logInfo("DEBUG: Saving pool config: '" + val + "'");
         profile.setConfig(ConfigurationKeyEnum.GATHER_ROTATION_POOL, val);
         setShouldUpdateConfig(true);
+    }
+
+    private void reconcileRotationPool(List<GatherType> activeMarches) {
+        List<GatherType> normalizedPool = new ArrayList<>();
+
+        if (rotationPool != null) {
+            for (GatherType type : rotationPool) {
+                if (enabledTypes.contains(type) && !normalizedPool.contains(type) && !activeMarches.contains(type)) {
+                    normalizedPool.add(type);
+                }
+            }
+        }
+
+        for (GatherType type : enabledTypes) {
+            if (!activeMarches.contains(type) && !normalizedPool.contains(type)) {
+                normalizedPool.add(type);
+            }
+        }
+
+        if (!normalizedPool.equals(rotationPool)) {
+            rotationPool = normalizedPool;
+            logInfo("DEBUG: Reconciled pool from current HMI selections and active marches: '" + rotationPool + "'");
+            saveRotationPool();
+        }
     }
 
     // ================= SCAN & CHECKS =================
