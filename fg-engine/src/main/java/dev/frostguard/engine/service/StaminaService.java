@@ -102,12 +102,22 @@ public final class StaminaService {
         EnergySlot fresh = new EnergySlot(Math.max(0, stamina), Instant.now());
         slots.put(profileId, fresh);
         broadcastChange(profileId, fresh.level());
+        broadcastSynchronization(profileId, fresh.level());
     }
 
     public void addStamina(Long profileId, int amount) {
         requireId(profileId);
         int updated = applyDelta(profileId, amount);
         broadcastChange(profileId, updated);
+    }
+
+    public void addExternalStamina(Long profileId, int amount) {
+        requireId(profileId);
+        int updated = applyDelta(profileId, amount);
+        broadcastChange(profileId, updated);
+        if (amount > 0) {
+            broadcastAddition(profileId, amount, updated);
+        }
     }
 
     public void subtractStamina(Long profileId, int amount) {
@@ -128,6 +138,13 @@ public final class StaminaService {
         requireId(profileId);
         EnergySlot slot = slots.get(profileId);
         return slot == null || slot.isStale();
+    }
+
+    public static long minutesToRegenerate(int currentStamina, int targetStamina) {
+        if (currentStamina >= targetStamina) {
+            return 0;
+        }
+        return (long) (targetStamina - currentStamina) * TICK_INTERVAL.toMinutes();
     }
 
     // ── Internals ────────────────────────────────────────────────────
@@ -170,6 +187,26 @@ public final class StaminaService {
                 obs.onEnergyLevelChanged(profileId, level);
             } catch (Exception ex) {
                 log.warn("Observer error during energy broadcast", ex);
+            }
+        }
+    }
+
+    private void broadcastAddition(Long profileId, int amount, int level) {
+        for (StaminaChangeListener obs : observers) {
+            try {
+                obs.onStaminaAdded(profileId, amount, level);
+            } catch (Exception ex) {
+                log.warn("Observer error during stamina-addition broadcast", ex);
+            }
+        }
+    }
+
+    private void broadcastSynchronization(Long profileId, int level) {
+        for (StaminaChangeListener obs : observers) {
+            try {
+                obs.onStaminaSynchronized(profileId, level);
+            } catch (Exception ex) {
+                log.warn("Observer error during stamina-synchronization broadcast", ex);
             }
         }
     }

@@ -358,10 +358,10 @@ public class StorehouseChestRoutine extends DelayedTask {
         sleepTask(4000); // Wait for claim animation
 
         // Update stamina service
-        StaminaService.getServices().addStamina(profile.getId(), BASE_STOREHOUSE_STAMINA);
+        StaminaService.getServices().addExternalStamina(profile.getId(), BASE_STOREHOUSE_STAMINA);
 
         if (agnesStamina != null && agnesStamina > 0) {
-            StaminaService.getServices().addStamina(profile.getId(), agnesStamina);
+            StaminaService.getServices().addExternalStamina(profile.getId(), agnesStamina);
             logInfo(String.format("Claimed %d base stamina + %d from Agnes bonus.",
                     BASE_STOREHOUSE_STAMINA, agnesStamina));
         } else {

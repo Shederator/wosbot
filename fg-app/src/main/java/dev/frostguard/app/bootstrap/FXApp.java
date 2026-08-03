@@ -3,6 +3,7 @@ package dev.frostguard.app.bootstrap;
 import atlantafx.base.theme.PrimerDark;
 import dev.frostguard.app.panel.launcher.ILauncherConstants;
 import dev.frostguard.app.panel.launcher.LauncherLayoutController;
+import dev.frostguard.app.panel.misc.GiftCodeAutomationService;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
@@ -53,6 +54,7 @@ public class FXApp extends Application {
 
         configureStage(stage, scene);
         stage.show();
+        GiftCodeAutomationService.getInstance().start();
         restoreWindowBounds(stage);
         maybeAutoStart(controller);
         stage.setOnCloseRequest(event -> shutdownFromUi(stage));

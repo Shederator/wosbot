@@ -160,6 +160,60 @@ public class TaskQueue {
                 .anyMatch(t -> t.getDelay(TimeUnit.SECONDS) < capSec);
     }
 
+    // ---- stamina re-evaluation ---------------------------------------------
+
+    public synchronized int reconsiderStaminaDeferrals(int currentStamina) {
+        int moved = 0;
+        LocalDateTime now = LocalDateTime.now();
+
+        for (DelayedTask task : new ArrayList<>(taskBacklog)) {
+            StaminaDeferral deferral = task.getStaminaDeferral();
+            if (deferral == null) {
+                continue;
+            }
+
+            LocalDateTime revisedWakeAt = deferral.revisedWakeAt(currentStamina, now);
+            if (!revisedWakeAt.isBefore(task.getScheduled())) {
+                continue;
+            }
+
+            LocalDateTime previousWakeAt = task.getScheduled();
+            taskBacklog.remove(task);
+            task.reschedule(revisedWakeAt);
+            taskBacklog.offer(task);
+            recordScheduleAdjustment(task);
+            emitInfoTask(task, String.format(
+                    "External stamina gain: current=%d minimum=%d target=%d floor=%s; wake-up %s -> %s",
+                    currentStamina,
+                    deferral.minimumRequired(),
+                    deferral.regenerationTarget(),
+                    deferral.earliestRunnableAt().format(TS_FMT),
+                    previousWakeAt.format(TS_FMT),
+                    task.getScheduled().format(TS_FMT)));
+            moved++;
+        }
+        return moved;
+    }
+
+    private void recordScheduleAdjustment(DelayedTask task) {
+        Object distinctKey = task.getDistinctKey();
+        String customName = distinctKey == null ? null : distinctKey.toString();
+        TaskStateData state = TaskManagementService.shared().lookupTaskState(
+                profile.getId(), task.getTpDailyTaskId(), customName);
+        if (state == null) {
+            state = new TaskStateData();
+            state.setProfileId(profile.getId());
+            state.setTaskId(task.getTpDailyTaskId());
+            state.setCustomTaskName(customName);
+            state.setScheduled(true);
+            state.setExecuting(false);
+        }
+        state.setNextExecutionTime(task.getScheduled());
+        TaskManagementService.shared().recordTaskState(profile.getId(), state);
+        ScheduleService.obtain().persistScheduleAdjustment(
+                profile, task.getTpTask(), task.getScheduled(), customName, task.getStaminaDeferral());
+    }
+
     // ---- preemption --------------------------------------------------------
 
     public synchronized void preemptActiveTask(PreemptionRule rule) {
@@ -232,6 +286,7 @@ public class TaskQueue {
         if (present != null) {
             taskBacklog.remove(present);
             present.setProfile(profile);
+            present.clearStaminaDeferral();
             present.reschedule(LocalDateTime.now());
             present.setRecurring(recurring);
             taskBacklog.offer(present);
@@ -526,7 +581,8 @@ public class TaskQueue {
         Object k = task.getDistinctKey(); if (k != null) s.setCustomTaskName(k.toString());
         TaskManagementService.shared().recordTaskState(profile.getId(), s);
         if (task.getScheduled() != null) {
-            ScheduleService.obtain().persistDailyCompletion(profile, task.getTpTask(), task.getScheduled(), s.getCustomTaskName());
+            ScheduleService.obtain().persistDailyCompletion(
+                    profile, task.getTpTask(), task.getScheduled(), s.getCustomTaskName(), task.getStaminaDeferral());
         }
     }
 

@@ -184,3 +184,50 @@
     -fx-background-color: #c0392b;
     -fx-border-color: #c0392b;
 }
+
+.giftcode-index-label {
+    -fx-text-fill: #666666;
+    -fx-font-size: 11px;
+    -fx-min-width: 28;
+}
+
+.giftcode-warning {
+    -fx-text-fill: #f0ad4e;
+    -fx-background-color: rgba(240, 173, 78, 0.10);
+    -fx-background-radius: 5;
+    -fx-padding: 8 10;
+}
+
+.giftcode-recipient-row {
+    -fx-background-color: #2a2a2a;
+    -fx-background-radius: 5;
+    -fx-padding: 8 10;
+}
+
+.giftcode-profile-row {
+    -fx-background-color: #222833;
+    -fx-background-radius: 5;
+    -fx-padding: 9 10;
+    -fx-border-color: #3a4658;
+    -fx-border-radius: 5;
+}
+
+.giftcode-profile-label {
+    -fx-text-fill: #ffffff;
+    -fx-font-weight: bold;
+}
+
+.giftcode-recipient-child {
+    -fx-translate-x: 14;
+    -fx-max-width: 100000;
+}
+
+.giftcode-recipient-label {
+    -fx-text-fill: #dddddd;
+    -fx-font-weight: bold;
+}
+
+.giftcode-recipient-source {
+    -fx-text-fill: #888888;
+    -fx-font-size: 10px;
+}

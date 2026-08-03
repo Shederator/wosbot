@@ -58,7 +58,7 @@ public final class CommonOCRSettings {
 
     private static TesseractSettingsData buildSpentStaminaConfig() {
         return TesseractSettingsData.builder()
-                .pageAnalysis(PageAnalysis.SINGLE_LINE)
+                .pageAnalysis(PageAnalysis.SINGLE_WORD)
                 .recognitionEngine(RecognitionEngine.LSTM_ONLY)
                 .isolateForeground(true)
                 .targetColor(new Color(254, 254, 254))

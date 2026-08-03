@@ -147,7 +147,7 @@ public class PetAdventureChestRoutine extends DelayedTask {
 		if (!staminaHelper.checkStaminaOrReschedule(
 				MIN_STAMINA_REQUIRED,
 				TARGET_STAMINA_FOR_REFRESH,
-				this::reschedule)) {
+				this)) {
 			return; // Task will be rescheduled by helper
 		}
 

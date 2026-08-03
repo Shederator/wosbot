@@ -3,53 +3,65 @@
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 
-<VBox stylesheets="@giftcode.css" maxHeight="Infinity" maxWidth="Infinity" HBox.hgrow="ALWAYS" VBox.vgrow="ALWAYS" xmlns="http://javafx.com/javafx/17.0.12" xmlns:fx="http://javafx.com/fxml/1">
-    <children>
-        <ScrollPane fitToWidth="true" hbarPolicy="NEVER" styleClass="task-page-scroll" vbarPolicy="AS_NEEDED" VBox.vgrow="ALWAYS">
-            <content>
-                <VBox styleClass="task-page-root" maxHeight="Infinity" maxWidth="Infinity" VBox.vgrow="ALWAYS">
-                    <children>
-                        <!-- Gift Codes Card -->
-                        <VBox styleClass="content-card">
-                            <children>
-                                <!-- Header -->
-                                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-red">
-                                    <children>
-                                        <Label text="Gift Codes" />
-                                    </children>
-                                </HBox>
-                                <!-- Body -->
-                                <VBox styleClass="task-section-inner">
-                                    <children>
-                                        <Label styleClass="task-card-description" text="Fetch the latest available gift codes from the server. Click the copy button next to any code to copy it to your clipboard." wrapText="true" />
-
-                                        <Separator style="-fx-opacity: 0.25;" />
-
-                                        <!-- Controls row -->
-                                        <HBox spacing="10" alignment="CENTER_LEFT">
-                                            <children>
-                                                <Button fx:id="buttonFetch" mnemonicParsing="false" onAction="#handleFetch" styleClass="giftcode-fetch-btn" text="Fetch Codes" />
-                                                <Button fx:id="buttonCopyAll" mnemonicParsing="false" onAction="#handleCopyAll" styleClass="giftcode-copy-all-btn" text="Copy All" visible="false" managed="false" />
-                                                <Region HBox.hgrow="ALWAYS" />
-                                                <Label fx:id="labelStatus" styleClass="giftcode-status" text="Click 'Fetch Codes' to load gift codes." />
-                                            </children>
-                                        </HBox>
-
-                                        <Separator style="-fx-opacity: 0.25;" />
-
-                                        <!-- Gift code list container -->
-                                        <VBox fx:id="giftcodeListContainer" spacing="6" VBox.vgrow="ALWAYS">
-                                            <children>
-                                                <Label styleClass="giftcode-placeholder" text="No gift codes loaded yet." />
-                                            </children>
-                                        </VBox>
-                                    </children>
-                                </VBox>
-                            </children>
-                        </VBox>
-                    </children>
+<VBox stylesheets="@giftcode.css" maxHeight="Infinity" maxWidth="Infinity" VBox.vgrow="ALWAYS"
+      xmlns="http://javafx.com/javafx/17.0.12" xmlns:fx="http://javafx.com/fxml/1">
+    <ScrollPane fitToWidth="true" hbarPolicy="NEVER" styleClass="task-page-scroll" vbarPolicy="AS_NEEDED" VBox.vgrow="ALWAYS">
+        <VBox styleClass="task-page-root" maxWidth="Infinity" spacing="14">
+            <VBox styleClass="content-card">
+                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-red">
+                    <Label text="Gift Codes" />
+                </HBox>
+                <VBox styleClass="task-section-inner" spacing="10">
+                    <Label styleClass="task-card-description"
+                           text="Active codes are loaded from the Frostguard gift code source. Discovery dates show when a code entered the list, not when it expires."
+                           wrapText="true" />
+                    <HBox spacing="10" alignment="CENTER_LEFT">
+                        <Button fx:id="buttonFetch" onAction="#handleFetch" styleClass="giftcode-fetch-btn" text="Refresh" />
+                        <Button fx:id="buttonCopyAll" onAction="#handleCopyAll" styleClass="giftcode-copy-all-btn"
+                                text="Copy All Active" visible="false" managed="false" />
+                        <Region HBox.hgrow="ALWAYS" />
+                        <Label fx:id="labelStatus" styleClass="giftcode-status" text="Gift codes have not been checked yet." wrapText="true" />
+                    </HBox>
+                    <Separator style="-fx-opacity: 0.25;" />
+                    <VBox fx:id="giftcodeListContainer" spacing="6">
+                        <Label styleClass="giftcode-placeholder" text="No active gift codes loaded." />
+                    </VBox>
                 </VBox>
-            </content>
-        </ScrollPane>
-    </children>
+            </VBox>
+
+            <VBox styleClass="content-card">
+                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-red">
+                    <Label text="Recipients &amp; Claims" />
+                </HBox>
+                <VBox styleClass="task-section-inner" spacing="10">
+                    <Label styleClass="task-card-description"
+                           text="Each profile keeps its own auto-claim setting and additional recipients. Redeemed-code history is shared across profiles in this bot's local database."
+                           wrapText="true" />
+                    <Label fx:id="labelAccountHint" styleClass="giftcode-warning"
+                           text="No complete profile identity found. In Profile Manager, enter both ID and Server/Region under Character Information before enabling auto claim."
+                           wrapText="true" />
+                    <VBox fx:id="recipientListContainer" spacing="6">
+                        <Label styleClass="giftcode-placeholder" text="No Player IDs configured yet." />
+                    </VBox>
+                    <HBox spacing="8" alignment="CENTER_LEFT">
+                        <ComboBox fx:id="comboRecipientProfile" promptText="Owning profile" prefWidth="180" />
+                        <TextField fx:id="textfieldRecipientAlias" promptText="Alias (e.g. Alex)" HBox.hgrow="ALWAYS" />
+                        <TextField fx:id="textfieldRecipientId" promptText="Player ID" HBox.hgrow="ALWAYS" />
+                        <TextField fx:id="textfieldRecipientRegion" promptText="Region" prefWidth="100" />
+                        <Button onAction="#handleAddRecipient" styleClass="giftcode-copy-all-btn" text="Add" />
+                    </HBox>
+                    <Separator style="-fx-opacity: 0.25;" />
+                    <HBox spacing="12" alignment="CENTER_LEFT">
+                        <Button fx:id="buttonClaimAll" onAction="#handleClaimAll" styleClass="giftcode-fetch-btn"
+                                text="Claim All for All Recipients" disable="true" />
+                        <Label fx:id="labelClaimStatus" styleClass="giftcode-status" wrapText="true"
+                               visible="false" managed="false" HBox.hgrow="ALWAYS" />
+                    </HBox>
+                    <Label styleClass="giftcode-description"
+                           text="Manual claim refreshes the code list first. Each Player ID and code is redeemed at most once per bot instance, even when the recipient appears in multiple profiles."
+                           wrapText="true" />
+                </VBox>
+            </VBox>
+        </VBox>
+    </ScrollPane>
 </VBox>

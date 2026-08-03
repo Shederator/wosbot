@@ -289,6 +289,7 @@ public enum ConfigurationKeyEnum {
     TELEGRAM_ALLOWED_CHAT_ID_STRING     ("",            String.class,   ConfigCategory.SYSTEM),
     TELEGRAM_BOT_ENABLED_BOOL          ("false",       Boolean.class,  ConfigCategory.SYSTEM),
     TELEGRAM_BOT_TOKEN_STRING           ("",            String.class,   ConfigCategory.SYSTEM),
+    GIFT_CODE_STATE_JSON                ("{}",          String.class,   ConfigCategory.SYSTEM, true),
 
     /* ─────────── testing ─────────── */
 

@@ -15,6 +15,9 @@ public class DailyTaskStatusData {
     private boolean activated;
     private LocalDateTime scheduledAt;
     private LocalDateTime lastCompletion;
+    private Integer staminaMinimumRequired;
+    private Integer staminaRegenerationTarget;
+    private LocalDateTime staminaEarliestRunnableAt;
 
     /* ── primary construction via factory ── */
 
@@ -33,7 +36,11 @@ public class DailyTaskStatusData {
 
     /** Immutable-style copy with updated schedule. */
     public DailyTaskStatusData withUpdatedSchedule(LocalDateTime nextRun) {
-        return create(boundProfileId, taskTypeCode, customLabel, activated, nextRun, lastCompletion);
+        DailyTaskStatusData copy = create(boundProfileId, taskTypeCode, customLabel, activated, nextRun, lastCompletion);
+        copy.staminaMinimumRequired = staminaMinimumRequired;
+        copy.staminaRegenerationTarget = staminaRegenerationTarget;
+        copy.staminaEarliestRunnableAt = staminaEarliestRunnableAt;
+        return copy;
     }
 
     /* ── no-arg for frameworks ── */
@@ -41,12 +48,16 @@ public class DailyTaskStatusData {
 
     /** Constructor used by Hibernate HQL projections. */
     public DailyTaskStatusData(Long profileId, int typeCode, LocalDateTime lastRun,
-                               LocalDateTime nextRun, String label) {
+                               LocalDateTime nextRun, String label, Integer minimumRequired,
+                               Integer regenerationTarget, LocalDateTime earliestRunnableAt) {
         this.boundProfileId = profileId;
         this.taskTypeCode = typeCode;
         this.lastCompletion = lastRun;
         this.scheduledAt = nextRun;
         this.customLabel = label;
+        this.staminaMinimumRequired = minimumRequired;
+        this.staminaRegenerationTarget = regenerationTarget;
+        this.staminaEarliestRunnableAt = earliestRunnableAt;
         this.activated = true;
     }
 
@@ -75,6 +86,21 @@ public class DailyTaskStatusData {
 
     public LocalDateTime getLastCompletion()            { return lastCompletion; }
     public void setLastCompletion(LocalDateTime ts)     { this.lastCompletion = ts; }
+
+    public Integer getStaminaMinimumRequired()          { return staminaMinimumRequired; }
+    public void setStaminaMinimumRequired(Integer value) { this.staminaMinimumRequired = value; }
+
+    public Integer getStaminaRegenerationTarget()       { return staminaRegenerationTarget; }
+    public void setStaminaRegenerationTarget(Integer value) { this.staminaRegenerationTarget = value; }
+
+    public LocalDateTime getStaminaEarliestRunnableAt() { return staminaEarliestRunnableAt; }
+    public void setStaminaEarliestRunnableAt(LocalDateTime value) { this.staminaEarliestRunnableAt = value; }
+
+    public boolean hasStaminaDeferral() {
+        return staminaMinimumRequired != null
+            && staminaRegenerationTarget != null
+            && staminaEarliestRunnableAt != null;
+    }
 
     /* ── legacy delegates ── */
 

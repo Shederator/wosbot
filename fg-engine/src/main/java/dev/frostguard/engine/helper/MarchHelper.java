@@ -1,45 +1,54 @@
 package dev.frostguard.engine.helper;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
+import dev.frostguard.api.domain.MarchResourceType;
 import dev.frostguard.api.domain.MarchSlotState;
-import dev.frostguard.api.domain.MarchSlotStatus;
-import dev.frostguard.api.domain.PointData;
+import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.emulator.EmulatorController;
-import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.engine.nav.RallyFlagCoordinates;
+import dev.frostguard.vision.color.GameColors;
+import dev.frostguard.vision.color.PixelStats;
+import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.logging.ProfileContextLogger;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
+import dev.frostguard.vision.ocr.TesseractOcrProvider;
+
+import java.awt.image.BufferedImage;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 // Handles march-slot availability checks, rally flag interaction,
 // and left-panel menu toggling for deployment workflows.
 public class MarchHelper {
 
     private static final int SLOT_COUNT = 6;
-    private static final int LOCKED_FLAG_THRESHOLD = 88;
-    private static final int MAX_FLAG_SLOTS = 6;
-    private static final int FLAG_SLOT_TOLERANCE_PX = 45;
-    private static final Pattern TIMER_PATTERN = Pattern.compile("\\b\\d{1,2}:\\d{2}(?::\\d{2})?\\b");
-    private static final PointData MARCH_RECALL_CONFIRM_TOP_LEFT = new PointData(446, 780);
-    private static final PointData MARCH_RECALL_CONFIRM_BOTTOM_RIGHT = new PointData(578, 800);
-    private static final AreaData MARCH_QUEUE_AREA = new AreaData(new PointData(10, 342), new PointData(435, 772));
+    private static final int MAX_FLAG_SLOTS = 8;
+    // A padlock matches its own icon at 98-100%; an unlocked slot never exceeds ~37%. Half a slot of
+    // tolerance absorbs the tile drift without ever reaching a neighbouring slot (~74px apart).
+    private static final double LOCKED_FLAG_THRESHOLD = 85;
+    private static final int FLAG_SLOT_TOLERANCE_PX = 35;
+    // "Idle" measures ~145 white pixels, a countdown ~255-285, so the gap is wide. Orange "Unlock"
+    // (~260) and red "Unavailable" (~565) never overlap white; stationed rows have no status line.
+    private static final int COLOUR_PRESENT_MIN = 60;
+    // Gather icons sit on a green disc (~1000-1200 green pixels); every other icon has none.
+    // The returning icon self-matches at 100%; the next closest icon reaches only ~68%.
+    private static final double RETURNING_ICON_THRESHOLD = 85;
+    private static final double STATUS_TEXT_THRESHOLD = 90;
+    private static final double ACTIVITY_ICON_THRESHOLD = 85;
+    // A non-gather row icon still contributes enough non-background colour to prove the row is not idle.
+    private static final int ICON_PRESENT_MIN = 500;
 
     private final EmulatorController emu;
     private final String device;
     private final ResilientOcrExecutor<String> ocrStrings;
     private final ProfileContextLogger log;
-    private final TemplateSearchHelper templateSearch;
 
     public MarchHelper(EmulatorController emuManager, String emulatorNumber,
                        ResilientOcrExecutor<String> stringHelper, AccountDescriptor profile) {
@@ -47,7 +56,6 @@ public class MarchHelper {
         this.device = emulatorNumber;
         this.ocrStrings = stringHelper;
         this.log = new ProfileContextLogger(MarchHelper.class, profile);
-        this.templateSearch = new TemplateSearchHelper(emuManager, emulatorNumber, profile);
     }
 
     public boolean checkMarchesAvailable() {
@@ -64,170 +72,129 @@ public class MarchHelper {
     public List<MarchSlotState> readMarchQueue() {
         openLeftMenuCitySection(false);
         try {
+            return readVisibleMarchQueue();
+        } finally {
+            dismissLeftPanel();
+        }
+    }
+
+    /**
+     * Reads the already-open wilderness March Queue panel without changing its state. This is for
+     * workflows such as Intel recall that must inspect rows and then interact with the same panel.
+     */
+    public List<MarchSlotState> readVisibleMarchQueue() {
+        try {
+            RawImageData frame = emu.captureScreen(device);
+            BufferedImage image = TesseractOcrProvider.toBufferedImage(frame);
+
             List<MarchSlotState> slots = new ArrayList<>(SLOT_COUNT);
             for (int index = 0; index < SLOT_COUNT; index++) {
-                slots.add(readSlot(index));
+                slots.add(readSlot(frame, image, index));
             }
             log.info("March queue: " + slots.stream()
                     .map(slot -> "#" + slot.slot() + "=" + slot.status()
-                            + (slot.countdown() == null ? "" : "(" + slot.countdown() + ")"))
+                            + "/" + slot.activityType()
+                            + "/" + slot.movementPhase()
+                            + (slot.resourceType() == null ? "" : "/" + slot.resourceType())
+                            + (slot.countdown() == null ? "" : "(" + slot.countdown() + ")")
+                            + (slot.evidence() == null ? "" : "{" + slot.evidence() + "}"))
                     .collect(Collectors.joining(" ")));
             return slots;
         } catch (Exception ex) {
             log.error("March queue read error: " + ex.getMessage());
             return List.of();
-        } finally {
-            dismissLeftPanel();
         }
     }
 
-    // Detects currently usable march capacity from the left march queue panel.
-    // A slot counts when it is not LOCKED.
-    public int detectUsableMarchSlots() {
-        int usableSlots = (int) readMarchQueue().stream()
-            .filter(slot -> slot.status().countsTowardsCapacity())
-                .count();
-        log.info("Detected usable march slots: " + usableSlots);
-        return usableSlots;
+    private MarchSlotState readSlot(RawImageData frame, BufferedImage image, int index) {
+        int slot = index + 1;
+        AreaData status = CommonGameAreas.MARCH_QUEUE_STATUS[index];
+        AreaData title = CommonGameAreas.MARCH_QUEUE_TITLE[index];
+        AreaData icon = CommonGameAreas.MARCH_QUEUE_ICON[index];
+
+        int orange = PixelStats.count(image, status, GameColors::isActionOrange);
+        int red = PixelStats.count(image, status, GameColors::isBlockedRed);
+        int white = PixelStats.count(image, status, GameColors::isLabelWhite);
+        int gatherGreen = PixelStats.count(image, icon, GameColors::isVividGreen);
+        int iconColour = PixelStats.count(image, icon, pixel -> GameColors.isLabelWhite(pixel)
+                || GameColors.isVividGreen(pixel)
+                || GameColors.isActionOrange(pixel)
+                || GameColors.isBlockedRed(pixel)
+                || GameColors.isMarchQueueIconBlue(pixel));
+        boolean returning = emu.locatePattern(device, frame, TemplatesEnum.MARCH_QUEUE_RETURNING_ICON,
+                icon.topLeft(), icon.bottomRight(), RETURNING_ICON_THRESHOLD).isFound();
+        boolean rally = matchesActivityIcon(frame, icon, TemplatesEnum.MARCH_QUEUE_RALLY_ICON);
+        boolean attackIcon = matchesActivityIcon(frame, icon, TemplatesEnum.MARCH_QUEUE_ATTACK_ICON);
+        boolean encampment = matchesActivityIcon(frame, icon, TemplatesEnum.MARCH_QUEUE_ENCAMPMENT_ICON);
+        boolean reinforcement = matchesActivityIcon(frame, icon, TemplatesEnum.MARCH_QUEUE_REINFORCEMENT_ICON);
+        boolean garrisoned = matchesActivityIcon(frame, icon, TemplatesEnum.MARCH_QUEUE_GARRISONED_ICON);
+        boolean slotFlag = emu.locatePattern(device, frame, TemplatesEnum.MARCH_QUEUE_SLOT_FLAG_ICON,
+                icon.topLeft(), icon.bottomRight(), RETURNING_ICON_THRESHOLD).isFound();
+        boolean idleText = matchesStatus(frame, status, TemplatesEnum.MARCH_QUEUE_STATUS_IDLE);
+        boolean unlockText = matchesStatus(frame, status, TemplatesEnum.MARCH_QUEUE_STATUS_UNLOCK);
+        boolean unavailableText = matchesStatus(frame, status, TemplatesEnum.MARCH_QUEUE_STATUS_UNAVAILABLE);
+        boolean goToText = matchesTitle(frame, title, TemplatesEnum.MARCH_QUEUE_TEXT_GO_TO);
+        boolean gatheringText = matchesTitle(frame, title, TemplatesEnum.MARCH_QUEUE_TEXT_GATHERING);
+        boolean attackText = matchesTitle(frame, title, TemplatesEnum.MARCH_QUEUE_TEXT_ATTACK);
+        boolean terminalStatus = idleText || unlockText || unavailableText
+                || orange >= COLOUR_PRESENT_MIN || red >= COLOUR_PRESENT_MIN;
+        Duration countdown = !terminalStatus && white >= COLOUR_PRESENT_MIN ? readCountdown(index) : null;
+        MarchResourceType resourceType = detectGatherResource(frame, icon);
+        boolean activityIconPresent = iconColour >= ICON_PRESENT_MIN && !slotFlag;
+
+        return MarchQueueSlotClassifier.classify(new MarchQueueSlotClassifier.Signals(
+                slot, orange, red, white, gatherGreen, returning, rally, attackIcon, encampment, reinforcement,
+                garrisoned,
+                idleText, unlockText, unavailableText, goToText, gatheringText, attackText,
+                activityIconPresent, countdown, resourceType));
     }
 
-    // Counts only usable march slots that are currently occupied.
-    public int countOccupiedUsableMarchSlots() {
-        int occupiedSlots = (int) readMarchQueue().stream()
-            .filter(slot -> slot.status().countsTowardsCapacity())
-                .filter(slot -> slot.status() != MarchSlotStatus.IDLE)
-                .count();
-        log.info("Detected occupied usable march slots: " + occupiedSlots);
-        return occupiedSlots;
+    private boolean matchesStatus(RawImageData frame, AreaData status, TemplatesEnum template) {
+        return emu.locatePattern(device, frame, template, status.topLeft(), status.bottomRight(),
+                STATUS_TEXT_THRESHOLD).isFound();
     }
 
-    // Recalls all active marches shown in the march queue panel.
-    public int recallAllActiveMarches() {
-        openLeftMenuCitySection(false);
-        int recalled = 0;
-
-        try {
-            while (true) {
-                List<ImageSearchResultData> recallButtons = templateSearch.locateAllPatterns(
-                        TemplatesEnum.MARCHES_AREA_RECALL_BUTTON,
-                        SearchConfig.builder()
-                                .withArea(MARCH_QUEUE_AREA)
-                                .withMaxAttempts(2)
-                                .withDelay(150L)
-                                .withMaxResults(6)
-                                .build());
-
-                if (recallButtons == null || recallButtons.isEmpty()) {
-                    break;
-                }
-
-                ImageSearchResultData button = recallButtons.get(0);
-                if (button == null || button.getPoint() == null) {
-                    break;
-                }
-
-                emu.touchPoint(device, button.getPoint());
-                interruptibleWait(200);
-                emu.touchArea(device, MARCH_RECALL_CONFIRM_TOP_LEFT, MARCH_RECALL_CONFIRM_BOTTOM_RIGHT, 1, 200);
-                recalled++;
-                interruptibleWait(300);
-            }
-
-            log.info("Recalled active marches for capacity detection: " + recalled);
-            return recalled;
-        } finally {
-            dismissLeftPanel();
-        }
+    private boolean matchesTitle(RawImageData frame, AreaData title, TemplatesEnum template) {
+        return emu.locatePattern(device, frame, template, title.topLeft(), title.bottomRight(),
+                STATUS_TEXT_THRESHOLD).isFound();
     }
 
-    private MarchSlotState readSlot(int index) {
-        AreaData statusArea = CommonGameAreas.MARCH_QUEUE_STATUS[index];
-        AreaData timerArea = CommonGameAreas.MARCH_QUEUE_TIMER[index];
-        AreaData iconArea = CommonGameAreas.MARCH_QUEUE_ICON[index];
-
-        String statusText = ocrStrings.attemptRecognition(
-                statusArea.topLeft(),
-                statusArea.bottomRight(),
-                2,
-                120L,
-                null,
-                text -> text != null,
-                text -> text);
-
-        String timerText = ocrStrings.attemptRecognition(
-                timerArea.topLeft(),
-                timerArea.bottomRight(),
-                2,
-                120L,
-                CommonOCRSettings.MARCH_QUEUE_TIMER_SETTINGS,
-                text -> text != null,
-                text -> text);
-
-        Duration countdown = parseCountdown(timerText);
-        MarchSlotStatus status = classifyStatus(statusText, countdown, iconArea);
-        return new MarchSlotState(index + 1, status, countdown);
+    private MarchResourceType detectGatherResource(RawImageData frame, AreaData icon) {
+        if (matchesResource(frame, icon, TemplatesEnum.MARCH_QUEUE_MEAT_ICON)) {
+            return MarchResourceType.MEAT;
+        }
+        if (matchesResource(frame, icon, TemplatesEnum.MARCH_QUEUE_WOOD_ICON)) {
+            return MarchResourceType.WOOD;
+        }
+        if (matchesResource(frame, icon, TemplatesEnum.MARCH_QUEUE_COAL_ICON)) {
+            return MarchResourceType.COAL;
+        }
+        if (matchesResource(frame, icon, TemplatesEnum.MARCH_QUEUE_IRON_ICON)) {
+            return MarchResourceType.IRON;
+        }
+        return MarchResourceType.UNKNOWN;
     }
 
-    private MarchSlotStatus classifyStatus(String statusText, Duration countdown, AreaData iconArea) {
-        String normalized = statusText == null ? "" : statusText.toLowerCase(Locale.ENGLISH);
-        if (normalized.contains("unlock") || normalized.contains("unavailable")) {
-            return MarchSlotStatus.LOCKED;
-        }
-        if (normalized.contains("idle")) {
-            return MarchSlotStatus.IDLE;
-        }
-        if (countdown != null) {
-            if (isReturningIcon(iconArea)) {
-                return MarchSlotStatus.RETURNING;
-            }
-            if (normalized.contains("gather")) {
-                return MarchSlotStatus.GATHERING;
-            }
-            return MarchSlotStatus.BUSY_UNKNOWN;
-        }
-        return MarchSlotStatus.STATIONED;
+    private boolean matchesResource(RawImageData frame, AreaData icon, TemplatesEnum template) {
+        return emu.locatePattern(device, frame, template, icon.topLeft(), icon.bottomRight(), 80).isFound();
     }
 
-    private boolean isReturningIcon(AreaData iconArea) {
-        ImageSearchResultData icon = templateSearch.locatePattern(
-                TemplatesEnum.MARCH_QUEUE_RETURNING_ICON,
-                SearchConfig.builder()
-                        .withArea(iconArea)
-                        .withThreshold(88)
-                        .withMaxAttempts(1)
-                        .build());
-        return icon != null && icon.isFound();
+    private boolean matchesActivityIcon(RawImageData frame, AreaData icon, TemplatesEnum template) {
+        return emu.locatePattern(device, frame, template, icon.topLeft(), icon.bottomRight(),
+                ACTIVITY_ICON_THRESHOLD).isFound();
     }
 
-    private Duration parseCountdown(String raw) {
-        if (raw == null) {
-            return null;
-        }
-        String text = raw.trim();
-        java.util.regex.Matcher matcher = TIMER_PATTERN.matcher(text);
-        if (!matcher.find()) {
-            return null;
-        }
-        String timer = matcher.group();
-        String[] parts = timer.split(":");
-        try {
-            if (parts.length == 2) {
-                long minutes = Long.parseLong(parts[0]);
-                long seconds = Long.parseLong(parts[1]);
-                return Duration.ofMinutes(minutes).plusSeconds(seconds);
-            }
-            if (parts.length == 3) {
-                long hours = Long.parseLong(parts[0]);
-                long minutes = Long.parseLong(parts[1]);
-                long seconds = Long.parseLong(parts[2]);
-                return Duration.ofHours(hours).plusMinutes(minutes).plusSeconds(seconds);
-            }
-        } catch (NumberFormatException ignored) {
-            return null;
-        }
-        return null;
+    private Duration readCountdown(int index) {
+        AreaData timer = CommonGameAreas.MARCH_QUEUE_TIMER[index];
+        String text = ocrStrings.attemptRecognition(timer.topLeft(), timer.bottomRight(),
+                2, 150L, CommonOCRSettings.MARCH_QUEUE_TIMER_SETTINGS,
+                GameTimeUtils::isAcceptedFormat, value -> value);
+        return text == null ? null : GameTimeUtils.parseDuration(text);
     }
 
+    // A locked slot wears a padlock, so it is recognised before it is tapped. The previous check read
+    // the unlock prompt with OCR after tapping and treated anything that was not the word "unlock" -
+    // garbage included - as a confirmation, which let locked flags through.
     public boolean selectFlag(Integer flagNumber) {
         if (flagNumber == null) {
             log.debug("No flag — skipping");

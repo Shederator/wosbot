@@ -276,11 +276,13 @@ private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
             LocalDateTime staminaReadyAt = LocalDateTime.now().plusMinutes(
                     staminaHelper.staminaRegenerationTime(staminaHelper.getCurrentStamina(), refreshStaminaLevel));
             if (staminaReadyAt.isAfter(nextRun)) {
+                LocalDateTime marchReadyAt = nextRun;
                 logInfo(routineLogPolarTerrorHuntingLine(String.format(
                         "Stamina runs out before the march returns; delaying the next run from %s to %s",
                         GameTimeUtils.formatCountdown(nextRun),
                         GameTimeUtils.formatCountdown(staminaReadyAt))));
                 nextRun = staminaReadyAt;
+                deferForStamina(requiredStaminaForRally(), refreshStaminaLevel, nextRun, marchReadyAt);
             }
         }
 
@@ -385,10 +387,9 @@ private RallyLaunchResult launchSingleRallyFlow(int polarLevel, boolean useFlag,
                     "The formation screen offers Troop Training, so there are no troops to send");
         }
 
-        long travelTimeSeconds = staminaHelper.parseTravelTime();
-        int rallyStaminaCost = staminaHelper.readDeployCost(MAX_POLAR_RALLY_STAMINA_COST);
-        logInfo(routineLogPolarTerrorHuntingLine(String.format(
-                "Deployment read: travelSeconds=%d staminaCost=%d", travelTimeSeconds, rallyStaminaCost)));
+        var deployment = deploymentHelper.readScreen(MAX_POLAR_RALLY_STAMINA_COST);
+        long travelTimeSeconds = deployment.travelTimeSeconds();
+        int rallyStaminaCost = deployment.staminaCost();
 
         ImageSearchResultData deploy = templateSearchHelper.locatePattern(
                 TemplatesEnum.DEPLOY_BUTTON,
@@ -538,7 +539,7 @@ private void rescheduleForStaminaRegen() {
         logInfo(routineLogPolarTerrorHuntingLine(String.format(
                 "Stamina gate: waiting %d min for regeneration from %d to %d",
                 waitMinutes, current, refreshStaminaLevel)));
-        reschedule(retryAt);
+        deferForStamina(requiredStaminaForRally(), refreshStaminaLevel, retryAt);
     }
 
 private void rescheduleForStaminaTopUpRetry(StaminaTopUpResult result) {

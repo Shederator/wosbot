@@ -81,6 +81,10 @@
 		</dependency>
 		<dependency>
 			<groupId>dev.frostguard</groupId>
+			<artifactId>fg-data</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>dev.frostguard</groupId>
 			<artifactId>fg-tasks</artifactId>
 		</dependency>
 		<dependency>
@@ -97,6 +101,12 @@
 			<groupId>ch.qos.logback</groupId>
 			<artifactId>logback-classic</artifactId>
 			<scope>compile</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
 		</dependency>
 	</dependencies>
 
