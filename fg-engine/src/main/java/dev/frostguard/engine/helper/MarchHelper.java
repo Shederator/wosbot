@@ -66,6 +66,34 @@ public class MarchHelper {
         return anyIdle;
     }
 
+    /**
+     * Legacy compatibility API: number of configured march slots that can be used.
+     * Only locked slots are excluded from capacity.
+     */
+    public int detectUsableMarchSlots() {
+        List<MarchSlotState> slots = readMarchQueue();
+        if (slots.isEmpty()) {
+            return 0;
+        }
+        return (int) slots.stream()
+                .filter(slot -> slot.status().countsTowardsCapacity())
+                .count();
+    }
+
+    /**
+     * Legacy compatibility API: number of currently occupied usable slots.
+     */
+    public int countOccupiedUsableMarchSlots() {
+        List<MarchSlotState> slots = readMarchQueue();
+        if (slots.isEmpty()) {
+            return 0;
+        }
+        return (int) slots.stream()
+                .filter(slot -> slot.status().countsTowardsCapacity())
+                .filter(slot -> !slot.isIdle())
+                .count();
+    }
+
     // Reads every March Queue row from a single screenshot. Text is deliberately avoided: the status
     // line is classified by colour (white "Idle", orange "Unlock", red "Unavailable", nothing at all
     // for stationed troops) and the activity by its icon. Only the countdown needs OCR.
