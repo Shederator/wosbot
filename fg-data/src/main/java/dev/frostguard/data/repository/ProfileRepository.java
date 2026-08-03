@@ -9,9 +9,13 @@ import java.util.stream.Collectors;
 
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ConfigData;
+import dev.frostguard.api.domain.ProfileTagData;
 import dev.frostguard.data.access.DataStore;
 import dev.frostguard.data.entity.Config;
+import dev.frostguard.data.entity.ConfigTemplate;
 import dev.frostguard.data.entity.Profile;
+import dev.frostguard.data.entity.ProfileTag;
+import dev.frostguard.api.configs.TpConfigEnum;
 
 /**
  * Manages {@link Profile} persistence operations and the associated
@@ -21,9 +25,11 @@ import dev.frostguard.data.entity.Profile;
 public class ProfileRepository {
 
 	private static ProfileRepository instance;
-	private final DataStore store = DataStore.getInstance();
+	private final DataStore store;
 
-	private ProfileRepository() {}
+	private ProfileRepository() { this(DataStore.getInstance()); }
+
+	public ProfileRepository(DataStore store) { this.store = java.util.Objects.requireNonNull(store); }
 
 	public static ProfileRepository getRepository() {
 		if (instance == null) {
@@ -41,6 +47,7 @@ public class ProfileRepository {
 		}
 
 		attachConfigEntries(descriptors);
+		attachTags(descriptors);
 		return descriptors;
 	}
 
@@ -49,6 +56,7 @@ public class ProfileRepository {
 
 		return findDescriptorById(id)
 			.map(this::attachSingleConfigs)
+			.map(this::attachSingleTags)
 			.orElse(null);
 	}
 
@@ -59,12 +67,121 @@ public class ProfileRepository {
 	}
 
 	public boolean addAccount(Profile profile) { return store.persist(profile); }
+
+	public Long createAccountAggregate(Profile profile, List<ConfigData> settings, List<String> tagNames) {
+		try {
+			return store.withinTransaction(em -> {
+				ConfigTemplate template = em.find(ConfigTemplate.class, TpConfigEnum.PROFILE_CONFIG.getId());
+				if (template == null) throw new IllegalStateException("Profile configuration template is missing");
+				for (ConfigData setting : settings == null ? List.<ConfigData>of() : settings) {
+					profile.getSettings().add(new Config(profile, template,
+							setting.getConfigurationName(), setting.getValue()));
+				}
+				for (String raw : tagNames == null ? List.<String>of() : tagNames) {
+					String name = normalizeTag(raw);
+					if (name.isBlank()) continue;
+					List<ProfileTag> matches = em.createQuery(
+							"SELECT t FROM ProfileTag t WHERE lower(t.name) = :name", ProfileTag.class)
+							.setParameter("name", name.toLowerCase()).getResultList();
+					ProfileTag tag = matches.isEmpty() ? new ProfileTag(name) : matches.get(0);
+					if (matches.isEmpty()) em.persist(tag);
+					profile.getTags().add(tag);
+				}
+				em.persist(profile);
+				em.flush();
+				return profile.getId();
+			});
+		} catch (Exception ex) {
+			return null;
+		}
+	}
 	public boolean saveAccount(Profile profile) { return store.merge(profile); }
 	public boolean deleteAccount(Profile profile) { return store.remove(profile); }
 
 	public Profile getAccountById(Long id) {
 		if (id == null) return null;
 		return store.lookup(Profile.class, id);
+	}
+
+	public List<String> getTagNames() {
+		return store.executeQuery("SELECT t.name FROM ProfileTag t ORDER BY lower(t.name)", String.class, null);
+	}
+
+	public List<ProfileTagData> getTags() {
+		return store.executeQuery("SELECT t FROM ProfileTag t ORDER BY lower(t.name)", ProfileTag.class, null)
+				.stream().map(tag -> new ProfileTagData(tag.getName(),
+						tag.getColor() == null ? "#388bfd" : tag.getColor())).toList();
+	}
+
+	public boolean updateTag(String oldName, String newName, String color) {
+		try {
+			return store.withinTransaction(em -> {
+				String normalizedName = normalizeTag(newName);
+				if (normalizedName.isBlank()) return false;
+				Long collisionCount = em.createQuery(
+						"SELECT count(t) FROM ProfileTag t WHERE lower(t.name) = :newName AND lower(t.name) <> :oldName",
+						Long.class).setParameter("newName", normalizedName.toLowerCase())
+						.setParameter("oldName", oldName.toLowerCase()).getSingleResult();
+				if (collisionCount > 0) return false;
+				List<ProfileTag> matches = em.createQuery(
+						"SELECT t FROM ProfileTag t WHERE lower(t.name) = :name", ProfileTag.class)
+						.setParameter("name", oldName.toLowerCase()).getResultList();
+				if (matches.isEmpty()) return false;
+				ProfileTag tag = matches.get(0);
+				tag.setName(normalizedName);
+				tag.setColor(normalizeColor(color));
+				return true;
+			});
+		} catch (Exception ex) {
+			return false;
+		}
+	}
+
+	public boolean deleteTag(String name) {
+		try {
+			return store.withinTransaction(em -> {
+				List<ProfileTag> matches = em.createQuery(
+						"SELECT t FROM ProfileTag t WHERE lower(t.name) = :name", ProfileTag.class)
+						.setParameter("name", name.toLowerCase()).getResultList();
+				if (matches.isEmpty()) return false;
+				ProfileTag tag = matches.get(0);
+				em.createNativeQuery("DELETE FROM profile_tag_assignments WHERE tag_id = ?")
+						.setParameter(1, tag.getId()).executeUpdate();
+				em.remove(tag);
+				return true;
+			});
+		} catch (Exception ex) {
+			return false;
+		}
+	}
+
+	public boolean replaceProfileTags(Long profileId, List<String> tagNames) {
+		if (profileId == null) return false;
+		try {
+			return store.withinTransaction(em -> {
+				Profile profile = em.find(Profile.class, profileId);
+				if (profile == null) return false;
+				var normalized = tagNames == null ? List.<String>of() : tagNames.stream()
+						.map(ProfileRepository::normalizeTag)
+						.filter(name -> !name.isBlank())
+						.distinct()
+						.toList();
+				var assigned = new java.util.LinkedHashSet<ProfileTag>();
+				for (String name : normalized) {
+					List<ProfileTag> matches = em.createQuery(
+							"SELECT t FROM ProfileTag t WHERE lower(t.name) = :name", ProfileTag.class)
+							.setParameter("name", name.toLowerCase())
+							.getResultList();
+					ProfileTag tag = matches.isEmpty() ? new ProfileTag(name) : matches.get(0);
+					if (matches.isEmpty()) em.persist(tag);
+					assigned.add(tag);
+				}
+				profile.setTags(assigned);
+				return true;
+			});
+		} catch (Exception ex) {
+			return false;
+		}
 	}
 
 	public List<Config> getAccountSettings(Long accountId) {
@@ -138,6 +255,34 @@ public class ProfileRepository {
 
 		descriptors.forEach(d ->
 			d.setConfigs(grouped.getOrDefault(d.getId(), new ArrayList<>())));
+	}
+
+	private void attachTags(List<AccountDescriptor> descriptors) {
+		if (descriptors.isEmpty()) return;
+		List<Object[]> rows = store.executeQuery(
+				"SELECT p.id, t.name FROM Profile p JOIN p.tags t ORDER BY lower(t.name)", Object[].class, null);
+		if (rows == null) return;
+		Map<Long, List<String>> grouped = rows.stream().collect(Collectors.groupingBy(
+				row -> (Long) row[0], Collectors.mapping(row -> (String) row[1], Collectors.toList())));
+		descriptors.forEach(descriptor -> descriptor.setTags(grouped.getOrDefault(descriptor.getId(), List.of())));
+	}
+
+	private AccountDescriptor attachSingleTags(AccountDescriptor descriptor) {
+		List<String> tags = store.executeQuery(
+				"SELECT t.name FROM Profile p JOIN p.tags t WHERE p.id = :profileId ORDER BY lower(t.name)",
+				String.class, Map.of("profileId", descriptor.getId()));
+		descriptor.setTags(tags);
+		return descriptor;
+	}
+
+	private static String normalizeTag(String raw) {
+		if (raw == null) return "";
+		String trimmed = raw.trim().replaceAll("\\s+", " ");
+		return trimmed.length() <= 40 ? trimmed : trimmed.substring(0, 40);
+	}
+
+	private static String normalizeColor(String raw) {
+		return raw != null && raw.matches("#[0-9a-fA-F]{6}") ? raw.toLowerCase() : "#388bfd";
 	}
 
 	private AccountDescriptor attachSingleConfigs(AccountDescriptor descriptor) {

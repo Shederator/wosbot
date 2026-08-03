@@ -28,6 +28,7 @@ public class AccountDescriptor {
     private String serverName;
     private int queueSlot = Integer.MAX_VALUE;
     private List<ConfigData> entries = new ArrayList<>();
+    private List<String> tags = new ArrayList<>();
     private HashMap<String, String> globalOverrides = new HashMap<>();
 
     public AccountDescriptor(Long accountId) {
@@ -102,6 +103,8 @@ public class AccountDescriptor {
 
     public List<ConfigData> getEntries() { return entries; }
     public void setEntries(List<ConfigData> entries) { this.entries = entries; }
+    public List<String> getTags() { return tags; }
+    public void setTags(List<String> tags) { this.tags = tags == null ? new ArrayList<>() : new ArrayList<>(tags); }
 
     public HashMap<String, String> getGlobalOverrides() { return globalOverrides; }
     public void setGlobalOverrides(HashMap<String, String> overrides) { this.globalOverrides = overrides; }

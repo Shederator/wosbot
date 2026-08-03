@@ -2,7 +2,6 @@ package dev.frostguard.data.access;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +19,6 @@ import dev.frostguard.data.entity.DailyTaskTemplate;
 final class DataSeeder {
 
 	private static final Logger LOG = LoggerFactory.getLogger(DataSeeder.class);
-	private static final AtomicBoolean completed = new AtomicBoolean(false);
 
 	private record RoutineSeed(TpDailyTaskEnum type) {
 		DailyTaskTemplate toEntity() { return DailyTaskTemplate.fromRoutineType(type); }
@@ -39,8 +37,6 @@ final class DataSeeder {
 		Arrays.stream(TpConfigEnum.values()).map(SettingSeed::new).toList();
 
 	static void populate(DataStore store) {
-		if (!completed.compareAndSet(false, true)) return;
-
 		int routinesAdded = seedRoutineDefinitions(store);
 		int settingsAdded = seedSettingDefinitions(store);
 

@@ -10,9 +10,10 @@ import dev.frostguard.api.domain.MarchResourceType;
 import dev.frostguard.api.domain.MarchSlotState;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.TaskStateData;
-import dev.frostguard.api.domain.TesseractSettingsData;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.helper.DeploymentHelper;
+import dev.frostguard.engine.nav.CommonGameAreas;
+import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -22,7 +23,6 @@ import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.engine.service.TaskManagementService;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
-import java.awt.Color;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -306,20 +306,21 @@ public record MarchesAvailable(boolean available, LocalDateTime rescheduleTo) {
 	}
 
 private void tryRescheduleFromCooldownFlow() {
+		int completedRewardsClaimed = redeemCompletedMissions();
+		if (completedRewardsClaimed > 0) {
+			logInfo(routineLogIntelligenceLine(
+					"Claimed " + completedRewardsClaimed + " completed Intel reward(s) before cooldown scheduling."));
+		}
+
 		logInfo(routineLogIntelligenceLine("Zero intel items detected. Attempting to read the cooldown timer."));
 
-		LocalDateTime cooldown = textHelper.attemptRecognition(
-				new PointData(378, 103),
-				new PointData(508, 146),
-				3,
-				200L,
-				TesseractSettingsData.assembler()
-						.charWhitelist("0123456789")
-						.stripBackground(true)
-						.setTextColor(new Color(255, 255, 255))
-						.build(),
-				GameTimeUtils::isAcceptedFormat,
-				text -> LocalDateTime.now().plus(GameTimeUtils.parseDuration(text)));
+		LocalDateTime cooldown = readCooldownFlow(
+				CommonGameAreas.INTEL_COOLDOWN_WITH_MARKERS_OCR_AREA, "marker-map");
+		if (cooldown == null) {
+			logDebug(routineLogIntelligenceLine(
+					"Cooldown was not readable in the marker-map banner. Trying the empty-map layout."));
+			cooldown = readCooldownFlow(CommonGameAreas.INTEL_COOLDOWN_EMPTY_MAP_OCR_AREA, "empty-map");
+		}
 
 		if (cooldown == null) {
 			logWarning(routineLogIntelligenceLine("Could not read cooldown timer via OCR. Planning next run in 10 minutes."));
@@ -332,6 +333,20 @@ private void tryRescheduleFromCooldownFlow() {
 		pressBack();
 
 		logInfo(routineLogIntelligenceLine("Zero new intel detected. Planning next run task to run at: " + cooldown.format(DATETIME_FORMATTER)));
+	}
+
+private LocalDateTime readCooldownFlow(AreaData area, String layout) {
+		LocalDateTime cooldown = textHelper.attemptRecognition(
+				area,
+				3,
+				200L,
+				CommonOCRSettings.INTEL_COOLDOWN_SETTINGS,
+				GameTimeUtils::isAcceptedFormat,
+				text -> LocalDateTime.now().plus(GameTimeUtils.parseDuration(text)));
+		if (cooldown != null) {
+			logInfo(routineLogIntelligenceLine("Cooldown timer read from " + layout + " layout."));
+		}
+		return cooldown;
 	}
 
 private String routineLogIntelligenceLine(String note) {
@@ -407,9 +422,10 @@ private MarchesAvailable resolveMarchesAvailable() {
 		return new MarchesAvailable(false, retryAt);
 	}
 
-private void redeemCompletedMissions() {
+private int redeemCompletedMissions() {
 		intelScreenHelper.ensureOnIntelScreen();
 		logInfo(routineLogIntelligenceLine("Scanning for completed missions to claim."));
+		int claimedRewards = 0;
 
 		for (int i = 0; i < 2; i++) {
 			logDebug(routineLogIntelligenceLine("Scanning for completed missions. Attempt " + (i + 1) + "."));
@@ -426,11 +442,14 @@ private void redeemCompletedMissions() {
 
 			for (ImageSearchResultData completedMission : completed) {
 				tapPoint(completedMission.getPoint());
+				claimedRewards++;
 				sleepTask(500);
 				tapRandomPoint(new PointData(700, 1270), new PointData(710, 1280), 3, 100);
 				sleepTask(500);
 			}
 		}
+
+		return claimedRewards;
 	}
 
 private void requeueGatherTasksFlow() {

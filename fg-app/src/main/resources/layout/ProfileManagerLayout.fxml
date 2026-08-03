@@ -11,32 +11,37 @@
    <children>
 
       <!-- Top Search + Sort Bar -->
-      <HBox alignment="CENTER_LEFT" spacing="12" styleClass="control-top-bar">
+      <VBox spacing="8" styleClass="profile-manager-top-bar">
          <children>
             <!-- Search Field -->
             <HBox alignment="CENTER_LEFT" spacing="0" HBox.hgrow="ALWAYS" styleClass="log-search-wrapper">
                <children>
                   <FontIcon iconLiteral="mdi2m-magnify" iconSize="16" iconColor="#636a75" />
-                  <TextField fx:id="txtSearchProfiles" promptText="Search profiles..."
+                  <TextField fx:id="txtSearchProfiles" promptText="Search name, ID, server, alliance, emulator or tag..."
                              HBox.hgrow="ALWAYS" styleClass="control-search-field" />
                   <Button fx:id="btnClearSearch" onAction="#handleClearSearch" styleClass="search-clear-btn" text="✕" />
                </children>
             </HBox>
 
-            <Region HBox.hgrow="ALWAYS" />
-
-            <!-- Sort By -->
-            <Label text="Sort by:" textFill="#636a75" />
-            <ComboBox fx:id="comboBoxSortBy" prefWidth="150" promptText="Name" styleClass="control-filter-combo" />
-
-            <!-- Settings Button (column visibility) -->
-            <Button fx:id="btnColumnSettings" onAction="#handleColumnSettings" styleClass="column-settings-btn">
-               <graphic>
-                  <FontIcon iconLiteral="mdi2c-cog" iconSize="18" iconColor="#636a75" />
-               </graphic>
-            </Button>
+            <FlowPane alignment="CENTER_LEFT" hgap="8" vgap="8" prefWrapLength="850">
+               <children>
+                  <Button fx:id="btnAddFilter" onAction="#handleAddFilter" text="+ Filter" styleClass="action-button-transfer" />
+                  <Button onAction="#handleManageTags" text="Manage tags" styleClass="action-button-transfer" />
+                  <ComboBox fx:id="comboSavedViews" prefWidth="145" promptText="Saved views" />
+                  <Button onAction="#handleSaveView" text="Save view" styleClass="action-button-transfer" />
+                  <Button onAction="#handleDeleteView" text="Delete view" styleClass="action-button-transfer" />
+                  <Label text="Sort by:" textFill="#636a75" />
+                  <ComboBox fx:id="comboBoxSortBy" prefWidth="150" promptText="Name" styleClass="control-filter-combo" />
+                  <Button fx:id="btnColumnSettings" onAction="#handleColumnSettings" styleClass="column-settings-btn">
+                     <graphic><FontIcon iconLiteral="mdi2c-cog" iconSize="18" iconColor="#636a75" /></graphic>
+                  </Button>
+               </children>
+            </FlowPane>
          </children>
-      </HBox>
+      </VBox>
+
+      <FlowPane fx:id="structuredFilterPane" hgap="6" vgap="6" visible="false" managed="false"
+                styleClass="profile-tag-filter-bar" />
 
       <!-- Profile Table -->
       <TableView fx:id="tableviewLogMessages" VBox.vgrow="ALWAYS"
@@ -45,28 +50,56 @@
             <TableView fx:constant="CONSTRAINED_RESIZE_POLICY" />
          </columnResizePolicy>
          <columns>
+            <TableColumn fx:id="columnSelected" minWidth="42.0"
+                         maxWidth="42.0" prefWidth="42.0" resizable="false"
+                         sortable="false" style="-fx-alignment: CENTER;" />
             <TableColumn fx:id="columnEnabled" minWidth="50.0"
                          prefWidth="90.0" text="ENABLED" style="-fx-alignment: CENTER;" />
             <TableColumn fx:id="columnEmulatorNumber" minWidth="40.0"
                          prefWidth="80.0" text="EMULATOR" style="-fx-alignment: CENTER;" />
             <TableColumn fx:id="columnFurnaceLevel" minWidth="60.0"
-                         prefWidth="120.0" text="FURNACE LEVEL" style="-fx-alignment: CENTER;" />
-            <TableColumn fx:id="columnProfileName" maxWidth="Infinity"
-                         minWidth="60.0" prefWidth="200.0" text="NAME" style="-fx-alignment: CENTER;" />
+                         prefWidth="105.0" text="FURNACE LEVEL" visible="false" style="-fx-alignment: CENTER;" />
+            <TableColumn fx:id="columnProfileName"
+                         minWidth="100.0" prefWidth="180.0" text="NAME" style="-fx-alignment: CENTER;" />
+            <TableColumn fx:id="columnServer" minWidth="70.0"
+                         prefWidth="100.0" text="SERVER" style="-fx-alignment: CENTER;" />
+            <TableColumn fx:id="columnAlliance" minWidth="70.0"
+                         prefWidth="90.0" text="ALLIANCE" style="-fx-alignment: CENTER;" />
+            <TableColumn fx:id="columnTags" minWidth="100.0"
+                         prefWidth="180.0" text="TAGS" style="-fx-alignment: CENTER_LEFT;" />
             <TableColumn fx:id="columnPriority" minWidth="40.0"
                          prefWidth="90.0" text="PRIORITY" style="-fx-alignment: CENTER;" />
             <TableColumn fx:id="columnStatus" minWidth="60.0"
                          prefWidth="200.0" text="STATUS" style="-fx-alignment: CENTER;" />
             <TableColumn fx:id="columnStamina" minWidth="40.0"
-                         prefWidth="90.0" text="STAMINA" style="-fx-alignment: CENTER;" />
-            <TableColumn fx:id="columnDelete" minWidth="60.0"
-                         prefWidth="140.0" text="ACTIONS" style="-fx-alignment: CENTER;" />
+                         prefWidth="80.0" text="STAMINA" visible="false" style="-fx-alignment: CENTER;" />
+            <TableColumn fx:id="columnDelete" minWidth="130.0"
+                         prefWidth="155.0" text="ACTIONS" style="-fx-alignment: CENTER;" />
          </columns>
       </TableView>
 
       <!-- Bottom Toolbar -->
-      <HBox alignment="CENTER_RIGHT" spacing="12" styleClass="control-bottom-bar">
+      <FlowPane alignment="CENTER_RIGHT" hgap="8" vgap="8" prefWrapLength="850" styleClass="control-bottom-bar">
          <children>
+            <Label fx:id="lblSelectionCount" text="0 profiles selected"
+                   visible="false" managed="false" styleClass="bulk-selection-count" />
+            <Button fx:id="btnEnableSelected" mnemonicParsing="false"
+                    onAction="#handleEnableSelected" text="Enable"
+                    visible="false" managed="false" styleClass="action-button-enable" />
+            <Button fx:id="btnDisableSelected" mnemonicParsing="false"
+                    onAction="#handleDisableSelected" text="Disable"
+                    visible="false" managed="false" styleClass="action-button-disable" />
+            <Button fx:id="btnTagsSelected" mnemonicParsing="false"
+                    onAction="#handleTagsSelected" text="Tags ▾"
+                    visible="false" managed="false" styleClass="action-button-tags" />
+            <Separator fx:id="selectionSeparator" orientation="VERTICAL"
+                       visible="false" managed="false" prefHeight="24" />
+            <Button fx:id="btnImportProfiles" mnemonicParsing="false"
+                    onAction="#handleImportProfiles" text="Import"
+                    styleClass="action-button-transfer" />
+            <Button fx:id="btnExportProfiles" mnemonicParsing="false"
+                    onAction="#handleExportProfiles" text="Export"
+                    styleClass="action-button-transfer" />
             <Button fx:id="btnBulkUpdate" mnemonicParsing="false"
                     onAction="#handleButtonBulkUpdateProfiles" text="Bulk Update"
                     styleClass="action-button-bulk">
@@ -82,7 +115,7 @@
                </graphic>
             </Button>
          </children>
-      </HBox>
+      </FlowPane>
 
    </children>
 </VBox>

@@ -11,6 +11,7 @@ import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TpConfigEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ProfileStatusData;
+import dev.frostguard.api.domain.ProfileTagData;
 import dev.frostguard.data.entity.Config;
 import dev.frostguard.data.entity.ConfigTemplate;
 import dev.frostguard.data.entity.Profile;
@@ -75,8 +76,10 @@ public class ProfileService implements ProfileServiceInterface {
 		return withDescriptor(descriptor, "create", account -> {
 			Profile entity = new Profile();
 			copyDescriptorFields(account, entity);
-			return profiles.addAccount(entity);
-		}, null);
+			Long id = profiles.createAccountAggregate(entity, account.getConfigs(), account.getTags());
+			account.setId(id);
+			return id != null;
+		}, descriptor);
 	}
 
 	@Override
@@ -91,6 +94,9 @@ public class ProfileService implements ProfileServiceInterface {
 			}
 			copyDescriptorFields(account, entity);
 			if (!replaceProfileSettings(entity, account)) {
+				return false;
+			}
+			if (!profiles.replaceProfileTags(entity.getId(), account.getTags())) {
 				return false;
 			}
 			return profiles.saveAccount(entity);
@@ -141,6 +147,34 @@ public class ProfileService implements ProfileServiceInterface {
 			}
 		}
 		return complete;
+	}
+
+	@Override
+	public List<String> fetchProfileTags() {
+		return profiles.getTagNames();
+	}
+
+	@Override
+	public List<ProfileTagData> fetchProfileTagDefinitions() { return profiles.getTags(); }
+
+	@Override
+	public boolean updateProfileTag(String oldName, String newName, String color) {
+		return profiles.updateTag(oldName, newName, color);
+	}
+
+	@Override
+	public boolean deleteProfileTag(String name) { return profiles.deleteTag(name); }
+
+	@Override
+	public boolean replaceProfileTags(Long profileId, List<String> tags) {
+		boolean changed = profiles.replaceProfileTags(profileId, tags);
+		if (changed) {
+			AccountDescriptor updated = profiles.getAccountWithSettingsById(profileId);
+			if (updated != null) {
+				broadcastAccountDataChange(updated);
+			}
+		}
+		return changed;
 	}
 
 	public void broadcastStatusChange(ProfileStatusData state) {

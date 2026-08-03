@@ -30,6 +30,11 @@
 			<groupId>org.openjfx</groupId>
 			<artifactId>javafx-fxml</artifactId>
 		</dependency>
+		<dependency>
+			<groupId>org.openjfx</groupId>
+			<artifactId>javafx-swing</artifactId>
+			<version>${javafx.version}</version>
+		</dependency>
 
 		<!-- AtlantaFX theme -->
 		<dependency>

@@ -5,9 +5,11 @@ import dev.frostguard.api.configs.TpMessageSeverityEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ConfigData;
 import dev.frostguard.api.domain.ProfileStatusData;
+import dev.frostguard.api.domain.ProfileTagData;
 import dev.frostguard.app.panel.launcher.ILauncherConstants;
 import dev.frostguard.engine.listener.ProfileStatusChangeListener;
 import dev.frostguard.engine.service.LoggingService;
+import dev.frostguard.engine.service.ScheduleService;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
 import javafx.scene.Parent;
@@ -19,9 +21,12 @@ import javafx.stage.Stage;
 
 import java.io.IOException;
 import java.net.URL;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 public class ProfileManagerActionController implements ProfileStatusChangeListener {
 
@@ -29,10 +34,18 @@ public class ProfileManagerActionController implements ProfileStatusChangeListen
 
 	private Stage newProfileStage;
 	private IProfileModel iModel;
+	private final ProfileRuntimeController runtimeController;
+	private final ProfileTransferService transferService = new ProfileTransferService();
 
 	public ProfileManagerActionController(ProfileManagerLayoutController profileManagerLayoutController) {
+		this(profileManagerLayoutController, new ProfileModel(), new ScheduleProfileRuntimeController());
+	}
+
+	ProfileManagerActionController(ProfileManagerLayoutController profileManagerLayoutController,
+			IProfileModel model, ProfileRuntimeController runtimeController) {
 		this.profileManagerLayoutController = profileManagerLayoutController;
-		this.iModel = new ProfileModel();
+		this.iModel = model;
+		this.runtimeController = runtimeController;
 		this.iModel.addProfileStatusChangeListerner(this);
 	}
 
@@ -60,8 +73,185 @@ public class ProfileManagerActionController implements ProfileStatusChangeListen
 		return iModel.addProfile(profile);
 	}
 
+	public boolean duplicateProfile(ProfileAux source, List<ProfileAux> existingProfiles) {
+		if (source == null) return false;
+		String name = availableName(source.getName() + " Copy", existingProfiles.stream()
+				.map(ProfileAux::getName).toList());
+		try {
+			boolean created = iModel.addProfile(transferService.duplicate(source, name));
+			if (created) log(TpMessageSeverityEnum.INFO, "Duplicated profile '" + source.getName() + "' as '" + name + "'");
+			return created;
+		} catch (Exception ex) {
+			log(TpMessageSeverityEnum.ERROR, "Failed to duplicate profile: " + ex.getMessage());
+			return false;
+		}
+	}
+
+	public void exportProfiles(Path destination, List<ProfileAux> selectedProfiles) throws IOException {
+		transferService.write(destination, selectedProfiles);
+		log(TpMessageSeverityEnum.INFO, "Exported " + selectedProfiles.size() + " profiles to " + destination);
+	}
+
+	public ImportResult importProfiles(List<Path> sources, List<ProfileAux> existingProfiles) {
+		ImportPreview preview = prepareImport(sources, existingProfiles);
+		ImportResult imported = importPrepared(preview.profiles());
+		return new ImportResult(imported.imported(), imported.failed() + preview.errors().size());
+	}
+
+	public ImportPreview prepareImport(List<Path> sources, List<ProfileAux> existingProfiles) {
+		List<String> occupiedNames = new ArrayList<>(existingProfiles.stream().map(ProfileAux::getName).toList());
+		List<AccountDescriptor> prepared = new ArrayList<>();
+		List<String> errors = new ArrayList<>();
+		for (Path source : sources) {
+			try {
+				for (AccountDescriptor descriptor : transferService.read(source)) {
+					String name = availableName(descriptor.getName(), occupiedNames);
+					descriptor.setName(name);
+					occupiedNames.add(name);
+					prepared.add(descriptor);
+				}
+			} catch (Exception ex) {
+				errors.add(source.getFileName() + ": " + ex.getMessage());
+				log(TpMessageSeverityEnum.ERROR, "Failed to import " + source + ": " + ex.getMessage());
+			}
+		}
+		return new ImportPreview(prepared, errors);
+	}
+
+	public ImportResult importPrepared(List<AccountDescriptor> profiles) {
+		int imported = 0;
+		int failed = 0;
+		for (AccountDescriptor descriptor : profiles) {
+			if (iModel.addProfile(descriptor)) imported++; else failed++;
+		}
+		return new ImportResult(imported, failed);
+	}
+
+	private String availableName(String requested, List<String> occupiedNames) {
+		String base = requested == null || requested.isBlank() ? "Imported Profile" : requested.trim();
+		String candidate = base;
+		int suffix = 2;
+		while (containsName(occupiedNames, candidate)) {
+			candidate = base + " (" + suffix++ + ")";
+		}
+		return candidate;
+	}
+
+	private boolean containsName(List<String> names, String candidate) {
+		return names.stream().anyMatch(name -> name != null && name.equalsIgnoreCase(candidate));
+	}
+
+	public record ImportResult(int imported, int failed) {
+		public boolean successful() { return failed == 0; }
+	}
+
+	public record ImportPreview(List<AccountDescriptor> profiles, List<String> errors) {
+	}
+
 	public boolean saveProfile(ProfileAux currentProfile) {
 		return iModel.saveProfile(toDescriptor(currentProfile));
+	}
+
+	public List<String> loadTags() {
+		return iModel.getTags();
+	}
+
+	public List<ProfileTagData> loadTagDefinitions() { return iModel.getTagDefinitions(); }
+	public boolean updateTag(String oldName, String newName, String color) {
+		return iModel.updateTag(oldName, newName, color);
+	}
+	public boolean deleteTag(String name) { return iModel.deleteTag(name); }
+
+	public BulkEnabledUpdateResult updateTag(List<ProfileAux> selectedProfiles, String tagName, boolean add) {
+		if (selectedProfiles == null || selectedProfiles.isEmpty() || tagName == null || tagName.isBlank()) {
+			return new BulkEnabledUpdateResult(0, 0);
+		}
+		String normalized = tagName.trim().replaceAll("\\s+", " ");
+		int updated = 0;
+		for (ProfileAux profile : selectedProfiles) {
+			List<String> previous = profile.getTags();
+			List<String> tags = new ArrayList<>(previous);
+			tags.removeIf(tag -> tag.equalsIgnoreCase(normalized));
+			if (add) tags.add(normalized);
+			if (iModel.replaceTags(profile.getId(), tags)) {
+				profile.setTags(tags);
+				updated++;
+			} else {
+				profile.setTags(previous);
+			}
+		}
+		return new BulkEnabledUpdateResult(updated, selectedProfiles.size() - updated);
+	}
+
+	public BulkEnabledUpdateResult setProfilesEnabled(List<ProfileAux> selectedProfiles, boolean enabled) {
+		if (selectedProfiles == null || selectedProfiles.isEmpty()) {
+			return new BulkEnabledUpdateResult(0, 0);
+		}
+
+		int updated = 0;
+		for (ProfileAux profile : selectedProfiles) {
+			boolean previousEnabled = profile.isEnabled();
+			profile.setEnabled(enabled);
+			if (saveProfile(profile)) {
+				updated++;
+				if (!enabled) {
+					pauseRunningQueue(profile.getId());
+				}
+			} else {
+				profile.setEnabled(previousEnabled);
+				log(TpMessageSeverityEnum.ERROR, "Failed to " + (enabled ? "enable" : "disable")
+						+ " profile: " + profile.getName());
+			}
+		}
+		int failed = selectedProfiles.size() - updated;
+		log(failed == 0 ? TpMessageSeverityEnum.INFO : TpMessageSeverityEnum.WARNING,
+				"Bulk profile update " + (enabled ? "enabled " : "disabled ") + updated
+						+ " of " + selectedProfiles.size() + " selected profiles");
+		return new BulkEnabledUpdateResult(updated, failed);
+	}
+
+	public long countRunningProfiles(List<ProfileAux> selectedProfiles) {
+		if (selectedProfiles == null || selectedProfiles.isEmpty()) {
+			return 0;
+		}
+		Set<Long> activeIds = runtimeController.activeQueueIds();
+		return selectedProfiles.stream().filter(profile -> activeIds.contains(profile.getId())).count();
+	}
+
+	private void pauseRunningQueue(Long profileId) {
+		if (profileId == null) {
+			return;
+		}
+		if (runtimeController.activeQueueIds().contains(profileId)) {
+			runtimeController.pauseQueue(profileId);
+		}
+	}
+
+	interface ProfileRuntimeController {
+		Set<Long> activeQueueIds();
+
+		void pauseQueue(Long profileId);
+	}
+
+	private static final class ScheduleProfileRuntimeController implements ProfileRuntimeController {
+		@Override
+		public Set<Long> activeQueueIds() {
+			return ScheduleService.obtain().getCoordinator().getActiveQueueStates().stream()
+					.filter(state -> !state.isPaused())
+					.map(state -> state.getProfileId())
+					.collect(Collectors.toSet());
+		}
+
+		@Override
+		public void pauseQueue(Long profileId) {
+			ScheduleService.obtain().suspendAccountQueue(profileId);
+		}
+	}
+
+	public record BulkEnabledUpdateResult(int updated, int failed) {
+		public boolean successful() {
+			return failed == 0;
+		}
 	}
 
 	public boolean bulkUpdateSelectedProfiles(ProfileAux templateProfile, List<ProfileAux> selectedProfiles) {
@@ -181,6 +371,7 @@ public class ProfileManagerActionController implements ProfileStatusChangeListen
 		currentProfile.getConfigs().forEach(config ->
 			descriptor.getConfigs().add(new ConfigData(currentProfile.getId(), config.getName(), config.getValue()))
 		);
+		descriptor.setTags(currentProfile.getTags());
 		return descriptor;
 	}
 

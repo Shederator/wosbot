@@ -23,17 +23,15 @@ public final class DataStore implements AutoCloseable {
 
 	private static final Logger LOG = LoggerFactory.getLogger(DataStore.class);
 	private static final String PERSISTENCE_UNIT = "frostguardPU";
-	private static final DataStore INSTANCE = createInstance();
-
 	private final EntityManagerFactory emf;
 
-	private static DataStore createInstance() {
-		return new DataStore();
+	private static final class Holder {
+		private static final DataStore INSTANCE = new DataStore(Map.of());
 	}
 
-	private DataStore() {
+	private DataStore(Map<String, Object> overrides) {
 		try {
-			this.emf = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT);
+			this.emf = Persistence.createEntityManagerFactory(PERSISTENCE_UNIT, overrides);
 			DataSeeder.populate(this);
 			LOG.info("Frostguard data store initialized");
 		} catch (Exception cause) {
@@ -42,8 +40,12 @@ public final class DataStore implements AutoCloseable {
 		}
 	}
 
+	public static DataStore openIsolated(Map<String, Object> overrides) {
+		return new DataStore(overrides == null ? Map.of() : overrides);
+	}
+
 	public static DataStore getInstance() {
-		return INSTANCE;
+		return Holder.INSTANCE;
 	}
 
 	/**

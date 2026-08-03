@@ -204,7 +204,13 @@ protected void loadConfiguration() {
 
 
         List<LocalDateTime> newCompletionTimes = trainAllReadyQueuesFlow(readyQueues);
-        allCompletionTimes.addAll(newCompletionTimes);
+
+        logInfo(routineLogTrainingLine("Verifying final queue states via sidebar."));
+        navigationHelper.ensureCorrectScreenLocation(LaunchPoint.HOME);
+        marchHelper.openLeftMenuCitySection(true);
+        List<QueueSlot> verifiedQueues = inspectAllQueues();
+        allCompletionTimes.clear();
+        allCompletionTimes.addAll(extractExistingCompletionTimesFlow(verifiedQueues));
 
         deferToEarliestCompletion(allCompletionTimes);
     }
@@ -262,7 +268,7 @@ private boolean shouldLimitTrainingForAppointmentFlow() {
         }
     }
 
-private void performLimitedTrainingForAppointment(QueueSlot queue) {
+private boolean performLimitedTrainingForAppointment(QueueSlot queue) {
         LocalDateTime now = LocalDateTime.now();
 
 
@@ -276,7 +282,7 @@ private void performLimitedTrainingForAppointment(QueueSlot queue) {
 
         if (selectHighestUnlockedTroopLevel(troopTypeBeingTrained) == -1) {
             logWarning(routineLogTrainingLine("No unlocked troop level confirmed. Skipping limited training."));
-            return;
+            return false;
         }
 
         emuManager.captureScreen(EMULATOR_NUMBER);
@@ -289,15 +295,17 @@ private void performLimitedTrainingForAppointment(QueueSlot queue) {
 
 
             pressTrainButton();
-            return;
+            isPromotionTraining = true;
+            return true;
         }
 
         if (maxTroops == 0) {
             logWarning(routineLogTrainingLine("Max troops is zero. Zero training possible."));
-            return;
+            return false;
         }
 
         trainOptimalTroopCountFlow(trainTime, maxTroops, neededTime);
+        return true;
     }
 
 private void refreshMinistryAppointmentIfNeeded() {
@@ -398,14 +406,14 @@ private LocalDateTime extractTrainingCompletionTimeFlow() {
         return null;
     }
 
-private void performPromotionPriorityTraining(QueueSlot queue) {
+private boolean performPromotionPriorityTraining(QueueSlot queue) {
         logInfo(routineLogTrainingLine("Executing promotion-priority training for " + queue.type().name()));
 
         int maxLevel = selectHighestUnlockedTroopLevel(queue.type());
 
         if (maxLevel == -1) {
             logWarning(routineLogTrainingLine("No unlocked troop level confirmed. Skipping training."));
-            return;
+            return false;
         }
 
         logInfo(routineLogTrainingLine("Maximum unlocked troop level: " + maxLevel));
@@ -415,15 +423,17 @@ private void performPromotionPriorityTraining(QueueSlot queue) {
 
         if (promotionExecuted) {
             logInfo(routineLogTrainingLine("Promotion executed finished cleanly."));
+            return true;
         } else {
             logInfo(routineLogTrainingLine("Zero promotable troops detected. Reselecting highest unlocked level for normal training."));
             int selectedLevel = selectHighestUnlockedTroopLevel(queue.type());
             if (selectedLevel == -1) {
                 logWarning(routineLogTrainingLine("Could not reselect an unlocked troop level. Skipping normal training."));
-                return;
+                return false;
             }
             logInfo(routineLogTrainingLine("Reselected level " + selectedLevel + " for normal training."));
             pressTrainButton();
+            return true;
         }
     }
 
@@ -766,19 +776,79 @@ private Integer extractMaxTroopCountFlow() {
                 text -> RegexNumberParser.extractByPattern(text, Pattern.compile(".*?(\\d+).*")));
     }
 
-private List<LocalDateTime> trainAllReadyQueuesFlow(List<QueueSlot> readyQueues) {
+    private List<LocalDateTime> trainAllReadyQueuesFlow(List<QueueSlot> readyQueues) {
         List<LocalDateTime> completionTimes = new ArrayList<>();
+        if (readyQueues.isEmpty()) return completionTimes;
+
+        boolean inTrainingInterface = false;
 
         for (QueueSlot queue : readyQueues) {
             troopTypeBeingTrained = queue.type();
-            LocalDateTime completionTime = trainSingleQueueFlow(queue);
+            boolean trainingStartedSuccessfully = false;
 
-            if (completionTime != null) {
-                completionTimes.add(completionTime);
+            if (!inTrainingInterface) {
+                navigationHelper.ensureCorrectScreenLocation(LaunchPoint.HOME);
+                marchHelper.openLeftMenuCitySection(true);
+                AreaData areaToTap = resolvePipelineArea(queue.type());
+                tapRandomPoint(areaToTap.topLeft(), areaToTap.bottomRight(), 1, 500);
+                tapRandomPoint(TRAINING_CAMP_TAP_MIN_VALUE, TRAINING_CAMP_TAP_MAX_VALUE, 10, 100);
+                if (openUpTrainingInterface()) {
+                    inTrainingInterface = true;
+                }
+            } else {
+                logInfo(routineLogTrainingLine("Switching to tab: " + queue.type().name()));
+                switchTrainingTab(queue.type());
+                sleepTask(500); // UI transition delay
+            }
+
+            if (inTrainingInterface) {
+                promotionCompletionTime = null;
+                isPromotionTraining = false;
+
+                if (performTrainingForQueue(queue)) {
+                    trainingStartedSuccessfully = true;
+                    LocalDateTime completionTime = extractTrainingCompletionTimeFlow();
+                    if (completionTime != null) {
+                        completionTimes.add(completionTime);
+                    }
+                }
+            }
+
+            if (!trainingStartedSuccessfully) {
+                logWarning(routineLogTrainingLine("Multi-tab flow failed for " + queue.type().name() + ". Falling back to single queue flow."));
+                
+                // Reset state by forcing a menu close (which acts as a generic back/reset in many cases)
+                marchHelper.closeLeftMenu();
+                for (int i = 0; i < 3; i++) {
+                    dismissPopupsFlow();
+                }
+                
+                inTrainingInterface = false;
+
+                LocalDateTime fallbackTime = trainSingleQueueFlow(queue);
+                if (fallbackTime != null) {
+                    completionTimes.add(fallbackTime);
+                }
             }
         }
 
         return completionTimes;
+    }
+
+    private void switchTrainingTab(TroopTypeShape type) {
+        switch (type) {
+            case INFANTRY -> tapPoint(new dev.frostguard.api.domain.PointData(120, 1213));
+            case LANCER -> tapPoint(new dev.frostguard.api.domain.PointData(360, 1213));
+            case MARKSMAN -> tapPoint(new dev.frostguard.api.domain.PointData(600, 1213));
+        }
+    }
+
+    private boolean performTrainingForQueue(QueueSlot queue) {
+        if (shouldLimitTrainingForAppointmentFlow()) {
+            return performLimitedTrainingForAppointment(queue);
+        } else {
+            return performMaximumTraining(queue);
+        }
     }
 
 private void resetTroopListToEndFlow() {
@@ -787,14 +857,6 @@ private void resetTroopListToEndFlow() {
         swipe(TROOP_LIST_RIGHT_VALUE, TROOP_LIST_LEFT_VALUE);
         sleepTask(200);
 
-    }
-
-private void performTrainingForQueue(QueueSlot queue) {
-        if (shouldLimitTrainingForAppointmentFlow()) {
-            performLimitedTrainingForAppointment(queue);
-        } else {
-            performMaximumTraining(queue);
-        }
     }
 
 private boolean openUpTrainingInterface() {
@@ -1030,19 +1092,21 @@ private List<TemplatesEnum> resolveTroopsTemplates(TroopTypeShape type) {
         };
     }
 
-private void performMaximumTraining(QueueSlot queue) {
+    private boolean performMaximumTraining(QueueSlot queue) {
         logInfo(routineLogTrainingLine("Training maximum troops (no appointment constraints)."));
 
         if (!ministryAppointmentEnabled && prioritizePromotion) {
-            performPromotionPriorityTraining(queue);
+            return performPromotionPriorityTraining(queue);
         } else {
             if (selectHighestUnlockedTroopLevel(troopTypeBeingTrained) != -1) {
                 pressTrainButton();
-            } else {
-                logWarning(routineLogTrainingLine("No unlocked troop level confirmed. Skipping normal training."));
+                return true;
             }
         }
+        return false;
     }
+
+
 
 private void manageNoQueuesSelected() {
         logInfo(routineLogTrainingLine("Zero troop types selected for training. Disabling task."));

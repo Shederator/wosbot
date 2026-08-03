@@ -14,7 +14,7 @@
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
 
-<BorderPane prefHeight="580.0" prefWidth="550.0"
+<BorderPane prefHeight="680.0" prefWidth="550.0"
             xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1"
             fx:controller="dev.frostguard.app.panel.profile.EditProfileController">
 
@@ -81,6 +81,17 @@
                         <Label text="Server" minWidth="140" />
                         <TextField fx:id="txtCharacterServer" promptText="1234"
                                    HBox.hgrow="ALWAYS" />
+                    </HBox>
+                </VBox>
+
+                <Separator style="-fx-opacity: 0.3;" />
+
+                <VBox spacing="8">
+                    <Label text="Tags" style="-fx-font-weight: bold;" />
+                    <FlowPane fx:id="tagChoicesPane" hgap="8" vgap="8" />
+                    <HBox alignment="CENTER_LEFT" spacing="8">
+                        <TextField fx:id="txtNewTag" promptText="New tag name" HBox.hgrow="ALWAYS" />
+                        <Button mnemonicParsing="false" onAction="#handleAddTag" text="Add tag" />
                     </HBox>
                 </VBox>
             </VBox>

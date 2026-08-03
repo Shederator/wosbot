@@ -897,6 +897,17 @@
     -fx-max-height: 44;
 }
 
+.profile-manager-top-bar {
+    -fx-background-color: -fg-bg-card;
+    -fx-border-color: -fg-border-subtle;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-border-width: 1;
+    -fx-padding: 8 12;
+    -fx-alignment: CENTER_LEFT;
+    -fx-min-height: 86;
+}
+
 /* Bottom bar shared across Logs, Profiles, Tasks tabs */
 .control-bottom-bar {
     -fx-background-color: transparent;
@@ -904,6 +915,111 @@
     -fx-alignment: CENTER_LEFT;
     -fx-spacing: 8;
     -fx-min-height: 40;
+}
+
+.bulk-selection-count {
+    -fx-text-fill: #e6edf3;
+    -fx-font-weight: bold;
+}
+
+.action-button-enable,
+.action-button-disable,
+.action-button-tags {
+    -fx-background-radius: 4;
+    -fx-padding: 7 14;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+}
+
+.action-button-tags {
+    -fx-background-color: #30363d;
+    -fx-text-fill: #e6edf3;
+}
+
+.action-button-tags:hover {
+    -fx-background-color: #484f58;
+}
+
+.profile-tag-filter-bar {
+    -fx-background-color: transparent;
+    -fx-padding: 2 4;
+}
+
+.profile-tag-chip {
+    -fx-background-color: #21262d;
+    -fx-border-color: #484f58;
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-text-fill: #c9d1d9;
+    -fx-padding: 3 10;
+    -fx-cursor: hand;
+}
+
+.profile-tag-chip:selected {
+    -fx-background-color: #1f6feb;
+    -fx-border-color: #58a6ff;
+    -fx-text-fill: white;
+}
+
+.profile-filter-chip {
+    -fx-background-color: #1f6feb;
+    -fx-background-radius: 12;
+    -fx-text-fill: white;
+    -fx-padding: 3 10;
+    -fx-cursor: hand;
+}
+
+.profile-filter-chip:hover {
+    -fx-background-color: #388bfd;
+}
+
+.profile-tag-choice {
+    -fx-background-color: #21262d;
+    -fx-background-radius: 12;
+    -fx-padding: 2 8;
+    -fx-min-height: 26;
+    -fx-max-height: 26;
+    -fx-text-fill: #c9d1d9;
+    -fx-cursor: hand;
+}
+
+.profile-tag-overflow {
+    -fx-text-fill: #8b949e;
+    -fx-font-size: 11px;
+    -fx-padding: 2 4;
+}
+
+.action-button-transfer {
+    -fx-background-color: #21262d;
+    -fx-border-color: #484f58;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-text-fill: #e6edf3;
+    -fx-padding: 7 12;
+    -fx-cursor: hand;
+}
+
+.action-button-transfer:hover {
+    -fx-background-color: #30363d;
+    -fx-border-color: #8b949e;
+}
+
+.action-button-enable {
+    -fx-background-color: #2ea043;
+    -fx-text-fill: white;
+}
+
+.action-button-enable:hover {
+    -fx-background-color: #3fb950;
+}
+
+.action-button-disable {
+    -fx-background-color: #da3633;
+    -fx-text-fill: white;
+}
+
+.action-button-disable:hover {
+    -fx-background-color: #f85149;
 }
 
 /* Wrapper that groups search field + clear-X button side by side */
@@ -1645,4 +1761,3 @@
 .accent-button:hover {
     -fx-background-color: #37d47f;
 }
-
