@@ -1,9 +1,11 @@
 package dev.frostguard.app.panel.emulator;
 
 import java.io.File;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 
+import dev.frostguard.api.configs.BotStartupScreenEnum;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.engine.emulator.EmulatorType;
 import dev.frostguard.api.configs.GameVersionEnum;
@@ -27,7 +29,9 @@ import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
+import javafx.stage.Window;
 
 /**
  * Controller responsible for the emulator configuration panel.
@@ -63,6 +67,18 @@ public class EmuConfigLayoutController {
 
 	@FXML
 	private ComboBox<GameVersionEnum> comboboxGameRegion;
+
+	@FXML
+	private ComboBox<BotStartupScreenEnum> comboboxStartupScreen;
+
+	@FXML
+	private CheckBox checkboxOcrDebugImages;
+
+	@FXML
+	private TextField textfieldOcrDebugPath;
+
+	@FXML
+	private Button buttonOcrDebugBrowse;
 
 	@FXML
 	private ComboBox<IdleBehaviorEnum> comboboxInactivityPolicy;
@@ -113,6 +129,8 @@ public class EmuConfigLayoutController {
 		restoreSettingsFromConfig(globalConfig);
 		attachPersistenceListeners();
 		configureGameAndIdleDropdowns(globalConfig);
+		configureBotSettings(globalConfig);
+		configureOcrDebugSettings(globalConfig);
 		configureStopBehaviorDropdowns(globalConfig);
 		configureAutoStartSection(globalConfig);
 		configureAnalyticsToggles(globalConfig);
@@ -318,6 +336,97 @@ public class EmuConfigLayoutController {
 				}
 			}
 		});
+	}
+
+	private void configureBotSettings(Map<String, String> cfg) {
+		comboboxStartupScreen.setItems(FXCollections.observableArrayList(BotStartupScreenEnum.values()));
+		BotStartupScreenEnum savedStartupScreen = BotStartupScreenEnum.parse(
+				cfg.getOrDefault(
+						ConfigurationKeyEnum.BOT_STARTUP_SCREEN_STRING.name(),
+						ConfigurationKeyEnum.BOT_STARTUP_SCREEN_STRING.getDefaultValue()));
+		comboboxStartupScreen.setValue(savedStartupScreen);
+
+		comboboxStartupScreen.setOnAction(evt -> {
+			BotStartupScreenEnum selected = comboboxStartupScreen.getValue();
+			if (selected != null) {
+				ScheduleService.obtain().persistEmulatorPath(
+						ConfigurationKeyEnum.BOT_STARTUP_SCREEN_STRING.name(),
+						selected.name());
+			}
+		});
+	}
+
+	private void configureOcrDebugSettings(Map<String, String> cfg) {
+		boolean debugEnabled = Boolean.parseBoolean(cfg.getOrDefault(
+				ConfigurationKeyEnum.OCR_DEBUG_IMAGES_ENABLED_BOOL.name(),
+				ConfigurationKeyEnum.OCR_DEBUG_IMAGES_ENABLED_BOOL.getDefaultValue()));
+		checkboxOcrDebugImages.setSelected(debugEnabled);
+
+		String debugPath = cfg.getOrDefault(
+				ConfigurationKeyEnum.OCR_DEBUG_IMAGES_PATH_STRING.name(),
+				ConfigurationKeyEnum.OCR_DEBUG_IMAGES_PATH_STRING.getDefaultValue());
+		textfieldOcrDebugPath.setText(debugPath);
+		textfieldOcrDebugPath.setDisable(!debugEnabled);
+		buttonOcrDebugBrowse.setDisable(!debugEnabled);
+
+		checkboxOcrDebugImages.selectedProperty().addListener((obs, oldValue, newValue) -> {
+			textfieldOcrDebugPath.setDisable(!newValue);
+			buttonOcrDebugBrowse.setDisable(!newValue);
+			ConfigService.obtain().writeGlobalSetting(
+					ConfigurationKeyEnum.OCR_DEBUG_IMAGES_ENABLED_BOOL,
+					String.valueOf(newValue));
+		});
+
+		textfieldOcrDebugPath.focusedProperty().addListener((obs, oldValue, hasFocus) -> {
+			if (!hasFocus) {
+				persistOcrDebugPath(textfieldOcrDebugPath.getText());
+			}
+		});
+
+		buttonOcrDebugBrowse.setOnAction(evt -> chooseOcrDebugDirectory());
+	}
+
+	private void chooseOcrDebugDirectory() {
+		DirectoryChooser chooser = new DirectoryChooser();
+		chooser.setTitle("Select OCR Debug Folder");
+		File initialDir = resolveInitialOcrDebugDirectory();
+		if (initialDir != null && initialDir.isDirectory()) {
+			chooser.setInitialDirectory(initialDir);
+		}
+
+		Window owner = buttonOcrDebugBrowse.getScene() == null ? null : buttonOcrDebugBrowse.getScene().getWindow();
+		File picked = chooser.showDialog(owner);
+		if (picked == null) {
+			return;
+		}
+
+		textfieldOcrDebugPath.setText(picked.getAbsolutePath());
+		persistOcrDebugPath(picked.getAbsolutePath());
+	}
+
+	private File resolveInitialOcrDebugDirectory() {
+		String raw = textfieldOcrDebugPath.getText();
+		if (raw != null && !raw.isBlank()) {
+			File current = new File(raw.trim());
+			if (current.isDirectory()) {
+				return current;
+			}
+			File parent = current.getParentFile();
+			if (parent != null && parent.isDirectory()) {
+				return parent;
+			}
+		}
+		return Paths.get(System.getProperty("user.dir")).toFile();
+	}
+
+	private void persistOcrDebugPath(String rawPath) {
+		String path = rawPath == null || rawPath.isBlank()
+				? ConfigurationKeyEnum.OCR_DEBUG_IMAGES_PATH_STRING.getDefaultValue()
+				: rawPath.trim();
+		textfieldOcrDebugPath.setText(path);
+		ConfigService.obtain().writeGlobalSetting(
+				ConfigurationKeyEnum.OCR_DEBUG_IMAGES_PATH_STRING,
+				path);
 	}
 
 	private void configureStopBehaviorDropdowns(Map<String, String> cfg) {

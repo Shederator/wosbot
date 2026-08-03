@@ -93,18 +93,43 @@
                   </GridPane>
               </VBox>
 
-              <!-- Game Settings (full width, single line) -->
-              <VBox styleClass="content-card" VBox.vgrow="NEVER">
-                  <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-teal">
-                       <children><Label text="Game Settings" /></children>
-                   </HBox>
-                  <HBox alignment="CENTER_LEFT" spacing="10" styleClass="content-card-inner">
-                      <!-- Game Version -->
-                      <Label text="Game Version" disable="true" />
-                      <Region HBox.hgrow="ALWAYS" />
-                      <ComboBox fx:id="comboboxGameRegion" disable="true" maxWidth="Infinity" prefWidth="180.0" />
-                  </HBox>
-              </VBox>
+              <!-- Game + Bot Settings -->
+              <HBox spacing="16" VBox.vgrow="NEVER">
+                  <children>
+                      <VBox styleClass="content-card" HBox.hgrow="ALWAYS">
+                          <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-teal">
+                               <children><Label text="Game Settings" /></children>
+                           </HBox>
+                          <HBox alignment="CENTER_LEFT" spacing="10" styleClass="content-card-inner">
+                              <Label text="Game Version" disable="true" />
+                              <Region HBox.hgrow="ALWAYS" />
+                              <ComboBox fx:id="comboboxGameRegion" disable="true" maxWidth="Infinity" prefWidth="180.0" />
+                          </HBox>
+                      </VBox>
+
+                      <VBox styleClass="content-card" HBox.hgrow="ALWAYS">
+                          <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-teal">
+                               <children><Label text="Bot Settings" /></children>
+                           </HBox>
+                          <VBox spacing="10" styleClass="content-card-inner">
+                              <HBox alignment="CENTER_LEFT" spacing="10">
+                                  <Label text="Startup Screen" />
+                                  <Region HBox.hgrow="ALWAYS" />
+                                  <ComboBox fx:id="comboboxStartupScreen" maxWidth="Infinity" prefWidth="260.0" />
+                              </HBox>
+                              <HBox alignment="CENTER_LEFT" spacing="10">
+                                  <CheckBox fx:id="checkboxOcrDebugImages" text="Save OCR debug images" />
+                              </HBox>
+                              <HBox alignment="CENTER_LEFT" spacing="10">
+                                  <Label text="OCR Debug Folder" />
+                                  <Region HBox.hgrow="ALWAYS" />
+                                  <TextField fx:id="textfieldOcrDebugPath" maxWidth="Infinity" prefWidth="240.0" />
+                                  <Button fx:id="buttonOcrDebugBrowse" text="Browse" />
+                              </HBox>
+                          </VBox>
+                      </VBox>
+                  </children>
+              </HBox>
           </children>
       </VBox>
 

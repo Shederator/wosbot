@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
+import dev.frostguard.api.configs.OcrDebugSettings;
 import dev.frostguard.api.configs.TpConfigEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.data.entity.Config;
@@ -43,6 +44,7 @@ public class ConfigService {
 			if (holder == null) {
 				holder = new ConfigService();
 				holder.installMissingGlobalDefaults();
+				holder.refreshRuntimeSettings();
 			}
 			return holder;
 		}
@@ -90,9 +92,13 @@ public class ConfigService {
 		}
 		try {
 			Optional<Config> row = findGlobalConfig(key);
-			return row
+			boolean saved = row
 					.map(cfg -> updateConfigRow(cfg, value, () -> configStore.saveSetting(cfg)))
 					.orElseGet(() -> createGlobalConfig(key, value));
+			if (saved) {
+				refreshRuntimeSettings();
+			}
+			return saved;
 		} catch (Exception ex) {
 			LOG.error("Could not write global config {}: {}", key.name(), ex.getMessage(), ex);
 			return false;
@@ -118,6 +124,10 @@ public class ConfigService {
 				}
 			}
 		}
+	}
+
+	private void refreshRuntimeSettings() {
+		OcrDebugSettings.syncFrom(loadGlobalSettings());
 	}
 
 	private Optional<Config> findProfileConfig(Long profileId, ConfigurationKeyEnum key) {

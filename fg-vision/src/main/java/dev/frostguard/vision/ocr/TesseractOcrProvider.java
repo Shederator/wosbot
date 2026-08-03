@@ -2,10 +2,7 @@ package dev.frostguard.vision.ocr;
 
 import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -14,6 +11,8 @@ import java.util.List;
 
 import javax.imageio.ImageIO;
 
+import dev.frostguard.api.configs.OcrDebugImageWriter;
+import dev.frostguard.api.configs.OcrDebugSettings;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.TesseractSettingsData;
@@ -65,6 +64,7 @@ public final class TesseractOcrProvider {
         BufferedImage prepared = cropAndPreprocess(
                 capture, clip[0], clip[1], clip[2], clip[3],
                 MAGNIFICATION, false, null);
+        exportReadingImage(prepared, clip[0], clip[1], clip[2], clip[3], "lang");
         return executeRecognition(configureTesseract(lang), prepared);
     }
 
@@ -96,6 +96,7 @@ public final class TesseractOcrProvider {
                 capture, cx, cy, cw, ch, MAGNIFICATION,
                 cfg.isRemoveBackground(), cfg.getTextColor());
         log.debug("Crop + preprocess: {} ms", System.currentTimeMillis() - step);
+        exportReadingImage(prepared, cx, cy, cw, ch, "cfg");
 
         step = System.currentTimeMillis();
         Tesseract engine = configureTesseract(cfg);
@@ -105,7 +106,7 @@ public final class TesseractOcrProvider {
         String recognised = executeRecognition(engine, prepared);
         log.debug("Engine execution: {} ms", System.currentTimeMillis() - step);
 
-        if (cfg.isDebug()) {
+        if (cfg.isDebug() && OcrDebugSettings.isEnabled()) {
             exportDiagnosticImage(capture, prepared, cx, cy, cw, ch, cfg, recognised);
         }
 
@@ -363,30 +364,25 @@ public final class TesseractOcrProvider {
     //  Debug / diagnostic output
     // =====================================================================
 
-    /**
-     * Writes a side-by-side diagnostic PNG to {@code <cwd>/temp/}.
-     */
     private static void exportDiagnosticImage(RawImageData capture, BufferedImage processed,
             int cx, int cy, int cw, int ch,
             TesseractSettingsData cfg, String text) {
-        long t0 = System.currentTimeMillis();
-        try {
-            Path tempDir = Paths.get(System.getProperty("user.dir")).resolve("temp");
-            Files.createDirectories(tempDir);
+        String summary = formatSettingsSummary(cfg, text);
+        BufferedImage full = toBufferedImage(capture);
+        BufferedImage composite = composeDiagnosticPanel(
+                full, processed, cx, cy, cw, ch, summary, text);
 
-            String summary = formatSettingsSummary(cfg, text);
-            BufferedImage full = toBufferedImage(capture);
-            BufferedImage composite = composeDiagnosticPanel(
-                    full, processed, cx, cy, cw, ch, summary, text);
+        OcrDebugImageWriter.saveDebugImage(composite, "ocr-diagnostic", System.currentTimeMillis(), 1);
+    }
 
-            ByteArrayOutputStream buf = new ByteArrayOutputStream();
-            ImageIO.write(composite, "png", buf);
-            Files.write(tempDir.resolve(System.currentTimeMillis() + "_debug.png"), buf.toByteArray());
-
-            log.debug("Diagnostic image saved: {} ms", System.currentTimeMillis() - t0);
-        } catch (IOException ex) {
-            log.error("Diagnostic image export failed: {}", ex.getMessage());
+    private static void exportReadingImage(BufferedImage processed,
+            int cx, int cy, int cw, int ch, String mode) {
+        if (!OcrDebugSettings.isEnabled() || processed == null) {
+            return;
         }
+
+        String prefix = "ocr-reading-" + mode + "-" + cx + "_" + cy + "_" + cw + "_" + ch;
+        OcrDebugImageWriter.saveDebugImage(processed, prefix, System.currentTimeMillis(), 1);
     }
 
     private static String formatSettingsSummary(TesseractSettingsData cfg, String text) {

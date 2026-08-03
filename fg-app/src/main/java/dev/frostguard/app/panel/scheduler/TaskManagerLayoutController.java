@@ -132,6 +132,18 @@ public class TaskManagerLayoutController implements ProfileDataChangeListener {
 		}
 	}
 
+	public void showTimelineStartupView() {
+		showingGanttView = true;
+		showGanttView();
+		setToggleButtonLabel();
+	}
+
+	public void showTableStartupView() {
+		showingGanttView = false;
+		showTableView();
+		setToggleButtonLabel();
+	}
+
 	private void configureFilter() {
 		if (txtFilterTaskName != null) {
 			txtFilterTaskName.textProperty().addListener((observable, oldValue, newValue) -> applyFilter(newValue));
