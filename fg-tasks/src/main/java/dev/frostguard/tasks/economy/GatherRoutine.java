@@ -46,6 +46,8 @@ public class GatherRoutine extends DelayedTask {
     // ========== Constants & Config Keys ==========
     private static final int DEFAULT_QUEUES = 6;
     private static final int DEFAULT_LEVEL = 5;
+    private static final int MAX_GATHER_LEVEL = 9;
+    private static final int REGION_SAFE_MAX_LEVEL = 8;
     private static final boolean DEFAULT_REMOVE_HEROES = false;
     private static final boolean DEFAULT_INTEL_SMART = false;
     private static final int PENDING_HIGH_PRIORITY_RETRY_MINUTES = 5;
@@ -99,6 +101,7 @@ public class GatherRoutine extends DelayedTask {
     private boolean intelEnabled;
     private boolean gatherSpeed;
     private boolean autoJoinEnabled;
+    private boolean downgradeLevelIfNoNode;
 
     private List<GatherType> enabledTypes;
     private List<GatherType> rotationPool;
@@ -242,6 +245,7 @@ public class GatherRoutine extends DelayedTask {
         this.intelEnabled = get(ConfigurationKeyEnum.INTEL_BOOL, false);
         this.gatherSpeed = get(ConfigurationKeyEnum.GATHER_SPEED_BOOL, false);
         this.autoJoinEnabled = get(ConfigurationKeyEnum.ALLIANCE_AUTOJOIN_BOOL, false);
+        this.downgradeLevelIfNoNode = get(ConfigurationKeyEnum.GATHER_DOWNGRADE_LEVEL_BOOL, true);
 
         this.enabledTypes = Arrays.stream(GatherType.values())
                 .filter(this::isTypeEnabled)
@@ -693,16 +697,69 @@ public class GatherRoutine extends DelayedTask {
         if (!selectTile(type))
             return retryLater();
 
-        int level = get(type.levelKey, DEFAULT_LEVEL);
-        if (!setLevel(level))
-            return retryLater();
+        int configuredLevel = clampGatherLevel(get(type.levelKey, DEFAULT_LEVEL));
+        List<Integer> levelAttempts = buildLevelAttempts(configuredLevel);
 
-        if (!executeSearch())
-            return retryLater();
-        if (!deployMarchAction(type))
-            return retryLater();
+        for (int i = 0; i < levelAttempts.size(); i++) {
+            int level = levelAttempts.get(i);
+            logInfo(String.format("Gather level attempt %d/%d for %s: level %d",
+                    i + 1,
+                    levelAttempts.size(),
+                    type,
+                    level));
 
-        return true;
+            if (!setLevel(level)) {
+                return retryLater();
+            }
+
+            if (!executeSearch()) {
+                return retryLater();
+            }
+
+            DeployResult result = deployMarchAction(type);
+            if (result == DeployResult.SUCCESS) {
+                return true;
+            }
+
+            if (result != DeployResult.NODE_NOT_FOUND || i == levelAttempts.size() - 1) {
+                return retryLater();
+            }
+
+            logInfo(String.format(
+                    "No node found for %s at level %d. Retrying with next fallback level.",
+                    type,
+                    level));
+        }
+
+        return retryLater();
+    }
+
+    private int clampGatherLevel(int level) {
+        return Math.max(1, Math.min(MAX_GATHER_LEVEL, level));
+    }
+
+    private List<Integer> buildLevelAttempts(int configuredLevel) {
+        List<Integer> attempts = new ArrayList<>();
+        attempts.add(configuredLevel);
+
+        if (configuredLevel == MAX_GATHER_LEVEL) {
+            attempts.add(REGION_SAFE_MAX_LEVEL);
+        }
+
+        if (downgradeLevelIfNoNode) {
+            int last = attempts.get(attempts.size() - 1);
+            if (last > 1) {
+                attempts.add(last - 1);
+            }
+        }
+
+        List<Integer> uniqueAttempts = new ArrayList<>();
+        for (Integer attempt : attempts) {
+            if (!uniqueAttempts.contains(attempt)) {
+                uniqueAttempts.add(attempt);
+            }
+        }
+        return uniqueAttempts;
     }
 
     private boolean openSearchMenu() {
@@ -754,11 +811,11 @@ public class GatherRoutine extends DelayedTask {
         return true;
     }
 
-    private boolean deployMarchAction(GatherType type) {
+    private DeployResult deployMarchAction(GatherType type) {
         ImageSearchResultData btn = templateSearchHelper.locatePattern(TemplatesEnum.GAME_HOME_SHORTCUTS_FARM_GATHER,
                 SearchConfig.builder().build());
         if (!btn.isFound())
-            return false;
+            return DeployResult.NODE_NOT_FOUND;
 
         tapPoint(btn.getPoint());
         sleepTask(1000);
@@ -776,7 +833,7 @@ public class GatherRoutine extends DelayedTask {
         ImageSearchResultData deploy = templateSearchHelper.locatePattern(TemplatesEnum.GATHER_DEPLOY_BUTTON,
                 SearchConfig.builder().build());
         if (!deploy.isFound())
-            return false;
+            return DeployResult.FAILED;
 
         tapPoint(deploy.getPoint());
         sleepTask(1000);
@@ -785,9 +842,9 @@ public class GatherRoutine extends DelayedTask {
                 .isFound()) {
             pressBack();
             pressBack();
-            return false;
+            return DeployResult.FAILED;
         }
-        return true;
+        return DeployResult.SUCCESS;
     }
 
     // ================= HELPERS (UI/OCR) =================
@@ -1169,5 +1226,11 @@ public class GatherRoutine extends DelayedTask {
         RecallReason(String logValue) {
             this.logValue = logValue;
         }
+    }
+
+    private enum DeployResult {
+        SUCCESS,
+        NODE_NOT_FOUND,
+        FAILED
     }
 }
