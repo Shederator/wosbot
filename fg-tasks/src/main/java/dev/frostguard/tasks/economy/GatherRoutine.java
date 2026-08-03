@@ -1,7 +1,7 @@
 package dev.frostguard.tasks.economy;
 
 import java.awt.Color;
-import java.time.Duration;
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -15,28 +15,27 @@ import java.util.stream.Collectors;
 
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
+import dev.frostguard.vision.convert.GameTimeUtils;
+import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.data.entity.DailyTask;
+import dev.frostguard.data.repository.DailyTaskRepository;
 import dev.frostguard.data.repository.DailyTaskRepository;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
-import dev.frostguard.api.domain.MarchActivityType;
-import dev.frostguard.api.domain.MarchMovementPhase;
-import dev.frostguard.api.domain.MarchResourceType;
-import dev.frostguard.api.domain.MarchSlotAvailability;
-import dev.frostguard.api.domain.MarchSlotState;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.TesseractSettingsData;
-import dev.frostguard.engine.helper.MarchSlotAvailabilityEstimator;
+import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.GatherQueuePolicy;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.schedule.TaskQueue;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.service.StatisticsService;
+import net.sourceforge.tess4j.TesseractException;
 
 /**
  * Optimized GatherRoutine: Manages persistent resource rotation, fairness, and
@@ -47,6 +46,8 @@ public class GatherRoutine extends DelayedTask {
     // ========== Constants & Config Keys ==========
     private static final int DEFAULT_QUEUES = 6;
     private static final int DEFAULT_LEVEL = 5;
+    private static final int MAX_GATHER_LEVEL = 9;
+    private static final int REGION_SAFE_MAX_LEVEL = 8;
     private static final boolean DEFAULT_REMOVE_HEROES = false;
     private static final boolean DEFAULT_INTEL_SMART = false;
     private static final int PENDING_HIGH_PRIORITY_RETRY_MINUTES = 5;
@@ -58,26 +59,18 @@ public class GatherRoutine extends DelayedTask {
     private static final int TROOP_RETURN_RETRY_MINUTES = 1;
     // pernerch/2026-07-02: Bear Trap active duration (30 min) used to estimate end time for defer calculation
     private static final int BEAR_TRAP_DURATION_MINUTES = 30;
-    private static final int LOWER_BOUND_RECHECK_BUFFER_MINUTES = 1;
-    private static final int GATHER_RETURN_BUFFER_MINUTES = 5;
-    private static final int UNKNOWN_MARCH_RETRY_MINUTES = 5;
-    private static final int STATIONED_MARCH_RETRY_MINUTES = 60;
-    private static final MarchSlotAvailabilityEstimator.Settings MARCH_SLOT_ESTIMATE_SETTINGS =
-            new MarchSlotAvailabilityEstimator.Settings(
-                    Duration.ofMinutes(LOWER_BOUND_RECHECK_BUFFER_MINUTES),
-                    Duration.ofMinutes(GATHER_RETURN_BUFFER_MINUTES),
-                    Duration.ofMinutes(UNKNOWN_MARCH_RETRY_MINUTES),
-                    Duration.ofMinutes(STATIONED_MARCH_RETRY_MINUTES));
 
     // Region Constants (UI)
     private static final MarchQueueRegion[] MARCH_QUEUES = {
-            new MarchQueueRegion(new PointData(10, 342), new PointData(435, 407)),
-            new MarchQueueRegion(new PointData(10, 415), new PointData(435, 480)),
-            new MarchQueueRegion(new PointData(10, 488), new PointData(435, 553)),
-            new MarchQueueRegion(new PointData(10, 561), new PointData(435, 626)),
-            new MarchQueueRegion(new PointData(10, 634), new PointData(435, 699)),
-            new MarchQueueRegion(new PointData(10, 707), new PointData(435, 772)),
+            new MarchQueueRegion(new PointData(10, 342), new PointData(435, 407), new PointData(152, 378)),
+            new MarchQueueRegion(new PointData(10, 415), new PointData(435, 480), new PointData(152, 451)),
+            new MarchQueueRegion(new PointData(10, 488), new PointData(435, 553), new PointData(152, 524)),
+            new MarchQueueRegion(new PointData(10, 561), new PointData(435, 626), new PointData(152, 597)),
+            new MarchQueueRegion(new PointData(10, 634), new PointData(435, 699), new PointData(152, 670)),
+            new MarchQueueRegion(new PointData(10, 707), new PointData(435, 772), new PointData(152, 743)),
     };
+    private static final int TIME_TEXT_WIDTH = 140;
+    private static final int TIME_TEXT_HEIGHT = 19;
 
     // PointData Constants (UI)
     private static final PointData SEARCH_BTN_TL = new PointData(25, 850);
@@ -92,9 +85,7 @@ public class GatherRoutine extends DelayedTask {
     private static final PointData LEVEL_INC_BR = new PointData(500, 1066);
     private static final PointData LEVEL_DEC_TL = new PointData(50, 1040);
     private static final PointData LEVEL_DEC_BR = new PointData(85, 1066);
-    private static final PointData ONLY_FULL_RESOURCES_TOGGLE = new PointData(183, 1140);
-    private static final AreaData ONLY_FULL_RESOURCES_TICK_AREA =
-            new AreaData(new PointData(145, 1110), new PointData(225, 1170));
+    private static final PointData LEVEL_LOCK_BTN = new PointData(183, 1140);
     private static final PointData SEARCH_EXEC_TL = new PointData(301, 1200);
     private static final PointData SEARCH_EXEC_BR = new PointData(412, 1229);
     private static final PointData RECALL_CONFIRM_TL = new PointData(446, 780);
@@ -110,8 +101,7 @@ public class GatherRoutine extends DelayedTask {
     private boolean intelEnabled;
     private boolean gatherSpeed;
     private boolean autoJoinEnabled;
-    private boolean onlyFullResources;
-    private boolean downgradeLevelOnMissingNode;
+    private boolean downgradeLevelIfNoNode;
 
     private List<GatherType> enabledTypes;
     private List<GatherType> rotationPool;
@@ -149,13 +139,10 @@ public class GatherRoutine extends DelayedTask {
             return;
         if (checkGatherSpeedWait())
             return;
-        // 1. Read the shared March Queue model and derive gather-specific state from it.
-        GatherMarchSnapshot marchSnapshot = readGatherMarchSnapshot();
-        List<GatherType> activeMarches = new ArrayList<>(marchSnapshot.activeTypes());
-        int activeGatherCount = marchSnapshot.activeGatherCount();
-        int idleSlotCount = marchSnapshot.idleSlotCount();
-        logInfo(String.format("Active gather marches: %d / %d; idle physical march slots: %d",
-                activeGatherCount, activeQueues, idleSlotCount));
+        // 1. Scan Active Marches
+        List<GatherType> activeMarches = scanActiveMarches();
+        int activeCount = countOccupiedMarchSlotsFlow();
+        logInfo(String.format("Active Marches: %d / %d", activeCount, activeQueues));
 
         // Changed by pernerch | Date: 2026-07-02 | Why: continuously self-heal gather state
         // by recalling duplicate gather marches when active gathers exceed configured queue limit.
@@ -166,12 +153,9 @@ public class GatherRoutine extends DelayedTask {
                 recalledOverflow));
             sleepTask(500);
             earliestReschedule = null;
-            marchSnapshot = readGatherMarchSnapshot();
-            activeMarches = new ArrayList<>(marchSnapshot.activeTypes());
-            activeGatherCount = marchSnapshot.activeGatherCount();
-            idleSlotCount = marchSnapshot.idleSlotCount();
-            logInfo(String.format("Active gather marches after correction: %d / %d; idle physical march slots: %d",
-                    activeGatherCount, activeQueues, idleSlotCount));
+            activeMarches = scanActiveMarches();
+            activeCount = countOccupiedMarchSlotsFlow();
+            logInfo(String.format("Active Marches after correction: %d / %d", activeCount, activeQueues));
         }
 
         // Changed by pernerch | Date: 2026-07-02 | Why: when higher-priority tasks are pending,
@@ -182,15 +166,13 @@ public class GatherRoutine extends DelayedTask {
                 return;
             }
 
-            if (activeGatherCount > 0) {
-                LocalDateTime next = earliestReschedule != null
-                        ? earliestReschedule
-                        : marchSnapshot.nextCheckAt() != null ? marchSnapshot.nextCheckAt() : LocalDateTime.now().plusMinutes(5);
+            if (activeCount > 0) {
+                LocalDateTime next = earliestReschedule != null ? earliestReschedule : LocalDateTime.now().plusMinutes(5);
                 logInfo(String.format(
                 "Deferring gather deployment because higher-priority march task(s) are pending: %s. " +
                     "%d gather march(es) are outside; next return at %s.",
                 pendingHigherPriorityTasks,
-                        activeGatherCount,
+                        activeCount,
                         GameTimeUtils.formatCountdown(next)));
                 reschedule(next);
             } else {
@@ -206,13 +188,13 @@ public class GatherRoutine extends DelayedTask {
             return;
         }
 
-        if (idleSlotCount <= 0 && activeGatherCount < activeQueues) {
+        if (activeCount >= activeQueues && earliestReschedule == null) {
             if (!autoJoinEnabled) {
                 int recalledBlockedMarches = recallBlockedMarchesWhenAutojoinOffFlow();
                 if (recalledBlockedMarches > 0) {
                     LocalDateTime retryAt = LocalDateTime.now().plusMinutes(1);
                     logInfo(String.format(
-                            "Autojoin is disabled and all physical march slots are blocked. Recalled %d march(es); rechecking gather in 1 minute at %s.",
+                            "Autojoin is disabled and all gather slots are blocked. Recalled %d march(es); rechecking gather in 1 minute at %s.",
                             recalledBlockedMarches,
                             GameTimeUtils.formatCountdown(retryAt)));
                     reschedule(retryAt);
@@ -220,32 +202,23 @@ public class GatherRoutine extends DelayedTask {
                 }
             }
 
-            LocalDateTime retryAt = marchSnapshot.nextCheckAt() != null
-                    ? marchSnapshot.nextCheckAt()
-                    : LocalDateTime.now().plusMinutes(UNKNOWN_MARCH_RETRY_MINUTES);
-            logInfo(String.format(
-                    "No idle physical march slot is available for gather. Rechecking at %s.",
-                    GameTimeUtils.formatCountdown(retryAt)));
-            reschedule(retryAt);
-            return;
-        }
-
-        if (activeGatherCount >= activeQueues && earliestReschedule == null) {
-            // Only fall back to 5-min polling if the next check is near or unknown.
-            LocalDateTime nextGatherCheck = marchSnapshot.earliestGatherCheckAt();
+            // pernerch/2026-07-02: read the actual march return times so gather wakes up exactly
+            // when a slot becomes free, not on a blind 5-minute ticker.
+            // Only fall back to 5-min polling if the return is ≤10 min away (near-term uncertainty).
+            LocalDateTime latestReturn = resolveLatestMarchReturnTime();
             LocalDateTime retryAt;
-            if (nextGatherCheck != null && ChronoUnit.MINUTES.between(LocalDateTime.now(), nextGatherCheck) > 10) {
-                retryAt = nextGatherCheck.plusMinutes(TROOP_RETURN_MARGIN_MINUTES);
+            if (latestReturn != null && ChronoUnit.MINUTES.between(LocalDateTime.now(), latestReturn) > 10) {
+                retryAt = latestReturn.plusMinutes(TROOP_RETURN_MARGIN_MINUTES);
                 logInfo(String.format(
-                        "All configured gather queues are currently active%s. " +
-                        "Scheduling next gather check at %s.",
+                        "All configured march slots are currently occupied outside gather%s. " +
+                        "Scheduling next gather check at march return time %s.",
                         autoJoinEnabled ? " (autojoin enabled)" : " (autojoin disabled)",
                         GameTimeUtils.formatCountdown(retryAt)));
             } else {
                 retryAt = LocalDateTime.now().plusMinutes(5);
                 logInfo(String.format(
-                        "All configured gather queues are currently active%s. " +
-                        "Next check is near or unknown - retrying in 5 minutes at %s.",
+                        "All configured march slots are currently occupied outside gather%s. " +
+                        "Return is near or unknown - retrying in 5 minutes at %s.",
                         autoJoinEnabled ? " (autojoin enabled)" : " (autojoin disabled)",
                         GameTimeUtils.formatCountdown(retryAt)));
             }
@@ -254,10 +227,10 @@ public class GatherRoutine extends DelayedTask {
         }
 
         // 2. Fill Queues (Persistent Rotation)
-        GatherFillResult fillResult = fillQueues(activeGatherCount, idleSlotCount, activeMarches);
+        fillQueues(activeCount, activeMarches);
 
         // 3. Save & Finalize
-        finalizeReschedule(fillResult);
+        finalizeReschedule();
     }
 
     // ================= CONFIGURATION =================
@@ -272,8 +245,7 @@ public class GatherRoutine extends DelayedTask {
         this.intelEnabled = get(ConfigurationKeyEnum.INTEL_BOOL, false);
         this.gatherSpeed = get(ConfigurationKeyEnum.GATHER_SPEED_BOOL, false);
         this.autoJoinEnabled = get(ConfigurationKeyEnum.ALLIANCE_AUTOJOIN_BOOL, false);
-        this.onlyFullResources = get(ConfigurationKeyEnum.GATHER_ONLY_FULL_RESOURCES_BOOL, false);
-        this.downgradeLevelOnMissingNode = get(ConfigurationKeyEnum.GATHER_DOWNGRADE_LEVEL_BOOL, true);
+        this.downgradeLevelIfNoNode = get(ConfigurationKeyEnum.GATHER_DOWNGRADE_LEVEL_BOOL, true);
 
         this.enabledTypes = Arrays.stream(GatherType.values())
                 .filter(this::isTypeEnabled)
@@ -307,31 +279,26 @@ public class GatherRoutine extends DelayedTask {
 
     // ================= ROTATION LOGIC =================
 
-    private GatherFillResult fillQueues(int currentActive, int idleSlotCount, List<GatherType> activeMarches) {
-        int freeSlots = Math.min(activeQueues - currentActive, idleSlotCount);
-        int deployed = 0;
-        int noNode = 0;
-        int blocked = 0;
-        int sameTargetBlocked = 0;
-        logInfo(String.format("Gather fill: active=%d/%d idleSlots=%d freeSlots=%d pool=%s",
-                currentActive, activeQueues, idleSlotCount, freeSlots, rotationPool));
+    private void fillQueues(int currentActive, List<GatherType> activeMarches) {
+        int freeSlots = activeQueues - currentActive;
+        logInfo(String.format("Free slots: %d. Pool: %s", freeSlots, rotationPool));
 
         // Remove types already marching from the current pool for initial fairness
         if (rotationPool.removeAll(activeMarches)) {
-            logDebug("Removed active gather types from pool: " + activeMarches);
+            logInfo("Removed active marches from pool: " + activeMarches);
             saveRotationPool();
         }
 
         // If pool is empty after removing active marches but there are free slots,
         // allow duplicate types so we can fill all available march queues
         if (rotationPool.isEmpty() && freeSlots > 0) {
-            logDebug("Gather pool empty after removing active types; allowing duplicates for remaining slots.");
+            logInfo("Pool empty after removing active marches. Allowing duplicates for remaining slots.");
             rotationPool = new ArrayList<>(enabledTypes);
         }
 
         if (freeSlots <= 0) {
             saveRotationPool();
-            return new GatherFillResult(0, 0, 0, 0, false, 0);
+            return;
         }
 
         // Shuffle loaded pool for randomness in this run
@@ -339,15 +306,13 @@ public class GatherRoutine extends DelayedTask {
 
         int remaining = freeSlots;
         int safetyLoop = 0;
-        Set<GatherType> unavailableThisRun = new HashSet<>();
 
         while (remaining > 0 && safetyLoop++ < 10) {
 
             // Refill if empty
             if (rotationPool.isEmpty()) {
-                logDebug("Gather pool empty. Resetting.");
+                logInfo("Pool empty. Resetting.");
                 rotationPool = new ArrayList<>(enabledTypes);
-                rotationPool.removeAll(unavailableThisRun);
                 // Don't remove active marches on refill â€” duplicates are needed
                 // to fill remaining slots when activeQueues > enabledTypes.size()
                 Collections.shuffle(rotationPool);
@@ -355,9 +320,7 @@ public class GatherRoutine extends DelayedTask {
 
             // Try ALL pool items â€” don't limit to remaining, so if one type fails
             // we still try others. The inner loop stops when slots are full.
-            List<GatherType> batch = rotationPool.stream()
-                    .filter(type -> !unavailableThisRun.contains(type))
-                    .collect(Collectors.toCollection(ArrayList::new));
+            List<GatherType> batch = new ArrayList<>(rotationPool);
 
             if (batch.isEmpty())
                 break;
@@ -367,34 +330,18 @@ public class GatherRoutine extends DelayedTask {
                 if (remaining <= 0 || currentActive >= activeQueues)
                     break;
 
-                GatherDeployResult deployResult = deploy(type);
-                if (deployResult == GatherDeployResult.DEPLOYED) {
+                if (deploy(type)) {
                     currentActive++;
                     remaining--;
-                    deployed++;
                     rotationPool.remove(type);
                     progress = true;
+                    logInfo(String.format("Deployed %s. Removed from pool.", type));
                     StatisticsService.obtain().addToCounter(profile, "Gather Marches Deployed", 1);
                     activeMarches.add(type); // Add to avoid re-picking if we loop
                 } else {
-                    if (deployResult == GatherDeployResult.NO_TROOPS_AVAILABLE) {
-                        remaining = 0;
-                        saveRotationPool();
-                        return new GatherFillResult(deployed, noNode, blocked, sameTargetBlocked, true, 0);
-                    }
                     // Remove failed type from pool to avoid retrying it endlessly
                     rotationPool.remove(type);
-                    if (deployResult == GatherDeployResult.NO_NODE_FOUND) {
-                        noNode++;
-                        unavailableThisRun.add(type);
-                    }
-                    if (deployResult == GatherDeployResult.BLOCKED) {
-                        blocked++;
-                    }
-                    if (deployResult == GatherDeployResult.SAME_TARGET) {
-                        blocked++;
-                        sameTargetBlocked++;
-                    }
+                    logInfo(String.format("Failed to deploy %s. Skipping.", type));
                 }
             }
 
@@ -403,15 +350,14 @@ public class GatherRoutine extends DelayedTask {
         }
 
         saveRotationPool();
-        return new GatherFillResult(deployed, noNode, blocked, sameTargetBlocked, false, remaining);
     }
 
     private void loadRotationPool() {
         String saved = profile.getConfig(ConfigurationKeyEnum.GATHER_ROTATION_POOL, String.class);
-        logDebug("Loaded gather pool config: '" + saved + "'");
+        logInfo("DEBUG: Loaded pool config: '" + saved + "'");
         if (saved == null || saved.isEmpty()) {
             rotationPool = new ArrayList<>(enabledTypes);
-            logDebug("Gather pool config empty. Resetting to full: " + rotationPool);
+            logInfo("DEBUG: Pool config empty/null. Resetting to full: " + rotationPool);
             return;
         }
         try {
@@ -422,7 +368,7 @@ public class GatherRoutine extends DelayedTask {
                     .collect(Collectors.toList());
         } catch (Exception e) {
             rotationPool = new ArrayList<>(enabledTypes);
-            logDebug("Could not parse gather pool config; resetting: " + e.getMessage());
+            logInfo("DEBUG: Error parsing pool. Resetting: " + e.getMessage());
         }
     }
 
@@ -430,57 +376,64 @@ public class GatherRoutine extends DelayedTask {
         if (rotationPool == null)
             return;
         String val = rotationPool.stream().map(Enum::name).collect(Collectors.joining(","));
-        logDebug("Saving gather pool config: '" + val + "'");
+        logInfo("DEBUG: Saving pool config: '" + val + "'");
         profile.setConfig(ConfigurationKeyEnum.GATHER_ROTATION_POOL, val);
         setShouldUpdateConfig(true);
     }
 
     // ================= SCAN & CHECKS =================
 
-    private GatherMarchSnapshot readGatherMarchSnapshot() {
-        List<MarchSlotState> slots = marchHelper.readMarchQueue();
-        List<GatherType> activeTypes = slots.stream()
-                .filter(slot -> slot.activityType() == MarchActivityType.GATHER)
-                .map(slot -> toGatherType(slot.resourceType()))
-                .filter(type -> type != null)
-                .collect(Collectors.toCollection(ArrayList::new));
+    private List<GatherType> scanActiveMarches() {
+        List<GatherType> active = new ArrayList<>();
+        if (enabledTypes == null || enabledTypes.isEmpty()) {
+            return active;
+        }
 
-        int activeGatherCount = (int) slots.stream()
-                .filter(slot -> slot.activityType() == MarchActivityType.GATHER)
-                .count();
-        int idleSlotCount = (int) slots.stream()
-                .filter(slot -> slot.availability() == MarchSlotAvailability.IDLE)
-                .count();
+        // Detect gather types directly from currently active march rows, so free slots
+        // can be assigned to the remaining resource types not yet outside.
+        navigationHelper.ensureCorrectScreenLocation(LaunchPoint.WORLD);
+        sleepTask(250);
+        marchHelper.openLeftMenuCitySection(false);
+        try {
+            for (GatherType type : enabledTypes) {
+                if (!checkActiveMarches(type).isEmpty()) {
+                    active.add(type);
+                }
+            }
+        } finally {
+            marchHelper.closeLeftMenu();
+        }
 
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime nextCheckAt = MarchSlotAvailabilityEstimator
-                .estimateEarliestCheckAt(slots, now, MARCH_SLOT_ESTIMATE_SETTINGS)
-                .orElse(null);
-        LocalDateTime earliestGatherCheckAt = slots.stream()
-                .filter(slot -> slot.activityType() == MarchActivityType.GATHER)
-                .map(slot -> MarchSlotAvailabilityEstimator
-                        .estimateNextCheck(slot, MARCH_SLOT_ESTIMATE_SETTINGS)
-                        .map(now::plus)
-                        .orElse(null))
-                .filter(time -> time != null)
-                .min(Comparator.naturalOrder())
-                .orElse(null);
+        if (!active.isEmpty()) {
+            logInfo("Detected active gather resource types: " + active);
+        }
 
-        return new GatherMarchSnapshot(slots, activeTypes, activeGatherCount, idleSlotCount,
-                nextCheckAt, earliestGatherCheckAt);
+        return active;
     }
 
-    private GatherType toGatherType(MarchResourceType resourceType) {
-        if (resourceType == null) {
-            return null;
+    // Changed by pernerch | Date: 2026-07-02 | Why: count occupied marches via the march-slot OCR
+    // grid instead of searching shortcut templates in the left menu, so gather startup matches the
+    // original slot-based behavior again.
+    private int countOccupiedMarchSlotsFlow() {
+        marchHelper.openLeftMenuCitySection(false);
+        int occupied = 0;
+
+        try {
+            for (int i = 0; i < CommonGameAreas.MARCH_SLOTS_TOP_LEFT.length; i++) {
+                PointData topLeft = CommonGameAreas.MARCH_SLOTS_TOP_LEFT[i];
+                PointData bottomRight = CommonGameAreas.MARCH_SLOTS_BOTTOM_RIGHT[i];
+                String text = emuManager.readText(EMULATOR_NUMBER, topLeft, bottomRight);
+                if (text == null || !text.toLowerCase().contains("idle")) {
+                    occupied++;
+                }
+            }
+        } catch (IOException | TesseractException e) {
+            logDebug("Could not fully read occupied march slots: " + e.getMessage());
+        } finally {
+            marchHelper.closeLeftMenu();
         }
-        return switch (resourceType) {
-            case MEAT -> GatherType.MEAT;
-            case WOOD -> GatherType.WOOD;
-            case COAL -> GatherType.COAL;
-            case IRON -> GatherType.IRON;
-            case UNKNOWN -> null;
-        };
+
+        return occupied;
     }
 
     // Changed by pernerch | Date: 2026-07-02 | Why: when autojoin is disabled and all gather
@@ -607,26 +560,41 @@ public class GatherRoutine extends DelayedTask {
     // marches (type, queue row, return time) to support deterministic overflow correction.
     private List<ActiveGatherMarchCandidate> collectActiveGatherMarchCandidatesFlow() {
         List<ActiveGatherMarchCandidate> candidates = new ArrayList<>();
-        LocalDateTime now = LocalDateTime.now();
-        for (MarchSlotState slot : marchHelper.readMarchQueue()) {
-            if (slot.activityType() != MarchActivityType.GATHER) {
-                continue;
+        marchHelper.openLeftMenuCitySection(false);
+
+        try {
+            PointData limit = new PointData(415,
+                    MARCH_QUEUES[MARCH_QUEUES.length - 1].bottomRight.getY());
+
+            for (GatherType type : GatherType.values()) {
+                List<ImageSearchResultData> results = templateSearchHelper.locateAllPatterns(
+                        type.template,
+                        SearchConfig.builder()
+                                .withArea(new AreaData(MARCH_QUEUES[0].topLeft, limit))
+                                .withMaxAttempts(3)
+                                .withMaxResults(MARCH_QUEUES.length)
+                                .withDelay(3)
+                                .build());
+
+                for (ImageSearchResultData result : results) {
+                    int queueIndex = findQueueIndex(result.getPoint());
+                    if (queueIndex < 0) {
+                        continue;
+                    }
+
+                    LocalDateTime returnTime = readReturnTime(queueIndex);
+                    if (returnTime == null) {
+                        returnTime = LocalDateTime.now().plusMinutes(5);
+                    }
+
+                    candidates.add(new ActiveGatherMarchCandidate(type, queueIndex, returnTime));
+                }
             }
 
-            GatherType type = toGatherType(slot.resourceType());
-            if (type == null) {
-                logDebug("Skipping active gather row with unknown resource type: #" + slot.slot()
-                        + " evidence=" + slot.evidence());
-                continue;
-            }
-
-            LocalDateTime returnTime = MarchSlotAvailabilityEstimator
-                    .estimateNextCheck(slot, MARCH_SLOT_ESTIMATE_SETTINGS)
-                    .map(now::plus)
-                    .orElse(now.plusMinutes(UNKNOWN_MARCH_RETRY_MINUTES));
-            candidates.add(new ActiveGatherMarchCandidate(type, slot.slot() - 1, returnTime));
+            return candidates;
+        } finally {
+            marchHelper.closeLeftMenu();
         }
-        return candidates;
     }
 
     // Changed by pernerch | Date: 2026-07-02 | Why: target a specific gather row for recall
@@ -680,68 +648,118 @@ public class GatherRoutine extends DelayedTask {
         }
     }
 
-    // ================= DEPLOYMENT PIPELINE =================
+    private List<ActiveMarchResult> checkActiveMarches(GatherType type) {
+        PointData limit = new PointData(415,
+                MARCH_QUEUES[MARCH_QUEUES.length - 1].bottomRight.getY());
 
-    private GatherDeployResult deploy(GatherType type) {
-        int targetLevel = get(type.levelKey, DEFAULT_LEVEL);
-        int minLevel = downgradeLevelOnMissingNode ? 1 : targetLevel;
+        // Fix: Use searchTemplates (plural) to find ALL matches of this type
+        List<ImageSearchResultData> results = templateSearchHelper.locateAllPatterns(
+                type.template,
+                SearchConfig.builder()
+                        .withArea(new AreaData(MARCH_QUEUES[0].topLeft, limit))
+                        .withMaxAttempts(3)
+                        .withMaxResults(MARCH_QUEUES.length)
+                        .withDelay(3).build());
 
-        for (int level = targetLevel; level >= minLevel; level--) {
-            int sameTargetFailures = 0;
-            GatherDeployResult result;
+        List<ActiveMarchResult> marchResults = new ArrayList<>();
 
-            do {
-                logInfo(String.format(
-                        "Gather deploy attempt: type=%s level=%d onlyFull=%s nodeAttempt=%d/%d",
-                        type, level, onlyFullResources, sameTargetFailures + 1,
-                        GatherSameTargetRetryPolicy.MAX_NODE_ATTEMPTS));
-
-                if (!openSearchMenu()) {
-                    return retryLater(GatherDeployResult.BLOCKED);
-                }
-                if (!selectTile(type)) {
-                    return retryLater(GatherDeployResult.BLOCKED);
-                }
-                if (!setLevel(level)) {
-                    return retryLater(GatherDeployResult.BLOCKED);
-                }
-                setOnlyFullResourcesSearch(onlyFullResources);
-                if (!executeSearch()) {
-                    return retryLater(GatherDeployResult.BLOCKED);
-                }
-
-                result = deployMarchAction(type, level);
-                if (result == GatherDeployResult.SAME_TARGET) {
-                    sameTargetFailures++;
-                    if (GatherSameTargetRetryPolicy.shouldSearchAnotherNode(sameTargetFailures)) {
-                        logInfo(String.format(
-                                "Gather target already has an incoming march: type=%s level=%d. Searching another node.",
-                                type, level));
-                        sleepTask(500);
-                    }
-                }
-            } while (result == GatherDeployResult.SAME_TARGET
-                    && GatherSameTargetRetryPolicy.shouldSearchAnotherNode(sameTargetFailures));
-
-            if (result == GatherDeployResult.DEPLOYED) {
-                return result;
-            }
-            if (result == GatherDeployResult.SAME_TARGET) {
-                logInfo(String.format(
-                        "Gather target conflict persisted after %d node attempts: type=%s level=%d.",
-                        sameTargetFailures, type, level));
-                return result;
-            }
-            if (result != GatherDeployResult.NO_NODE_FOUND || level == minLevel) {
-                return retryLater(result);
-            }
-
-            logInfo(String.format("No %s node found at level %d; trying level %d.", type, level, level - 1));
-            pressBack();
-            sleepTask(500);
+        if (results.isEmpty()) {
+            return marchResults; // Empty list = no marches of this type
         }
 
-        return GatherDeployResult.NO_NODE_FOUND;
+        for (ImageSearchResultData res : results) {
+            int qIdx = findQueueIndex(res.getPoint());
+            if (qIdx != -1) {
+                LocalDateTime time = readReturnTime(qIdx);
+                // If time read fails, we still count it as active with a fallback time
+                LocalDateTime returnTime = (time != null) ? time.plusMinutes(2) : LocalDateTime.now().plusMinutes(5);
+                marchResults.add(ActiveMarchResult.active(returnTime));
+            } else {
+                // Found the icon but couldn't map to a queue... treat as active anyway to be
+                // safe?
+                // For now, if we can't map it to a queue line, we might ignore it or treat as
+                // error.
+                // Safer to count it as active with default time to avoid over-deploying
+                marchResults.add(ActiveMarchResult.error());
+            }
+        }
+
+        return marchResults;
+    }
+
+    // ================= DEPLOYMENT PIPELINE =================
+
+    private boolean deploy(GatherType type) {
+        logInfo("Deploying " + type);
+
+        if (!openSearchMenu())
+            return retryLater();
+        if (!selectTile(type))
+            return retryLater();
+
+        int configuredLevel = clampGatherLevel(get(type.levelKey, DEFAULT_LEVEL));
+        List<Integer> levelAttempts = buildLevelAttempts(configuredLevel);
+
+        for (int i = 0; i < levelAttempts.size(); i++) {
+            int level = levelAttempts.get(i);
+            logInfo(String.format("Gather level attempt %d/%d for %s: level %d",
+                    i + 1,
+                    levelAttempts.size(),
+                    type,
+                    level));
+
+            if (!setLevel(level)) {
+                return retryLater();
+            }
+
+            if (!executeSearch()) {
+                return retryLater();
+            }
+
+            DeployResult result = deployMarchAction(type);
+            if (result == DeployResult.SUCCESS) {
+                return true;
+            }
+
+            if (result != DeployResult.NODE_NOT_FOUND || i == levelAttempts.size() - 1) {
+                return retryLater();
+            }
+
+            logInfo(String.format(
+                    "No node found for %s at level %d. Retrying with next fallback level.",
+                    type,
+                    level));
+        }
+
+        return retryLater();
+    }
+
+    private int clampGatherLevel(int level) {
+        return Math.max(1, Math.min(MAX_GATHER_LEVEL, level));
+    }
+
+    private List<Integer> buildLevelAttempts(int configuredLevel) {
+        List<Integer> attempts = new ArrayList<>();
+        attempts.add(configuredLevel);
+
+        if (configuredLevel == MAX_GATHER_LEVEL) {
+            attempts.add(REGION_SAFE_MAX_LEVEL);
+        }
+
+        if (downgradeLevelIfNoNode) {
+            int last = attempts.get(attempts.size() - 1);
+            if (last > 1) {
+                attempts.add(last - 1);
+            }
+        }
+
+        List<Integer> uniqueAttempts = new ArrayList<>();
+        for (Integer attempt : attempts) {
+            if (!uniqueAttempts.contains(attempt)) {
+                uniqueAttempts.add(attempt);
+            }
+        }
+        return uniqueAttempts;
     }
 
     private boolean openSearchMenu() {
@@ -783,22 +801,8 @@ public class GatherRoutine extends DelayedTask {
             else
                 tapRandomPoint(LEVEL_DEC_TL, LEVEL_DEC_BR, current - target, 150);
         }
+        ensureLevelLocked();
         return true;
-    }
-
-    private void setOnlyFullResourcesSearch(boolean desired) {
-        boolean current = templateSearchHelper
-                .locatePattern(TemplatesEnum.GAME_HOME_SHORTCUTS_FARM_TICK,
-                        SearchConfig.builder()
-                                .withArea(ONLY_FULL_RESOURCES_TICK_AREA)
-                                .withMaxAttempts(2)
-                                .build())
-                .isFound();
-        if (current != desired) {
-            logDebug("Setting only-full-resources search to " + desired);
-            tapPoint(ONLY_FULL_RESOURCES_TOGGLE);
-            sleepTask(300);
-        }
     }
 
     private boolean executeSearch() {
@@ -807,14 +811,11 @@ public class GatherRoutine extends DelayedTask {
         return true;
     }
 
-    private GatherDeployResult deployMarchAction(GatherType type, int level) {
+    private DeployResult deployMarchAction(GatherType type) {
         ImageSearchResultData btn = templateSearchHelper.locatePattern(TemplatesEnum.GAME_HOME_SHORTCUTS_FARM_GATHER,
                 SearchConfig.builder().build());
-        if (!btn.isFound()) {
-            logInfo(String.format("No gather node found: type=%s level=%d onlyFull=%s",
-                    type, level, onlyFullResources));
-            return GatherDeployResult.NO_NODE_FOUND;
-        }
+        if (!btn.isFound())
+            return DeployResult.NODE_NOT_FOUND;
 
         tapPoint(btn.getPoint());
         sleepTask(1000);
@@ -823,43 +824,55 @@ public class GatherRoutine extends DelayedTask {
                 SearchConfig.builder().withCoordinates(new PointData(51, 231), new PointData(295, 649)).build());
 
         if (!hero.isFound()) {
-            logDebug("Preferred hero not found for " + type + ". Proceeding with default march.");
+            logInfo("Preferred hero not found for " + type + ". Proceeding with default march.");
         }
 
         if (removeHeroes)
             removeDefaultHeroes();
 
-        if (deploymentHelper.hasNoDeployableTroops()) {
-            logInfo("No deployable troops found on gather formation screen.");
-            return GatherDeployResult.NO_TROOPS_AVAILABLE;
-        }
-
         ImageSearchResultData deploy = templateSearchHelper.locatePattern(TemplatesEnum.GATHER_DEPLOY_BUTTON,
                 SearchConfig.builder().build());
-        if (!deploy.isFound()) {
-            if (deploymentHelper.hasNoDeployableTroops()) {
-                logInfo("Gather deploy button is absent because no deployable troops are available.");
-                return GatherDeployResult.NO_TROOPS_AVAILABLE;
-            }
-            return GatherDeployResult.BLOCKED;
-        }
+        if (!deploy.isFound())
+            return DeployResult.FAILED;
 
         tapPoint(deploy.getPoint());
         sleepTask(1000);
 
-        if (deploymentHelper.isMarchQueueFull()) {
-            return GatherDeployResult.BLOCKED;
-        }
-
-        if (deploymentHelper.isSameTargetDialog()) {
+        if (templateSearchHelper.locatePattern(TemplatesEnum.TROOPS_ALREADY_MARCHING, SearchConfig.builder().build())
+                .isFound()) {
             pressBack();
             pressBack();
-            return GatherDeployResult.SAME_TARGET;
+            return DeployResult.FAILED;
         }
-        return GatherDeployResult.DEPLOYED;
+        return DeployResult.SUCCESS;
     }
 
     // ================= HELPERS (UI/OCR) =================
+
+    private int findQueueIndex(PointData p) {
+        int max = MARCH_QUEUES.length;
+        for (int i = 0; i < max; i++) {
+            MarchQueueRegion r = MARCH_QUEUES[i];
+            if (p.getX() >= r.topLeft.getX() && p.getX() <= r.bottomRight.getX() &&
+                    p.getY() >= r.topLeft.getY() && p.getY() <= r.bottomRight.getY())
+                return i;
+        }
+        return -1;
+    }
+
+    private LocalDateTime readReturnTime(int idx) {
+        MarchQueueRegion r = MARCH_QUEUES[idx];
+        TesseractSettingsData s = TesseractSettingsData.assembler()
+                .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
+                .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
+                .stripBackground(true)
+                .setTextColor(new Color(255, 255, 255))
+                .charWhitelist("0123456789:").build();
+
+        return textHelper.attemptRecognition(r.timeTextStart,
+                new PointData(r.timeTextStart.getX() + TIME_TEXT_WIDTH, r.timeTextStart.getY() + TIME_TEXT_HEIGHT),
+                3, 200L, s, GameTimeUtils::isAcceptedFormat, text -> LocalDateTime.now().plus(GameTimeUtils.parseDuration(text)));
+    }
 
     private Integer readLevel() {
         TesseractSettingsData s = TesseractSettingsData.assembler().charWhitelist("0123456789")
@@ -887,9 +900,18 @@ public class GatherRoutine extends DelayedTask {
         sleepTask(300);
     }
 
-    private GatherDeployResult retryLater(GatherDeployResult result) {
+    private void ensureLevelLocked() {
+        if (!templateSearchHelper
+                .locatePattern(TemplatesEnum.GAME_HOME_SHORTCUTS_FARM_TICK, SearchConfig.builder().build())
+                .isFound()) {
+            tapPoint(LEVEL_LOCK_BTN);
+            sleepTask(300);
+        }
+    }
+
+    private boolean retryLater() {
         pressBack(); // Safety back
-        return result;
+        return false;
     }
 
     // ================= SCHEDULING & CONFLICTS =================
@@ -899,77 +921,37 @@ public class GatherRoutine extends DelayedTask {
             earliestReschedule = t;
     }
 
-    private void finalizeReschedule(GatherFillResult fillResult) {
-        if (GatherSameTargetRetryPolicy.requiresCooldown(
-                fillResult.sameTargetBlocked(), fillResult.unfilledSlots())) {
-            LocalDateTime retryAt = LocalDateTime.now()
-                    .plus(GatherSameTargetRetryPolicy.EXHAUSTED_RETRY_DELAY);
-            logInfo(String.format(
-                    "Gather fill finished: deployed=%d noNode=%d blocked=%d noTroops=%s. "
-                            + "Same-target conflicts left %d slot(s) unfilled; retrying node search in %d minutes at %s.",
-                    fillResult.deployed(),
-                    fillResult.noNode(),
-                    fillResult.blocked(),
-                    fillResult.stoppedForNoTroops(),
-                    fillResult.unfilledSlots(),
-                    GatherSameTargetRetryPolicy.EXHAUSTED_RETRY_DELAY.toMinutes(),
-                    GameTimeUtils.formatCountdown(retryAt)));
-            reschedule(retryAt);
-            return;
-        }
+    private void finalizeReschedule() {
         if (earliestReschedule != null) {
             reschedule(earliestReschedule);
             return;
         }
-        LocalDateTime nextGatherCheck = resolveEarliestGatherRedeployTime();
-        if (nextGatherCheck != null) {
-            LocalDateTime scheduleAt = nextGatherCheck.plusMinutes(TROOP_RETURN_MARGIN_MINUTES);
-            String reason = fillResult.stoppedForNoTroops()
-                    ? "No deployable troops remain"
-                    : "All gather slots filled";
-            logInfo(String.format(
-                    "Gather fill finished: deployed=%d noNode=%d blocked=%d noTroops=%s. %s. Next gather check at %s (return-aware + %d min margin).",
-                    fillResult.deployed(),
-                    fillResult.noNode(),
-                    fillResult.blocked(),
-                    fillResult.stoppedForNoTroops(),
-                    reason,
-                    GameTimeUtils.formatCountdown(scheduleAt), TROOP_RETURN_MARGIN_MINUTES));
+        // pernerch/2026-07-02: schedule next run based on when the deployed marches will actually return,
+        // not a fixed 5-minute blind wait. Reads OCR return times from active gather march rows.
+        LocalDateTime maxReturnTime = resolveLatestMarchReturnTime();
+        if (maxReturnTime != null) {
+            LocalDateTime scheduleAt = maxReturnTime.plusMinutes(TROOP_RETURN_MARGIN_MINUTES);
+            logInfo(String.format("All gather slots filled. Next gather check at %s (latest march return + %d min margin).",
+                GameTimeUtils.formatCountdown(scheduleAt), TROOP_RETURN_MARGIN_MINUTES));
             reschedule(scheduleAt);
         } else {
             reschedule(LocalDateTime.now().plusMinutes(5));
         }
     }
 
-    private LocalDateTime resolveEarliestGatherRedeployTime() {
+    // pernerch/2026-07-02: reads active gather march candidates and returns the latest return time,
+    // used to schedule the next gather run after all slots are filled.
+    private LocalDateTime resolveLatestMarchReturnTime() {
         try {
-            LocalDateTime now = LocalDateTime.now();
-            return marchHelper.readMarchQueue().stream()
-                    .map(slot -> estimateGatherRedeployTime(slot, now))
-                    .filter(time -> time != null)
-                    .min(Comparator.naturalOrder())
-                    .orElse(null);
+            List<ActiveGatherMarchCandidate> candidates = collectActiveGatherMarchCandidatesFlow();
+            return candidates.stream()
+                .map(ActiveGatherMarchCandidate::returnTime)
+                .max(Comparator.naturalOrder())
+                .orElse(null);
         } catch (Exception e) {
-            logDebug("Could not resolve next gather redeploy time: " + e.getMessage());
+            logDebug("Could not resolve latest march return time: " + e.getMessage());
             return null;
         }
-    }
-
-    private LocalDateTime estimateGatherRedeployTime(MarchSlotState slot, LocalDateTime now) {
-        if (slot == null || now == null) {
-            return null;
-        }
-        if (slot.movementPhase() == MarchMovementPhase.RETURNING && slot.countdown() != null) {
-            return now.plus(slot.countdown());
-        }
-        if (slot.activityType() == MarchActivityType.GATHER
-                && slot.movementPhase() == MarchMovementPhase.WORKING) {
-            return MarchSlotAvailabilityEstimator
-                    .estimateNextCheck(slot, MARCH_SLOT_ESTIMATE_SETTINGS)
-                    .map(now::plus)
-                    .orElse(null);
-        }
-        return null;
     }
 
     // pernerch/2026-07-02: replaces blind checkIntelConflict(). Handles:
@@ -1167,24 +1149,25 @@ public class GatherRoutine extends DelayedTask {
     // ================= INNER CLASSES =================
 
     public enum GatherType {
-        MEAT(TemplatesEnum.GAME_HOME_SHORTCUTS_FARM_MEAT,
+        MEAT(TemplatesEnum.GAME_HOME_SHORTCUTS_MEAT, TemplatesEnum.GAME_HOME_SHORTCUTS_FARM_MEAT,
                 TemplatesEnum.GATHER_MEAT_HERO,
                 ConfigurationKeyEnum.GATHER_MEAT_BOOL, ConfigurationKeyEnum.GATHER_MEAT_LEVEL_INT),
-        WOOD(TemplatesEnum.GAME_HOME_SHORTCUTS_FARM_WOOD,
+        WOOD(TemplatesEnum.GAME_HOME_SHORTCUTS_WOOD, TemplatesEnum.GAME_HOME_SHORTCUTS_FARM_WOOD,
                 TemplatesEnum.GATHER_WOOD_HERO,
                 ConfigurationKeyEnum.GATHER_WOOD_BOOL, ConfigurationKeyEnum.GATHER_WOOD_LEVEL_INT),
-        COAL(TemplatesEnum.GAME_HOME_SHORTCUTS_FARM_COAL,
+        COAL(TemplatesEnum.GAME_HOME_SHORTCUTS_COAL, TemplatesEnum.GAME_HOME_SHORTCUTS_FARM_COAL,
                 TemplatesEnum.GATHER_COAL_HERO,
                 ConfigurationKeyEnum.GATHER_COAL_BOOL, ConfigurationKeyEnum.GATHER_COAL_LEVEL_INT),
-        IRON(TemplatesEnum.GAME_HOME_SHORTCUTS_FARM_IRON,
+        IRON(TemplatesEnum.GAME_HOME_SHORTCUTS_IRON, TemplatesEnum.GAME_HOME_SHORTCUTS_FARM_IRON,
                 TemplatesEnum.GATHER_IRON_HERO,
                 ConfigurationKeyEnum.GATHER_IRON_BOOL, ConfigurationKeyEnum.GATHER_IRON_LEVEL_INT);
 
-        final TemplatesEnum tile, preferredHero;
+        final TemplatesEnum template, tile, preferredHero;
         final ConfigurationKeyEnum enabledKey, levelKey;
 
-        GatherType(TemplatesEnum tile, TemplatesEnum preferredHero,
+        GatherType(TemplatesEnum template, TemplatesEnum tile, TemplatesEnum preferredHero,
                 ConfigurationKeyEnum enabledKey, ConfigurationKeyEnum levelKey) {
+            this.template = template;
             this.tile = tile;
             this.preferredHero = preferredHero;
             this.enabledKey = enabledKey;
@@ -1193,32 +1176,42 @@ public class GatherRoutine extends DelayedTask {
     }
 
     private static class MarchQueueRegion {
-        final PointData topLeft, bottomRight;
+        final PointData topLeft, bottomRight, timeTextStart;
 
-        MarchQueueRegion(PointData topLeft, PointData bottomRight) {
+        MarchQueueRegion(PointData topLeft, PointData bottomRight, PointData timeTextStart) {
             this.topLeft = topLeft;
             this.bottomRight = bottomRight;
+            this.timeTextStart = timeTextStart;
         }
     }
 
-    private record GatherMarchSnapshot(List<MarchSlotState> slots, List<GatherType> activeTypes,
-                                       int activeGatherCount, int idleSlotCount,
-                                       LocalDateTime nextCheckAt, LocalDateTime earliestGatherCheckAt) {
+    private static class ActiveMarchResult {
+        final boolean active;
+        final LocalDateTime returnTime;
+
+        private ActiveMarchResult(boolean active, LocalDateTime returnTime) {
+            this.active = active;
+            this.returnTime = returnTime;
+        }
+
+        static ActiveMarchResult active(LocalDateTime t) {
+            return new ActiveMarchResult(true, t);
+        }
+
+        static ActiveMarchResult error() {
+            return new ActiveMarchResult(true, LocalDateTime.now().plusMinutes(5));
+        }
+
+        boolean isActive() {
+            return active;
+        }
+
+        LocalDateTime getReturnTime() {
+            return returnTime;
+        }
     }
 
     private record ActiveGatherMarchCandidate(GatherType type, int queueIndex, LocalDateTime returnTime) {
-    }
-
-    private record GatherFillResult(int deployed, int noNode, int blocked, int sameTargetBlocked,
-                                    boolean stoppedForNoTroops, int unfilledSlots) {
-    }
-
-    private enum GatherDeployResult {
-        DEPLOYED,
-        NO_NODE_FOUND,
-        NO_TROOPS_AVAILABLE,
-        BLOCKED,
-        SAME_TARGET
     }
 
     private enum RecallReason {
@@ -1233,5 +1226,11 @@ public class GatherRoutine extends DelayedTask {
         RecallReason(String logValue) {
             this.logValue = logValue;
         }
+    }
+
+    private enum DeployResult {
+        SUCCESS,
+        NODE_NOT_FOUND,
+        FAILED
     }
 }
