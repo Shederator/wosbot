@@ -33,7 +33,7 @@ import java.util.List;
 
 public class IntelligenceRoutine extends DelayedTask {
 
-private static final int MIN_STAMINA_REQUIRED_FLOOR = 30;
+public static final int MIN_STAMINA_REQUIRED_FLOOR = 30;
 
 private static final int SURVIVOR_STAMINA_COST_VALUE = 12;
 
@@ -1192,5 +1192,30 @@ private void handleBeast(ImageSearchResultData beast) {
 					+ GameTimeUtils.formatCountdown(rescheduleTime)
 					+ ". Continuing loop to use remaining available marches."));
 		}
+	}
+
+	/**
+	 * Compatibility helper used by non-Intel routines to decide whether Intel should preempt
+	 * stamina-consuming work.
+	 */
+	public static boolean shouldDeferTaskToIntel(boolean intelEnabled,
+			boolean intelScheduled,
+			LocalDateTime intelScheduledAt,
+			int currentStamina,
+			int intelStaminaFloor) {
+		if (!intelEnabled || !intelScheduled) {
+			return false;
+		}
+		if (currentStamina < intelStaminaFloor) {
+			return true;
+		}
+		return intelScheduledAt != null && !intelScheduledAt.isAfter(LocalDateTime.now().plusMinutes(5));
+	}
+
+	/**
+	 * Compatibility helper for callers that gate beast deployment on flag lock state.
+	 */
+	public static boolean shouldAbortBeastDeployForLockedFlag(boolean flagModeEnabled, boolean flagSelected) {
+		return flagModeEnabled && !flagSelected;
 	}
 }
