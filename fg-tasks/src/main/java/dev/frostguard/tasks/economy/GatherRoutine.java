@@ -44,6 +44,8 @@ import dev.frostguard.engine.service.StatisticsService;
  */
 public class GatherRoutine extends DelayedTask {
 
+    private static final String EMPTY_ROTATION_ENABLED_TYPES = "NONE";
+
     // ========== Constants & Config Keys ==========
     private static final int DEFAULT_QUEUES = 6;
     private static final int DEFAULT_LEVEL = 5;
@@ -280,10 +282,7 @@ public class GatherRoutine extends DelayedTask {
                 .collect(Collectors.toList());
 
         loadRotationPool();
-        if (rotationPool != null) {
-            rotationPool.retainAll(enabledTypes);
-            saveRotationPool(); // Ensure consistent state
-        }
+        reconcileRotationPoolWithConfig();
 
         this.textHelper = new ResilientOcrExecutor<>(provider);
         this.earliestReschedule = null;
@@ -432,6 +431,66 @@ public class GatherRoutine extends DelayedTask {
         String val = rotationPool.stream().map(Enum::name).collect(Collectors.joining(","));
         logDebug("Saving gather pool config: '" + val + "'");
         profile.setConfig(ConfigurationKeyEnum.GATHER_ROTATION_POOL, val);
+        setShouldUpdateConfig(true);
+    }
+
+    private void reconcileRotationPoolWithConfig() {
+        String savedEnabledTypes = profile.getConfig(
+                ConfigurationKeyEnum.GATHER_ROTATION_ENABLED_TYPES_STRING, String.class);
+        List<GatherType> previousEnabledTypes = parseGatherTypes(savedEnabledTypes);
+
+        if (previousEnabledTypes == null) {
+            GatherRotationPoolPolicy.Reconciliation initialization =
+                    GatherRotationPoolPolicy.initialize(rotationPool, enabledTypes);
+            if (!initialization.pool().equals(rotationPool)) {
+                rotationPool = initialization.pool();
+                saveRotationPool();
+            }
+            logDebug("Initializing gather rotation enabled-type baseline: " + enabledTypes);
+            saveRotationEnabledTypes();
+            return;
+        }
+
+        GatherRotationPoolPolicy.Reconciliation reconciliation = GatherRotationPoolPolicy.reconcile(
+                rotationPool, previousEnabledTypes, enabledTypes);
+        if (!reconciliation.pool().equals(rotationPool)) {
+            rotationPool = reconciliation.pool();
+            saveRotationPool();
+        }
+        if (!previousEnabledTypes.equals(enabledTypes)) {
+            logInfo(String.format(
+                    "Applied gather configuration change: enabled=%s disabled=%s pool=%s",
+                    reconciliation.newlyEnabled(), reconciliation.disabled(), rotationPool));
+            saveRotationEnabledTypes();
+        }
+    }
+
+    private List<GatherType> parseGatherTypes(String saved) {
+        if (saved == null || saved.isBlank()) {
+            return null;
+        }
+        if (EMPTY_ROTATION_ENABLED_TYPES.equals(saved)) {
+            return List.of();
+        }
+        try {
+            return Arrays.stream(saved.split(","))
+                    .map(String::trim)
+                    .filter(value -> !value.isEmpty())
+                    .map(GatherType::valueOf)
+                    .distinct()
+                    .collect(Collectors.toList());
+        } catch (IllegalArgumentException e) {
+            logWarning("Could not parse gather rotation enabled-type baseline; reinitializing it: "
+                    + e.getMessage());
+            return null;
+        }
+    }
+
+    private void saveRotationEnabledTypes() {
+        String value = enabledTypes.isEmpty()
+                ? EMPTY_ROTATION_ENABLED_TYPES
+                : enabledTypes.stream().map(Enum::name).collect(Collectors.joining(","));
+        profile.setConfig(ConfigurationKeyEnum.GATHER_ROTATION_ENABLED_TYPES_STRING, value);
         setShouldUpdateConfig(true);
     }
 

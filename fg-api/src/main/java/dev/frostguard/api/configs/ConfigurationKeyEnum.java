@@ -218,6 +218,7 @@ public enum ConfigurationKeyEnum {
     GATHER_ONLY_FULL_RESOURCES_BOOL ("false",               Boolean.class,  ConfigCategory.GATHERING),
     GATHER_DOWNGRADE_LEVEL_BOOL     ("true",                Boolean.class,  ConfigCategory.GATHERING),
     GATHER_REMOVE_HEROS_BOOL        ("true",                Boolean.class,  ConfigCategory.GATHERING),
+    GATHER_ROTATION_ENABLED_TYPES_STRING ("",               String.class,   ConfigCategory.GATHERING),
     GATHER_ROTATION_POOL            ("",                    String.class,   ConfigCategory.GATHERING),
     // pernerch/2026-07-02: timestamp of the last gather recall (Intel/Bear), stored per-profile task instance
     // to track troop return window and avoid re-deploying before troops are home.
