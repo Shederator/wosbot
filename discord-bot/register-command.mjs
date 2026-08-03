@@ -1,72 +1,100 @@
 #!/usr/bin/env node
 /**
- * Register (or update) the /build-pr slash command on the Discord application.
+ * Synchronise the guild-scoped /build-pr command and remove its global copy.
  *
- * Run once after creating the Discord application, and again whenever the
- * command definition changes. Registering is idempotent: Discord upserts by
- * command name.
- *
- * Usage:
- *   DISCORD_BOT_TOKEN=... DISCORD_APPLICATION_ID=... node register-command.mjs
- *
- * Optionally register to a single guild for instant availability (global
- * commands can take up to an hour to propagate):
- *   DISCORD_GUILD_ID=... node register-command.mjs
+ * Frostguard currently targets one Discord server. Keeping only the guild
+ * command prevents Discord from showing a duplicate global + guild command.
  */
 
-const token = process.env.DISCORD_BOT_TOKEN;
-const applicationId = process.env.DISCORD_APPLICATION_ID;
-const guildId = process.env.DISCORD_GUILD_ID || "";
+import { pathToFileURL } from "node:url";
 
-if (!token || !applicationId) {
-  console.error(
-    "Set DISCORD_BOT_TOKEN and DISCORD_APPLICATION_ID in the environment.",
-  );
-  process.exit(1);
-}
+const API = "https://discord.com/api/v10";
 
-const command = {
+export const buildPrCommand = {
   name: "build-pr",
   description:
     "Request a temporary Windows test build combining one or more open PRs",
   options: [
     {
-      type: 3, // STRING
+      type: 3,
       name: "prs",
       description: "PR numbers to combine, e.g. 47 48 49 65",
       required: true,
     },
     {
-      type: 3, // STRING
+      type: 3,
       name: "order",
       description: "Optional explicit merge order, e.g. 49 47 (default: ascending)",
       required: false,
     },
   ],
-  // No DMs: the access checks are channel/role based.
   dm_permission: false,
 };
 
-const url = guildId
-  ? `https://discord.com/api/v10/applications/${applicationId}/guilds/${guildId}/commands`
-  : `https://discord.com/api/v10/applications/${applicationId}/commands`;
-
-const response = await fetch(url, {
-  method: "POST",
-  headers: {
-    Authorization: `Bot ${token}`,
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify(command),
-});
-
-if (!response.ok) {
-  console.error(`Discord returned ${response.status}:`, await response.text());
-  process.exit(1);
+async function discordRequest(fetchImpl, token, url, options = {}) {
+  const response = await fetchImpl(url, {
+    ...options,
+    headers: {
+      Authorization: `Bot ${token}`,
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`Discord returned ${response.status}: ${await response.text()}`);
+  }
+  return response.status === 204 ? null : response.json();
 }
 
-const data = await response.json();
-console.log(
-  `Registered /${data.name} (id ${data.id}) ` +
-  (guildId ? `in guild ${guildId}` : "globally (may take up to 1 hour)"),
-);
+export async function syncCommand(env = process.env, fetchImpl = fetch) {
+  const token = env.DISCORD_BOT_TOKEN;
+  const applicationId = env.DISCORD_APPLICATION_ID;
+  const guildId = env.DISCORD_GUILD_ID;
+  if (!token || !/^\d+$/.test(applicationId || "") || !/^\d+$/.test(guildId || "")) {
+    throw new Error(
+      "Set DISCORD_BOT_TOKEN plus numeric DISCORD_APPLICATION_ID and DISCORD_GUILD_ID values.",
+    );
+  }
+
+  const guildUrl = `${API}/applications/${applicationId}/guilds/${guildId}/commands`;
+  const registered = await discordRequest(fetchImpl, token, guildUrl, {
+    method: "POST",
+    body: JSON.stringify(buildPrCommand),
+  });
+
+  const globalUrl = `${API}/applications/${applicationId}/commands`;
+  const globalCommands = await discordRequest(fetchImpl, token, globalUrl);
+  const duplicates = globalCommands.filter(
+    (candidate) => candidate.name === buildPrCommand.name && candidate.type === 1,
+  );
+  for (const duplicate of duplicates) {
+    await discordRequest(
+      fetchImpl,
+      token,
+      `${globalUrl}/${duplicate.id}`,
+      { method: "DELETE" },
+    );
+  }
+
+  return { registered, deletedGlobalIds: duplicates.map(({ id }) => id) };
+}
+
+async function main() {
+  const result = await syncCommand();
+  console.log(
+    `Registered guild /${result.registered.name} (id ${result.registered.id}).`,
+  );
+  if (result.deletedGlobalIds.length) {
+    console.log(
+      `Deleted ${result.deletedGlobalIds.length} global /build-pr duplicate(s).`,
+    );
+  } else {
+    console.log("No global /build-pr duplicate was present.");
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exit(1);
+  });
+}
