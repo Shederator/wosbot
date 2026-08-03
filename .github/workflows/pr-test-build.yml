@@ -51,6 +51,31 @@ on:
         required: false
         type: string
         default: ""
+      discord_guild_id:
+        description: "Discord guild that originated the request (empty for manual runs)"
+        required: false
+        type: string
+        default: ""
+      discord_channel_id:
+        description: "Discord channel that originated the request"
+        required: false
+        type: string
+        default: ""
+      discord_requester_id:
+        description: "Discord user to notify when the build finishes"
+        required: false
+        type: string
+        default: ""
+      discord_message_id:
+        description: "Original /build-pr status message to reply to"
+        required: false
+        type: string
+        default: ""
+      discord_request_id:
+        description: "Unique Discord interaction ID for traceability"
+        required: false
+        type: string
+        default: ""
 
 # One combined build at a time. Queuing instead of cancelling means a burst of
 # requests degrades to a slow queue, not to lost builds.
@@ -204,16 +229,24 @@ jobs:
           java-version: "21"
           cache: maven
 
-      - name: Install Tesseract native libraries
+      - name: Install Linux test runtimes
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            tesseract-ocr libtesseract-dev libleptonica-dev
+            tesseract-ocr libtesseract-dev libleptonica-dev xvfb
 
-      # Tests are intentionally NOT skipped: a combined build that fails its
-      # own suite is exactly what the requester needs to know.
+      # Test the combined tree with host-native Linux dependencies. Selecting
+      # Windows JavaFX during this phase prevents controller tests from starting
+      # a toolkit on the Linux runner, even when a virtual display is present.
+      - name: Test the combined tree on Linux
+        run: |
+          read -r -a maven_args <<< "${MAVEN_ARGS}"
+          xvfb-run --auto-servernum mvn "${maven_args[@]}" clean test
+
       - name: Build Windows desktop bundle from the merged tree
-        run: mvn ${MAVEN_ARGS} clean install -Djavafx.platform=win
+        run: |
+          read -r -a maven_args <<< "${MAVEN_ARGS}"
+          mvn "${maven_args[@]}" install -DskipTests -Djavafx.platform=win
 
       - name: Locate the desktop bundle
         id: bundle
@@ -414,8 +447,11 @@ jobs:
             echo "::error::Asset ${asset} is not attached to ${TAG}."
             exit 1
           fi
+          # GitHub's release API can expose the asset before its CDN download
+          # route has propagated. Treat the initial 404 as retryable.
           code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 120 \
-            --retry 3 --retry-delay 5 -r 0-1023 "${url}")"
+            --fail --retry 12 --retry-delay 5 --retry-all-errors \
+            -r 0-1023 "${url}" || true)"
           if [[ "${code}" != "200" && "${code}" != "206" ]]; then
             echo "::error::Download URL ${url} returned HTTP ${code}."
             exit 1
@@ -449,9 +485,16 @@ jobs:
           name: pr-test-plan
           path: ${{ runner.temp }}/plan
 
-      - name: Post the status message
+      - name: Reply with the final status in the requesting Discord channel
         env:
-          DISCORD_NIGHTLY_WEBHOOK_URL: ${{ secrets.DISCORD_NIGHTLY_WEBHOOK_URL }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_ALLOWED_GUILD_ID: ${{ vars.DISCORD_PR_BUILD_GUILD_ID }}
+          DISCORD_ALLOWED_CHANNEL_IDS: ${{ vars.DISCORD_PR_BUILD_CHANNEL_IDS }}
+          DISCORD_GUILD_ID: ${{ inputs.discord_guild_id }}
+          DISCORD_CHANNEL_ID: ${{ inputs.discord_channel_id }}
+          DISCORD_REQUESTER_ID: ${{ inputs.discord_requester_id }}
+          DISCORD_MESSAGE_ID: ${{ inputs.discord_message_id }}
+          DISCORD_REQUEST_ID: ${{ inputs.discord_request_id }}
           PLAN_OK: ${{ needs.plan.outputs.ok }}
           REUSE_URL: ${{ needs.plan.outputs.reuse_url }}
           BUILD_RESULT: ${{ needs.build.result }}
@@ -499,6 +542,13 @@ jobs:
 
           args=(--kind "${kind}" --run-url "${RUN_URL}"
                 --requester "${REQUESTER}" --requested "${REQUESTED}")
+          args+=(--guild-id "${DISCORD_GUILD_ID}"
+                 --channel-id "${DISCORD_CHANNEL_ID}"
+                 --requester-id "${DISCORD_REQUESTER_ID}"
+                 --message-id "${DISCORD_MESSAGE_ID}"
+                 --request-id "${DISCORD_REQUEST_ID}"
+                 --allowed-guild-id "${DISCORD_ALLOWED_GUILD_ID}"
+                 --allowed-channel-ids "${DISCORD_ALLOWED_CHANNEL_IDS}")
           if [[ -f "${plan_path}" ]]; then
             args+=(--plan "${plan_path}")
           else

@@ -1,0 +1,183 @@
+name: Stable Windows Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Stable version in X.Y.Z format (must match pom.xml)"
+        required: true
+        type: string
+      daily_run_id:
+        description: "Successful Daily Windows Bundle run ID from main"
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: stable-windows-release
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Verify and publish the stable Windows release
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Validate the selected daily run
+        id: source
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ inputs.daily_run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${RUN_ID}" =~ ^[0-9]+$ ]]; then
+            echo "::error::daily_run_id must be numeric."
+            exit 1
+          fi
+          run="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}")"
+          conclusion="$(jq -r '.conclusion' <<< "${run}")"
+          branch="$(jq -r '.head_branch' <<< "${run}")"
+          event="$(jq -r '.event' <<< "${run}")"
+          workflow="$(jq -r '.path' <<< "${run}")"
+          sha="$(jq -r '.head_sha' <<< "${run}")"
+          if [[ "${conclusion}" != "success" || "${branch}" != "main" ]]; then
+            echo "::error::Selected run must be successful and built from main."
+            exit 1
+          fi
+          if [[ "${event}" != "schedule" && "${event}" != "workflow_dispatch" ]]; then
+            echo "::error::Selected run must be a scheduled or manual daily build."
+            exit 1
+          fi
+          if [[ "${workflow}" != ".github/workflows/daily-windows-bundle.yml" ]]; then
+            echo "::error::Selected run does not belong to Daily Windows Bundle."
+            exit 1
+          fi
+          echo "sha=${sha}" >> "${GITHUB_OUTPUT}"
+
+      - name: Check out the exact verified commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+          lfs: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Validate version and notification code
+        env:
+          VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version must use X.Y.Z format."
+            exit 1
+          fi
+          project_version="$(mvn -B --no-transfer-progress -q help:evaluate -Dexpression=project.version -DforceStdout)"
+          if [[ "${VERSION}" != "${project_version}" ]]; then
+            echo "::error::Requested ${VERSION}, but pom.xml declares ${project_version}."
+            exit 1
+          fi
+          if [[ ! -f ".github/release-notes/v${VERSION}.md" ]]; then
+            echo "::error::Missing curated release notes for v${VERSION}."
+            exit 1
+          fi
+          python3 ci/test_verify_bundle.py
+          python3 ci/test_stable_release_notify.py
+
+      - name: Download the selected daily artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ inputs.daily_run_id }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh run download "${RUN_ID}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --name "frostguard-windows-desktop-bundle-${VERSION}" \
+            --dir "${RUNNER_TEMP}/stable"
+
+      - name: Locate and re-verify the bundle
+        id: bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          path="$(find "${RUNNER_TEMP}/stable" -type f -name '*-desktop-bundle.zip' | head -n 1)"
+          if [[ -z "${path}" ]]; then
+            echo "::error::The selected run has no desktop bundle artifact."
+            exit 1
+          fi
+          python3 ci/verify_bundle.py "${path}" --platform win
+          ci/smoke_test_bundle.sh "${path}"
+          echo "path=${path}" >> "${GITHUB_OUTPUT}"
+
+      - name: Publish immutable stable release
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ inputs.version }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          ZIP_PATH: ${{ steps.bundle.outputs.path }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v${VERSION}"
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            echo "::error::Stable release ${tag} already exists and will not be replaced."
+            exit 1
+          fi
+          asset="frostguard-windows-desktop-bundle.zip"
+          staged="${RUNNER_TEMP}/${asset}"
+          cp "${ZIP_PATH}" "${staged}"
+          gh release create "${tag}" "${staged}" \
+            --target "${SOURCE_SHA}" \
+            --title "Frostguard ${VERSION}" \
+            --notes-file ".github/release-notes/v${VERSION}.md" \
+            --latest
+          release_url="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${tag}"
+          download_url="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" \
+            --jq ".assets[] | select(.name == \"${asset}\") | .browser_download_url")"
+          # GitHub's release API can expose the asset before its CDN download
+          # route has propagated. Treat the initial 404 as retryable.
+          code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 120 \
+            --fail --retry 12 --retry-delay 5 --retry-all-errors \
+            -r 0-1023 "${download_url}" || true)"
+          if [[ "${code}" != "200" && "${code}" != "206" ]]; then
+            echo "::error::Published stable download returned HTTP ${code}."
+            exit 1
+          fi
+          latest_download_url="https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/${asset}"
+          latest_code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 120 \
+            --fail --retry 12 --retry-delay 5 --retry-all-errors \
+            -r 0-1023 "${latest_download_url}" || true)"
+          if [[ "${latest_code}" != "200" && "${latest_code}" != "206" ]]; then
+            echo "::error::Latest stable download returned HTTP ${latest_code}."
+            exit 1
+          fi
+          echo "release_url=${release_url}" >> "${GITHUB_OUTPUT}"
+          echo "download_url=${latest_download_url}" >> "${GITHUB_OUTPUT}"
+
+      - name: Announce the stable release
+        env:
+          DISCORD_NIGHTLY_WEBHOOK_URL: ${{ secrets.DISCORD_NIGHTLY_WEBHOOK_URL }}
+          VERSION: ${{ inputs.version }}
+          DOWNLOAD_URL: ${{ steps.release.outputs.download_url }}
+          RELEASE_URL: ${{ steps.release.outputs.release_url }}
+          ARCHIVE_URL: https://github.com/${{ github.repository }}/releases
+          DISCORD_STABLE_MESSAGE_ID: ${{ vars.DISCORD_STABLE_MESSAGE_ID }}
+        run: |
+          python3 ci/stable_release_notify.py \
+            --version "${VERSION}" \
+            --download-url "${DOWNLOAD_URL}" \
+            --release-url "${RELEASE_URL}" \
+            --archive-url "${ARCHIVE_URL}" \
+            --message-id "${DISCORD_STABLE_MESSAGE_ID}"

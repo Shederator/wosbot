@@ -5,6 +5,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import dev.frostguard.api.configs.*;
 import dev.frostguard.api.domain.*;
+import dev.frostguard.engine.listener.StaminaChangeListener;
 import dev.frostguard.engine.schedule.preempt.PreemptionListener;
 import dev.frostguard.engine.schedule.preempt.PreemptionRule;
 import dev.frostguard.engine.service.*;
@@ -14,11 +15,11 @@ import org.slf4j.LoggerFactory;
 // Central orchestrator for all per-profile TaskQueue instances.
 // Handles queue creation, ordered startup, global rule registration,
 // and bulk lifecycle controls (pause/resume/stop).
-public class TaskDispatcher implements PreemptionListener {
+public class TaskDispatcher implements PreemptionListener, StaminaChangeListener {
 
     private static final Logger log = LoggerFactory.getLogger(TaskDispatcher.class);
 
-    private final Map<Long, TaskQueue> managedQueues = new HashMap<>();
+    private final Map<Long, TaskQueue> managedQueues = new ConcurrentHashMap<>();
     private final Map<Long, Boolean> pauseFlags = new ConcurrentHashMap<>();
 
     // ── queue registration ──────────────────────────────────────────
@@ -47,11 +48,47 @@ public class TaskDispatcher implements PreemptionListener {
         }
     }
 
+    @Override
+    public void onEnergyLevelChanged(Long accountId, int currentStamina) {
+        // Scheduling reacts only to explicit additions, not OCR corrections or passive ticks.
+    }
+
+    @Override
+    public void onStaminaSynchronized(Long accountId, int currentStamina) {
+        reconsiderStaminaDeferrals(accountId, currentStamina, "Stamina synchronized");
+    }
+
+    @Override
+    public void onStaminaAdded(Long accountId, int amount, int currentStamina) {
+        reconsiderStaminaDeferrals(accountId, currentStamina, "Stamina +" + amount);
+    }
+
+    private void reconsiderStaminaDeferrals(Long accountId, int currentStamina, String source) {
+        if (accountId == null) {
+            return;
+        }
+        TaskQueue queue = managedQueues.get(accountId);
+        if (queue == null) {
+            return;
+        }
+
+        try {
+            int moved = queue.reconsiderStaminaDeferrals(currentStamina);
+            if (moved > 0) {
+                log.info("{} for profile {} (now {}) advanced {} stamina-blocked task(s)",
+                        source, accountId, currentStamina, moved);
+            }
+        } catch (Exception ex) {
+            log.error("Stamina re-evaluation error [{}]", accountId, ex);
+        }
+    }
+
     // ── start all queues ────────────────────────────────────────────
 
     public void startAll() {
         GlobalMonitorService monitor = GlobalMonitorService.getInstance();
         monitor.registerListener(this);
+        StaminaService.getServices().addStaminaChangeListener(this);
 
         // install global preemption and injection rules
         monitor.registerRule(new dev.frostguard.engine.schedule.preempt.BearTrapPreemptionRule());
@@ -107,6 +144,7 @@ public class TaskDispatcher implements PreemptionListener {
             }
         }
 
+        StaminaService.getServices().removeStaminaChangeListener(this);
         GlobalMonitorService.getInstance().shutdown();
 
         managedQueues.values().forEach(TaskQueue::stop);

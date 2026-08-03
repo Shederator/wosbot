@@ -203,122 +203,64 @@
 
 ## 🛠️ Installation & Setup
 
-> [!NOTE]
-> Follow these steps to compile and run the bot from source code.
+Choose the path that matches what you want to do:
 
-<br/>
+| Path | What it provides | Update model |
+|:-----|:-----------------|:-------------|
+| **Stable** | A tested, versioned release | Changes only when a new Stable is published |
+| **Nightly** | The latest development state; may be unstable | Rebuilt daily from `main` |
+| **PR build** | A temporary build containing selected open pull requests | Expires automatically |
+| **Source build** | A local Maven build from the repository | Built on demand from the checked-out commit |
 
-### ⚡ Prefer a ready-made build?
+### ⬇️ Download a Windows bundle
 
-A Windows desktop bundle is built automatically every night and after every pull
-request, so you can test the latest code without installing Java or Maven.
+Frostguard currently provides verified Windows desktop bundles. Java 21 or
+newer is required; Git and Maven are not.
 
-1. Open the **[Actions tab](../../actions/workflows/daily-windows-bundle.yml)**
-2. Click the most recent green **Daily Windows Bundle** run
-3. Download the **`frostguard-windows-desktop-bundle-<version>`** artifact
-4. Extract it anywhere and run `frostguard-<version>.jar`
+- **[Stable for Windows](https://github.com/Shederator/wosbot/releases/latest/download/frostguard-windows-desktop-bundle.zip)**
+- **[Nightly for Windows](https://github.com/Shederator/wosbot/releases/download/nightly/frostguard-windows-desktop-bundle.zip)**
+
+After choosing a build:
+
+1. Extract the complete ZIP into an empty folder. Do not run it from inside the ZIP.
+2. Double-click **`Start Frostguard.bat`**.
+3. Open **Configuration** and select your emulator's command-line controller.
 
 > [!IMPORTANT]
-> GitHub requires you to be **signed in** to download workflow artifacts, and
-> they are retained for **14 days**. Every bundle is verified in CI (structure,
-> classpath, and a real launch smoke test) before it is published.
+> Keep the extracted folder together. The launcher, application JAR, runtime
+> libraries, OCR data and templates are all part of the installation.
 
-<br/>
+See the **[complete installation guide](docs/installation.md)** for Java,
+emulator and game settings.
 
-### 1️⃣ Prerequisites
+### 🧪 Test pull requests
 
-<div align="center">
+Request a temporary build of one or more open pull requests with `/build-pr` in
+the Discord `#request-a-build` channel.
 
-| Requirement | Version | Download |
-|:-----------:|:-------:|:--------:|
-| ![Java](https://img.shields.io/badge/Java_JDK-ED8B00?style=flat-square&logo=openjdk&logoColor=white) | `21` | **[Adoptium Temurin](https://adoptium.net/)** |
-| ![Maven](https://img.shields.io/badge/Apache_Maven-C71A36?style=flat-square&logo=apache-maven&logoColor=white) | `3.8+` | **[Download Maven](https://maven.apache.org/install.html)** |
+PR builds use the same Windows bundle format as Stable and Nightly, but contain
+unmerged code and expire automatically.
 
-</div>
+### 🛠️ Build from source
 
-<details>
-<summary><b>💡 Windows Users: Adding Java & Maven to PATH</b></summary>
-<br/>
-
-1. Press <kbd>Win</kbd> + <kbd>R</kbd>, type `sysdm.cpl`, and press <kbd>Enter</kbd>
-2. Go to **Advanced** → **Environment Variables**
-3. Under **System variables**, select `Path` and click **Edit**
-4. Add the `bin` directories of your Java and Maven installations:
-   ```
-   C:\Program Files\Eclipse Adoptium\jdk-21\bin
-   C:\apache-maven-3.9.9\bin
-   ```
-5. Click **OK** and restart your terminal
-6. Verify with:
-   ```sh
-   java -version
-   mvn -version
-   ```
-
-</details>
-
-<br/>
-
-### 2️⃣ Compilation
+Developers need Java 21, Maven 3.8+, Git and Git LFS:
 
 ```sh
-# Clone the repository
-git clone https://github.com/Shederator/frostguard.git
-cd frostguard
-
-# Build the project
+git clone https://github.com/Shederator/wosbot.git
+cd wosbot
+git lfs install
+git lfs pull
 mvn clean install package
+java -jar fg-app/target/frostguard-<version>.jar
 ```
 
-> [!TIP]
-> Once completed, the compiled `.jar` file will be in the `fg-app/target` directory (e.g., `frostguard-1.7.1.jar`).
+The build creates the application JAR and Windows desktop bundle under
+`fg-app/target`. For the complete source setup, Windows helper and verification
+commands, see:
 
-<br/>
-
-#### Quick Build Script (Windows)
-
-For Windows users, use the **`fg-build.bat`** script for easier compilation:
-
-```batch
-fg-build.bat
-```
-
-**What it does:**
-- ✅ Stops any running Java and ADB processes
-- ✅ Runs full build (`mvn clean install package`) with one automatic retry for transient `fg-vision` copy/package issues
-- ✅ Verifies packaged app JAR integrity (`LauncherLayoutController.class` check) and triggers one focused `fg-app` fallback rebuild if needed
-- ✅ Opens the generated desktop-bundle ZIP in Explorer after success (fallback: opens `fg-app/target`)
-- ✅ Displays clear success/error messages
-
-This script is especially useful after code changes or when local packaging occasionally fails due to transient file-lock/resource-copy issues.
-
-<br/>
-
-#### Verifying a build the way CI does
-
-The same checks that guard the nightly bundle can be run locally on Windows,
-Linux or macOS. See **[`ci/README.md`](ci/README.md)** for details.
-
-```sh
-mvn clean install -Djavafx.platform=win
-python3 ci/verify_bundle.py fg-app/target/frostguard-*-desktop-bundle.zip
-ci/smoke_test_bundle.sh fg-app/target/frostguard-*-desktop-bundle.zip
-```
-
-<br/>
-
-### 3️⃣ Running the Bot
-
-```sh
-# Navigate to the target directory
-cd fg-app/target
-
-# Run the compiled jar
-java -jar frostguard-1.7.1.jar
-```
-
-> [!IMPORTANT]
-> We highly recommend running via command line to access real-time logs for easier debugging. Double-clicking the `.jar` works, but console logs won't be visible.
+- **[Installation and source build](docs/installation.md)**
+- **[Windows-specific setup](docs/windows.md)**
+- **[CI and bundle verification](ci/README.md)**
 
 <br/>
 
@@ -395,128 +337,6 @@ C:\LDPlayer\LDPlayer9\ldconsole.exe
 
 ---
 
-<br/>
-
-## 🔧 Recent Fixes & Improvements
-
-<div align="center">
-  <i>Consolidated reliability, scheduling, UI, and packaging improvements for shared-emulator and multi-profile operation.</i>
-</div>
-
-<br/>
-
-### Build & Distribution
-
-| Date | Area | Change | Impact |
-|:-----|:-----|:-------|:-------|
-| 2026-07-02 | Build | Improved fg-build.bat resilience and retry behavior for transient build failures | Fewer broken local builds, cleaner recovery flow |
-| 2026-07-02 | Packaging | Added templates directory to distribution bundle (361 fg-vision images) | Debug template search works in packaged builds without manual copy steps |
-| 2026-07-02 | Build Artifacts | Added packaged app JAR integrity check with fallback rebuild | Prevents shipping incomplete app JARs after successful Maven output |
-| 2026-07-04 | Build Script | `fg-build.bat` now retries full build once after `fg-vision` transient copy/package failures | Better local build stability on occasional file-lock/resource-copy hiccups |
-| 2026-07-04 | Build Validation | `fg-build.bat` verifies packaged app JAR content and auto-runs focused `fg-app` fallback rebuild if integrity check fails | Reduces risk of distributing incomplete application JARs |
-| 2026-07-04 | Build Artifacts | `fg-build.bat` now opens the generated desktop-bundle ZIP in Explorer after successful builds (fallback: target folder) | Faster handoff to packaged output without manual folder navigation |
-| 2026-07-31 | Build Compatibility | Restored Telegram service compatibility constants/helpers expected by engine tests (`CURRENT_LOG_PATH`, standard-queue guard helper) | Prevented test-compile break after merge integration and kept behavior backward-compatible |
-
-### UI & Navigation
-
-| Date | Area | Change | Impact |
-|:-----|:-----|:-------|:-------|
-| 2026-07-02 | Debugging UI | Template search controls are hidden unless "Template Search" mode is active | Cleaner OCR workflow and lower visual clutter |
-| 2026-07-02 | Debugging UI | Fixed template list visibility/selection behavior in debugging panel | Template list now behaves predictably when switching actions |
-| 2026-07-03 | Navigation | Added stability re-check before HOME/WORLD anchor taps | Reduces transient mis-taps during screen-state transitions |
-| 2026-07-04 | Emulator UI | Reworked Instance/Game settings into full-width layout with line-aligned rows | Cleaner settings readability and consistent control alignment |
-| 2026-07-04 | Emulator UI | Added `Stop Behavior` and `Stop Behavior Telegram` dropdowns in Instance Settings | Operators can control stop behavior separately for GUI and Telegram stop actions |
-
-### Scheduler & Task Logic
-
-| Date | Area | Change | Impact |
-|:-----|:-----|:-------|:-------|
-| 2026-07-02 | Gather | Enforced gather queue hard-cap with duplicate prevention | Fewer blocked marches and less wasteful gather churn |
-| 2026-07-02 | Gather | Automatic overflow correction recalls duplicate marches by longest return first | Self-healing gather state and better march capacity availability |
-| 2026-07-02 | Gather | Added deterministic recall reason logging (`disabled-type`, `duplicate-type`, `overflow-fallback`) | Faster root-cause analysis for recall actions |
-| 2026-07-02 | Gather | Deferral now uses real march return timing instead of noisy blind retries | Lower scheduler churn with preserved event responsiveness |
-| 2026-07-02 | Intel | Mission-first pre-check before gather recall | Avoids unnecessary gather disruption when no Intel action exists |
-| 2026-07-02 | Intel | Intel recall flow explicitly re-enters world context before march handling | More reliable march detection and recall behavior |
-| 2026-07-02 | Intel | Internal march accounting for Beast/Fire Beast only, survivor batch throttling, journey unlimited flow | Better mission throughput and clearer march usage boundaries |
-| 2026-07-02 | Scheduler | Idle-time handover can pass slot to overdue same-emulator sibling profile | Better device-slot utilization and reduced idle waste |
-| 2026-07-02 | Scheduler | Added explicit single-profile-per-emulator guard for handover path | No behavior change for single-profile setups |
-| 2026-07-04 | Scheduler | Bot start now guarantees first Initialize execution before normal queue heuristics apply | Prevents skipped startup initialization when emulator/game is already open |
-| 2026-07-04 | Intel | Added dynamic march-capacity fallback (`configured-1`) for possible VIP expiry during recall edge-case | Intel flow continues safely instead of retry-looping on false full-capacity assumptions |
-| 2026-07-04 | Injection | Furnace upgrade injection now performs recovery back navigation when claim button is missing | Reduces risk of leaving unexpected overlays (e.g., chat) open after aborted injection |
-| 2026-07-31 | Gather | Reintroduced active queue clamping in central policy (`resolveActiveQueueLimit`) to cap out-of-range configured queue values | Prevents gather overcommit while preserving existing scheduler architecture |
-| 2026-07-31 | Intel | Added locked-flag deployment guard in beast flow to abort safely when selected rally flag cannot be applied | Avoids accidental deployment with wrong flag state and keeps march assignment deterministic |
-
-### Multi-Profile Runtime & Logging
-
-| Date | Area | Change | Impact |
-|:-----|:-----|:-------|:-------|
-| 2026-07-02 | Profile Switching | Runtime now refreshes active profile context and stamina on emulator-local handover | Prevents stale profile identity and stale stamina carry-over |
-| 2026-07-02 | Bear Trap | Added preemption safety gates and trigger suppression | Fewer false interrupts and smoother queue continuity |
-| 2026-07-02 | Bear Trap | Shared-emulator rally-join handling now avoids cross-account contention | Safer concurrent operation on one emulator slot |
-| 2026-07-02 | Character Switch | Corrected template paths for character-switch detection | More reliable switch-button discovery and profile switching |
-| 2026-07-03 | Logging | Emulator tap logs now resolve active profile per device slot instead of first profile on that emulator | Correct profile names in multi-profile shared-emulator logs |
-| 2026-07-04 | Stop Control | Introduced separate GUI/Telegram stop paths with optional emulator-close behavior | Consistent operator control and safer remote stop handling |
-| 2026-07-31 | Profile Switching | Restored same-emulator fast profile switching fallback to avoid forced emulator reboot on character-switch miss | Cleaner multi-account handover continuity without unnecessary restart cycle |
-| 2026-07-31 | Initialization | Refreshes stamina for the active profile during initialization right after character verification/switching | Prevents stale stamina state from leaking between profiles on shared emulators and keeps startup state consistent |
-
-### Stamina & Stability
-
-| Date | Area | Change | Impact |
-|:-----|:-----|:-------|:-------|
-| 2026-07-02 | Stamina | Added timeout guards and reduced OCR attempts/delays in stamina update flow | Significantly lower risk of UI stalls during stamina reads |
-| 2026-07-02 | Stamina | Stamina writes and deltas are clamped to valid in-game bounds | More stable combat/intel scheduling decisions |
-
-### Commit Coverage (Fork vs Upstream)
-
-| Date | Commit | Subject | Primary Scope | Coverage |
-|:-----|:-------|:--------|:--------------|:---------|
-| 2026-07-01 | 9e363c3 | Changes Profile fixed, Life Essence issues fixed, Bear logic fixed, no waiting time if bear is not set active. Smarter gather logic to avoid recalling them | Profile switching, Bear Trap behavior, gather safety, intelligence flow, life essence routines | Covered in Scheduler and Multi-Profile Runtime groups |
-| 2026-07-01 | 4fff81a | Stamina fix added | Stamina service corrections and tests | Covered in Stamina and Stability group |
-| 2026-07-02 | 54208c7 | fix character switch | Character switch template mapping | Covered in Multi-Profile Runtime and Logging group |
-| 2026-07-02 | 37b683e | Several smaller fixes | Mixed fixes across scheduler, gather, stamina, intel, and docs | Covered across grouped sections above |
-| 2026-07-02 | 89f8f59 | Hotfix #1 | Scheduler delay handling and launcher updates | Covered in Scheduler and Task Logic group |
-| 2026-07-02 | 8a077e6 | Hotfix #2 infinite loop caused by new methodics for gathering and march deployment for Intel and/or bear trap | Infinite-loop prevention in gather and march deployment flow | Covered in Scheduler and Task Logic group |
-| 2026-07-02 | 3a01a02 | Hotfix #3 Multiple smaller fixes | Build script, debugging UI, stamina helper, packaging updates | Covered in Build and Distribution, UI and Navigation, and Stamina and Stability groups |
-| 2026-07-02 | 41d8fa9 | Hotfix #4 Gather routine adaptions and few smaller fixes | Gather routine adaptations, config, and build packaging touch-ups | Covered in Scheduler and Task Logic and Build and Distribution groups |
-| 2026-07-03 | 8e80aa8 | Hotfix #5 | Intelligence routine refinements | Covered in Scheduler and Task Logic group |
-
-All commits in the range `upstream/main..HEAD` are represented above.
-
-### Validation Snapshot (2026-07-31)
-
-| Scope | Command / Suite | Result |
-|:------|:----------------|:-------|
-| Full Reactor Build | `mvn clean install` | ✅ `BUILD SUCCESS` (Total time: 17.082 s) |
-| Queue Guard Regression | `GatherQueuePolicyTest` | ✅ 3 tests, 0 failures, 0 errors |
-| Intel Flag-Lock Guard Regression | `IntelligenceRoutineTest` | ✅ 3 tests, 0 failures, 0 errors |
-| Telegram Compatibility Regression | `TelegramBotServiceTest` | ✅ 2 tests, 0 failures, 0 errors |
-| Initialization Stamina Refresh Regression | `InitializeRoutineTest` | ✅ 1 test, 0 failures, 0 errors |
-
-### Detailed Test Report: Fast Profile Switching Restore (2026-07-31)
-
-| Category | Verification | Evidence | Status |
-|:---------|:-------------|:---------|:-------|
-| Functional Change | Character switch failure path keeps emulator session alive instead of forcing emulator shutdown | `CharacterSwitchHelper.switchToCharacter(...)` fallback now exits UI state and returns failure without closing emulator | ✅ Pass |
-| Initialization Safety | Initialization no longer assumes emulator restart on character-switch miss | `InitializeRoutine.verifyAndSwitchCharacter(...)` failure branch keeps runtime session continuity | ✅ Pass |
-| Initialization Stamina Refresh | Startup now re-reads stamina for the active profile after character verification/switching | `InitializeRoutine` triggers a fresh stamina read before march-capacity detection and task handoff | ✅ Pass |
-| Build Integrity | Full multi-module reactor compile/test/package/install | `mvn clean install` completed with `BUILD SUCCESS` | ✅ Pass |
-| Module Health | All modules completed successfully in reactor summary | `fg-api`, `fg-data`, `fg-vision`, `fg-engine`, `fg-tasks`, `fg-watcher`, `fg-app` all `SUCCESS` | ✅ Pass |
-| Tasks Test Suite | Focused task runtime/test stability after switching behavior change | Surefire summary in `fg-tasks`: 45 tests, 0 failures, 0 errors, 0 skipped | ✅ Pass |
-| Packaging Path | Desktop artifact packaging still intact | `fg-app` produced `frostguard-2.1.0.jar` and `frostguard-2.1.0-desktop-bundle.zip` | ✅ Pass |
-
-#### Test Procedure
-
-1. Run the full reactor test suite: `mvn -pl fg-tasks -am test -DskipTests=false`
-2. Confirm the targeted regression remains green: `InitializeRoutineTest`
-3. If you want to package the desktop bundle afterwards, run `mvn clean install` or the existing Windows build helper script
-
-#### Notes
-
-- Existing Maven shade overlap warnings in `fg-watcher` remain unchanged and non-blocking for this fix.
-- No additional functional surface was modified beyond the switch-failure/session-continuity path and the new init-time stamina refresh.
-
-<br/>
-
 ## 🚀 Roadmap
 
 <div align="center">
@@ -560,12 +380,25 @@ request guidance.
 
 <br/>
 
+## ⭐ Star History
 
-<sub>If you find this project useful, please consider giving it a star!</sub>
+<div align="center">
+  <i>If you find Frostguard useful, consider giving it a star — it helps others discover the project!</i>
+</div>
 
 <br/>
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Shederator/frostguard&type=Date)](https://star-history.com/#Shederator/frostguard&Date)
+<div align="center">
+
+<a href="https://www.star-history.com/?repos=Shederator%2Fwosbot&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Shederator/wosbot&type=date&theme=dark&legend=top-left&sealed_token=Q4rcyFr92ZWBzZQ20e-IzVUjxqfb5_eM5u09bqV8HyzPBtTvEvoQpkN-YO7JzMG8uRS50EcA9FGzM65sJJmceYHi43KwVqBIFrYbqa7ImNnjTUMFTGryFQ" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Shederator/wosbot&type=date&legend=top-left&sealed_token=Q4rcyFr92ZWBzZQ20e-IzVUjxqfb5_eM5u09bqV8HyzPBtTvEvoQpkN-YO7JzMG8uRS50EcA9FGzM65sJJmceYHi43KwVqBIFrYbqa7ImNnjTUMFTGryFQ" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Shederator/wosbot&type=date&legend=top-left&sealed_token=Q4rcyFr92ZWBzZQ20e-IzVUjxqfb5_eM5u09bqV8HyzPBtTvEvoQpkN-YO7JzMG8uRS50EcA9FGzM65sJJmceYHi43KwVqBIFrYbqa7ImNnjTUMFTGryFQ" />
+ </picture>
+</a>
+
+</div>
 
 <br/>
 

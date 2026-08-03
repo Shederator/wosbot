@@ -41,6 +41,7 @@ import dev.frostguard.engine.listener.BotStateListener;
 import dev.frostguard.engine.listener.QueueStateListener;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.DelayedTaskRegistry;
+import dev.frostguard.engine.schedule.StaminaDeferral;
 import dev.frostguard.engine.schedule.TaskDispatcher;
 import dev.frostguard.engine.schedule.TaskQueue;
 
@@ -213,16 +214,47 @@ public class ScheduleService {
 
 	public void persistDailyCompletion(AccountDescriptor acct, TpDailyTaskEnum taskType,
 			LocalDateTime nextRun, String customLabel) {
+		persistDailyCompletion(acct, taskType, nextRun, customLabel, null);
+	}
+
+	public void persistDailyCompletion(AccountDescriptor acct, TpDailyTaskEnum taskType,
+			LocalDateTime nextRun, String customLabel, StaminaDeferral staminaDeferral) {
 		if (acct == null || taskType == null) {
 			return;
 		}
-		DailyTask record = dailyTasks.findByAccountIdAndTaskType(acct.getId(), taskType);
+		DailyTask record = findDailyRecord(acct.getId(), taskType, customLabel);
 		if (record == null) {
-			dailyTasks.addDailyTask(newDailyRecord(acct, taskType, nextRun, customLabel));
+			record = newDailyRecord(acct, taskType, nextRun, customLabel);
+			applyStaminaDeferral(record, staminaDeferral);
+			dailyTasks.addDailyTask(record);
 			return;
 		}
 		record.setPreviousRun(LocalDateTime.now());
 		record.setScheduledAt(nextRun);
+		applyStaminaDeferral(record, staminaDeferral);
+		dailyTasks.saveDailyTask(record);
+	}
+
+	public void persistScheduleAdjustment(AccountDescriptor acct, TpDailyTaskEnum taskType,
+			LocalDateTime nextRun, String customLabel) {
+		persistScheduleAdjustment(acct, taskType, nextRun, customLabel, null);
+	}
+
+	public void persistScheduleAdjustment(AccountDescriptor acct, TpDailyTaskEnum taskType,
+			LocalDateTime nextRun, String customLabel, StaminaDeferral staminaDeferral) {
+		if (acct == null || taskType == null) {
+			return;
+		}
+		DailyTask record = findDailyRecord(acct.getId(), taskType, customLabel);
+		if (record == null) {
+			record = newDailyRecord(acct, taskType, nextRun, customLabel);
+			record.setPreviousRun(null);
+			applyStaminaDeferral(record, staminaDeferral);
+			dailyTasks.addDailyTask(record);
+			return;
+		}
+		record.setScheduledAt(nextRun);
+		applyStaminaDeferral(record, staminaDeferral);
 		dailyTasks.saveDailyTask(record);
 	}
 
@@ -335,6 +367,12 @@ public class ScheduleService {
 		} else {
 			task.reschedule(saved.getNextSchedule());
 			task.setLastExecutionTime(saved.getLastExecution());
+			if (saved.hasStaminaDeferral()) {
+				task.restoreStaminaDeferral(new StaminaDeferral(
+						saved.getStaminaMinimumRequired(),
+						saved.getStaminaRegenerationTarget(),
+						saved.getStaminaEarliestRunnableAt()));
+			}
 			state.setLastExecutionTime(saved.getLastExecution());
 			state.setNextExecutionTime(saved.getNextSchedule());
 			log(TpMessageSeverityEnum.INFO, task.getTaskName(), account.getName(),
@@ -471,6 +509,22 @@ public class ScheduleService {
 		record.setPreviousRun(LocalDateTime.now());
 		record.setScheduledAt(nextRun);
 		return record;
+	}
+
+	private DailyTask findDailyRecord(Long accountId, TpDailyTaskEnum taskType, String customLabel) {
+		return customLabel == null
+				? dailyTasks.findByAccountIdAndTaskType(accountId, taskType)
+				: dailyTasks.findByAccountIdTaskTypeAndCustomLabel(accountId, taskType, customLabel);
+	}
+
+	private void applyStaminaDeferral(DailyTask record, StaminaDeferral deferral) {
+		if (deferral == null) {
+			record.clearStaminaDeferral();
+			return;
+		}
+		record.setStaminaMinimumRequired(deferral.minimumRequired());
+		record.setStaminaRegenerationTarget(deferral.regenerationTarget());
+		record.setStaminaEarliestRunnableAt(deferral.earliestRunnableAt());
 	}
 
 	private boolean removeFromQueue(Long accountId, TpDailyTaskEnum taskType, String customLabel) {

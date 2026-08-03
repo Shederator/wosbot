@@ -1,6 +1,5 @@
 package dev.frostguard.tasks.events;
 
-import dev.frostguard.engine.nav.RallyFlagCoordinates;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.data.entity.DailyTask;
 import dev.frostguard.data.repository.DailyTaskRepository;
@@ -18,6 +17,7 @@ import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
+import dev.frostguard.engine.helper.DeploymentHelper;
 import java.awt.Color;
 
 import java.time.LocalDateTime;
@@ -60,7 +60,7 @@ public class MercenaryEventRoutine extends DelayedTask {
         }
 
         // Verify if there's enough stamina to hunt, if not, reschedule the task
-        if (!staminaHelper.checkStaminaAndMarchesOrReschedule(minStaminaLevel, refreshStaminaLevel, this::reschedule))
+        if (!staminaHelper.checkStaminaAndMarchesOrReschedule(minStaminaLevel, refreshStaminaLevel, this))
             return;
 
         int attempt = 0;
@@ -349,22 +349,45 @@ public class MercenaryEventRoutine extends DelayedTask {
 
         // Check if we should use a specific flag
         if (useFlag && !sameLevelAsLastTime) {
-            tapPoint(RallyFlagCoordinates.pointForFlag(flagNumber));
+            marchHelper.selectFlag(flagNumber);
             sleepTask(300);
         }
 
-        // Parse travel time
-        long travelTimeSeconds = staminaHelper.parseTravelTime();
-
-        // Parse stamina cost
-        Integer spentStamina = staminaHelper.getSpentStamina();
+        int maxStaminaCost = rally
+                ? DeploymentHelper.MAX_RALLY_STAMINA_COST
+                : DeploymentHelper.MAX_ATTACK_STAMINA_COST;
+        var deployment = deploymentHelper.readScreen(maxStaminaCost);
+        long travelTimeSeconds = deployment.travelTimeSeconds();
+        int spentStamina = deployment.staminaCost();
         lastStaminaSpent = spentStamina;
+        if (deploymentHelper.hasNoDeployableTroops() || deploymentHelper.isDeployCostRed()) {
+            logWarning("Deployment blocked by troops or stamina. No march was sent or deducted.");
+            pressBack();
+            reschedule(LocalDateTime.now().plusMinutes(5));
+            return;
+        }
 
         // Validate travel time before deploying
         if (travelTimeSeconds <= 0) {
             logError("Failed to parse valid march time via OCR. Using conservative 10 minute fallback reschedule.");
             tapPoint(deployButton.getPoint()); // Deploy anyway since we're already in the march screen
             sleepTask(2000);
+
+            if (deploymentHelper.isSameTargetDialog()) {
+                logWarning("Another march is already targeting this mercenary. Cancelling deployment.");
+                pressBack();
+                pressBack();
+                reschedule(LocalDateTime.now().plusMinutes(1));
+                return;
+            }
+            ImageSearchResultData deployStillPresent = templateSearchHelper.locatePattern(
+                    TemplatesEnum.DEPLOY_BUTTON,
+                    SearchConfigConstants.SINGLE_WITH_2_RETRIES);
+            if (deployStillPresent.isFound()) {
+                logWarning("Deploy button remained visible; stamina was not deducted.");
+                reschedule(LocalDateTime.now().plusMinutes(5));
+                return;
+            }
 
             // Update stamina with fallback
             staminaHelper.subtractStamina(spentStamina, rally);
@@ -380,6 +403,14 @@ public class MercenaryEventRoutine extends DelayedTask {
         // Deploy march with known travel time
         tapPoint(deployButton.getPoint());
         sleepTask(2000);
+
+        if (deploymentHelper.isSameTargetDialog()) {
+            logWarning("Another march is already targeting this mercenary. Cancelling deployment.");
+            pressBack();
+            pressBack();
+            reschedule(LocalDateTime.now().plusMinutes(1));
+            return;
+        }
 
         // Verify deployment succeeded
         ImageSearchResultData deployStillPresent = templateSearchHelper.locatePattern(

@@ -622,7 +622,7 @@ public class PetSkillsRoutine extends DelayedTask {
             logInfo(String.format("Stamina skill level: %d. Added %d stamina.", level, staminaToAdd));
         }
 
-        StaminaService.getServices().addStamina(profile.getId(), staminaToAdd);
+        StaminaService.getServices().addExternalStamina(profile.getId(), staminaToAdd);
     }
 
     /**

@@ -6,12 +6,17 @@ import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.nav.CommonGameAreas;
+import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.vision.color.GameColors;
 import dev.frostguard.vision.color.PixelStats;
+import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.logging.ProfileContextLogger;
+import dev.frostguard.vision.convert.RegexNumberParser;
+import dev.frostguard.vision.ocr.ResilientOcrExecutor;
 import dev.frostguard.vision.ocr.TesseractOcrProvider;
 
 import java.awt.image.BufferedImage;
+import java.time.Duration;
 
 /**
  * Reads the deployment screen every marching routine shares.
@@ -23,6 +28,9 @@ import java.awt.image.BufferedImage;
  */
 public class DeploymentHelper {
 
+    public static final int MAX_ATTACK_STAMINA_COST = 10;
+    public static final int MAX_RALLY_STAMINA_COST = 25;
+
     // A red cost measures ~440 matching pixels, a white one exactly 0, so the bar can sit low.
     private static final int COST_RED_PIXEL_MIN = 10;
     // The ticked preparation option shows ~390 green pixels; the three others show none.
@@ -31,14 +39,67 @@ public class DeploymentHelper {
     private final EmulatorController emu;
     private final String device;
     private final TemplateSearchHelper templates;
+    private final ResilientOcrExecutor<Integer> integerReader;
+    private final ResilientOcrExecutor<Duration> durationReader;
     private final ProfileContextLogger log;
 
     public DeploymentHelper(EmulatorController emuManager, String emulatorNumber,
-                            TemplateSearchHelper templateSearchHelper, AccountDescriptor profile) {
+                            TemplateSearchHelper templateSearchHelper,
+                            ResilientOcrExecutor<Integer> integerReader,
+                            ResilientOcrExecutor<Duration> durationReader,
+                            AccountDescriptor profile) {
         this.emu = emuManager;
         this.device = emulatorNumber;
         this.templates = templateSearchHelper;
+        this.integerReader = integerReader;
+        this.durationReader = durationReader;
         this.log = new ProfileContextLogger(DeploymentHelper.class, profile);
+    }
+
+    /**
+     * Reads the values shown after lineup selection. The screen value is authoritative because hero
+     * bonuses can reduce the action's nominal stamina cost.
+     */
+    public DeploymentScreenRead readScreen(int maxPlausibleStaminaCost) {
+        if (maxPlausibleStaminaCost < 1) {
+            throw new IllegalArgumentException("Maximum plausible stamina cost must be positive");
+        }
+
+        long travelSeconds = readTravelTimeSeconds();
+
+        Integer readCost = integerReader.attemptRecognition(
+                CommonGameAreas.SPENT_STAMINA_OCR_AREA,
+                3, 100L,
+                CommonOCRSettings.SPENT_STAMINA_SETTINGS,
+                txt -> RegexNumberParser.conformsTo(txt, CommonOCRSettings.NUMBER_PATTERN),
+                txt -> RegexNumberParser.extractByPattern(txt, CommonOCRSettings.NUMBER_PATTERN));
+        boolean fallback = readCost == null || readCost < 1 || readCost > maxPlausibleStaminaCost;
+        int staminaCost = fallback ? maxPlausibleStaminaCost : readCost;
+
+        if (fallback) {
+            log.warn("Deployment stamina cost "
+                    + (readCost == null ? "unreadable" : readCost)
+                    + " is out of range [1.." + maxPlausibleStaminaCost + "]; assuming "
+                    + maxPlausibleStaminaCost);
+        }
+        log.info("Deployment screen: travelSeconds=" + travelSeconds
+                + " staminaCost=" + staminaCost
+                + " staminaFallback=" + fallback);
+        return new DeploymentScreenRead(travelSeconds, staminaCost, fallback);
+    }
+
+    public long readTravelTimeSeconds() {
+        Duration travel = durationReader.attemptRecognition(
+                CommonGameAreas.TRAVEL_TIME_OCR_AREA,
+                3, 100L,
+                CommonOCRSettings.TRAVEL_TIME_SETTINGS,
+                GameTimeUtils::isAcceptedFormat,
+                GameTimeUtils::parseDuration);
+        long travelSeconds = travel == null ? 0 : travel.getSeconds();
+        if (travel == null) {
+            log.warn("Deployment travel-time OCR failed");
+        }
+        return travelSeconds;
     }
 
     /**

@@ -3,10 +3,9 @@
 
 The nightly bundle is ~220 MB, far above Discord's per-message upload ceiling,
 and a GitHub Actions artifact link only works for signed-in users with access to
-the repository. So the message this script posts carries the **public release
-asset URL** as plain message content (tappable on mobile, no login required)
-plus an embed with the facts a tester needs before downloading: version, size,
-staged runtime JAR count, executed test count, trigger, branch and commit.
+the repository. The maintained Nightly message therefore links the public
+release asset from a compact user-facing embed and lists the PRs or direct
+commits added since the previous Nightly. CI-only metrics stay in Actions.
 
 The webhook URL is read from the environment rather than argv, because anything
 passed on a command line shows up in the process list and in `set -x` traces.
@@ -46,7 +45,9 @@ EMBED_FOOTER_LIMIT = 2048
 ATTACHMENT_LIMIT_BYTES = 8 * 1024 * 1024
 
 STATUS_STYLE = {
-    "success": (0x2ECC71, "Build succeeded"),
+    # Amber distinguishes an intentionally unstable Nightly from the green
+    # Stable announcement without making a successful build look like a fault.
+    "success": (0xF1C40F, "Build succeeded"),
     "failure": (0xE74C3C, "Build failed"),
     "cancelled": (0x95A5A6, "Build cancelled"),
     "skipped": (0x95A5A6, "Build skipped"),
@@ -99,53 +100,10 @@ def redact(text: str) -> str:
 
 def build_payload(args: argparse.Namespace) -> dict:
     color, headline = STATUS_STYLE.get(args.status, STATUS_STYLE["failure"])
-
     version = args.version or "unknown"
-    title = (
-        f"Frostguard {version} — Windows desktop bundle"
-        if args.status == "success"
-        else f"Frostguard {version} — {headline.lower()}"
-    )
-
+    description_parts: list[str] = []
     fields: list[dict] = []
 
-    def add_field(name: str, value: str, inline: bool = True) -> None:
-        value = truncate(value, EMBED_FIELD_VALUE_LIMIT)
-        if value:
-            fields.append(
-                {
-                    "name": truncate(name, EMBED_FIELD_NAME_LIMIT),
-                    "value": value,
-                    "inline": inline,
-                }
-            )
-
-    add_field("Version", f"`{version}`")
-    if args.bundle_bytes > 0:
-        add_field("Download size", human_size(args.bundle_bytes))
-    if args.jar_count > 0:
-        add_field("Runtime JARs", str(args.jar_count))
-    if args.test_count > 0:
-        add_field("JUnit tests", f"{args.test_count} passed")
-    if args.trigger:
-        add_field("Trigger", f"`{args.trigger}`")
-    if args.branch:
-        add_field("Branch", f"`{args.branch}`")
-
-    if args.commit:
-        short = args.commit[:7]
-        subject = first_line(args.commit_message)
-        commit_url = (
-            f"https://github.com/{args.repository}/commit/{args.commit}"
-            if args.repository
-            else ""
-        )
-        link = f"[`{short}`]({commit_url})" if commit_url else f"`{short}`"
-        if subject:
-            link += f" {truncate(subject, 200)}"
-        add_field("Commit", link, inline=False)
-
-    description_parts: list[str] = []
     if args.status == "success":
         if args.download_url and not args.download_url.startswith("http"):
             # A half-populated URL means the release step was skipped or failed.
@@ -157,18 +115,23 @@ def build_payload(args: argparse.Namespace) -> dict:
             args.download_url = ""
         if args.download_url:
             description_parts.append(
-                f"**[⬇ Download {args.bundle_name or 'the bundle'}]"
+                "The newest automated development build. It may contain "
+                "unfinished or unstable changes."
+            )
+            description_parts.append(
+                f"**[⬇️ Download Frostguard {version} for Windows]"
                 f"({args.download_url})**"
             )
-            # The assembly ships no launcher .bat for the app itself (only
-            # fg-watcher.bat), so `java -jar` is the real entry point. Naming a
-            # script that is not in the ZIP would send every tester into a
-            # support question.
             description_parts.append(
-                "Verified: bundle structure, manifest classpath and launch "
-                "smoke test. Unzip anywhere, then run "
-                "`java -jar frostguard-*.jar` (Java 21+ required)."
+                "Extract the complete archive and use the included Frostguard "
+                "launcher. Java 21 or newer is required."
             )
+            if args.changes:
+                fields.append({
+                    "name": "Changes since the previous Nightly",
+                    "value": truncate(args.changes, EMBED_FIELD_VALUE_LIMIT),
+                    "inline": False,
+                })
         elif args.run_url:
             description_parts.append(
                 f"Build passed. The artifact is attached to "
@@ -182,37 +145,33 @@ def build_payload(args: argparse.Namespace) -> dict:
         )
 
     embed = {
-        "title": truncate(title, EMBED_TITLE_LIMIT),
+        "title": truncate(
+            f"🧪 Frostguard Nightly {version}"
+            if args.status == "success"
+            else f"Frostguard {version} — {headline.lower()}",
+            EMBED_TITLE_LIMIT,
+        ),
         "color": color,
         "description": truncate("\n\n".join(description_parts), EMBED_DESCRIPTION_LIMIT),
         "fields": fields,
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
-    if args.run_url:
+    if args.status == "success" and args.download_url:
+        embed["url"] = args.download_url
+        build_identity = f"Nightly #{args.run_number}" if args.run_number else "Nightly"
+        embed["footer"] = {"text": f"{build_identity} • updated automatically"}
+    elif args.run_url:
         embed["url"] = args.run_url
 
-    footer = args.repository or ""
-    if args.run_number:
-        footer = f"{footer} • run #{args.run_number}".strip(" •")
-    if args.actor:
-        footer = f"{footer} • {args.actor}".strip(" •")
-    if footer:
-        embed["footer"] = {"text": truncate(footer, EMBED_FOOTER_LIMIT)}
-
-    # The bare URL as message content stays tappable in the mobile client and in
-    # notification previews, where embed links are easy to miss.
-    content = ""
-    if args.status == "success" and args.download_url:
-        content = truncate(args.download_url, CONTENT_LIMIT)
-
     payload = {
+        # PATCH preserves omitted fields. Explicitly clear content so the raw
+        # URL from the original version of the maintained message disappears.
+        "content": "",
         "username": args.username,
         "embeds": [embed],
         # Never let a commit subject containing @everyone ping the channel.
         "allowed_mentions": {"parse": []},
     }
-    if content:
-        payload["content"] = content
     return payload
 
 
@@ -253,14 +212,15 @@ def retry_after_seconds(error: urllib.error.HTTPError, body: str) -> float:
         return 5.0
 
 
-def post(webhook: str, body: bytes, content_type: str, timeout: float) -> None:
-    """POST with retries for rate limits and transient server errors."""
+def post(webhook: str, body: bytes, content_type: str, timeout: float,
+         method: str = "POST") -> bytes:
+    """Send a webhook request with retries for rate limits and transient errors."""
     last_error = "no attempt was made"
     for attempt in range(1, MAX_ATTEMPTS + 1):
         request = urllib.request.Request(
             webhook,
             data=body,
-            method="POST",
+            method=method,
             headers={
                 "Content-Type": content_type,
                 "User-Agent": "frostguard-ci/1.0 (+https://github.com/Shederator/wosbot)",
@@ -268,8 +228,9 @@ def post(webhook: str, body: bytes, content_type: str, timeout: float) -> None:
         )
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
+                response_body = response.read()
                 print(f"Discord accepted the notification (HTTP {response.status}).")
-                return
+                return response_body
         except urllib.error.HTTPError as error:
             detail = ""
             try:
@@ -332,6 +293,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--commit", default="")
     parser.add_argument("--commit-message", default="")
     parser.add_argument("--actor", default="")
+    parser.add_argument("--changes", default="")
     parser.add_argument("--username", default="Frostguard Builds")
     parser.add_argument(
         "--attach",
@@ -344,6 +306,16 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="environment variable holding the webhook URL",
     )
     parser.add_argument("--timeout", type=float, default=30.0)
+    parser.add_argument(
+        "--message-id",
+        default="",
+        help="edit this existing webhook message instead of creating a new one",
+    )
+    parser.add_argument(
+        "--message-id-output",
+        default="",
+        help="write the ID of a newly created message to this GitHub output file",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -394,7 +366,34 @@ def main(argv: list[str] | None = None) -> int:
         body = json.dumps(payload).encode("utf-8")
         content_type = "application/json"
 
-    post(webhook, body, content_type, args.timeout)
+    destination = webhook
+    method = "POST"
+    if args.message_id:
+        if not args.message_id.isdigit():
+            print("::error::Discord message ID must be numeric.")
+            return 1
+        if args.attach:
+            print("::error::Attachments are not supported when editing a message.")
+            return 1
+        destination = f"{webhook.rstrip('/')}/messages/{args.message_id}"
+        method = "PATCH"
+    elif args.message_id_output:
+        # Discord only returns the created message when wait=true is requested.
+        separator = "&" if "?" in webhook else "?"
+        destination = f"{webhook}{separator}wait=true"
+
+    response_body = post(destination, body, content_type, args.timeout, method=method)
+    if args.message_id_output:
+        try:
+            message_id = str(json.loads(response_body).get("id", ""))
+        except (json.JSONDecodeError, AttributeError, TypeError):
+            message_id = ""
+        if not message_id.isdigit():
+            print("::error::Discord did not return a valid created message ID.")
+            return 1
+        with open(args.message_id_output, "a", encoding="utf-8") as output:
+            output.write(f"message_id={message_id}\n")
+        print(f"Created maintained Discord message {message_id}.")
     return 0
 
 

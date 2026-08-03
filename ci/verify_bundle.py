@@ -32,6 +32,7 @@ MINIMUM_RUNTIME_JARS = 50
 
 # Exact entries that must be present at these exact paths.
 REQUIRED_FILES = [
+    "Start Frostguard.bat",
     "fg-watcher.bat",
     "lib/adb/adb.exe",
     "lib/adb/AdbWinApi.dll",

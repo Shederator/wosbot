@@ -2,6 +2,12 @@
 
 This document summarizes Windows-specific setup for Frostguard.
 
+The [latest Stable Windows bundle](https://github.com/Shederator/wosbot/releases/latest/download/frostguard-windows-desktop-bundle.zip)
+is versioned and remains unchanged until the next Stable release. The
+[latest Nightly](https://github.com/Shederator/wosbot/releases/download/nightly/frostguard-windows-desktop-bundle.zip)
+is rebuilt daily from `main`. Git, Git LFS and Maven are needed only when
+building from source.
+
 ## Build Requirements
 
 - Windows 10 or Windows 11.
@@ -56,7 +62,11 @@ The application currently packages Windows ADB and Tesseract assets from `tools/
 
 ## Starting Frostguard
 
-From the repository root:
+After downloading a desktop bundle, extract the complete ZIP into an empty
+folder and double-click `Start Frostguard.bat`. The launcher locates the
+versioned application JAR and reports a clear error if Java 21 is missing.
+
+For a source build, run from the repository root:
 
 ```powershell
 java -jar fg-app\target\frostguard-<version>.jar

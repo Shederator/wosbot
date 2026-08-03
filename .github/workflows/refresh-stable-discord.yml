@@ -1,0 +1,42 @@
+name: Refresh Stable Discord Message
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    name: Update the maintained Stable download
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Test the Stable notifier
+        run: python3 ci/test_stable_release_notify.py
+
+      - name: Resolve and publish the latest Stable release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DISCORD_NIGHTLY_WEBHOOK_URL: ${{ secrets.DISCORD_NIGHTLY_WEBHOOK_URL }}
+          DISCORD_STABLE_MESSAGE_ID: ${{ vars.DISCORD_STABLE_MESSAGE_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest")"
+          tag="$(jq -r '.tag_name' <<< "${release}")"
+          version="${tag#v}"
+          release_url="$(jq -r '.html_url' <<< "${release}")"
+          asset="frostguard-windows-desktop-bundle.zip"
+          download_url="https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/${asset}"
+          archive_url="https://github.com/${GITHUB_REPOSITORY}/releases"
+
+          python3 ci/stable_release_notify.py \
+            --version "${version}" \
+            --download-url "${download_url}" \
+            --release-url "${release_url}" \
+            --archive-url "${archive_url}" \
+            --message-id "${DISCORD_STABLE_MESSAGE_ID}"

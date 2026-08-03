@@ -14,10 +14,12 @@ Run with:  python3 ci/test_discord_notify.py
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import unittest
 import urllib.error
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -43,6 +45,7 @@ BASE_ARGS = [
     "--commit", "b962083c0ffee1234567890abcdefabcdefabcde",
     "--commit-message", "fix(intel): claim final rewards\n\nbody line ignored",
     "--actor", "Shederator",
+    "--changes", "• [#79](https://github.com/Shederator/wosbot/pull/79) Cleaner downloads",
 ]
 
 
@@ -53,22 +56,23 @@ def payload(extra: list[str] | None = None) -> dict:
 
 class PayloadTest(unittest.TestCase):
 
-    def test_success_payload_carries_the_download_link_as_content(self):
-        # The bare URL in `content` is what stays tappable in the mobile client
-        # and in the notification preview; embed links are easy to miss there.
+    def test_success_payload_has_no_bare_url_content(self):
         result = payload()
-        self.assertIn("releases/download/nightly", result["content"])
+        self.assertEqual("", result["content"])
+        self.assertIn("releases/download/nightly", result["embeds"][0]["description"])
 
-    def test_success_embed_is_green_and_names_the_version(self):
+    def test_success_embed_is_amber_and_names_the_version(self):
         embed = payload()["embeds"][0]
-        self.assertEqual(0x2ECC71, embed["color"])
+        self.assertEqual(0xF1C40F, embed["color"])
         self.assertIn("2.1.0", embed["title"])
+        self.assertIn("Frostguard Nightly", embed["title"])
+        self.assertEqual("Nightly #42 • updated automatically", embed["footer"]["text"])
 
     def test_failure_payload_is_red_and_links_the_log_not_a_download(self):
         result = payload(["--status", "failure"])
         embed = result["embeds"][0]
         self.assertEqual(0xE74C3C, embed["color"])
-        self.assertNotIn("content", result)
+        self.assertEqual("", result["content"])
         self.assertIn("workflow log", embed["description"])
 
     def test_never_pings_the_channel(self):
@@ -77,24 +81,22 @@ class PayloadTest(unittest.TestCase):
         result = payload(["--commit-message", "@everyone please test this"])
         self.assertEqual({"parse": []}, result["allowed_mentions"])
 
-    def test_uses_only_the_commit_subject(self):
+    def test_lists_changes_since_the_previous_nightly(self):
         fields = payload()["embeds"][0]["fields"]
-        commit = next(f for f in fields if f["name"] == "Commit")
-        self.assertIn("fix(intel): claim final rewards", commit["value"])
-        self.assertNotIn("body line ignored", commit["value"])
+        changes = next(
+            field for field in fields
+            if field["name"] == "Changes since the previous Nightly"
+        )
+        self.assertIn("#79", changes["value"])
 
-    def test_reports_size_in_human_units(self):
-        fields = payload()["embeds"][0]["fields"]
-        size = next(f for f in fields if f["name"] == "Download size")
-        self.assertEqual("231.0 MB", size["value"])
-
-    def test_omits_metrics_that_were_not_measured(self):
-        # A zero test count means the summary grep found nothing, not that zero
-        # tests passed. Printing "0 passed" would be a lie in a release notice.
-        result = payload(["--test-count", "0", "--jar-count", "0"])
+    def test_omits_internal_ci_metrics(self):
+        result = payload()
         names = {f["name"] for f in result["embeds"][0]["fields"]}
         self.assertNotIn("JUnit tests", names)
         self.assertNotIn("Runtime JARs", names)
+        self.assertNotIn("Trigger", names)
+        self.assertNotIn("Branch", names)
+        self.assertNotIn("Commit", names)
 
     def test_respects_every_discord_length_limit(self):
         long = "x" * 6000
@@ -142,17 +144,87 @@ class PayloadTest(unittest.TestCase):
         # A dead link posted to the channel is worse than no link: testers click
         # it, get a 404 and report the release as broken.
         result = payload(["--download-url", "frostguard.zip"])
-        self.assertNotIn("content", result)
+        self.assertEqual("", result["content"])
         self.assertIn("workflow run", result["embeds"][0]["description"])
 
     def test_success_without_a_release_falls_back_to_the_run_link(self):
         # Branch builds skip the release publish, so there is no public URL.
         result = payload(["--download-url", ""])
-        self.assertNotIn("content", result)
+        self.assertEqual("", result["content"])
         self.assertIn("workflow run", result["embeds"][0]["description"])
 
 
 class WebhookHandlingTest(unittest.TestCase):
+
+    def test_existing_daily_message_uses_patch(self):
+        env_var = "FG_TEST_DAILY_WEBHOOK"
+        os.environ[env_var] = WEBHOOK
+        try:
+            with mock.patch.object(discord_notify, "post") as sender:
+                code = discord_notify.main(
+                    BASE_ARGS + ["--webhook-env", env_var, "--message-id",
+                                 "1490710978805895298"]
+                )
+        finally:
+            del os.environ[env_var]
+        self.assertEqual(0, code)
+        self.assertEqual(
+            f"{WEBHOOK}/messages/1490710978805895298",
+            sender.call_args.args[0],
+        )
+        self.assertEqual("PATCH", sender.call_args.kwargs["method"])
+
+    def test_new_daily_message_writes_its_id(self):
+        env_var = "FG_TEST_DAILY_WEBHOOK"
+        os.environ[env_var] = WEBHOOK
+        with tempfile.NamedTemporaryFile(mode="r+", delete=False) as output:
+            output_path = output.name
+        try:
+            with mock.patch.object(
+                discord_notify,
+                "post",
+                return_value=b'{"id":"1533475915571527701"}',
+            ) as sender:
+                code = discord_notify.main(
+                    BASE_ARGS + ["--webhook-env", env_var,
+                                 "--message-id-output", output_path]
+                )
+            with open(output_path, encoding="utf-8") as output:
+                written = output.read()
+        finally:
+            del os.environ[env_var]
+            os.unlink(output_path)
+        self.assertEqual(0, code)
+        self.assertEqual("message_id=1533475915571527701\n", written)
+        self.assertEqual(f"{WEBHOOK}?wait=true", sender.call_args.args[0])
+        self.assertEqual("POST", sender.call_args.kwargs["method"])
+
+    def test_rejects_missing_id_in_create_response(self):
+        env_var = "FG_TEST_DAILY_WEBHOOK"
+        os.environ[env_var] = WEBHOOK
+        with tempfile.NamedTemporaryFile(delete=False) as output:
+            output_path = output.name
+        try:
+            with mock.patch.object(discord_notify, "post", return_value=b'{}'):
+                code = discord_notify.main(
+                    BASE_ARGS + ["--webhook-env", env_var,
+                                 "--message-id-output", output_path]
+                )
+        finally:
+            del os.environ[env_var]
+            os.unlink(output_path)
+        self.assertEqual(1, code)
+
+    def test_rejects_non_numeric_daily_message_id(self):
+        env_var = "FG_TEST_DAILY_WEBHOOK"
+        os.environ[env_var] = WEBHOOK
+        try:
+            code = discord_notify.main(
+                BASE_ARGS + ["--webhook-env", env_var, "--message-id", "bad"]
+            )
+        finally:
+            del os.environ[env_var]
+        self.assertEqual(1, code)
 
     def test_missing_secret_warns_but_does_not_fail_the_build(self):
         # A build that produced a good artifact must not be marked failed just
@@ -161,7 +233,6 @@ class WebhookHandlingTest(unittest.TestCase):
         self.assertEqual(0, code)
 
     def test_rejects_a_secret_that_is_not_a_discord_webhook(self):
-        import os
         os.environ["FG_TEST_WEBHOOK"] = "https://example.com/not-a-webhook"
         try:
             code = discord_notify.main(

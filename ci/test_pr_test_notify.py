@@ -8,12 +8,12 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pr_test_notify as notify
 from discord_notify import (
-    CONTENT_LIMIT,
     EMBED_DESCRIPTION_LIMIT,
     EMBED_FIELD_NAME_LIMIT,
     EMBED_FIELD_VALUE_LIMIT,
@@ -88,8 +88,10 @@ class SuccessPayloadTest(unittest.TestCase):
         text = self.payload()["embeds"][0]["description"]
         self.assertIn("UNMERGED TEST BUILD", text)
 
-    def test_content_carries_the_bare_download_url(self):
-        self.assertEqual(self.payload()["content"], self.URL)
+    def test_download_url_stays_inside_the_embed(self):
+        payload = self.payload()
+        self.assertNotIn("content", payload)
+        self.assertIn(self.URL, payload["embeds"][0]["description"])
 
     def test_lists_every_pr_with_number_title_and_pinned_sha(self):
         text = all_text(self.payload())
@@ -224,7 +226,6 @@ class LimitsTest(unittest.TestCase):
         embed = payload["embeds"][0]
         self.assertLessEqual(len(embed["title"]), EMBED_TITLE_LIMIT)
         self.assertLessEqual(len(embed["description"]), EMBED_DESCRIPTION_LIMIT)
-        self.assertLessEqual(len(payload.get("content", "")), CONTENT_LIMIT)
         self.assertLessEqual(len(embed["fields"]), 10)
         for field in embed["fields"]:
             self.assertLessEqual(len(field["name"]), EMBED_FIELD_NAME_LIMIT)
@@ -250,23 +251,70 @@ class MissingPlanTest(unittest.TestCase):
             os.unlink(path)
 
 
-class WebhookGuardTest(unittest.TestCase):
-    def test_missing_webhook_warns_but_does_not_fail(self):
-        env_var = "FG_PR_TEST_ABSENT"
-        os.environ.pop(env_var, None)
-        code = notify.main(["--kind", "rejected", "--reason", "x",
-                            "--webhook-env", env_var])
+class DiscordContextTest(unittest.TestCase):
+    def context_args(self) -> list[str]:
+        return [
+            "--guild-id", "11111", "--channel-id", "22222",
+            "--requester-id", "33333", "--message-id", "44444",
+            "--request-id", "55555", "--allowed-guild-id", "11111",
+            "--allowed-channel-ids", "22222,66666",
+        ]
+
+    def test_manual_run_without_context_does_not_post(self):
+        code = notify.main(["--kind", "rejected", "--reason", "x"])
         self.assertEqual(code, 0)
 
-    def test_non_discord_webhook_is_rejected(self):
-        env_var = "FG_PR_TEST_BAD_HOOK"
-        os.environ[env_var] = "https://example.com/not-a-webhook"
-        try:
-            code = notify.main(["--kind", "rejected", "--reason", "x",
-                                "--webhook-env", env_var])
-        finally:
-            del os.environ[env_var]
-        self.assertEqual(code, 1)
+    def test_context_requires_the_configured_guild(self):
+        args = notify.parse_args(
+            ["--kind", "failure", *self.context_args()]
+        )
+        args.allowed_guild_id = "99999"
+        self.assertIn("not allowlisted", notify.validate_discord_context(args))
+
+    def test_context_requires_an_allowlisted_channel(self):
+        args = notify.parse_args(
+            ["--kind", "failure", *self.context_args()]
+        )
+        args.channel_id = "77777"
+        self.assertIn("not allowlisted", notify.validate_discord_context(args))
+
+    def test_payload_replies_and_mentions_only_the_requester(self):
+        payload = payload_for(
+            "failure", sample_plan(), guild_id="11111", channel_id="22222",
+            requester_id="33333", message_id="44444",
+        )
+        self.assertEqual(payload["content"], "<@33333>")
+        self.assertEqual(payload["allowed_mentions"], {
+            "parse": [], "users": ["33333"],
+        })
+        self.assertEqual(payload["message_reference"]["message_id"], "44444")
+
+    def test_bot_api_posts_to_the_validated_channel(self):
+        response = mock.MagicMock()
+        response.status = 200
+        response.__enter__.return_value = response
+        response.__exit__.return_value = False
+
+        with mock.patch.object(notify.urllib.request, "urlopen",
+                               return_value=response) as urlopen:
+            notify.post_bot_message(
+                "secret-token", "22222", {"content": "<@33333>"}, 5.0,
+            )
+
+        request = urlopen.call_args.args[0]
+        self.assertEqual(
+            request.full_url,
+            "https://discord.com/api/v10/channels/22222/messages",
+        )
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(request.get_header("Authorization"),
+                         "Bot secret-token")
+
+    def test_partial_discord_context_is_rejected(self):
+        args = notify.parse_args([
+            "--kind", "failure", "--guild-id", "11111",
+        ])
+        self.assertIn("missing or invalid", notify.validate_discord_context(args))
 
 
 if __name__ == "__main__":

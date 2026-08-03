@@ -13,6 +13,7 @@ import dev.frostguard.data.entity.DailyTask;
 import dev.frostguard.data.repository.DailyTaskRepository;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.engine.helper.DeploymentHelper;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.service.StatisticsService;
@@ -22,7 +23,6 @@ import dev.frostguard.tasks.dailies.IntelligenceRoutine;
 public class BeastSlayRoutine extends DelayedTask {
 
 	private static final int DEFAULT_STAMINA_RESERVE = 130;
-	private static final int STAMINA_COST_PER_ATTACK = 10;
 
 	private final DailyTaskRepository iDailyTaskRepository = DailyTaskRepository.getRepository();
 	private final TaskManagementService taskManagementService = TaskManagementService.shared();
@@ -63,10 +63,11 @@ public class BeastSlayRoutine extends DelayedTask {
 		}
 
 		// Only spend stamina above the reserve, so at least `staminaReserve` stays for Intel/Rally.
-		int minToAct = staminaReserve + STAMINA_COST_PER_ATTACK;
+		int minToAct = staminaReserve + 1;
 
 		// Use staminaHelper to check stamina (already read during initialization/validation)
-		if (!staminaHelper.checkStaminaAndMarchesOrReschedule(minToAct, minToAct, this::reschedule)) {
+		if (!staminaHelper.checkStaminaAndMarchesOrReschedule(
+				minToAct, staminaReserve + DeploymentHelper.MAX_ATTACK_STAMINA_COST, this)) {
 			return;
 		}
 
@@ -77,7 +78,7 @@ public class BeastSlayRoutine extends DelayedTask {
 		int attacksDone = 0;
 
 		// Fill available queues with beast attacks, never dipping below the reserve
-		while (currentStamina - staminaReserve >= STAMINA_COST_PER_ATTACK && attacksDone < maxQueues) {
+		while (currentStamina > staminaReserve && attacksDone < maxQueues) {
 
 			sleepTask(6000);
 			// Open the creature search menu
@@ -120,14 +121,60 @@ public class BeastSlayRoutine extends DelayedTask {
 
 
 			try {
-				// Use staminaHelper to parse travel time via OCR (uses CommonGameAreas.TRAVEL_TIME_OCR_AREA)
-				long travelSeconds = staminaHelper.parseTravelTime();
+				if (deploymentHelper.hasNoDeployableTroops()) {
+					logWarning("No deployable troops are available for Beast Hunting.");
+					pressBack();
+					updateReschedule(LocalDateTime.now().plusMinutes(5));
+					break;
+				}
+				var deployment = deploymentHelper.readScreen(DeploymentHelper.MAX_ATTACK_STAMINA_COST);
+				long travelSeconds = deployment.travelTimeSeconds();
+				int staminaCost = deployment.staminaCost();
+				if (deploymentHelper.isDeployCostRed()) {
+					logWarning("Deploy stamina cost is red; no attack was sent or deducted.");
+					pressBack();
+					updateReschedule(LocalDateTime.now().plusMinutes(5));
+					break;
+				}
+				if (currentStamina - staminaCost < staminaReserve) {
+					int target = staminaReserve + DeploymentHelper.MAX_ATTACK_STAMINA_COST;
+					LocalDateTime retryAt = LocalDateTime.now().plusMinutes(
+							staminaHelper.staminaRegenerationTime(currentStamina, target));
+					logInfo("Deployment costs " + staminaCost + " stamina; current " + currentStamina
+							+ " would cross reserve " + staminaReserve + ". Waiting until " + target + ".");
+					pressBack();
+					deferForStamina(staminaReserve + staminaCost, target, retryAt);
+					updateReschedule(retryAt);
+					break;
+				}
 
-				// confirm attack
-				tapRandomPoint(new PointData(450, 1183), new PointData(640, 1240));
+				ImageSearchResultData deploy = templateSearchHelper.locatePattern(
+						TemplatesEnum.DEPLOY_BUTTON, SearchConfigConstants.SINGLE_WITH_RETRIES);
+				if (!deploy.isFound()) {
+					logWarning("Deploy button not found after reading the formation screen.");
+					updateReschedule(LocalDateTime.now().plusMinutes(5));
+					break;
+				}
+				tapPoint(deploy.getPoint());
+				sleepTask(1000);
 
-				// Update stamina tracking
-				staminaHelper.subtractStamina(STAMINA_COST_PER_ATTACK, false);
+				if (deploymentHelper.isSameTargetDialog()) {
+					logWarning("Another march is already targeting this beast; cancelling deployment.");
+					pressBack();
+					pressBack();
+					updateReschedule(LocalDateTime.now().plusMinutes(1));
+					break;
+				}
+
+				ImageSearchResultData deployStillPresent = templateSearchHelper.locatePattern(
+						TemplatesEnum.DEPLOY_BUTTON, SearchConfigConstants.SINGLE_WITH_2_RETRIES);
+				if (deployStillPresent.isFound()) {
+					logWarning("Deploy button remained visible; stamina and statistics were not updated.");
+					updateReschedule(LocalDateTime.now().plusMinutes(5));
+					break;
+				}
+
+				staminaHelper.subtractStamina(staminaCost, false);
 				currentStamina = staminaHelper.getCurrentStamina();
 				attacksDone++;
 				StatisticsService.obtain().addToCounter(profile, "Beast Attacks Sent", 1);
@@ -138,7 +185,8 @@ public class BeastSlayRoutine extends DelayedTask {
 				updateReschedule(marchReturn);
 
 				logInfo("Beast attacked. March returns in ~" + returnSeconds
-						+ "s. Remaining stamina: " + currentStamina + ", attacks done: " + attacksDone);
+						+ "s. Cost: " + staminaCost + ", remaining stamina: " + currentStamina
+						+ ", attacks done: " + attacksDone);
 
 			} catch (Exception e) {
 				logError("Failed during beast attack: " + e.getMessage());

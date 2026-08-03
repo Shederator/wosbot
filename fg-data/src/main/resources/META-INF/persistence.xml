@@ -17,6 +17,7 @@
         <class>dev.frostguard.data.entity.ConfigTemplate</class>
         <class>dev.frostguard.data.entity.DailyTask</class>
         <class>dev.frostguard.data.entity.DailyTaskTemplate</class>
+        <class>dev.frostguard.data.entity.GiftCodeClaim</class>
         <class>dev.frostguard.data.entity.Profile</class>
         <class>dev.frostguard.data.entity.ProfileBuilding</class>
 

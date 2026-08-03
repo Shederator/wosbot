@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Post a combined-PR test build status message to a Discord webhook.
+"""Reply with a combined-PR test build result through the Discord bot API.
 
 This is the reporting half of the `/build-pr` feature (issue #68). It reads
 the plan.json written by ci/pr_build_plan.py and renders one of four message
@@ -15,9 +15,9 @@ kinds:
 - failure    The build itself failed; links the workflow log.
 
 Every download is explicitly marked as an UNMERGED TEST BUILD so nobody
-mistakes it for a nightly. The webhook URL comes from the environment, never
-argv, for the same process-list reason as ci/discord_notify.py, whose
-delivery machinery (retries, rate limits, redaction) is reused here.
+mistakes it for a nightly. Discord IDs are validated against the configured
+guild/channel allowlist before the bot token is used. Manual runs with no
+Discord context remain valid and intentionally send no message.
 """
 
 from __future__ import annotations
@@ -26,12 +26,14 @@ import argparse
 import json
 import os
 import sys
+import time
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from discord_notify import (  # noqa: E402
-    CONTENT_LIMIT,
     EMBED_DESCRIPTION_LIMIT,
     EMBED_FIELD_NAME_LIMIT,
     EMBED_FIELD_VALUE_LIMIT,
@@ -39,10 +41,8 @@ from discord_notify import (  # noqa: E402
     EMBED_TITLE_LIMIT,
     human_size,
     lenient_int,
-    post,
     truncate,
 )
-import re
 
 KIND_STYLE = {
     "success": (0x2ECC71, "Test build ready"),
@@ -235,13 +235,23 @@ def build_payload(args: argparse.Namespace, plan: dict) -> dict:
     embed["footer"] = {"text": truncate(footer, EMBED_FOOTER_LIMIT)}
 
     payload = {
-        "username": args.username,
         "embeds": [embed],
         # A PR title is contributor-controlled text; never let it ping.
         "allowed_mentions": {"parse": []},
     }
-    if args.kind == "success" and args.download_url.startswith("http"):
-        payload["content"] = truncate(args.download_url, CONTENT_LIMIT)
+    if args.requester_id:
+        payload["content"] = f"<@{args.requester_id}>"
+        payload["allowed_mentions"] = {
+            "parse": [],
+            "users": [args.requester_id],
+        }
+    if args.message_id:
+        payload["message_reference"] = {
+            "message_id": args.message_id,
+            "channel_id": args.channel_id,
+            "guild_id": args.guild_id,
+            "fail_if_not_exists": False,
+        }
     return payload
 
 
@@ -263,11 +273,79 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
                         help="single-line rejection reason when no plan exists")
     parser.add_argument("--problems", default="",
                         help="newline-separated staleness findings")
-    parser.add_argument("--username", default="Frostguard PR Test Builds")
-    parser.add_argument("--webhook-env", default="DISCORD_NIGHTLY_WEBHOOK_URL")
+    parser.add_argument("--guild-id", default="")
+    parser.add_argument("--channel-id", default="")
+    parser.add_argument("--requester-id", default="")
+    parser.add_argument("--message-id", default="")
+    parser.add_argument("--request-id", default="")
+    parser.add_argument("--allowed-guild-id", default="")
+    parser.add_argument("--allowed-channel-ids", default="")
+    parser.add_argument("--token-env", default="DISCORD_BOT_TOKEN")
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args(argv)
+
+
+def valid_snowflake(value: str) -> bool:
+    return value.isdigit() and 5 <= len(value) <= 20
+
+
+def validate_discord_context(args: argparse.Namespace) -> str:
+    values = [args.guild_id, args.channel_id, args.requester_id, args.message_id]
+    if not any(values):
+        return "missing"
+    if not all(valid_snowflake(value) for value in values):
+        return "Discord context contains a missing or invalid ID"
+    if args.request_id and not valid_snowflake(args.request_id):
+        return "Discord request ID is invalid"
+    if not valid_snowflake(args.allowed_guild_id):
+        return "configured Discord guild allowlist is missing or invalid"
+    if args.guild_id != args.allowed_guild_id:
+        return "Discord guild is not allowlisted"
+    channels = {
+        value.strip() for value in args.allowed_channel_ids.split(",")
+        if value.strip()
+    }
+    if not channels or not all(valid_snowflake(value) for value in channels):
+        return "configured Discord channel allowlist is missing or invalid"
+    if args.channel_id not in channels:
+        return "Discord channel is not allowlisted"
+    return ""
+
+
+def post_bot_message(token: str, channel_id: str, payload: dict,
+                     timeout: float) -> None:
+    url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
+    body = json.dumps(payload).encode("utf-8")
+    for attempt in range(4):
+        request = urllib.request.Request(
+            url,
+            data=body,
+            method="POST",
+            headers={
+                "Authorization": f"Bot {token}",
+                "Content-Type": "application/json",
+                "User-Agent": "frostguard-ci/1.0",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                if response.status < 300:
+                    return
+        except urllib.error.HTTPError as error:
+            if error.code == 429 or 500 <= error.code < 600:
+                retry_after = error.headers.get("Retry-After", "1")
+                time.sleep(min(float(retry_after), 30.0))
+                continue
+            raise RuntimeError(
+                f"Discord API rejected the notification with HTTP {error.code}"
+            ) from error
+        except urllib.error.URLError as error:
+            if attempt < 3:
+                time.sleep(2 ** attempt)
+                continue
+            raise RuntimeError("Discord API notification failed") from error
+    raise RuntimeError("Discord API notification failed after retries")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -279,18 +357,23 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0
 
-    webhook = os.environ.get(args.webhook_env, "").strip()
-    if not webhook:
-        print(f"::warning::{args.webhook_env} is empty; no Discord message sent.")
+    context_error = validate_discord_context(args)
+    if context_error == "missing":
+        print("Manual run has no Discord context; no Discord message sent.")
         return 0
-    if not re.match(r"^https://(canary\.|ptb\.)?discord(app)?\.com/api/webhooks/", webhook):
-        print(
-            f"::error::{args.webhook_env} does not look like a Discord webhook URL."
-        )
+    if context_error:
+        print(f"::warning::{context_error}; no Discord message sent.")
+        return 0
+
+    token = os.environ.get(args.token_env, "").strip()
+    if not token:
+        print(f"::warning::{args.token_env} is empty; no Discord message sent.")
+        return 0
+    if any(character.isspace() for character in token):
+        print(f"::error::{args.token_env} is malformed.")
         return 1
 
-    post(webhook, json.dumps(payload).encode("utf-8"), "application/json",
-         args.timeout)
+    post_bot_message(token, args.channel_id, payload, args.timeout)
     return 0
 
 

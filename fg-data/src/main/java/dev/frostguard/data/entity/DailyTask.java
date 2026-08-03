@@ -56,6 +56,15 @@ public class DailyTask {
 	@Column(name = "custom_task_name", nullable = true)
 	private String customTaskLabel;
 
+	@Column(name = "stamina_minimum_required")
+	private Integer staminaMinimumRequired;
+
+	@Column(name = "stamina_regeneration_target")
+	private Integer staminaRegenerationTarget;
+
+	@Column(name = "stamina_earliest_runnable_at")
+	private LocalDateTime staminaEarliestRunnableAt;
+
 	public DailyTask() {}
 
 	public static DailyTask scheduled(Profile owner, DailyTaskTemplate routine,
@@ -109,6 +118,21 @@ public class DailyTask {
 
 	public String getCustomTaskLabel() { return customTaskLabel; }
 	public void setCustomTaskLabel(String label) { this.customTaskLabel = label; }
+
+	public Integer getStaminaMinimumRequired() { return staminaMinimumRequired; }
+	public void setStaminaMinimumRequired(Integer value) { this.staminaMinimumRequired = value; }
+
+	public Integer getStaminaRegenerationTarget() { return staminaRegenerationTarget; }
+	public void setStaminaRegenerationTarget(Integer value) { this.staminaRegenerationTarget = value; }
+
+	public LocalDateTime getStaminaEarliestRunnableAt() { return staminaEarliestRunnableAt; }
+	public void setStaminaEarliestRunnableAt(LocalDateTime value) { this.staminaEarliestRunnableAt = value; }
+
+	public void clearStaminaDeferral() {
+		staminaMinimumRequired = null;
+		staminaRegenerationTarget = null;
+		staminaEarliestRunnableAt = null;
+	}
 
 	// Compatibility delegates for downstream callers
 	public DailyTaskTemplate getDefinition() { return routine; }

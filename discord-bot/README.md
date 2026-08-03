@@ -1,6 +1,6 @@
 # `/build-pr` — combined PR test builds from Discord
 
-Lets approved Discord testers request a public Windows test build that
+Lets Discord users request a public Windows test build that
 combines one or more **open** pull requests (including stacked PRs) without
 merging anything, e.g.:
 
@@ -24,7 +24,7 @@ GitHub **Actions tab → PR Test Build → Run workflow** with `prs: 47,48,49,65
    ▼
 Cloudflare Worker (this directory)
    • verifies the Discord Ed25519 signature
-   • checks channel + tester role
+   • checks the configured channel
    • validates numbers, rejects closed/merged PRs with reasons
    • pins the exact head SHA of every PR
    • shows the merge plan with Build / Cancel buttons
@@ -38,8 +38,8 @@ GitHub Actions: pr-test-build.yml
    • publish (trusted)   fresh runner re-verifies the bundle, re-checks every
                          PR is still open and unchanged, publishes the
                          temporary pr-test-<digest> prerelease
-   • notify  (trusted)   posts the download link / conflict report / failure
-                         to the existing Discord webhook
+   • notify  (trusted)   replies in the requesting channel and mentions only
+                         the requester
    ▼
 pr-test-cleanup.yml deletes the release after 7 days
 or when every included PR is closed.
@@ -73,16 +73,15 @@ fine), and repo admin on GitHub.
    → name it e.g. `Frostguard Test Builds`.
 2. On **General Information**, note the **Application ID** and the
    **Public Key**.
-3. On **Bot**, click **Reset Token** and note the **Bot Token** (needed only
-   for command registration, not by the worker).
-4. On **Installation**, pick *Guild Install*; under OAuth2 scopes the bot
-   needs only `applications.commands`. Install it to your server via the
-   generated link.
+3. On **Bot**, click **Reset Token** and note the **Bot Token** (needed for
+   command registration and the trusted workflow notification job).
+4. On **Installation**, pick *Guild Install*. Enable the `applications.commands`
+   and `bot` scopes. Grant only **View Channels**, **Send Messages** and
+   **Read Message History**, then install it through the generated link.
 
-> A webhook alone is not enough for slash commands: webhooks can only *post*
-> messages. Slash commands need an application with an **interactions
-> endpoint**, which is what this worker provides. Your existing
-> `DISCORD_NIGHTLY_WEBHOOK_URL` webhook is still used — for posting results.
+> A webhook alone is not enough for this flow. Slash commands need an
+> application with an **interactions endpoint**, and the final result uses the
+> same bot identity so it can reply to the original status message.
 
 ### 2. Create the fine-grained GitHub token for the worker
 
@@ -99,7 +98,7 @@ This token cannot push, merge or create releases even if leaked.
 
 ```bash
 cd discord-bot
-# Fill DISCORD_APPLICATION_ID (and optionally the channel/role IDs) in
+# Fill DISCORD_APPLICATION_ID (and optionally the channel IDs) in
 # wrangler.toml, then:
 npx wrangler deploy
 npx wrangler secret put DISCORD_PUBLIC_KEY   # from step 1.2
@@ -126,23 +125,23 @@ DISCORD_GUILD_ID=<your server id> node register-command.mjs
 With `DISCORD_GUILD_ID` the command appears instantly; without it Discord
 takes up to an hour to propagate it globally.
 
-### 6. Restrict who can use it
+### 6. Configure result routing
 
-Two independent layers; use either or both:
+Configure the channel in both systems so the workflow can validate the worker's
+Discord context again before it uses the bot token:
 
-- **Worker config** (`wrangler.toml`): set `ALLOWED_CHANNEL_IDS` and/or
-  `ALLOWED_ROLE_IDS` (enable Developer Mode in Discord, right-click a
-  channel/role → Copy ID), then `npx wrangler deploy` again.
-- **Discord UI**: Server Settings → Integrations → your app → `/build-pr` →
-  limit to specific roles/channels.
+- **Worker config** (`wrangler.toml`): set `ALLOWED_CHANNEL_IDS`, then deploy.
+- **GitHub secret**: `DISCORD_BOT_TOKEN`.
+- **GitHub variable**: `DISCORD_PR_BUILD_GUILD_ID`.
+- **GitHub variable**: `DISCORD_PR_BUILD_CHANNEL_IDS` (CSV).
 
 ### 7. Verify end-to-end
 
 1. In the allowed channel run `/build-pr prs: <an open PR number>`.
 2. Check the plan shows the pinned SHA, press **Build**.
 3. Watch the run under Actions → *PR Test Build*.
-4. The result message (or conflict report) arrives via the existing
-   nightly webhook.
+4. The result arrives as a reply to the original status message and mentions
+   only the requester.
 
 ## Configuration reference
 
@@ -151,11 +150,12 @@ Two independent layers; use either or both:
 | `wrangler.toml` | `GITHUB_REPO` | repo whose PRs are built |
 | `wrangler.toml` | `DISCORD_APPLICATION_ID` | application (client) ID |
 | `wrangler.toml` | `ALLOWED_CHANNEL_IDS` | CSV channel allowlist (empty = all) |
-| `wrangler.toml` | `ALLOWED_ROLE_IDS` | CSV role allowlist (empty = all) |
 | `wrangler.toml` | `COOLDOWN_MINUTES` | flood-control gap between builds |
 | worker secret | `DISCORD_PUBLIC_KEY` | interaction signature verification |
 | worker secret | `GITHUB_TOKEN` | fine-grained dispatch-only token |
-| repo secret | `DISCORD_NIGHTLY_WEBHOOK_URL` | already configured; reused for results |
+| repo secret | `DISCORD_BOT_TOKEN` | bot token used only by the trusted notify job |
+| repo variable | `DISCORD_PR_BUILD_GUILD_ID` | allowed server ID |
+| repo variable | `DISCORD_PR_BUILD_CHANNEL_IDS` | allowed result channel IDs (CSV) |
 
 ## Tests
 

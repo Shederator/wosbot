@@ -38,6 +38,7 @@ RUNTIME_JARS = (
 )
 
 OTHER_FILES = [
+    "Start Frostguard.bat",
     "fg-watcher.bat",
     f"fg-watcher-{VERSION}.jar",
     "lib/adb/adb.exe",
@@ -146,6 +147,10 @@ class VerifyBundleTest(unittest.TestCase):
 
     def test_rejects_bundle_without_the_watcher_launcher(self):
         files = [f for f in OTHER_FILES if f != "fg-watcher.bat"]
+        self.assertEqual(1, run(build_bundle(other_files=files)))
+
+    def test_rejects_bundle_without_the_app_launcher(self):
+        files = [f for f in OTHER_FILES if f != "Start Frostguard.bat"]
         self.assertEqual(1, run(build_bundle(other_files=files)))
 
     def test_rejects_empty_templates_directory(self):

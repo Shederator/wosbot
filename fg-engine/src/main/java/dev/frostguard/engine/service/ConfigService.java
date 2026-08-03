@@ -186,6 +186,10 @@ public class ConfigService {
 		if (isHiddenStatisticsUpdate(key)) {
 			return;
 		}
+		if (key == ConfigurationKeyEnum.GIFT_CODE_STATE_JSON) {
+			LOG.debug("Profile gift code state {}", updatedExisting ? "updated" : "created");
+			return;
+		}
 		LOG.info("Profile config {} {}: {}", key.name(), updatedExisting ? "updated" : "created", value);
 	}
 
