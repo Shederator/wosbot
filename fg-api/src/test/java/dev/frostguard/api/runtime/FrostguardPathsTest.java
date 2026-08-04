@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.nio.file.Path;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -12,10 +13,16 @@ class FrostguardPathsTest {
     @TempDir
     Path tempDir;
 
+    @BeforeEach
+    void prepareOverrides() {
+        clearOverrides();
+    }
+
     @AfterEach
     void clearOverrides() {
         System.clearProperty(FrostguardPaths.DATA_PROPERTY);
         System.clearProperty(FrostguardPaths.HOME_PROPERTY);
+        System.clearProperty(FrostguardPaths.NATIVE_PROPERTY);
     }
 
     @Test
@@ -29,6 +36,20 @@ class FrostguardPathsTest {
 
         assertEquals(data.toAbsolutePath(), paths.dataHome());
         assertEquals(home.toAbsolutePath(), paths.applicationHome());
+        assertEquals(home.resolve("app/lib/native").toAbsolutePath(), paths.nativeHome());
+    }
+
+    @Test
+    void explicitNativeDirectorySupportsExternalRuntimeArtifacts() {
+        Path home = tempDir.resolve("program");
+        Path nativeHome = tempDir.resolve("native-runtime");
+        System.setProperty(FrostguardPaths.HOME_PROPERTY, home.toString());
+        System.setProperty(FrostguardPaths.DATA_PROPERTY, tempDir.resolve("data").toString());
+        System.setProperty(FrostguardPaths.NATIVE_PROPERTY, nativeHome.toString());
+
+        FrostguardPaths paths = FrostguardPaths.resolve(FrostguardPathsTest.class);
+
+        assertEquals(nativeHome.toAbsolutePath(), paths.nativeHome());
     }
 
     @Test

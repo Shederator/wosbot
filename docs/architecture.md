@@ -215,10 +215,15 @@ installation refresh:
 - clean staging: `fg-distribution/target/staging/Frostguard`
 - local installation: `.frostguard` (with persistent `.frostguard/data`)
 - runtime dependencies staged under `Frostguard/app/lib`
+- optional platform-native libraries under `Frostguard/app/lib/native`
 
 The first implementation intentionally packages Windows only. Linux launchers,
 archives and macOS application bundles are follow-up platform work; they must
 reuse the same staging, metadata, application-home and data-home contracts.
+The native-library location is part of that contract and can be overridden with
+`-Dfrostguard.native=/absolute/path` or `FROSTGUARD_NATIVE`. Future native
+artifacts should be resolved by Maven and staged there rather than discovered
+through package-manager-specific application code.
 
 Local deployment prepares all replacement files outside `.frostguard`, moves
 the current managed paths to a transaction backup, and restores them if any

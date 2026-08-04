@@ -11,15 +11,19 @@ import java.util.Objects;
 public final class FrostguardPaths {
     public static final String DATA_PROPERTY = "frostguard.data";
     public static final String HOME_PROPERTY = "frostguard.home";
+    public static final String NATIVE_PROPERTY = "frostguard.native";
     public static final String DATA_ENVIRONMENT = "FROSTGUARD_DATA";
+    public static final String NATIVE_ENVIRONMENT = "FROSTGUARD_NATIVE";
 
     private final Path applicationHome;
     private final Path dataHome;
+    private final Path nativeHome;
     private final Path codeSource;
 
-    private FrostguardPaths(Path applicationHome, Path dataHome, Path codeSource) {
+    private FrostguardPaths(Path applicationHome, Path dataHome, Path nativeHome, Path codeSource) {
         this.applicationHome = applicationHome;
         this.dataHome = dataHome;
+        this.nativeHome = nativeHome;
         this.codeSource = codeSource;
     }
 
@@ -55,7 +59,14 @@ public final class FrostguardPaths {
         } else {
             throw unresolved(codeSource, "data home");
         }
-        return new FrostguardPaths(normalize(applicationHome), normalize(dataHome), codeSource);
+        Path explicitNative = propertyPath(NATIVE_PROPERTY);
+        if (explicitNative == null) {
+            explicitNative = environmentPath(NATIVE_ENVIRONMENT);
+        }
+        Path nativeHome = explicitNative != null
+                ? explicitNative
+                : applicationHome.resolve("app/lib/native");
+        return new FrostguardPaths(normalize(applicationHome), normalize(dataHome), normalize(nativeHome), codeSource);
     }
 
     public Path applicationHome() {
@@ -64,6 +75,10 @@ public final class FrostguardPaths {
 
     public Path dataHome() {
         return dataHome;
+    }
+
+    public Path nativeHome() {
+        return nativeHome;
     }
 
     public Path codeSource() {

@@ -17,6 +17,7 @@ import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.TesseractSettingsData;
 import dev.frostguard.api.runtime.FrostguardPaths;
+import com.sun.jna.NativeLibrary;
 import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
 import org.slf4j.Logger;
@@ -42,6 +43,9 @@ public final class TesseractOcrProvider {
 
     /** Lazily resolved, then reused for every subsequent call. */
     private static volatile String resolvedTessdataDir;
+
+    /** Guards the process-wide JNA search-path registration. */
+    private static volatile boolean nativeLibraryPathConfigured;
 
     // =====================================================================
     //  Public entry points
@@ -170,6 +174,7 @@ public final class TesseractOcrProvider {
 
     /** Builds a single-line LSTM engine for the given language. */
     private static Tesseract configureTesseract(String lang) {
+        configureNativeLibraryPath();
         Tesseract t = new Tesseract();
         t.setDatapath(locateTessdata());
         t.setLanguage(lang);
@@ -181,6 +186,7 @@ public final class TesseractOcrProvider {
 
     /** Builds an engine whose behaviour is controlled by {@code cfg}. */
     private static Tesseract configureTesseract(TesseractSettingsData cfg) {
+        configureNativeLibraryPath();
         Tesseract t = new Tesseract();
         t.setDatapath(locateTessdata());
         t.setLanguage("eng");
@@ -194,6 +200,19 @@ public final class TesseractOcrProvider {
     private static String executeRecognition(Tesseract engine, BufferedImage img)
             throws TesseractException {
         return engine.doOCR(img).replace("\n", "").replace("\r", "").trim();
+    }
+
+    private static void configureNativeLibraryPath() {
+        if (nativeLibraryPathConfigured) return;
+        synchronized (TesseractOcrProvider.class) {
+            if (nativeLibraryPathConfigured) return;
+            Path nativeHome = FrostguardPaths.resolve(TesseractOcrProvider.class).nativeHome();
+            if (Files.isDirectory(nativeHome)) {
+                NativeLibrary.addSearchPath("tesseract", nativeHome.toString());
+                log.debug("Tesseract native-library search path includes {}", nativeHome);
+            }
+            nativeLibraryPathConfigured = true;
+        }
     }
 
     // =====================================================================
