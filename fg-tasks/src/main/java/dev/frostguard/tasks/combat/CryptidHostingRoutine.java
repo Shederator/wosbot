@@ -149,11 +149,14 @@ public class CryptidHostingRoutine extends DelayedTask {
         sleepTask(500L);
 
         // Leave the War/Rally panel the same way navigateToCryptid expects to
-        // find things - back on World, not mid-menu.
-        pressBack();
-        sleepTask(500L);
-        pressBack();
-        sleepTask(500L);
+        // find things - back on World, not mid-menu. A fixed pressBack() count
+        // was tried first and failed live: it did not consistently clear every
+        // dialog layer (Auto-Join dialog stayed open after Stop in manual
+        // testing until explicitly dismissed), which then made the very next
+        // march-queue read misclassify every slot as UNKNOWN instead of IDLE.
+        // ensureCorrectScreenLocation retries back-presses until it actually
+        // detects Home/World rather than assuming a count.
+        navigationHelper.ensureCorrectScreenLocation(LaunchPoint.WORLD);
     }
 
     private static final PointData ALLIANCE_BUTTON_TL = new PointData(493, 1187);
