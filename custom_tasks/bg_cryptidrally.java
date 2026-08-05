@@ -16,7 +16,7 @@ import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.MarchSlotState;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.engine.helper.DeploymentHelper;
-import dev.frostguard.engine.helper.TemplateSearchHelper;
+import dev.frostguard.engine.helper.StaminaTopUpResult;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.CustomTaskConfigurable;
@@ -69,8 +69,15 @@ public class bg_cryptidrally extends DelayedTask implements CustomTaskConfigurab
     private static final int RALLY_MINUTES_INDEX = 0;
 
     /** Flag preset to deploy. 0 means "no preset, use Equalize instead". */
-    private int flagNumber = 0;
+    private int flagNumber = 1;
     private int requestedRuns = DEFAULT_RUNS;
+
+    /**
+     * Stamina items to keep in reserve when topping up. Zero means spend
+     * whatever is needed - matt's instruction is to open more Chief Stamina
+     * cans when the deploy cost shows red.
+     */
+    private int staminaItemReserve = 0;
 
     public bg_cryptidrally(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
         super(profile, tpTask);
@@ -170,6 +177,8 @@ public class bg_cryptidrally extends DelayedTask implements CustomTaskConfigurab
         MARCH_QUEUE_FULL,
         NO_TROOPS,
         DEPLOY_NOT_FOUND,
+        STAMINA_ITEMS_INSUFFICIENT,
+        STAMINA_REFILL_FAILED,
         NAVIGATION_UNIMPLEMENTED
     }
 
@@ -233,6 +242,32 @@ public class bg_cryptidrally extends DelayedTask implements CustomTaskConfigurab
         if (deploy == null || !deploy.isFound()) {
             return HostOutcome.DEPLOY_NOT_FOUND;
         }
+
+        // A red cost means the stamina is not there. Pressing Deploy anyway
+        // opens the game's own obtain-more dialog, which is where the engine
+        // can spend Chief Stamina cans - so press it deliberately and refill
+        // rather than treating red as a dead end.
+        if (deploymentHelper.isDeployCostRed()) {
+            logInfo("bg_cryptidrally | Deploy cost is red; opening the top-up dialog to spend stamina cans.");
+            tapPoint(deploy.getPoint());
+            sleepTask(1000L);
+
+            StaminaTopUpResult refill = staminaHelper.refillFromOpenDialog(
+                    STAMINA_PER_HOST, staminaItemReserve);
+            if (!refill.successful()) {
+                logWarning("bg_cryptidrally | Stamina refill ended with " + refill.status());
+                return refill.confirmedItemShortage()
+                        ? HostOutcome.STAMINA_ITEMS_INSUFFICIENT
+                        : HostOutcome.STAMINA_REFILL_FAILED;
+            }
+            // The dialog replaced the screen, so re-find Deploy before tapping.
+            deploy = templateSearchHelper.locatePattern(
+                    TemplatesEnum.DEPLOY_BUTTON, SearchConfigConstants.SINGLE_WITH_RETRIES);
+            if (deploy == null || !deploy.isFound()) {
+                return HostOutcome.DEPLOY_NOT_FOUND;
+            }
+        }
+
         tapPoint(deploy.getPoint());
         sleepTask(2000L);
 
