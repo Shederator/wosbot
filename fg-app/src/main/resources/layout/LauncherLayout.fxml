@@ -111,7 +111,10 @@
 
             <!-- Notification bubbles cluster -->
             <HBox spacing="10" alignment="CENTER_LEFT">
-                <HBox fx:id="discordBubbleContainer" alignment="CENTER" styleClass="discord-bubble">
+                <!-- Bearguard: hidden. managed=false so it also stops reserving
+                     layout space, matching what handleCloseDiscordBubble does. -->
+                <HBox fx:id="discordBubbleContainer" alignment="CENTER" styleClass="discord-bubble"
+                      visible="false" managed="false">
                     <Label text="Having problems? Join our Discord" styleClass="discord-bubble-text"
                            onMouseClicked="#openDiscord" />
                     <org.kordamp.ikonli.javafx.FontIcon fx:id="iconDiscordBubble" iconSize="18"

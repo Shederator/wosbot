@@ -8,6 +8,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
@@ -47,14 +48,21 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
      * deliberately unmapped: it shows population on the City view and a UTC
      * clock on the World view, so it cannot be trusted as a single field.
      */
-    private static final PointData POWER_TL = new PointData(95, 45);
-    private static final PointData POWER_BR = new PointData(270, 100);
+    // Each crop starts AFTER its icon. Verified against a live frame: the coal
+    // slot (the only one with no icon inside the crop) read correctly first
+    // time, while power and gems both had their icon in-frame and OCR folded
+    // its edges into the digits - the diamond turned 56,112 into 596,256.
+    private static final PointData POWER_TL = new PointData(130, 48);
+    private static final PointData POWER_BR = new PointData(272, 96);
     private static final PointData COAL_TL = new PointData(430, 0);
     private static final PointData COAL_BR = new PointData(515, 40);
-    private static final PointData GEMS_TL = new PointData(550, 0);
-    private static final PointData GEMS_BR = new PointData(675, 40);
-    private static final PointData TEMP_TL = new PointData(305, 45);
-    private static final PointData TEMP_BR = new PointData(415, 100);
+    // Measured on a magnified frame: the diamond icon ends at x=572, the digits
+    // run 591-667, and the green "+" starts at 688. 578 sits in the clean gap.
+    // Both earlier attempts failed by landing on a glyph edge rather than in the
+    // gap - 590 clipped the leading "5" (read as 596,256) and 608 cut it off
+    // entirely (read as 5,256).
+    private static final PointData GEMS_TL = new PointData(578, 2);
+    private static final PointData GEMS_BR = new PointData(675, 38);
 
     /**
      * The HUD renders white text over a busy scene. Whitelisting the separator
@@ -70,9 +78,15 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
                     .setTextColor(new java.awt.Color(255, 255, 255))
                     .build();
 
-    private static final TesseractSettingsData HUD_TEMPERATURE_SETTINGS =
+    /**
+     * Digits and comma only, for the slots that always show a full number
+     * (Power, Gems). Allowing K/M/B there costs accuracy for no benefit: with
+     * the letters in the whitelist Tesseract read a clean "56,256" crop as
+     * "596,256", inventing a digit. Only Coal actually abbreviates.
+     */
+    private static final TesseractSettingsData HUD_FULL_NUMBER_SETTINGS =
             TesseractSettingsData.assembler()
-                    .charWhitelist("-0123456789.")
+                    .charWhitelist("0123456789,")
                     .pageAnalysis(PageAnalysis.SINGLE_LINE)
                     .stripBackground(true)
                     .setTextColor(new java.awt.Color(255, 255, 255))
@@ -82,7 +96,13 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
 
     public bg_telemetry(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
         super(profile, tpTask);
-        reschedule(LocalDateTime.now(ZoneOffset.UTC));
+        // Scheduling is in LOCAL time: TaskQueue compares against
+        // LocalDateTime.now(). Passing a UTC instant here silently pushes the
+        // first run forward by the machine's UTC offset, so the task sits in
+        // the queue looking healthy and simply never becomes due.
+        // (shield.java uses UTC because it targets a fixed UTC window - that is
+        // a different intent from "run now".)
+        reschedule(LocalDateTime.now());
     }
 
     @Override
@@ -108,7 +128,13 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
         String first = settings.getFirstExecutionUtc();
         if (first != null && !first.isBlank()) {
             try {
-                reschedule(LocalDateTime.parse(first, UTC_INPUT_FORMATTER));
+                // The setting is expressed in UTC but the scheduler works in
+                // local time, so convert rather than passing it through.
+                LocalDateTime localStart = LocalDateTime.parse(first, UTC_INPUT_FORMATTER)
+                        .atOffset(ZoneOffset.UTC)
+                        .atZoneSameInstant(ZoneId.systemDefault())
+                        .toLocalDateTime();
+                reschedule(localStart);
             } catch (RuntimeException e) {
                 logWarning("bg_telemetry | Unparseable first-execution time '" + first + "', starting immediately.");
             }
@@ -119,10 +145,9 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
     protected void execute() {
         logInfo("bg_telemetry | Sampling HUD.");
 
-        Long power = readScaledNumber(POWER_TL, POWER_BR, "power");
-        Long coal = readScaledNumber(COAL_TL, COAL_BR, "coal");
-        Long gems = readScaledNumber(GEMS_TL, GEMS_BR, "gems");
-        Double temperature = readTemperature();
+        Long power = readScaledNumber(POWER_TL, POWER_BR, HUD_FULL_NUMBER_SETTINGS, "power");
+        Long coal = readScaledNumber(COAL_TL, COAL_BR, HUD_NUMBER_SETTINGS, "coal");
+        Long gems = readScaledNumber(GEMS_TL, GEMS_BR, HUD_FULL_NUMBER_SETTINGS, "gems");
 
         // A frame where nothing at all resolved almost always means we are not
         // actually on the HUD (a popup, an event takeover). Recording that as a
@@ -140,18 +165,17 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
         sample.put("power", power);
         sample.put("coal", coal);
         sample.put("gems", gems);
-        sample.put("temperatureC", temperature);
 
         String json = toJson(sample);
         writeSample(json);
 
-        logInfo("bg_telemetry | power=" + power + " coal=" + coal + " gems=" + gems + " tempC=" + temperature);
+        logInfo("bg_telemetry | power=" + power + " coal=" + coal + " gems=" + gems);
         scheduleNext();
     }
 
     private void scheduleNext() {
         setRecurring(true);
-        reschedule(LocalDateTime.now(ZoneOffset.UTC).plus(interval));
+        reschedule(LocalDateTime.now().plus(interval));
     }
 
     /**
@@ -159,8 +183,8 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
      * rather than a guess when OCR gives nothing usable — a wrong number is
      * worse than a missing one in a history meant for graphing.
      */
-    private Long readScaledNumber(PointData tl, PointData br, String label) {
-        String raw = readStringValue(tl, br, HUD_NUMBER_SETTINGS);
+    private Long readScaledNumber(PointData tl, PointData br, TesseractSettingsData settings, String label) {
+        String raw = readStringValue(tl, br, settings);
         if (raw == null || raw.isBlank()) {
             logWarning("bg_telemetry | No OCR text for " + label + ".");
             return null;
@@ -184,9 +208,17 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
 
         long multiplier = 1L;
         char last = s.charAt(s.length() - 1);
-        if (last == 'K' || last == 'M' || last == 'B') {
+        boolean abbreviated = last == 'K' || last == 'M' || last == 'B';
+        if (abbreviated) {
             multiplier = last == 'K' ? 1_000L : last == 'M' ? 1_000_000L : 1_000_000_000L;
             s = s.substring(0, s.length() - 1);
+        } else {
+            // Tesseract frequently reads the HUD's thousands commas as periods
+            // ("12.552.372"). Only the abbreviated form has a real decimal
+            // point, so on an un-abbreviated value a period is always a group
+            // separator and is safe to drop. Without this, every full-precision
+            // Power reading is discarded.
+            s = s.replace(".", "");
         }
 
         if (s.isEmpty()) {
@@ -198,19 +230,6 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
             // for the values the HUD actually shows.
             return (long) (Double.parseDouble(s) * multiplier);
         } catch (NumberFormatException e) {
-            return null;
-        }
-    }
-
-    private Double readTemperature() {
-        String raw = readStringValue(TEMP_TL, TEMP_BR, HUD_TEMPERATURE_SETTINGS);
-        if (raw == null || raw.isBlank()) {
-            return null;
-        }
-        try {
-            return Double.parseDouble(raw.trim().replace(" ", ""));
-        } catch (NumberFormatException e) {
-            logWarning("bg_telemetry | Unparseable temperature reading: '" + raw.trim() + "'");
             return null;
         }
     }
