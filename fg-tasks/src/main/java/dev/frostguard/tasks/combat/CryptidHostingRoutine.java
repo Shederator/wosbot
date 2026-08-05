@@ -117,6 +117,52 @@ public class CryptidHostingRoutine extends DelayedTask {
         return true;
     }
 
+    /**
+     * Stops the game's native Alliance -> War -> Rally Auto-Join.
+     *
+     * <p>Copied from {@code BearTrapRoutine.disableAutojoinFlow} - same
+     * coordinates, same unconditional tap sequence. It does not check whether
+     * Auto-Join is already off first: if it is, the Stop button is simply
+     * greyed out and the blind tap on it is a no-op, which is exactly what
+     * BearTrapRoutine already relies on and is verified live for this task too
+     * - confirmed against a real "Auto-Join time remaining: Locked" state
+     * after running this sequence.
+     */
+    private void disableAutoJoin() {
+        tapRandomPoint(ALLIANCE_BUTTON_TL, ALLIANCE_BUTTON_BR);
+        sleepTask(3000L);
+
+        ImageSearchResultData warButton = templateSearchHelper.locatePattern(
+                TemplatesEnum.ALLIANCE_WAR_BUTTON,
+                SearchConfig.builder().withThreshold(90).withMaxAttempts(5).build());
+        if (warButton == null || !warButton.isFound()) {
+            logWarning("CryptidHostingRoutine | Alliance War button not found; could not confirm Auto-Join is off.");
+            return;
+        }
+        tapRandomPoint(warButton.getPoint(), warButton.getPoint(), 1, 1000);
+        sleepTask(1000L);
+
+        tapRandomPoint(AUTOJOIN_BUTTON_TL, AUTOJOIN_BUTTON_BR, 1, 1500);
+        sleepTask(500L);
+
+        tapRandomPoint(AUTOJOIN_STOP_BUTTON_TL, AUTOJOIN_STOP_BUTTON_BR, 1, 500);
+        sleepTask(500L);
+
+        // Leave the War/Rally panel the same way navigateToCryptid expects to
+        // find things - back on World, not mid-menu.
+        pressBack();
+        sleepTask(500L);
+        pressBack();
+        sleepTask(500L);
+    }
+
+    private static final PointData ALLIANCE_BUTTON_TL = new PointData(493, 1187);
+    private static final PointData ALLIANCE_BUTTON_BR = new PointData(561, 1240);
+    private static final PointData AUTOJOIN_BUTTON_TL = new PointData(260, 1200);
+    private static final PointData AUTOJOIN_BUTTON_BR = new PointData(450, 1240);
+    private static final PointData AUTOJOIN_STOP_BUTTON_TL = new PointData(120, 1070);
+    private static final PointData AUTOJOIN_STOP_BUTTON_BR = new PointData(240, 1110);
+
     /** Reads the operator's settings from the Rally panel's Host Rally tab. */
     private void loadSettings() {
         Integer runs = profile.getConfig(ConfigurationKeyEnum.CRYPTID_HOST_RUNS_INT, Integer.class);
@@ -132,6 +178,16 @@ public class CryptidHostingRoutine extends DelayedTask {
     @Override
     protected void execute() {
         loadSettings();
+
+        // Order of operations matters and was confirmed live: the game's own
+        // native Auto-Join (Alliance -> War -> Rally, independent of anything
+        // in this bot) will grab any troops the instant a march slot frees up
+        // - including troops this task just recalled for its own use. It has
+        // to be stopped BEFORE any recall or hosting, or it silently steals
+        // the freed slot first. BearTrapRoutine.disableAutojoinFlow() already
+        // establishes this exact ordering for the same reason.
+        disableAutoJoin();
+
         int stamina = staminaHelper.getCurrentStamina();
         int horns = readHornCount();
         int affordableByStamina = stamina / STAMINA_PER_HOST;
