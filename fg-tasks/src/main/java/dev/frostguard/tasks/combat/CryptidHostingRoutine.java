@@ -6,18 +6,22 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.MarchSlotState;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.engine.helper.DeploymentHelper;
 import dev.frostguard.engine.helper.StaminaTopUpResult;
+import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
@@ -161,9 +165,20 @@ public class CryptidHostingRoutine extends DelayedTask {
         logInfo("CryptidHostingRoutine | Hosting " + runs + " rally(ies) this run.");
 
         int hosted = 0;
+        boolean waitingOnRecall = false;
         for (int i = 0; i < runs; i++) {
-            if (!ensureIdleMarchSlot()) {
-                logInfo("CryptidHostingRoutine | No idle march slot; stopping after " + hosted + " host(s).");
+            MarchAvailability availability = ensureIdleMarchSlot();
+            if (availability == MarchAvailability.RECALL_PENDING) {
+                // A gatherer was just recalled. Waiting inline here would hold
+                // the queue for however long the march takes to return - stop
+                // this pass and let the reschedule below bring the task back
+                // once it should be home.
+                waitingOnRecall = true;
+                break;
+            }
+            if (availability == MarchAvailability.NONE) {
+                logInfo("CryptidHostingRoutine | No idle march slot and nothing gathering to recall; stopping after "
+                        + hosted + " host(s).");
                 break;
             }
             HostOutcome outcome = hostOneRally();
@@ -177,8 +192,21 @@ public class CryptidHostingRoutine extends DelayedTask {
 
         logInfo("CryptidHostingRoutine | Hosted " + hosted + " of " + runs + " planned.");
         setRecurring(true);
-        // Rally muster plus travel there and back; re-check a little after.
-        reschedule(LocalDateTime.now().plusMinutes(hosted > 0 ? 10 : 30));
+        if (waitingOnRecall) {
+            // Observed live: a recalled gatherer took under 3 minutes to land.
+            // 5 gives margin without leaving stamina idle for long.
+            logInfo("CryptidHostingRoutine | Waiting on a recalled march; checking back in 5 minutes.");
+            reschedule(LocalDateTime.now().plusMinutes(5));
+        } else {
+            // Rally muster plus travel there and back; re-check a little after.
+            reschedule(LocalDateTime.now().plusMinutes(hosted > 0 ? 10 : 30));
+        }
+    }
+
+    private enum MarchAvailability {
+        IDLE,
+        RECALL_PENDING,
+        NONE
     }
 
     private enum HostOutcome {
@@ -299,23 +327,97 @@ public class CryptidHostingRoutine extends DelayedTask {
      * Ensures at least one march slot is free, recalling a single gatherer if
      * not. Recalls one at a time rather than everything - the other gatherers
      * are still earning while this rally runs.
+     *
+     * <p>Verified live: the game's own Recall confirmation sits at the exact
+     * coordinates {@link #MARCH_RECALL_CONFIRM_TOP_LEFT}/
+     * {@link #MARCH_RECALL_CONFIRM_BOTTOM_RIGHT} copied from
+     * {@code IntelligenceRoutine} - watched the dialog appear there and land a
+     * blind tap correctly. A recalled march took under 3 minutes to land.
      */
-    private boolean ensureIdleMarchSlot() {
+    private MarchAvailability ensureIdleMarchSlot() {
         List<MarchSlotState> slots = marchHelper.readMarchQueue();
         if (slots.stream().anyMatch(MarchSlotState::isIdle)) {
-            return true;
+            return MarchAvailability.IDLE;
         }
-        boolean hasGatherer = slots.stream().anyMatch(MarchSlotState::isGather);
-        if (!hasGatherer) {
-            return false;
+
+        MarchSlotState longestGather = slots.stream()
+                .filter(MarchSlotState::isGather)
+                .max(Comparator.comparing(s -> s.countdown() == null ? Duration.ZERO : s.countdown()))
+                .orElse(null);
+        if (longestGather == null) {
+            return MarchAvailability.NONE;
         }
-        logInfo("CryptidHostingRoutine | No idle slot but a gatherer is out; recall not implemented yet.");
-        // Deliberately not recalling until the navigation seam is closed and
-        // the whole flow has been observed end to end. Recalling troops is a
-        // real, visible action in matt's game and should not fire as a side
-        // effect of a task that cannot yet complete its main job.
-        return false;
+
+        // GatherRoutine already honours this timestamp and stands down while a
+        // recent recall is still in transit - without writing it first, Gather
+        // would simply redeploy the same troops into the slot this just freed.
+        profile.setConfig(ConfigurationKeyEnum.GATHER_LAST_RECALL_TIME_STRING, LocalDateTime.now().toString());
+
+        boolean recalled = recallGatherMarchByQueueFlow(longestGather.slot() - 1);
+        if (!recalled) {
+            logWarning("CryptidHostingRoutine | Could not locate a recall button for queue #"
+                    + longestGather.slot() + ".");
+            return MarchAvailability.NONE;
+        }
+
+        logInfo("CryptidHostingRoutine | Recalled gathering march #" + longestGather.slot()
+                + " to free a slot for hosting.");
+        return MarchAvailability.RECALL_PENDING;
     }
+
+    /**
+     * Copied from {@code IntelligenceRoutine.recallGatherMarchByQueueFlow} - it
+     * is private there and there is no shared recall API on MarchHelper yet.
+     * The row-region table and confirm coordinates are the same ones; both are
+     * verified against the live wilderness panel, not guessed.
+     */
+    private boolean recallGatherMarchByQueueFlow(int queueIndex) {
+        marchHelper.openLeftMenuCitySection(false);
+        try {
+            List<ImageSearchResultData> recallButtons = templateSearchHelper.locateAllPatterns(
+                    TemplatesEnum.MARCHES_AREA_RECALL_BUTTON,
+                    SearchConfig.builder()
+                            .withArea(new AreaData(MARCH_QUEUE_REGIONS[0].topLeft(),
+                                    MARCH_QUEUE_REGIONS[MARCH_QUEUE_REGIONS.length - 1].bottomRight()))
+                            .withMaxAttempts(3)
+                            .withDelay(3)
+                            .withMaxResults(MARCH_QUEUE_REGIONS.length)
+                            .build());
+
+            if (recallButtons.isEmpty()) {
+                return false;
+            }
+
+            int targetRowCenterY = (MARCH_QUEUE_REGIONS[queueIndex].topLeft().getY()
+                    + MARCH_QUEUE_REGIONS[queueIndex].bottomRight().getY()) / 2;
+            ImageSearchResultData bestRowButton = recallButtons.stream()
+                    .min(Comparator.comparingInt(button -> Math.abs(button.getPoint().getY() - targetRowCenterY)))
+                    .orElse(null);
+            if (bestRowButton == null) {
+                return false;
+            }
+
+            tapRandomPoint(bestRowButton.getPoint(), bestRowButton.getPoint(), 1, 200);
+            tapRandomPoint(MARCH_RECALL_CONFIRM_TOP_LEFT, MARCH_RECALL_CONFIRM_BOTTOM_RIGHT, 1, 200);
+            return true;
+        } finally {
+            marchHelper.closeLeftMenu();
+        }
+    }
+
+    private record MarchQueueRegion(PointData topLeft, PointData bottomRight) {}
+
+    private static final PointData MARCH_RECALL_CONFIRM_TOP_LEFT = new PointData(446, 780);
+    private static final PointData MARCH_RECALL_CONFIRM_BOTTOM_RIGHT = new PointData(578, 800);
+
+    private static final MarchQueueRegion[] MARCH_QUEUE_REGIONS = {
+            new MarchQueueRegion(new PointData(10, 342), new PointData(435, 407)),
+            new MarchQueueRegion(new PointData(10, 415), new PointData(435, 480)),
+            new MarchQueueRegion(new PointData(10, 488), new PointData(435, 553)),
+            new MarchQueueRegion(new PointData(10, 561), new PointData(435, 626)),
+            new MarchQueueRegion(new PointData(10, 634), new PointData(435, 699)),
+            new MarchQueueRegion(new PointData(10, 707), new PointData(435, 772)),
+    };
 
     /**
      * Events -> Gina's Revenge -> Attack/Find a Cryptid.
