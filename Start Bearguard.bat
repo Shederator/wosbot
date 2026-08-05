@@ -16,7 +16,9 @@ REM    is what a bundle install gets naturally by having lib\ beside the jar.
 setlocal EnableExtensions
 cd /d "%~dp0"
 
-set "JDK=C:\Users\matt\OneDrive - Elucid Systems\Desktop\lol\frostguard-tools\jdk-21.0.12+8"
+REM frostguard-tools moved out of OneDrive sync (bundled binaries + a
+REM constantly-changing SQLite WAL file are a bad fit for cloud sync).
+set "JDK=C:\Frostguard-tools\jdk-21.0.12+8"
 
 if not exist "%JDK%\bin\javaw.exe" (
     echo [ERROR] Bundled JDK not found at:
