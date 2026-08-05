@@ -69,3 +69,6 @@ ci/__pycache__/
 # Rewritten at runtime by CustomTaskService with absolute machine-specific
 # source paths - tracking it produces constant spurious diffs.
 custom_tasks/custom_tasks.json
+
+# Runtime telemetry output - machine-specific, regenerated every run.
+telemetry/
