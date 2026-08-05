@@ -114,7 +114,10 @@ public enum TpDailyTaskEnum {
 
     // Id 900+ deliberately: upstream allocates in the low hundreds, so this
     // range will not collide with anything it adds later.
-    EVENT_CRYPTID_HOST     (900, "Host Cryptid Rally",           ConfigurationKeyEnum.CRYPTID_HOST_ENABLED_BOOL,              RoutineCategory.EVENT);
+    EVENT_CRYPTID_HOST     (900, "Host Cryptid Rally",           ConfigurationKeyEnum.CRYPTID_HOST_ENABLED_BOOL,              RoutineCategory.EVENT),
+    // No category here is a clean fit - closest existing bucket is ALLIANCE,
+    // since Alliance chat is one of the three captured channels.
+    CHAT_CAPTURE           (901, "Chat Capture",                 ConfigurationKeyEnum.CHAT_CAPTURE_ENABLED_BOOL,              RoutineCategory.ALLIANCE);
 
     /* ================================================================
      *  Category taxonomy used to group routines in the management UI.

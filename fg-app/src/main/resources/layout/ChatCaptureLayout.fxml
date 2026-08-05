@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<!-- Chat Capture — sidebar panel; controller is injected programmatically by
+     LauncherLayoutController.initializeModules(), same as every other panel
+     in this list. -->
+<StackPane maxHeight="Infinity" maxWidth="Infinity"
+           HBox.hgrow="ALWAYS" VBox.vgrow="ALWAYS"
+           xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1">
+    <ScrollPane fitToWidth="true" hbarPolicy="NEVER" vbarPolicy="AS_NEEDED"
+                styleClass="task-page-scroll">
+        <VBox spacing="14" styleClass="task-page-root" maxWidth="Infinity">
+
+            <VBox maxWidth="Infinity" styleClass="content-card">
+                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-red">
+                    <Label style="-fx-font-weight: bold; -fx-text-fill: -fg-bg-app; -fx-font-size: 13px;"
+                           text="Chat Capture" />
+                </HBox>
+
+                <VBox maxWidth="Infinity" spacing="10" styleClass="task-section-inner">
+
+                    <HBox alignment="CENTER_LEFT" maxWidth="Infinity">
+                        <CheckBox fx:id="checkBoxEnableChatCapture" mnemonicParsing="false"
+                                  style="-fx-font-weight: bold;" text="Enable" />
+                    </HBox>
+                    <Label styleClass="task-card-description" wrapText="true"
+                           text="Screenshots World, Alliance, and Personal chat on a schedule and saves them for the dashboard. Repeat runs only save messages that are actually new - it diffs against what it already captured rather than re-saving the same history every cycle." />
+
+                    <Separator style="-fx-opacity: 0.25;" />
+
+                    <HBox alignment="CENTER_LEFT" spacing="14">
+                        <Label styleClass="task-field-label" text="Check every" minWidth="140" />
+                        <ComboBox fx:id="comboBoxChatFrequency" prefWidth="150.0" />
+                    </HBox>
+
+                    <Separator style="-fx-opacity: 0.25;" />
+
+                    <Label styleClass="task-field-label" text="Channels" minWidth="140" />
+                    <HBox alignment="CENTER_LEFT" spacing="14">
+                        <CheckBox fx:id="checkBoxChatIncludeWorld" mnemonicParsing="false" text="World" />
+                    </HBox>
+                    <HBox alignment="CENTER_LEFT" spacing="14">
+                        <CheckBox fx:id="checkBoxChatIncludeAlliance" mnemonicParsing="false" text="Alliance" />
+                    </HBox>
+                    <HBox alignment="CENTER_LEFT" spacing="14">
+                        <CheckBox fx:id="checkBoxChatIncludePersonal" mnemonicParsing="false" text="Personal" />
+                    </HBox>
+                    <Label styleClass="task-card-note" wrapText="true"
+                           text="Personal is your direct messages, not just group chat - off by default." />
+
+                    <Separator style="-fx-opacity: 0.25;" />
+
+                    <HBox alignment="CENTER_LEFT" spacing="14">
+                        <Label styleClass="task-field-label" text="Output" minWidth="140" />
+                        <ComboBox fx:id="comboBoxChatMode" prefWidth="220.0" />
+                    </HBox>
+                    <Label styleClass="task-card-note" wrapText="true"
+                           text="This only tells the dashboard which way to present what was captured - the capture itself is identical either way. Turning raw chat into an actual summary needs an AI pass over the transcript, which happens on the dashboard side after capture, not here." />
+
+                    <HBox alignment="CENTER_LEFT" spacing="14">
+                        <CheckBox fx:id="checkBoxChatFilterNoise" mnemonicParsing="false"
+                                  text="Filter out emote/sticker-only messages" />
+                    </HBox>
+                    <Label styleClass="task-card-note" wrapText="true"
+                           text="Applied during capture, not just tagged for later: a message with no letters or digits in it (just an emoji or sticker) is dropped before saving." />
+
+                </VBox>
+            </VBox>
+
+        </VBox>
+    </ScrollPane>
+</StackPane>

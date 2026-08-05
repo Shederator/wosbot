@@ -60,6 +60,7 @@ import dev.frostguard.app.panel.training.TrainingLayoutController;
 import dev.frostguard.app.panel.training.ResearchLayoutController;
 import dev.frostguard.app.panel.misc.CharacterLayoutController;
 import dev.frostguard.app.panel.misc.StatisticsLayoutController;
+import dev.frostguard.app.panel.social.ChatCaptureLayoutController;
 import dev.frostguard.app.panel.taskbuilder.TaskBuilderLayoutController;
 import dev.frostguard.app.panel.custom.CustomTasksLayoutController;
 import javafx.application.Platform;
@@ -673,7 +674,10 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
                 new ModuleDefinition("SkipTutorialLayout",       "Skip Tutorial",        MaterialDesignS.SKIP_NEXT_OUTLINE,          SkipTutorialLayoutController::new),
                 new ModuleDefinition("CharacterLayout",          "Character",            MaterialDesignA.ACCOUNT_OUTLINE,            CharacterLayoutController::new),
-                new ModuleDefinition("StatisticsLayout",         "Statistics",           MaterialDesignV.VIEW_DASHBOARD_OUTLINE,     StatisticsLayoutController::new)
+                new ModuleDefinition("StatisticsLayout",         "Statistics",           MaterialDesignV.VIEW_DASHBOARD_OUTLINE,     StatisticsLayoutController::new),
+
+                // Bearguard
+                new ModuleDefinition("ChatCaptureLayout",        "Chat",                 MaterialDesignC.CHAT_OUTLINE,               ChatCaptureLayoutController::new)
         );
         //@formatter:on
 

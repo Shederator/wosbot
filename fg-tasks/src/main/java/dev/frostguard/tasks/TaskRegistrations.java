@@ -8,6 +8,7 @@ import dev.frostguard.engine.schedule.DelayedTaskRegistry;
 import dev.frostguard.tasks.alliance.*;
 import dev.frostguard.tasks.city.*;
 import dev.frostguard.tasks.combat.*;
+import dev.frostguard.tasks.social.*;
 import dev.frostguard.tasks.dailies.*;
 import dev.frostguard.tasks.economy.*;
 import dev.frostguard.tasks.events.*;
@@ -113,6 +114,7 @@ public class TaskRegistrations {
 
             // Bearguard
             case EVENT_CRYPTID_HOST -> new CryptidHostingRoutine(profile, type);
+            case CHAT_CAPTURE -> new ChatCaptureRoutine(profile, type);
 
             default -> null;
         };

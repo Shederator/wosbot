@@ -314,7 +314,31 @@ public enum ConfigurationKeyEnum {
     CRYPTID_HOST_ENABLED_BOOL           ("false",   Boolean.class,  ConfigCategory.EVENTS),
     CRYPTID_HOST_RUNS_INT               ("1",       Integer.class,  ConfigCategory.EVENTS),
     CRYPTID_HOST_USE_STAMINA_ITEMS_BOOL ("false",   Boolean.class,  ConfigCategory.EVENTS),
-    CRYPTID_HOST_FLAG_INT               ("0",       Integer.class,  ConfigCategory.EVENTS);
+    CRYPTID_HOST_FLAG_INT               ("0",       Integer.class,  ConfigCategory.EVENTS),
+
+    // Bearguard: Chat capture. World/Alliance/Personal are scraped on a
+    // schedule and diffed against what was already captured, so repeat runs
+    // only add genuinely new messages rather than re-saving the same history
+    // every cycle.
+    //
+    // MODE and FILTER_NOISE are honoured downstream (the dashboard/website
+    // side), not by this bot. The bot's own OCR has no way to understand
+    // meaning well enough to write a real summary - that needs an LLM pass
+    // over the captured transcript, which happens after capture, not during
+    // it. Recording the preference now means the downstream pass does not
+    // need its own separate settings surface.
+    CHAT_CAPTURE_ENABLED_BOOL           ("false",           Boolean.class,  ConfigCategory.SYSTEM),
+    CHAT_CAPTURE_FREQUENCY_MINUTES_INT  ("30",              Integer.class,  ConfigCategory.SYSTEM),
+    CHAT_CAPTURE_INCLUDE_WORLD_BOOL     ("true",            Boolean.class,  ConfigCategory.SYSTEM),
+    CHAT_CAPTURE_INCLUDE_ALLIANCE_BOOL  ("true",            Boolean.class,  ConfigCategory.SYSTEM),
+    CHAT_CAPTURE_INCLUDE_PERSONAL_BOOL  ("false",           Boolean.class,  ConfigCategory.SYSTEM),
+    // TRANSCRIPT = keep full readable message history; SUMMARY = downstream
+    // should condense to "what happened today" instead of showing every line.
+    CHAT_CAPTURE_MODE_STRING            ("TRANSCRIPT",      String.class,   ConfigCategory.SYSTEM),
+    // Applied live, not just tagged: emote/sticker-only messages (no letters
+    // or digits after stripping punctuation) are dropped before saving, since
+    // that much is plain pattern matching and does not need an LLM.
+    CHAT_CAPTURE_FILTER_NOISE_BOOL      ("true",            Boolean.class,  ConfigCategory.SYSTEM);
 
     /* ================================================================
      *  Functional groupings surfaced in the operator panel.
