@@ -33,9 +33,16 @@ public class RawImageData {
     public int stride()      { return scanlineWidth * colorDepth; }
 
     public boolean isValid() {
+        // colorDepth is BITS per pixel (see the capture() factory, which
+        // receives bitsPerPixel), but frameBytes.length is a byte count. The
+        // check below divides by 8 to compare like units; multiplying
+        // colorDepth in directly - as this previously did - demands roughly
+        // 8x the real frame size and fails on every genuine capture. Confirmed
+        // live: this had no prior callers anywhere in the codebase, so the
+        // bug was never exercised until now.
         return frameBytes != null
             && scanlineWidth > 0 && scanlineCount > 0 && colorDepth > 0
-            && frameBytes.length >= scanlineWidth * scanlineCount * colorDepth;
+            && frameBytes.length >= scanlineWidth * scanlineCount * (colorDepth / 8);
     }
 
     /* ── accessors ── */
