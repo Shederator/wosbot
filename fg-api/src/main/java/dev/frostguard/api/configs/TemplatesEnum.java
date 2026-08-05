@@ -100,7 +100,15 @@ public enum TemplatesEnum {
     GAME_PROFILE_SETTINGS_SWITCH_CHARACTER_BUTTON, GAME_PROFILE_SETTINGS_CHARACTER_FURNACE_LEVEL_ACTIVE, GAME_PROFILE_SETTINGS_CHARACTER_FURNACE_LEVEL_INACTIVE, GAME_PROFILE_SETTINGS_CHARACTER_ACTIVE_CHECKMARK, GAME_PROFILE_SETTINGS_SWITCH_CHARACTER_CONFIRM_BUTTON,
     GAME_PROFILE_SETTINGS_SWITCH_CHARACTER_CANCEL_BUTTON, RESEARCH_TEXT,
     RESEARCH_HELP_BUTTON, RESEARCH_SPEEDUP_BUTTON,
-    SKIP_TUTORIAL_HAND, SKIP_TUTORIAL_HAND_MIRROR, SKIP_TUTORIAL_BUTTON;
+    SKIP_TUTORIAL_HAND, SKIP_TUTORIAL_HAND_MIRROR, SKIP_TUTORIAL_BUTTON,
+
+    // Bearguard additions. Appended at the end deliberately: upstream adds its
+    // own constants here too, and appending keeps every merge a clean
+    // fast-forward instead of an interleaved conflict.
+    // The event's bottom button has two states - "Find a Cryptid" (costs a Horn
+    // to spawn one) and "Attack a Cryptid" (one is already on the map, free) -
+    // so both are matched rather than assuming a single label.
+    GINAS_REVENGE_TAB, CRYPTID_FIND_BUTTON, CRYPTID_ATTACK_BUTTON;
 
     /* ================================================================
      *  Functional area taxonomy for batch queries and filtering.

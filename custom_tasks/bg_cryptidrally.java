@@ -189,12 +189,9 @@ public class bg_cryptidrally extends DelayedTask implements CustomTaskConfigurab
      * than assuming each tap landed.
      */
     private HostOutcome hostOneRally() {
-        ImageSearchResultData target = locateCryptidTarget();
-        if (target == null) {
-            return HostOutcome.NAVIGATION_UNIMPLEMENTED;
+        if (!navigateToCryptid()) {
+            return HostOutcome.TARGET_NOT_FOUND;
         }
-        tapPoint(target.getPoint());
-        sleepTask(1200L);
 
         ImageSearchResultData rally = templateSearchHelper.locatePattern(
                 TemplatesEnum.RALLY_BUTTON, SearchConfigConstants.SINGLE_WITH_RETRIES);
@@ -310,29 +307,78 @@ public class bg_cryptidrally extends DelayedTask implements CustomTaskConfigurab
     }
 
     /**
-     * Locates the Berserk Cryptid on the map.
+     * Events -> Gina's Revenge -> Attack/Find a Cryptid.
      *
-     * <p>NOT IMPLEMENTED. The route is Events -> Gina's Revenge -> "Find
-     * Cryptid" (bottom of the panel), and neither step has a template here:
-     * {@code NavigationHelper.EventMenu} has no Gina entry, and there is no
-     * "Find"/"Search" event-panel button template. Both must be captured from a
-     * live screen first.
+     * <p>Verified against the live game: pressing the event's bottom button
+     * lands directly on the cryptid with its target dialog already open, so no
+     * separate "tap the monster on the map" step is needed.
      *
-     * <p>Two candidate routes when that happens:
-     * <ul>
-     *   <li>Events tab - matches HeroMissionEventRoutine's shape exactly
-     *       (navigate to named event, press its action button, rally the
-     *       located target). Needs 2 new templates.</li>
-     *   <li>World creature-search strip - BeastSlayRoutine notes Berserk
-     *       Cryptid appears there as an inserted tab, which would reuse the
-     *       proven openUpPolarsMenu swipe-and-match pattern. Needs 1.</li>
-     * </ul>
+     * <p>The tab strip does not remember its position, so it is swiped back to
+     * the far left and then scanned rightwards - the same approach
+     * NavigationHelper uses, and for the same reason: the strip keeps animating
+     * after a swipe returns, so each search needs a settle first.
      */
-    private ImageSearchResultData locateCryptidTarget() {
-        logError("bg_cryptidrally | Cryptid navigation is not implemented - no template exists for "
-                + "the Gina's Revenge event tab or the 'Find Cryptid' button. Capture those from a "
-                + "live screen before enabling this task.");
-        return null;
+    private boolean navigateToCryptid() {
+        ImageSearchResultData events = templateSearchHelper.locatePattern(
+                TemplatesEnum.HOME_EVENTS_BUTTON, SearchConfigConstants.SINGLE_WITH_RETRIES);
+        if (events == null || !events.isFound()) {
+            logWarning("bg_cryptidrally | Events button not found.");
+            return false;
+        }
+        tapPoint(events.getPoint());
+        sleepTask(2000L);
+
+        if (!selectGinasRevengeTab()) {
+            logWarning("bg_cryptidrally | Gina's Revenge tab not found - is the event still running?");
+            return false;
+        }
+
+        // Prefer Attack: it means a cryptid is already on the map and costs no
+        // Horn. Find spawns a fresh one and consumes a Horn, so it is the
+        // fallback rather than the default.
+        ImageSearchResultData attack = templateSearchHelper.locatePattern(
+                TemplatesEnum.CRYPTID_ATTACK_BUTTON, SearchConfigConstants.DEFAULT_SINGLE);
+        if (attack != null && attack.isFound()) {
+            logInfo("bg_cryptidrally | Cryptid already on the map - attacking (no Horn spent).");
+            tapPoint(attack.getPoint());
+            sleepTask(3000L);
+            return true;
+        }
+
+        ImageSearchResultData find = templateSearchHelper.locatePattern(
+                TemplatesEnum.CRYPTID_FIND_BUTTON, SearchConfigConstants.DEFAULT_SINGLE);
+        if (find != null && find.isFound()) {
+            logInfo("bg_cryptidrally | No cryptid out - spending a Horn to find one.");
+            tapPoint(find.getPoint());
+            sleepTask(3000L);
+            return true;
+        }
+
+        logWarning("bg_cryptidrally | Neither Attack nor Find button matched on the event panel.");
+        return false;
+    }
+
+    /** Swipes the event tab strip back to the start, then scans right for the tab. */
+    private boolean selectGinasRevengeTab() {
+        for (int reset = 0; reset < 3; reset++) {
+            swipe(new PointData(80, 143), new PointData(600, 143));
+            sleepTask(600L);
+        }
+
+        for (int scan = 0; scan < 8; scan++) {
+            ImageSearchResultData tab = templateSearchHelper.locatePattern(
+                    TemplatesEnum.GINAS_REVENGE_TAB, SearchConfigConstants.DEFAULT_SINGLE);
+            if (tab != null && tab.isFound()) {
+                tapPoint(tab.getPoint());
+                sleepTask(1500L);
+                return true;
+            }
+            swipe(new PointData(630, 143), new PointData(300, 143));
+            // The strip keeps sliding after the gesture returns; searching too
+            // soon misses a tab that is mid-animation.
+            sleepTask(900L);
+        }
+        return false;
     }
 
     /**
