@@ -511,6 +511,8 @@ public class CryptidHostingRoutine extends DelayedTask {
             logInfo("CryptidHostingRoutine | Cryptid already on the map - attacking (no Horn spent).");
             tapPoint(attack.getPoint());
             sleepTask(3000L);
+            // Attack alone lands directly on the target dialog with Rally
+            // already visible - verified live, no further tap needed.
             return true;
         }
 
@@ -519,13 +521,30 @@ public class CryptidHostingRoutine extends DelayedTask {
         if (find != null && find.isFound()) {
             logInfo("CryptidHostingRoutine | No cryptid out - spending a Horn to find one.");
             tapPoint(find.getPoint());
-            sleepTask(3000L);
+            sleepTask(2500L);
+            // Unlike Attack, Find does NOT open the target dialog. It pans the
+            // camera to the newly spawned cryptid's map location (with a "We've
+            // found traces..." banner) and leaves the camera centered there -
+            // the dialog only opens once the cryptid itself is tapped, same as
+            // tapping any other creature on the map. Verified live across
+            // several frames: the model settles at a fixed screen position
+            // after the pan, so a single centered tap reliably opens it.
+            tapPoint(CRYPTID_MAP_CENTER);
+            sleepTask(1500L);
             return true;
         }
 
         logWarning("CryptidHostingRoutine | Neither Attack nor Find button matched on the event panel.");
         return false;
     }
+
+    /**
+     * Where the camera settles the newly-spawned cryptid after Find. Measured
+     * live: the model and its "Berserk Cryptid" label sat at this exact spot
+     * across five consecutive frames, so the pan animation had already
+     * finished by the time this task's own sleep would tap.
+     */
+    private static final PointData CRYPTID_MAP_CENTER = new PointData(360, 575);
 
     /** Swipes the event tab strip back to the start, then scans right for the tab. */
     private boolean selectGinasRevengeTab() {
