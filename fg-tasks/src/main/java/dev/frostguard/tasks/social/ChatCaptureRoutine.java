@@ -163,8 +163,8 @@ public class ChatCaptureRoutine extends DelayedTask {
         tapPoint(CHAT_CLOSE);
         sleepTask(500L);
 
-        logInfo("ChatCaptureRoutine | Captured " + totalNew + " new frame(s) across "
-                + (includeWorld ? 1 : 0) + (includeAlliance ? 1 : 0) + (includePersonal ? 1 : 0) + " channel(s).");
+        int channelCount = (includeWorld ? 1 : 0) + (includeAlliance ? 1 : 0) + (includePersonal ? 1 : 0);
+        logInfo("ChatCaptureRoutine | Captured " + totalNew + " new frame(s) across " + channelCount + " channel(s).");
 
         setRecurring(true);
         reschedule(LocalDateTime.now().plusMinutes(frequencyMinutes));
