@@ -300,7 +300,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
     private void showVersion() { /* internal */
         String version = getVersion();
-        labelVersion.setText("Version: " + version);
+        labelVersion.setText("Bearguard v" + version);
     }
 
     private String getVersion() { /* internal */
@@ -714,7 +714,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
         String version = getVersion();
         int stamina = StaminaService.getServices().getCurrentStamina(currentProfile.getId());
-        String title = String.format("Whiteout Survival Bot v%s - %s [Stamina: %d]",
+        String title = String.format("Bearguard v%s - %s [Stamina: %d]",
                 version,
                 currentProfile.getName(),
                 stamina);

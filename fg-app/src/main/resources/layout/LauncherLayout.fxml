@@ -19,7 +19,7 @@
                    onMouseClicked="#handleTitleBarMouseClicked">
 
             <!-- Title label centered in stack -->
-            <Label fx:id="labelWindowTitle" text="Whiteout Survival Bot"
+            <Label fx:id="labelWindowTitle" text="Bearguard"
                    styleClass="title-bar-text"
                    mouseTransparent="true"
                    StackPane.alignment="CENTER" />
@@ -98,7 +98,7 @@
             <!-- Left cluster: branding + social -->
             <VBox alignment="CENTER_LEFT" spacing="2">
                 <HBox alignment="CENTER_LEFT" spacing="12">
-                    <Label fx:id="labelVersion" text="Whiteout Survival Bot" styleClass="app-version"
+                    <Label fx:id="labelVersion" text="Bearguard" styleClass="app-version"
                            style="-fx-text-fill: #e6edf3; -fx-font-weight: bold; -fx-font-size: 13px;" />
                     <org.kordamp.ikonli.javafx.FontIcon fx:id="iconDiscord" iconSize="18"
                         iconColor="#e6edf3" styleClass="social-icon"
