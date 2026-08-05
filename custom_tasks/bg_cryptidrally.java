@@ -68,8 +68,17 @@ public class bg_cryptidrally extends DelayedTask implements CustomTaskConfigurab
      */
     private static final int RALLY_MINUTES_INDEX = 0;
 
-    /** Flag preset to deploy. 0 means "no preset, use Equalize instead". */
-    private int flagNumber = 1;
+    /**
+     * Flag preset to load, or 0 to leave the formation exactly as the game
+     * presents it.
+     *
+     * <p>Defaults to 0 deliberately. Loading a flag replaces the WHOLE
+     * formation, heroes included - selecting flag 1 on the first live run wiped
+     * the three heroes the screen had already picked, because that preset has
+     * none saved. The deploy screen already arrives with sensible heroes and
+     * maxed troop sliders, so the correct behaviour is to touch nothing.
+     */
+    private int flagNumber = 0;
     private int requestedRuns = DEFAULT_RUNS;
 
     /**
@@ -217,18 +226,17 @@ public class bg_cryptidrally extends DelayedTask implements CustomTaskConfigurab
         tapPoint(hold.getPoint());
         sleepTask(1200L);
 
-        // Troops: a saved flag is deterministic; Equalize is the fallback when
-        // none is configured. Neither guarantees "max", but a flag preset is
-        // the closest thing the game exposes.
+        // Leave the formation alone by default. Both alternatives are
+        // destructive here: loading a flag swaps the entire formation including
+        // heroes (flag 1 has none saved, so the first live run deployed
+        // hero-less), and Equalize rebalances sliders that already arrive
+        // maxed. The screen's own defaults are what we want.
         if (flagNumber > 0) {
             if (!marchHelper.selectFlag(flagNumber)) {
-                logWarning("bg_cryptidrally | Flag " + flagNumber + " is locked; falling back to Equalize.");
-                deploymentHelper.tapEqualize();
+                logWarning("bg_cryptidrally | Flag " + flagNumber + " is locked; leaving the default formation.");
             }
-        } else {
-            deploymentHelper.tapEqualize();
+            sleepTask(600L);
         }
-        sleepTask(600L);
 
         if (deploymentHelper.hasNoDeployableTroops()) {
             return HostOutcome.NO_TROOPS;
