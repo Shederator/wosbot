@@ -1,4 +1,4 @@
-package dev.frostguard.engine.listener.task.impl;
+package dev.frostguard.tasks.combat;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import dev.frostguard.api.configs.TemplatesEnum;
+import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ImageSearchResultData;
@@ -19,10 +20,8 @@ import dev.frostguard.engine.helper.DeploymentHelper;
 import dev.frostguard.engine.helper.StaminaTopUpResult;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.SearchConfigConstants;
-import dev.frostguard.engine.schedule.CustomTaskConfigurable;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
-import dev.frostguard.engine.service.CustomTaskService;
 
 /**
  * Hosts Berserk Cryptid rallies (the Gina's Revenge event) for a configured
@@ -53,7 +52,7 @@ import dev.frostguard.engine.service.CustomTaskService;
  * everything around it is finished. The task refuses to run rather than
  * blind-tapping coordinates that were never observed.
  */
-public class bg_cryptidrally extends DelayedTask implements CustomTaskConfigurable {
+public class CryptidHostingRoutine extends DelayedTask {
 
     /** Hosting cost, matching {@link DeploymentHelper#MAX_RALLY_STAMINA_COST}. */
     private static final int STAMINA_PER_HOST = DeploymentHelper.MAX_RALLY_STAMINA_COST;
@@ -88,7 +87,10 @@ public class bg_cryptidrally extends DelayedTask implements CustomTaskConfigurab
      */
     private int staminaItemReserve = 0;
 
-    public bg_cryptidrally(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
+    /** Whether to spend Chief Stamina cans when the deploy cost shows red. */
+    private boolean useStaminaItems = false;
+
+    public CryptidHostingRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
         super(profile, tpTask);
         // Local time - the queue compares against LocalDateTime.now(); a UTC
         // instant here would silently defer the first run by the UTC offset.
@@ -97,7 +99,7 @@ public class bg_cryptidrally extends DelayedTask implements CustomTaskConfigurab
 
     @Override
     protected Object getDistinctKey() {
-        return "bg_cryptidrally";
+        return "cryptid_host";
     }
 
     @Override
@@ -111,20 +113,21 @@ public class bg_cryptidrally extends DelayedTask implements CustomTaskConfigurab
         return true;
     }
 
-    @Override
-    public void applyCustomTaskSettings(CustomTaskService.CustomTaskSettings settings) {
-        if (settings == null) {
-            return;
-        }
-        // The custom-task panel only exposes firstExecutionUtc and
-        // followUpDelayHours, so the hours field carries the run count until
-        // there is a proper Whiteout Console panel with a real dropdown.
-        Integer runs = settings.getFollowUpDelayHours();
+    /** Reads the operator's settings from the Rally panel's Host Rally tab. */
+    private void loadSettings() {
+        Integer runs = profile.getConfig(ConfigurationKeyEnum.CRYPTID_HOST_RUNS_INT, Integer.class);
         requestedRuns = runs != null && runs > 0 ? Math.min(runs, MAX_RUNS) : DEFAULT_RUNS;
+
+        Integer flag = profile.getConfig(ConfigurationKeyEnum.CRYPTID_HOST_FLAG_INT, Integer.class);
+        flagNumber = flag != null && flag > 0 ? flag : 0;
+
+        useStaminaItems = Boolean.TRUE.equals(
+                profile.getConfig(ConfigurationKeyEnum.CRYPTID_HOST_USE_STAMINA_ITEMS_BOOL, Boolean.class));
     }
 
     @Override
     protected void execute() {
+        loadSettings();
         int stamina = staminaHelper.getCurrentStamina();
         int horns = readHornCount();
         int affordableByStamina = stamina / STAMINA_PER_HOST;
@@ -132,7 +135,7 @@ public class bg_cryptidrally extends DelayedTask implements CustomTaskConfigurab
         // Report the arithmetic explicitly - "why did it only do 1 run" should
         // be answerable from the log alone.
         logInfo(String.format(
-                "bg_cryptidrally | requested=%d runs | stamina=%d (%d per host -> %d affordable)"
+                "CryptidHostingRoutine | requested=%d runs | stamina=%d (%d per host -> %d affordable)"
                         + " | horns=%s | cost for %d runs = %d stamina",
                 requestedRuns, stamina, STAMINA_PER_HOST, affordableByStamina,
                 horns < 0 ? "unread" : String.valueOf(horns),
@@ -145,7 +148,7 @@ public class bg_cryptidrally extends DelayedTask implements CustomTaskConfigurab
 
         if (runs <= 0) {
             int needed = STAMINA_PER_HOST;
-            logInfo("bg_cryptidrally | Not enough stamina for a single host; deferring until "
+            logInfo("CryptidHostingRoutine | Not enough stamina for a single host; deferring until "
                     + needed + " is available.");
             // Hand the wait to the engine's stamina deferral rather than
             // guessing a retry time.
@@ -155,24 +158,24 @@ public class bg_cryptidrally extends DelayedTask implements CustomTaskConfigurab
             return;
         }
 
-        logInfo("bg_cryptidrally | Hosting " + runs + " rally(ies) this run.");
+        logInfo("CryptidHostingRoutine | Hosting " + runs + " rally(ies) this run.");
 
         int hosted = 0;
         for (int i = 0; i < runs; i++) {
             if (!ensureIdleMarchSlot()) {
-                logInfo("bg_cryptidrally | No idle march slot; stopping after " + hosted + " host(s).");
+                logInfo("CryptidHostingRoutine | No idle march slot; stopping after " + hosted + " host(s).");
                 break;
             }
             HostOutcome outcome = hostOneRally();
             recordAttempt(outcome, hosted);
             if (outcome != HostOutcome.SUCCESS) {
-                logWarning("bg_cryptidrally | Host attempt failed (" + outcome + "); stopping this run.");
+                logWarning("CryptidHostingRoutine | Host attempt failed (" + outcome + "); stopping this run.");
                 break;
             }
             hosted++;
         }
 
-        logInfo("bg_cryptidrally | Hosted " + hosted + " of " + runs + " planned.");
+        logInfo("CryptidHostingRoutine | Hosted " + hosted + " of " + runs + " planned.");
         setRecurring(true);
         // Rally muster plus travel there and back; re-check a little after.
         reschedule(LocalDateTime.now().plusMinutes(hosted > 0 ? 10 : 30));
@@ -233,7 +236,7 @@ public class bg_cryptidrally extends DelayedTask implements CustomTaskConfigurab
         // maxed. The screen's own defaults are what we want.
         if (flagNumber > 0) {
             if (!marchHelper.selectFlag(flagNumber)) {
-                logWarning("bg_cryptidrally | Flag " + flagNumber + " is locked; leaving the default formation.");
+                logWarning("CryptidHostingRoutine | Flag " + flagNumber + " is locked; leaving the default formation.");
             }
             sleepTask(600L);
         }
@@ -252,15 +255,15 @@ public class bg_cryptidrally extends DelayedTask implements CustomTaskConfigurab
         // opens the game's own obtain-more dialog, which is where the engine
         // can spend Chief Stamina cans - so press it deliberately and refill
         // rather than treating red as a dead end.
-        if (deploymentHelper.isDeployCostRed()) {
-            logInfo("bg_cryptidrally | Deploy cost is red; opening the top-up dialog to spend stamina cans.");
+        if (deploymentHelper.isDeployCostRed() && useStaminaItems) {
+            logInfo("CryptidHostingRoutine | Deploy cost is red; opening the top-up dialog to spend stamina cans.");
             tapPoint(deploy.getPoint());
             sleepTask(1000L);
 
             StaminaTopUpResult refill = staminaHelper.refillFromOpenDialog(
                     STAMINA_PER_HOST, staminaItemReserve);
             if (!refill.successful()) {
-                logWarning("bg_cryptidrally | Stamina refill ended with " + refill.status());
+                logWarning("CryptidHostingRoutine | Stamina refill ended with " + refill.status());
                 return refill.confirmedItemShortage()
                         ? HostOutcome.STAMINA_ITEMS_INSUFFICIENT
                         : HostOutcome.STAMINA_REFILL_FAILED;
@@ -306,7 +309,7 @@ public class bg_cryptidrally extends DelayedTask implements CustomTaskConfigurab
         if (!hasGatherer) {
             return false;
         }
-        logInfo("bg_cryptidrally | No idle slot but a gatherer is out; recall not implemented yet.");
+        logInfo("CryptidHostingRoutine | No idle slot but a gatherer is out; recall not implemented yet.");
         // Deliberately not recalling until the navigation seam is closed and
         // the whole flow has been observed end to end. Recalling troops is a
         // real, visible action in matt's game and should not fire as a side
@@ -330,14 +333,14 @@ public class bg_cryptidrally extends DelayedTask implements CustomTaskConfigurab
         ImageSearchResultData events = templateSearchHelper.locatePattern(
                 TemplatesEnum.HOME_EVENTS_BUTTON, SearchConfigConstants.SINGLE_WITH_RETRIES);
         if (events == null || !events.isFound()) {
-            logWarning("bg_cryptidrally | Events button not found.");
+            logWarning("CryptidHostingRoutine | Events button not found.");
             return false;
         }
         tapPoint(events.getPoint());
         sleepTask(2000L);
 
         if (!selectGinasRevengeTab()) {
-            logWarning("bg_cryptidrally | Gina's Revenge tab not found - is the event still running?");
+            logWarning("CryptidHostingRoutine | Gina's Revenge tab not found - is the event still running?");
             return false;
         }
 
@@ -347,7 +350,7 @@ public class bg_cryptidrally extends DelayedTask implements CustomTaskConfigurab
         ImageSearchResultData attack = templateSearchHelper.locatePattern(
                 TemplatesEnum.CRYPTID_ATTACK_BUTTON, SearchConfigConstants.DEFAULT_SINGLE);
         if (attack != null && attack.isFound()) {
-            logInfo("bg_cryptidrally | Cryptid already on the map - attacking (no Horn spent).");
+            logInfo("CryptidHostingRoutine | Cryptid already on the map - attacking (no Horn spent).");
             tapPoint(attack.getPoint());
             sleepTask(3000L);
             return true;
@@ -356,13 +359,13 @@ public class bg_cryptidrally extends DelayedTask implements CustomTaskConfigurab
         ImageSearchResultData find = templateSearchHelper.locatePattern(
                 TemplatesEnum.CRYPTID_FIND_BUTTON, SearchConfigConstants.DEFAULT_SINGLE);
         if (find != null && find.isFound()) {
-            logInfo("bg_cryptidrally | No cryptid out - spending a Horn to find one.");
+            logInfo("CryptidHostingRoutine | No cryptid out - spending a Horn to find one.");
             tapPoint(find.getPoint());
             sleepTask(3000L);
             return true;
         }
 
-        logWarning("bg_cryptidrally | Neither Attack nor Find button matched on the event panel.");
+        logWarning("CryptidHostingRoutine | Neither Attack nor Find button matched on the event panel.");
         return false;
     }
 
@@ -412,7 +415,7 @@ public class bg_cryptidrally extends DelayedTask implements CustomTaskConfigurab
                     (json + System.lineSeparator()).getBytes(StandardCharsets.UTF_8),
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (IOException e) {
-            logWarning("bg_cryptidrally | Could not record attempt: " + e.getMessage());
+            logWarning("CryptidHostingRoutine | Could not record attempt: " + e.getMessage());
         }
     }
 }

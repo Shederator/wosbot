@@ -78,6 +78,24 @@ public class PolarTerrorLayoutController extends AbstractProfileController {
     @FXML
     private CheckBox checkBoxEnableBerserkCryptid;
 
+    // ── Bearguard: Host Rally tab ──
+    @FXML
+    private CheckBox checkBoxEnableCryptidHosting;
+    @FXML
+    private CheckBox checkBoxCryptidUseStaminaItems;
+    @FXML
+    private ComboBox<Integer> comboBoxCryptidHostRuns;
+    @FXML
+    private ComboBox<Integer> comboBoxCryptidHostFlag;
+    @FXML
+    private Label labelCryptidStaminaNow;
+    @FXML
+    private Label labelCryptidStaminaCost;
+    @FXML
+    private Label labelCryptidAffordable;
+    @FXML
+    private Label labelCryptidLeftOver;
+
     @FXML
     private Label labelBerserkCryptidMarch1Flag;
     @FXML
@@ -188,6 +206,8 @@ public class PolarTerrorLayoutController extends AbstractProfileController {
         comboBoxMappings.put(comboBoxPolarTerrorMarch5Flag, ConfigurationKeyEnum.POLAR_TERROR_MARCH_5_FLAG_STRING);
         comboBoxMappings.put(comboBoxPolarTerrorMarch6Flag, ConfigurationKeyEnum.POLAR_TERROR_MARCH_6_FLAG_STRING);
 
+        setUpCryptidHostingTab();
+
         comboBoxMappings.put(comboBoxBerserkCryptidMarch1Flag, ConfigurationKeyEnum.RALLY_MARCH_1_FLAG_STRING);
         comboBoxMappings.put(comboBoxBerserkCryptidMarch2Flag, ConfigurationKeyEnum.RALLY_MARCH_2_FLAG_STRING);
         comboBoxMappings.put(comboBoxBerserkCryptidMarch3Flag, ConfigurationKeyEnum.RALLY_MARCH_3_FLAG_STRING);
@@ -220,6 +240,11 @@ public class PolarTerrorLayoutController extends AbstractProfileController {
     @Override
     public void onProfileLoad(ProfileAux profile) {
         super.onProfileLoad(profile);
+
+        // Bearguard: stamina is per-profile, and this controller keeps no
+        // profile reference of its own, so capture the id while it is offered.
+        cryptidProfileId = profile == null ? null : profile.getId();
+        refreshCryptidMath();
 
         String storedMode = profile.getConfiguration(ConfigurationKeyEnum.POLAR_TERROR_MODE_STRING);
         if (!PolarTerrorMode.isLegacyValue(storedMode)) {
@@ -322,5 +347,104 @@ public class PolarTerrorLayoutController extends AbstractProfileController {
                 }
             }
         };
+    }
+
+    // ================================================================
+    //  Bearguard: Host Rally tab
+    // ================================================================
+
+    /** Stamina spent per hosted rally, mirroring DeploymentHelper.MAX_RALLY_STAMINA_COST. */
+    private static final int CRYPTID_STAMINA_PER_HOST = 25;
+
+    /**
+     * Captured on profile load. This controller has no currentProfile of its
+     * own - the base class hands the profile in rather than holding it - and
+     * stamina is per-profile, so the id has to be kept to look it up.
+     */
+    private Long cryptidProfileId;
+
+
+    private void setUpCryptidHostingTab() {
+        checkBoxMappings.put(checkBoxEnableCryptidHosting, ConfigurationKeyEnum.CRYPTID_HOST_ENABLED_BOOL);
+        checkBoxMappings.put(checkBoxCryptidUseStaminaItems, ConfigurationKeyEnum.CRYPTID_HOST_USE_STAMINA_ITEMS_BOOL);
+
+        for (int i = 1; i <= 20; i++) {
+            comboBoxCryptidHostRuns.getItems().add(i);
+        }
+        comboBoxMappings.put(comboBoxCryptidHostRuns, ConfigurationKeyEnum.CRYPTID_HOST_RUNS_INT);
+
+        // 0 = leave the deploy formation exactly as the game presents it.
+        // Loading a preset swaps heroes too, and an empty preset deploys
+        // hero-less, so "no flag" is the safe default rather than flag 1.
+        for (int i = 0; i <= 8; i++) {
+            comboBoxCryptidHostFlag.getItems().add(i);
+        }
+        comboBoxCryptidHostFlag.setCellFactory(lv -> buildFlagCell());
+        comboBoxCryptidHostFlag.setButtonCell(buildFlagCell());
+        comboBoxMappings.put(comboBoxCryptidHostFlag, ConfigurationKeyEnum.CRYPTID_HOST_FLAG_INT);
+
+        comboBoxCryptidHostRuns.valueProperty().addListener((obs, was, now) -> refreshCryptidMath());
+        refreshCryptidMath();
+    }
+
+    /** Renders flag 0 as a named option so it does not read as "flag zero". */
+    private ListCell<Integer> buildFlagCell() {
+        return new ListCell<>() {
+            @Override
+            protected void updateItem(Integer item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                } else {
+                    setText(item == 0 ? "Default formation" : "Flag " + item);
+                }
+            }
+        };
+    }
+
+    /**
+     * Recomputes the stamina arithmetic shown under the runs picker, so the
+     * cost of a choice is visible before it is made rather than discovered in
+     * the log afterwards.
+     */
+    private void refreshCryptidMath() {
+        Integer runs = comboBoxCryptidHostRuns.getValue();
+        int planned = runs == null ? 0 : runs;
+        int cost = planned * CRYPTID_STAMINA_PER_HOST;
+
+        int stamina = -1;
+        try {
+            if (cryptidProfileId != null) {
+                stamina = dev.frostguard.engine.service.StaminaService.getServices()
+                        .getCurrentStamina(cryptidProfileId);
+            }
+        } catch (RuntimeException ex) {
+            // The panel must still render if stamina is not known yet; showing
+            // a dash is better than failing to build the tab.
+            stamina = -1;
+        }
+
+        labelCryptidStaminaCost.setText(planned == 0 ? "-" : cost + " stamina for " + planned + " run(s)");
+
+        if (stamina < 0) {
+            labelCryptidStaminaNow.setText("unknown until the bot has run once");
+            labelCryptidAffordable.setText("-");
+            labelCryptidLeftOver.setText("-");
+            return;
+        }
+
+        int affordable = stamina / CRYPTID_STAMINA_PER_HOST;
+        labelCryptidStaminaNow.setText(String.valueOf(stamina));
+        labelCryptidAffordable.setText(affordable + " run(s) right now");
+
+        if (planned == 0) {
+            labelCryptidLeftOver.setText("-");
+        } else if (planned <= affordable) {
+            labelCryptidLeftOver.setText((stamina - cost) + " stamina left after " + planned + " run(s)");
+        } else {
+            int shortfall = cost - stamina;
+            labelCryptidLeftOver.setText("short by " + shortfall + " stamina - "
+                    + affordable + " will run, the rest wait for regen or cans");
+        }
     }
 }

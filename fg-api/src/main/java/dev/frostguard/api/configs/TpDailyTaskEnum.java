@@ -108,7 +108,13 @@ public enum TpDailyTaskEnum {
 
     /* ── shop ── */
 
-    SHOP_MYSTERY           (80,  "Shop Mystery",                 ConfigurationKeyEnum.BOOL_MYSTERY_SHOP,                      RoutineCategory.SHOP);
+    SHOP_MYSTERY           (80,  "Shop Mystery",                 ConfigurationKeyEnum.BOOL_MYSTERY_SHOP,                      RoutineCategory.SHOP),
+
+    /* ── Bearguard ── */
+
+    // Id 900+ deliberately: upstream allocates in the low hundreds, so this
+    // range will not collide with anything it adds later.
+    EVENT_CRYPTID_HOST     (900, "Host Cryptid Rally",           ConfigurationKeyEnum.CRYPTID_HOST_ENABLED_BOOL,              RoutineCategory.EVENT);
 
     /* ================================================================
      *  Category taxonomy used to group routines in the management UI.

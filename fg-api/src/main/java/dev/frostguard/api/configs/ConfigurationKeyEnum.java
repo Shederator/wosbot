@@ -304,7 +304,17 @@ public enum ConfigurationKeyEnum {
     TRAIN_MARKSMAN_BOOL                 ("false",   Boolean.class,  ConfigCategory.TRAINING),
     TRAIN_MINISTRY_APPOINTMENT_BOOL     ("false",   Boolean.class,  ConfigCategory.TRAINING),
     TRAIN_MINISTRY_APPOINTMENT_TIME_LONG("0",       Long.class,     ConfigCategory.TRAINING),
-    TRAIN_PRIORITIZE_PROMOTION_BOOL     ("false",   Boolean.class,  ConfigCategory.TRAINING);
+    TRAIN_PRIORITIZE_PROMOTION_BOOL     ("false",   Boolean.class,  ConfigCategory.TRAINING),
+
+    // Bearguard: Berserk Cryptid rally HOSTING, distinct from the RALLY_* keys
+    // above which configure joining someone else's. Appended at the end so
+    // upstream's own additions merge cleanly instead of conflicting.
+    // Flag 0 means "leave the deploy formation exactly as presented" - loading
+    // a preset swaps heroes too, and an empty preset deploys hero-less.
+    CRYPTID_HOST_ENABLED_BOOL           ("false",   Boolean.class,  ConfigCategory.EVENTS),
+    CRYPTID_HOST_RUNS_INT               ("1",       Integer.class,  ConfigCategory.EVENTS),
+    CRYPTID_HOST_USE_STAMINA_ITEMS_BOOL ("false",   Boolean.class,  ConfigCategory.EVENTS),
+    CRYPTID_HOST_FLAG_INT               ("0",       Integer.class,  ConfigCategory.EVENTS);
 
     /* ================================================================
      *  Functional groupings surfaced in the operator panel.

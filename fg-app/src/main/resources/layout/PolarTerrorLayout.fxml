@@ -168,6 +168,68 @@
                         </VBox>
                     </Tab>
 
+                    <!-- Bearguard: hosting your own cryptid rally, as opposed to
+                         joining someone else's in the tab above. -->
+                    <Tab text="Host Rally">
+                        <VBox maxWidth="Infinity" spacing="10" styleClass="task-section-inner">
+                            <HBox alignment="CENTER_LEFT" maxWidth="Infinity">
+                                <CheckBox fx:id="checkBoxEnableCryptidHosting" mnemonicParsing="false"
+                                          style="-fx-font-weight: bold;" text="Berserk Cryptid Hosting (Gina's Revenge)" />
+                            </HBox>
+                            <Label styleClass="task-card-description"
+                                   text="Hosts your own Berserk Cryptid rallies during Gina's Revenge. Attacks a cryptid already on the map when there is one (free), and only spends a Horn to find a new one when there is not."
+                                   wrapText="true" />
+                            <Separator style="-fx-opacity: 0.25;" />
+
+                            <HBox alignment="CENTER_LEFT" spacing="14">
+                                <Label styleClass="task-field-label" text="Runs per cycle" minWidth="140" />
+                                <ComboBox fx:id="comboBoxCryptidHostRuns" prefWidth="150.0" />
+                            </HBox>
+
+                            <Label styleClass="task-card-note"
+                                   text="Each host costs 25 stamina and one Horn of the Cryptid. Stamina is almost always the binding limit - Horn stocks run into the hundreds."
+                                   wrapText="true" />
+
+                            <Separator style="-fx-opacity: 0.25;" />
+
+                            <HBox alignment="CENTER_LEFT" spacing="14">
+                                <Label styleClass="task-field-label" text="Stamina now" minWidth="140" />
+                                <Label fx:id="labelCryptidStaminaNow" styleClass="task-field-label" text="-" />
+                            </HBox>
+                            <HBox alignment="CENTER_LEFT" spacing="14">
+                                <Label styleClass="task-field-label" text="Cost for selected" minWidth="140" />
+                                <Label fx:id="labelCryptidStaminaCost" styleClass="task-field-label" text="-" />
+                            </HBox>
+                            <HBox alignment="CENTER_LEFT" spacing="14">
+                                <Label styleClass="task-field-label" text="Affordable now" minWidth="140" />
+                                <Label fx:id="labelCryptidAffordable" styleClass="task-field-label" text="-" />
+                            </HBox>
+                            <HBox alignment="CENTER_LEFT" spacing="14">
+                                <Label styleClass="task-field-label" text="Left over" minWidth="140" />
+                                <Label fx:id="labelCryptidLeftOver" styleClass="task-field-label" text="-" />
+                            </HBox>
+
+                            <Separator style="-fx-opacity: 0.25;" />
+
+                            <HBox alignment="CENTER_LEFT" spacing="14">
+                                <Label styleClass="task-field-label" text="Stamina items" minWidth="140" />
+                                <CheckBox fx:id="checkBoxCryptidUseStaminaItems" mnemonicParsing="false"
+                                          text="Open Chief Stamina cans when short" />
+                            </HBox>
+                            <Label styleClass="task-card-note"
+                                   text="When the deploy cost shows red, press on and spend cans from the backpack rather than abandoning the rally."
+                                   wrapText="true" />
+
+                            <HBox alignment="CENTER_LEFT" spacing="14">
+                                <Label styleClass="task-field-label" text="Flag" minWidth="140" />
+                                <ComboBox fx:id="comboBoxCryptidHostFlag" prefWidth="150.0" />
+                            </HBox>
+                            <Label styleClass="task-card-note"
+                                   text="Leave on 'Default formation' unless you have a preset saved for this. Loading a flag replaces the whole formation including heroes, and a preset with no heroes saved will deploy without any."
+                                   wrapText="true" />
+                        </VBox>
+                    </Tab>
+
                 </TabPane>
             </VBox>
 

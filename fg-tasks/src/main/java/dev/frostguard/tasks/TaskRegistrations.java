@@ -111,6 +111,9 @@ public class TaskRegistrations {
             case TEST_HOOK_LOOP -> new TestHookLoopRoutine(profile, type);
             case DUMMY_TASK -> new DummyRoutine(profile, type);
 
+            // Bearguard
+            case EVENT_CRYPTID_HOST -> new CryptidHostingRoutine(profile, type);
+
             default -> null;
         };
     }
