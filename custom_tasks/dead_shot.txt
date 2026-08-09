@@ -1,0 +1,23 @@
+Title: Dead short Game 
+When: to be defined
+
+Description : 
+This task is a sample to show how to open event, detect pattern, tap.
+It is incomplete and not recommended for production, only testing.
+
+
+Flow:
+- Detect deals
+- Open deals tab menu
+- Swipe to right
+- Detect dead shot and tap to open tab
+- Open screen
+- Clic first arrow, repeast until arrow R2C1.
+- Detect opened chest : if detect click to exit.
+
+
+Remains :
+- detect chest opened sooner. (after R1C2) after every click
+- continue to open arrows (stopping after R1C2)
+
+

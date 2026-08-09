@@ -1,0 +1,296 @@
+{
+  "name" : "expert_idle_exploration",
+  "description" : "Empty the Exploration bag using idle mode. When screen open : either it trigger the trip, or detect it ended from a preivous run and collect the bags ",
+  "startLocation" : "WORLD",
+  "nodes" : [ {
+    "id" : 2,
+    "type" : "TAP_POINT",
+    "params" : {
+      "nodeName" : "Expand dashboard",
+      "tlX" : "1",
+      "tlY" : "500",
+      "brX" : "25",
+      "brY" : "600"
+    },
+    "executed" : true,
+    "canvasX" : 967.6666666666667,
+    "canvasY" : -495.6666666666667,
+    "nextNodeId" : 3,
+    "nextNodeFalseId" : -1,
+    "lastOcrResult" : null,
+    "nodeName" : "Expand dashboard",
+    "summary" : "Tap (1→25, 500→600)"
+  }, {
+    "id" : 3,
+    "type" : "SWIPE",
+    "params" : {
+      "nodeName" : "Swipe up 1",
+      "startX" : "200",
+      "startY" : "750",
+      "endX" : "260",
+      "endY" : "400"
+    },
+    "executed" : true,
+    "canvasX" : 1300.00086246393,
+    "canvasY" : -487.3654251252955,
+    "nextNodeId" : 11,
+    "nextNodeFalseId" : -1,
+    "lastOcrResult" : null,
+    "nodeName" : "Swipe up 1",
+    "summary" : "Swipe (200,750) → (260,400)"
+  }, {
+    "id" : 11,
+    "type" : "SWIPE",
+    "params" : {
+      "nodeName" : "Swipe up 2",
+      "startX" : "200",
+      "startY" : "750",
+      "endX" : "260",
+      "endY" : "400"
+    },
+    "executed" : true,
+    "canvasX" : 1531.4001043090477,
+    "canvasY" : -474.9059710972132,
+    "nextNodeId" : 4,
+    "nextNodeFalseId" : -1,
+    "lastOcrResult" : null,
+    "nodeName" : "Swipe up 2",
+    "summary" : "Swipe (200,750) → (260,400)"
+  }, {
+    "id" : 4,
+    "type" : "WAIT",
+    "params" : {
+      "nodeName" : "Wait for supplies",
+      "durationMs" : "2000"
+    },
+    "executed" : true,
+    "canvasX" : 940.622292808501,
+    "canvasY" : -279.72983819851373,
+    "nextNodeId" : 5,
+    "nextNodeFalseId" : -1,
+    "lastOcrResult" : null,
+    "nodeName" : "Wait for supplies",
+    "summary" : "Wait 2000ms"
+  }, {
+    "id" : 5,
+    "type" : "TAP_POINT",
+    "params" : {
+      "nodeName" : "Go to Trek Supplies",
+      "tlX" : "384",
+      "tlY" : "810",
+      "brX" : "420",
+      "brY" : "835"
+    },
+    "executed" : true,
+    "canvasX" : 1264.7437872095422,
+    "canvasY" : -279.29002951027996,
+    "nextNodeId" : 6,
+    "nextNodeFalseId" : -1,
+    "lastOcrResult" : null,
+    "nodeName" : "Go to Trek Supplies",
+    "summary" : "Tap (384→420, 810→835)"
+  }, {
+    "id" : 6,
+    "type" : "WAIT",
+    "params" : {
+      "nodeName" : "Wait bag preview",
+      "durationMs" : "200"
+    },
+    "executed" : true,
+    "canvasX" : 1535.7962372171357,
+    "canvasY" : -279.64027120352443,
+    "nextNodeId" : 14,
+    "nextNodeFalseId" : -1,
+    "lastOcrResult" : null,
+    "nodeName" : "Wait bag preview",
+    "summary" : "Wait 200ms"
+  }, {
+    "id" : 12,
+    "type" : "TAP_POINT",
+    "params" : {
+      "nodeName" : "Open bag preview",
+      "tlX" : "500",
+      "tlY" : "510",
+      "brX" : "650",
+      "brY" : "610"
+    },
+    "executed" : true,
+    "canvasX" : 723.3290210136828,
+    "canvasY" : 421.0541749354539,
+    "nextNodeId" : 13,
+    "nextNodeFalseId" : -1,
+    "lastOcrResult" : null,
+    "nodeName" : "Open bag preview",
+    "summary" : "Tap (500→650, 510→610)"
+  }, {
+    "id" : 13,
+    "type" : "WAIT",
+    "params" : {
+      "nodeName" : "Wait for bag",
+      "durationMs" : "3000"
+    },
+    "executed" : true,
+    "canvasX" : 990.5219126841463,
+    "canvasY" : 414.56521650719975,
+    "nextNodeId" : 7,
+    "nextNodeFalseId" : -1,
+    "lastOcrResult" : null,
+    "nodeName" : "Wait for bag",
+    "summary" : "Wait 3000ms"
+  }, {
+    "id" : 7,
+    "type" : "TAP_POINT",
+    "params" : {
+      "nodeName" : "Close bag preview",
+      "tlX" : "500",
+      "tlY" : "30",
+      "brX" : "600",
+      "brY" : "50"
+    },
+    "executed" : true,
+    "canvasX" : 1298.0641835839242,
+    "canvasY" : 416.8435124411489,
+    "nextNodeId" : 8,
+    "nextNodeFalseId" : -1,
+    "lastOcrResult" : null,
+    "nodeName" : "Close bag preview",
+    "summary" : "Tap (500→600, 30→50)"
+  }, {
+    "id" : 8,
+    "type" : "TAP_POINT",
+    "params" : {
+      "nodeName" : "Open Tundra Trek panel",
+      "tlX" : "400",
+      "tlY" : "150",
+      "brX" : "500",
+      "brY" : "300"
+    },
+    "executed" : true,
+    "canvasX" : 1620.8687045216705,
+    "canvasY" : 412.4568666362919,
+    "nextNodeId" : 9,
+    "nextNodeFalseId" : -1,
+    "lastOcrResult" : null,
+    "nodeName" : "Open Tundra Trek panel",
+    "summary" : "Tap (400→500, 150→300)"
+  }, {
+    "id" : 9,
+    "type" : "TAP_POINT",
+    "params" : {
+      "nodeName" : "Select idle trek",
+      "tlX" : "580",
+      "tlY" : "1150",
+      "brX" : "670",
+      "brY" : "1200"
+    },
+    "executed" : true,
+    "canvasX" : 1955.954108785156,
+    "canvasY" : 421.5786750113905,
+    "nextNodeId" : 10,
+    "nextNodeFalseId" : -1,
+    "lastOcrResult" : null,
+    "nodeName" : "Select idle trek",
+    "summary" : "Tap (580→670, 1150→1200)"
+  }, {
+    "id" : 10,
+    "type" : "TAP_POINT",
+    "params" : {
+      "nodeName" : "Confirm idle quantity",
+      "tlX" : "210",
+      "tlY" : "820",
+      "brX" : "490",
+      "brY" : "850"
+    },
+    "executed" : true,
+    "canvasX" : 2246.479471325023,
+    "canvasY" : 420.52536253986665,
+    "nextNodeId" : -1,
+    "nextNodeFalseId" : -1,
+    "lastOcrResult" : null,
+    "nodeName" : "Confirm idle quantity",
+    "summary" : "Tap (210→490, 820→850)"
+  }, {
+    "id" : 14,
+    "type" : "OCR_READ",
+    "params" : {
+      "nodeName" : "End Idle Trek detection",
+      "tlY" : "822",
+      "tlX" : "225",
+      "condition" : "STARTS_WITH",
+      "brY" : "885",
+      "expectedValue" : "End Idle ",
+      "brX" : "500"
+    },
+    "executed" : true,
+    "canvasX" : 534.0440546148149,
+    "canvasY" : 68.32168306780892,
+    "nextNodeId" : 15,
+    "nextNodeFalseId" : 12,
+    "lastOcrResult" : "End Idle Tirek",
+    "nodeName" : "End Idle Trek detection",
+    "summary" : "OCR (225, 822)→(500, 885) STARTS_WITH 'End Idle '"
+  }, {
+    "id" : 15,
+    "type" : "TAP_POINT",
+    "params" : {
+      "nodeName" : "Tap End Idle Trek button",
+      "tlY" : "822",
+      "tlX" : "225",
+      "x" : "0",
+      "brY" : "885",
+      "y" : "0",
+      "brX" : "500"
+    },
+    "executed" : true,
+    "canvasX" : 852.6639774059573,
+    "canvasY" : 59.82111555713753,
+    "nextNodeId" : 16,
+    "nextNodeFalseId" : -1,
+    "lastOcrResult" : null,
+    "nodeName" : "Tap End Idle Trek button",
+    "summary" : "Tap (225→500, 822→885)"
+  }, {
+    "id" : 16,
+    "type" : "TAP_POINT",
+    "params" : {
+      "nodeName" : "Exit screen",
+      "tlY" : "564",
+      "tlX" : "40",
+      "x" : "0",
+      "brY" : "1150",
+      "y" : "0",
+      "brX" : "580"
+    },
+    "executed" : true,
+    "canvasX" : 1167.8170660435476,
+    "canvasY" : 55.57560138629425,
+    "nextNodeId" : -1,
+    "nextNodeFalseId" : -1,
+    "lastOcrResult" : null,
+    "nodeName" : "Exit screen",
+    "summary" : "Tap (40→580, 564→1150)"
+  }, {
+    "id" : 17,
+    "type" : "TAP_POINT",
+    "params" : {
+      "nodeName" : "return to world",
+      "tlY" : "23",
+      "tlX" : "19",
+      "x" : "0",
+      "brY" : "41",
+      "y" : "0",
+      "brX" : "61"
+    },
+    "executed" : true,
+    "canvasX" : 1443.9114243093802,
+    "canvasY" : 43.45658820770558,
+    "nextNodeId" : -1,
+    "nextNodeFalseId" : -1,
+    "lastOcrResult" : null,
+    "nodeName" : "return to world",
+    "summary" : "Tap (19→61, 23→41)"
+  } ],
+  "createdAt" : 1783364400000,
+  "updatedAt" : 1783373593846,
+  "nextNodeId" : 17
+}
