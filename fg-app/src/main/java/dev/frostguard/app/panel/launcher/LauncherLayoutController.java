@@ -792,8 +792,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     }
 
     public void onQueueStateChanged(QueueStateData queueState) { /* bind */
-        // Changed by pernerch | Date: 2026-07-02 | Why: queue-state callbacks can originate from
-        // worker threads; marshal to JavaFX thread to prevent UI-thread violations during bot start.
+        // Queue-state callbacks can originate from worker threads.
         if (!Platform.isFxApplicationThread()) {
             Platform.runLater(() -> onQueueStateChanged(queueState));
             return;
@@ -803,11 +802,9 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
             return;
         }
 
-        // Changed by pernerch | Date: 2026-07-02 | Why: sync launcher profile/title with
-        // the queue owner when runtime execution switches to another profile.
-		if (null != queueState.getProfileId()) {
-			refreshActiveProfileFromQueueState(queueState.getProfileId());
-		}
+        if (null != queueState.getProfileId()) {
+            refreshActiveProfileFromQueueState(queueState.getProfileId());
+        }
 
         if (null != queueState.getActiveQueues()) {
             updateActiveQueueStates(queueState.getActiveQueues());
@@ -833,8 +830,6 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         updateWindowTitle();
     }
 
-    // Changed by pernerch | Date: 2026-07-02 | Why: keep UI profile identity and title in sync
-    // with engine-side profile switches on shared emulators.
     private void refreshActiveProfileFromQueueState(Long profileId) { /* internal */
         if (profileId == null) {
             return;
@@ -852,10 +847,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
             return;
         }
 
-        // Changed by pernerch | Date: 2026-07-02 | Why: keep launcher title/profile context
-        // aligned with the profile that currently owns emulator execution.
         currentProfile = activeProfile;
-        updateWindowTitle();
         selectProfileInComboBox(activeProfile);
     }
 

@@ -161,23 +161,21 @@ public class TaskQueue {
         return true;
     }
 
-        // Changed by pernerch | Date: 2026-07-02 | Why: expose overdue runnable snapshot so
-        // peer queues on the same emulator can be prioritized before idle behavior closes/suspends.
-        public synchronized Optional<OverdueRunnableSnapshot> peekMostRelevantOverdueRunnableTask() {
+    public synchronized Optional<OverdueRunnableSnapshot> peekMostRelevantOverdueRunnableTask() {
         LocalDateTime now = LocalDateTime.now();
 
         return taskBacklog.stream()
-            .filter(t -> t.getDelay(TimeUnit.MILLISECONDS) <= 0)
-            .max(Comparator
-                .comparingInt((DelayedTask t) -> rankingStrategy.getPriority(t))
-                .thenComparingLong(t -> Duration.between(t.getScheduled(), now).getSeconds()))
-            .map(t -> new OverdueRunnableSnapshot(
-                t.getTaskName(),
-                t.getTpTask(),
-                rankingStrategy.getPriority(t),
-                Math.max(0, Duration.between(t.getScheduled(), now).getSeconds()),
-                t.getScheduled()));
-        }
+                .filter(t -> t.getDelay(TimeUnit.MILLISECONDS) <= 0)
+                .max(Comparator
+                        .comparingInt((DelayedTask t) -> rankingStrategy.getPriority(t))
+                        .thenComparingLong(t -> Duration.between(t.getScheduled(), now).getSeconds()))
+                .map(t -> new OverdueRunnableSnapshot(
+                        t.getTaskName(),
+                        t.getTpTask(),
+                        rankingStrategy.getPriority(t),
+                        Math.max(0, Duration.between(t.getScheduled(), now).getSeconds()),
+                        t.getScheduled()));
+    }
 
     public boolean hasRunnableTasksWithin(int maxIdleMin) {
         if (taskBacklog.isEmpty()) return false;
@@ -467,6 +465,7 @@ public class TaskQueue {
             task.run();
             if (task.getTpTask() == TpDailyTaskEnum.INITIALIZE) {
                 initializationGate.completeInitialization();
+                ScheduleService.obtain().notifyActiveProfile(profile.getId());
             }
             long elapsed = (System.currentTimeMillis() - t0) / 1000;
             LocalDateTime scheduledAfterRun = task.getScheduled();
@@ -704,8 +703,6 @@ public class TaskQueue {
             boolean keep = Boolean.TRUE.equals(profile.getConfig(ConfigurationKeyEnum.KEEP_EMULATOR_OPEN_BOOL, Boolean.class));
             if (keep) { emitInfo("Idle exceeded - keeping device open per config"); statusModel.setIdleTimeExceeded(true); return; }
 
-            // Changed by pernerch | Date: 2026-07-02 | Why: keep single-profile-per-emulator
-            // setups on the original idle path; only evaluate handover when siblings exist.
             if (hasEnabledSiblingOnSameEmulator()) {
                 Optional<PeerSwitchCandidate> peerCandidate = findBestOverduePeerOnSameEmulator();
                 if (peerCandidate.isPresent()) {
@@ -716,8 +713,6 @@ public class TaskQueue {
             }
 
             suspendDevice(statusModel.getDelayUntil(), false);
-                    // Changed by pernerch | Date: 2026-07-02 | Why: force immediate activation of the
-                    // selected peer queue after slot handover to eliminate idle dead time.
             statusModel.setIdleTimeExceeded(true);
         } else if (statusModel.isIdleTimeExceeded() && LocalDateTime.now().plusMinutes(1).isAfter(statusModel.getDelayUntil())) {
             emitInfo("Next task approaching - re-acquiring slot"); acquireSlot();
@@ -756,8 +751,6 @@ public class TaskQueue {
     }
 
     private boolean hasEnabledSiblingOnSameEmulator() {
-        // Changed by pernerch | Date: 2026-07-02 | Why: explicit sibling detection guard for
-        // no-impact behavior in single-profile-per-emulator environments.
         if (profile == null || profile.getEmulatorNumber() == null || profile.getEmulatorNumber().isBlank()) {
             return false;
         }

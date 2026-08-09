@@ -32,9 +32,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.TimeUnit;
 
@@ -85,10 +83,6 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
     // ── formatters ──────────────────────────────────────────────────
     protected static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     protected static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss");
-
-    // Changed by pernerch | Date: 2026-07-02 | Why: force stamina OCR refresh after
-    // emulator-local profile switches so stale stamina values cannot leak between accounts.
-    private static final Map<String, Long> LAST_ACTIVE_PROFILE_BY_EMULATOR = new ConcurrentHashMap<>();
 
     // ── preemption ──────────────────────────────────────────────────
     private PreemptionToken preemptionToken;
@@ -149,13 +143,6 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
     public void run() {
         staminaDeferral = null;
         refreshProfileFromDb();
-        boolean switchedProfileOnEmulator = tpTask != TpDailyTaskEnum.INITIALIZE
-                && markAndDetectProfileSwitchFlow();
-        if (switchedProfileOnEmulator) {
-            // Changed by pernerch | Date: 2026-07-02 | Why: publish active-profile changes
-            // so UI title/profile context tracks the account currently controlling the emulator.
-            scheduleService.notifyActiveProfile(profile.getId());
-        }
         long t0 = System.currentTimeMillis();
         int baselineOcr = this.currentOcrFailures;
         int baselineTemplate = this.templateSearchHelper.getFailedSearches();
@@ -166,21 +153,11 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
                     || tpTask == TpDailyTaskEnum.SKIP_TUTORIAL
                     || tpTask == TpDailyTaskEnum.CREATE_CHARACTER) {
                 execute();
-                if (tpTask == TpDailyTaskEnum.INITIALIZE && markAndDetectProfileSwitchFlow()) {
-                    scheduleService.notifyActiveProfile(profile.getId());
-                }
                 return;
             }
 
             verifyGameProcessActive();
             navigationHelper.ensureCorrectScreenLocation(getRequiredStartLocation());
-
-            if (switchedProfileOnEmulator) {
-                // Changed by pernerch | Date: 2026-07-02 | Why: refresh stamina immediately on
-                // profile handover so downstream task logic always starts from current account data.
-                logInfo("Profile switch detected on emulator " + EMULATOR_NUMBER + ". Refreshing stamina from profile screen.");
-                staminaHelper.updateStaminaFromProfile();
-            }
 
             if (consumesStamina() && StaminaService.getServices().requiresUpdate(profile.getId())) {
                 staminaHelper.updateStaminaFromProfile();
@@ -213,17 +190,6 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
         } catch (Exception ex) {
             logWarning("Profile refresh failed before execution: " + ex.getMessage());
         }
-    }
-
-    // Changed by pernerch | Date: 2026-07-02 | Why: detect emulator-local profile handover
-    // so runtime state (stamina + active profile context) is refreshed exactly once per switch.
-    private boolean markAndDetectProfileSwitchFlow() {
-        if (EMULATOR_NUMBER == null || EMULATOR_NUMBER.isBlank() || profile == null || profile.getId() == null) {
-            return false;
-        }
-
-        Long previousProfileId = LAST_ACTIVE_PROFILE_BY_EMULATOR.put(EMULATOR_NUMBER, profile.getId());
-        return previousProfileId != null && !previousProfileId.equals(profile.getId());
     }
 
     private boolean deferForBearTrapProtection(BearTrapProtectionPolicy.Decision decision) {
@@ -404,13 +370,7 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
     }
 
     // ── logging ─────────────────────────────────────────────────────
-    // Changed by pernerch | Date: 2026-07-02 | Why: Ensure consistent profile name in logs for multi-profile 
-    // emulator debugging. All log levels now include profile name for clarity when multiple profiles 
-    // execute tasks on the same emulator (critical for detecting profile-switch race conditions).
-
     public void logInfo(String message) {
-        // Changed: Include profile name in INFO logs for consistency across all log levels.
-        // This is critical for multi-profile debugging where multiple TaskQueues run concurrently.
         logger.info(profile.getName() + " - " + message);
         loggingService.emit(TpMessageSeverityEnum.INFO, taskName, profile.getName(), message);
     }

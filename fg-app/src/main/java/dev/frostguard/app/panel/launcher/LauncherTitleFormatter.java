@@ -16,7 +16,8 @@ final class LauncherTitleFormatter {
 
         return entries.stream()
                 .filter(entry -> entry != null && entry.profileId() != null)
-                .sorted(Comparator.comparing(ProfileEntry::displayName, String.CASE_INSENSITIVE_ORDER))
+                .sorted(Comparator.comparing(ProfileEntry::displayName, String.CASE_INSENSITIVE_ORDER)
+                        .thenComparing(ProfileEntry::profileId))
                 .map(entry -> String.format("%s [Stamina: %d]", entry.displayName(), entry.stamina()))
                 .collect(Collectors.joining(" | "));
     }

@@ -29,6 +29,15 @@ class LauncherLayoutControllerTest {
     }
 
     @Test
+    void usesProfileIdToOrderDuplicateDisplayNamesDeterministically() {
+        String segment = LauncherTitleFormatter.formatProfileSegment(List.of(
+                new LauncherTitleFormatter.ProfileEntry(2L, "Same", 81),
+                new LauncherTitleFormatter.ProfileEntry(1L, "same", 120)));
+
+        assertEquals("same [Stamina: 120] | Same [Stamina: 81]", segment);
+    }
+
+    @Test
     void fallsBackToProfileIdWhenQueueNameIsUnavailable() {
         String segment = LauncherTitleFormatter.formatProfileSegment(List.of(
                 new LauncherTitleFormatter.ProfileEntry(42L, " ", 0)));
