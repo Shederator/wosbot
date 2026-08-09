@@ -1,5 +1,8 @@
 package dev.frostguard.api.domain;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import dev.frostguard.api.configs.FlowStepKind;
 import java.util.HashMap;
 import java.util.Map;
@@ -59,26 +62,50 @@ public class AutomationStep {
     /* ---- identity ---- */
 
     public int getStepId()              { return stepId; }
+    @JsonAlias("id")
     public void setStepId(int stepId)   { this.stepId = stepId; }
 
     /* ---- kind ---- */
 
     public FlowStepKind getKind()                { return kind; }
+    @JsonAlias("type")
     public void setKind(FlowStepKind kind)       { this.kind = kind; }
 
     /* ---- attributes ---- */
 
     public Map<String, String> getAttributes()                { return attributes; }
-    public void setAttributes(Map<String, String> attrs)      { this.attributes = attrs; }
+    @JsonAlias("params")
+    public void setAttributes(Map<String, String> attrs)      {
+        String existingNodeName = getNodeName();
+        this.attributes = new HashMap<>();
+        if (attrs != null) {
+            this.attributes.putAll(attrs);
+            if (this.attributes.containsKey(PARAM_NODE_NAME)) {
+                setNodeName(this.attributes.remove(PARAM_NODE_NAME));
+            } else if (!existingNodeName.isEmpty()) {
+                setNodeName(existingNodeName);
+            }
+        }
+    }
 
-    public void putAttribute(String key, String value)  { attributes.put(key, value); }
+    @JsonIgnore
+    public void putAttribute(String key, String value)  {
+        if (PARAM_NODE_NAME.equals(key)) {
+            setNodeName(value);
+        } else {
+            attributes.put(key, value);
+        }
+    }
+    @JsonIgnore
     public String getAttribute(String key)              { return attributes.get(key); }
 
+    @JsonIgnore
     public String getNodeName() {
         String value = getAttribute(PARAM_NODE_NAME);
         return value != null ? value : "";
     }
 
+    @JsonProperty(value = PARAM_NODE_NAME, access = JsonProperty.Access.WRITE_ONLY)
     public void setNodeName(String nodeName) {
         String sanitized = sanitizeNodeName(nodeName);
         if (sanitized.isEmpty()) {
@@ -118,27 +145,33 @@ public class AutomationStep {
     /* ---- execution state ---- */
 
     public boolean isCompleted()                   { return completed; }
+    @JsonAlias("executed")
     public void setCompleted(boolean completed)    { this.completed = completed; }
 
     /* ---- canvas layout position ---- */
 
     public double getLayoutX()          { return layoutX; }
+    @JsonAlias("canvasX")
     public void setLayoutX(double x)    { this.layoutX = x; }
 
     public double getLayoutY()          { return layoutY; }
+    @JsonAlias("canvasY")
     public void setLayoutY(double y)    { this.layoutY = y; }
 
     /* ---- flow graph edges ---- */
 
     public int getSuccessorId()           { return successorId; }
+    @JsonAlias("nextNodeId")
     public void setSuccessorId(int id)    { this.successorId = id; }
 
     public int getAlternateId()           { return alternateId; }
+    @JsonAlias("nextNodeFalseId")
     public void setAlternateId(int id)    { this.alternateId = id; }
 
     /* ---- OCR result cache ---- */
 
     public String getLastReadValue()             { return lastReadValue; }
+    @JsonAlias("lastOcrResult")
     public void setLastReadValue(String val)     { this.lastReadValue = val; }
 
     /* ---- structural queries ---- */
@@ -147,6 +180,7 @@ public class AutomationStep {
      * Whether this step type produces a conditional branch
      * (OCR_READ or TEMPLATE_SEARCH).
      */
+    @JsonIgnore
     public boolean isBranching() {
         return kind == FlowStepKind.OCR_READ
                 || kind == FlowStepKind.TEMPLATE_SEARCH;
@@ -155,6 +189,7 @@ public class AutomationStep {
     /**
      * Whether a bounding region is defined via tlX/tlY/brX/brY attributes.
      */
+    @JsonIgnore
     public boolean hasRegion() {
         return attributes.containsKey("tlX")
                 && attributes.containsKey("tlY")
@@ -163,16 +198,19 @@ public class AutomationStep {
     }
 
     /** Whether a successor edge has been connected. */
+    @JsonIgnore
     public boolean hasSuccessor() {
         return successorId >= 0;
     }
 
     /** Whether an alternate (false-branch) edge has been connected. */
+    @JsonIgnore
     public boolean hasAlternate() {
         return alternateId >= 0;
     }
 
     /** Total number of attributes currently stored on this step. */
+    @JsonIgnore
     public int attributeCount() {
         return attributes.size();
     }
@@ -216,26 +254,26 @@ public class AutomationStep {
 
     /* ---------- backward-compatible accessor shims ---------- */
 
-    public int getId()                          { return stepId; }
+    @JsonIgnore public int getId()              { return stepId; }
     public void setId(int id)                   { this.stepId = id; }
-    public FlowStepKind getType()               { return kind; }
+    @JsonIgnore public FlowStepKind getType()   { return kind; }
     public void setType(FlowStepKind type)      { this.kind = type; }
-    public Map<String, String> getParams()      { return attributes; }
-    public void setParams(Map<String, String> p){ this.attributes = p; }
+    @JsonIgnore public Map<String, String> getParams() { return attributes; }
+    public void setParams(Map<String, String> p){ setAttributes(p); }
     public void setParam(String k, String v)    { putAttribute(k, v); }
     public String getParam(String k)            { return getAttribute(k); }
     public int getParamAsInt(String k, int d)   { return readIntAttribute(k, d); }
-    public boolean isExecuted()                 { return completed; }
+    @JsonIgnore public boolean isExecuted()     { return completed; }
     public void setExecuted(boolean e)          { this.completed = e; }
-    public double getCanvasX()                  { return layoutX; }
+    @JsonIgnore public double getCanvasX()      { return layoutX; }
     public void setCanvasX(double x)            { this.layoutX = x; }
-    public double getCanvasY()                  { return layoutY; }
+    @JsonIgnore public double getCanvasY()      { return layoutY; }
     public void setCanvasY(double y)            { this.layoutY = y; }
-    public int getNextNodeId()                  { return successorId; }
+    @JsonIgnore public int getNextNodeId()      { return successorId; }
     public void setNextNodeId(int id)           { this.successorId = id; }
-    public int getNextNodeFalseId()             { return alternateId; }
+    @JsonIgnore public int getNextNodeFalseId() { return alternateId; }
     public void setNextNodeFalseId(int id)      { this.alternateId = id; }
-    public String getLastOcrResult()            { return lastReadValue; }
+    @JsonIgnore public String getLastOcrResult(){ return lastReadValue; }
     public void setLastOcrResult(String r)      { this.lastReadValue = r; }
 
     /**
@@ -276,7 +314,7 @@ public class AutomationStep {
                         && getAttribute("brX") != null;
                 String suffix    = (gs ? " GS" : "")
                         + (bounded ? " [area]" : " [full]");
-                yield String.format("Find: %s @%s\\% %s",
+                yield String.format("Find: %s @%s%% %s",
                         tplPath, threshold, suffix);
             }
 
@@ -286,6 +324,7 @@ public class AutomationStep {
     }
 
     /** Alias retained for backward compatibility. */
+    @JsonIgnore
     public String getSummary() { return describeBriefly(); }
 
     /* ---- private attribute helpers ---- */

@@ -1,5 +1,7 @@
 package dev.frostguard.api.domain;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -61,38 +63,51 @@ public class AutomationBlueprint {
     // ---- Accessors ----
 
     public String getTitle() { return title; }
+    @JsonAlias("name")
     public void setTitle(String title) { this.title = title; }
 
     public String getNotes() { return notes; }
+    @JsonAlias("description")
     public void setNotes(String notes) { this.notes = notes; }
 
     public String getInitialScreen() { return initialScreen; }
+    @JsonAlias("startLocation")
     public void setInitialScreen(String screen) { this.initialScreen = screen; }
 
     public List<AutomationStep> getSteps() { return steps; }
+    @JsonAlias("nodes")
     public void setSteps(List<AutomationStep> steps) { this.steps = steps; }
 
     public long getCreatedEpochMs() { return createdEpochMs; }
+    @JsonAlias("createdAt")
     public void setCreatedEpochMs(long ms) { this.createdEpochMs = ms; }
 
     public long getModifiedEpochMs() { return modifiedEpochMs; }
+    @JsonAlias("updatedAt")
     public void setModifiedEpochMs(long ms) { this.modifiedEpochMs = ms; }
 
     // Legacy compatibility
+    @JsonIgnore
     public String getName() { return title; }
     public void setName(String n) { this.title = n; }
+    @JsonIgnore
     public String getDescription() { return notes; }
     public void setDescription(String d) { this.notes = d; }
+    @JsonIgnore
     public String getStartLocation() { return initialScreen; }
     public void setStartLocation(String l) { this.initialScreen = l; }
+    @JsonIgnore
     public List<AutomationStep> getNodes() { return steps; }
     public void setNodes(List<AutomationStep> nodes) { this.steps = nodes; }
+    @JsonIgnore
     public long getCreatedAt() { return createdEpochMs; }
     public void setCreatedAt(long t) { this.createdEpochMs = t; }
+    @JsonIgnore
     public long getUpdatedAt() { return modifiedEpochMs; }
     public void setUpdatedAt(long t) { this.modifiedEpochMs = t; }
     public AutomationStep addNode(AutomationStep s) { return appendStep(s); }
     public void removeNode(int i) { dropStep(i); }
+    @JsonIgnore
     public int getNextNodeId() { return nextStepId(); }
 
     @Override
