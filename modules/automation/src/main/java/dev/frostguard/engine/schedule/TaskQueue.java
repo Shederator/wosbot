@@ -131,6 +131,24 @@ public class TaskQueue {
                 .anyMatch(t -> t.getDelay(TimeUnit.SECONDS) <= withinSec);
     }
 
+    public synchronized List<TpDailyTaskEnum> getNextQueuedTaskTypes(int limit) {
+        if (limit <= 0) {
+            return List.of();
+        }
+
+        Comparator<DelayedTask> priorityOrder = Comparator
+                .comparingInt(rankingStrategy::getPriority)
+                .reversed();
+        Comparator<DelayedTask> queueOrder = Comparator
+                .comparing(DelayedTask::getScheduled, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(priorityOrder);
+        return taskBacklog.stream()
+                .sorted(queueOrder)
+                .limit(limit)
+                .map(DelayedTask::getTpTask)
+                .toList();
+    }
+
     public synchronized boolean scheduleOrRescheduleQueuedTask(
             TpDailyTaskEnum kind,
             AccountDescriptor updatedProfile,
