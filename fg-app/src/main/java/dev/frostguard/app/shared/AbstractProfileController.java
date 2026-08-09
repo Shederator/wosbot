@@ -315,7 +315,8 @@ public abstract class AbstractProfileController implements IProfileLoadListener,
 		Object firstItem = checkComboBox.getItems().get(0);
 		try {
 			if (firstItem instanceof Integer) {
-				typed.getCheckModel().check(Integer.parseInt(token));
+				Object item = Integer.valueOf(token);
+				typed.getCheckModel().check(item);
 			} else {
 				typed.getCheckModel().check(token);
 			}

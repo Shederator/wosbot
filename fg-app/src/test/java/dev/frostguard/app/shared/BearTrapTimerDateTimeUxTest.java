@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.controlsfx.control.CheckComboBox;
 
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.BearTrapParticipationTriggerEnum;
@@ -380,6 +381,29 @@ class BearTrapTimerDateTimeUxTest {
         });
     }
 
+    @Test
+    void restoresBearJoinFormationsByValueInsteadOfListIndex() throws Exception {
+        runOnFxThread(() -> {
+            LoadedBearView view = loadBearView();
+            List<Change> changes = new ArrayList<>();
+            view.controller().attachProfileListener((key, value) -> changes.add(new Change(key, value)));
+            ProfileAux profile = profile(7L,
+                    config(ConfigurationKeyEnum.BEAR_TRAP_JOIN_FLAG_INT, "2,3,4"));
+
+            view.controller().onProfileLoad(profile);
+
+            assertEquals(List.of(2, 3, 4), view.joinFormations().getCheckModel().getCheckedItems());
+            assertTrue(changes.isEmpty(), "restoring saved formations must not rewrite the profile");
+
+            view.joinFormations().getCheckModel().clearCheck(Integer.valueOf(2));
+            view.joinFormations().getCheckModel().check(Integer.valueOf(7));
+
+            assertEquals(new Change(ConfigurationKeyEnum.BEAR_TRAP_JOIN_FLAG_INT, "3,4,7"),
+                    changes.get(changes.size() - 1));
+            return null;
+        });
+    }
+
     @SuppressWarnings({"rawtypes", "unchecked"})
     private static void selectItemNamed(ComboBox<?> comboBox, String label) {
         Object item = comboBox.getItems().stream()
@@ -412,7 +436,8 @@ class BearTrapTimerDateTimeUxTest {
                 (Label) namespace.get("labelParticipationTriggerInfo"),
                 (Label) namespace.get("labelParticipationHelper"),
                 (Label) namespace.get("labelParticipationWarning"),
-                (Label) namespace.get("labelSelectedTimerWarning"));
+                (Label) namespace.get("labelSelectedTimerWarning"),
+                (CheckComboBox<Integer>) namespace.get("checkComboBoxJoinFlag"));
     }
 
     private static ProfileAux profile(long id, ConfigAux... configs) {
@@ -471,6 +496,7 @@ class BearTrapTimerDateTimeUxTest {
             Label participationTriggerInfo,
             Label participationHelper,
             Label participationWarning,
-            Label selectedTimerWarning) {
+            Label selectedTimerWarning,
+            CheckComboBox<Integer> joinFormations) {
     }
 }
