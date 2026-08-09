@@ -62,20 +62,27 @@ public class CharacterSwitchHelper {
 
     // --- Character switching ---
 
-    public boolean switchToCharacter(AccountDescriptor p) {
+    public CharacterSwitchResult switchToCharacter(AccountDescriptor p) {
         String target = p.getCharacterName();
-        if (blank(target)) { log.error("No character name configured"); return false; }
+        if (blank(target)) {
+            log.error("No character name configured");
+            return CharacterSwitchResult.MISSING_CHARACTER_NAME;
+        }
         log.info("Switching to '" + target + "' server=" + p.getCharacterServer());
 
         if (!tapTemplate(TemplatesEnum.GAME_PROFILE_SETTINGS_BUTTON,
                 CommonGameAreas.PROFILE_SETTINGS_BUTTON_AREA)) {
-            log.error("Settings button not found"); return false;
+            log.error("Settings button not found");
+            return CharacterSwitchResult.SETTINGS_UNAVAILABLE;
         }
         if (!tapTemplate(TemplatesEnum.GAME_PROFILE_SETTINGS_SWITCH_CHARACTER_BUTTON, null)) {
-            log.error("Switch Character button not found"); emu.pressBack(dev); return false;
+            log.error("Switch Character button not found");
+            emu.pressBack(dev);
+            return CharacterSwitchResult.SWITCH_MENU_UNAVAILABLE;
         }
         sleep(2000);
 
+        boolean confirmationFailed = false;
         for (int pass = 0; pass < 3; pass++) {
             log.debug("Roster scan " + (pass + 1) + "/3");
             ImageSearchResultData hit = findInRoster(target);
@@ -84,18 +91,29 @@ public class CharacterSwitchHelper {
             // Check if already active via checkmark badge
             if (checkmarkAt(hit.getPoint())) {
                 log.info("Already active — done");
-                emu.pressBack(dev); sleep(500); return true;
+                emu.pressBack(dev);
+                sleep(500);
+                return CharacterSwitchResult.SUCCESS;
             }
 
             // Tap and confirm
             taps.tapInside(hit, 1, 500); sleep(500);
-            if (confirmSwitch(target)) { sleep(CHARACTER_SWITCH_RELOAD_DELAY_MS); log.info("Switch OK"); return true; }
+            if (confirmSwitch(target)) {
+                sleep(CHARACTER_SWITCH_RELOAD_DELAY_MS);
+                log.info("Switch OK");
+                return CharacterSwitchResult.SUCCESS;
+            }
+            confirmationFailed = true;
             log.warn("Confirm failed, canceling");
             cancelSwitch();
         }
-        log.error("Character not found after 3 passes — keeping emulator running and aborting switch");
+
+        CharacterSwitchResult result = confirmationFailed
+                ? CharacterSwitchResult.CONFIRMATION_FAILED
+                : CharacterSwitchResult.TARGET_NOT_FOUND;
+        log.error("Character switch failed after 3 passes: " + result);
         emu.pressBack(dev);
-        return false;
+        return result;
     }
 
     // --- Roster scanning (merged active + inactive search) ---

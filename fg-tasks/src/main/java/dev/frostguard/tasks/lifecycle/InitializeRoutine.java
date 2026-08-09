@@ -3,6 +3,8 @@ package dev.frostguard.tasks.lifecycle;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.engine.error.CharacterSwitchFailedException;
+import dev.frostguard.engine.error.InitializationFailedException;
 import dev.frostguard.engine.error.ProfileInReconnectStateException;
 import dev.frostguard.engine.error.StopExecutionException;
 import dev.frostguard.api.domain.ImageSearchResultData;
@@ -10,6 +12,7 @@ import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.helper.CharacterSwitchHelper;
+import dev.frostguard.engine.helper.CharacterSwitchResult;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 
 /**
@@ -116,14 +119,14 @@ public class InitializeRoutine extends DelayedTask {
 		
 		// Wait for home screen
 		if (!waitForHomeScreen()) {
-			// Home screen not found - already handled (emulator closed, recurring set)
-			return;
+			throw new InitializationFailedException(
+					"Home screen not found; emulator restart and initialization retry scheduled");
 		}
 		
 		// Verify and switch character if needed (before reading stamina)
 		if (!verifyAndSwitchCharacter()) {
-			// Character verification/switching failed - already handled
-			return;
+			throw new InitializationFailedException(
+					"Home screen not found after character switch; initialization retry scheduled");
 		}
 		
 		// All checks passed - complete initialization
@@ -332,8 +335,8 @@ public class InitializeRoutine extends DelayedTask {
 	 * </ol>
 	 * 
 	 * <p>
-	 * If character switching fails (character not found), the emulator is closed
-	 * and the method returns false. The queue will continue to the next profile.
+	 * If character switching fails, a typed exception keeps initialization from
+	 * being recorded as successful. The queue owns retry and emulator handover.
 	 * 
 	 * <p>
 	 * If character switch is successful, waits for game to reload and re-checks
@@ -360,14 +363,11 @@ public class InitializeRoutine extends DelayedTask {
 			logInfo("Current character does not match profile configuration. Switching character...");
 			
 			// Switch to correct character
-			boolean switchSuccess = characterSwitchHelper.switchToCharacter(profile);
+			CharacterSwitchResult switchResult = characterSwitchHelper.switchToCharacter(profile);
 			
-			if (!switchSuccess) {
-				// Character not found. Keep emulator session alive so same-emulator
-				// sibling profiles can continue without reboot.
-				logError("Character switching failed. Character not found. Continuing to next profile.");
-				// Do not set recurring=true - let queue continue to next profile
-				return false;
+			if (switchResult != CharacterSwitchResult.SUCCESS) {
+				logError("Character switching failed: " + switchResult);
+				throw new CharacterSwitchFailedException(switchResult);
 			}
 			
 			// Character switch successful, wait for game to reload

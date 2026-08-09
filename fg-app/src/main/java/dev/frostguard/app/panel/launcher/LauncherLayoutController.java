@@ -726,31 +726,27 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     }
 
     private String buildWindowTitleProfileSegment() { /* internal */
-        List<QueueProfileStateData> queueStates = new ArrayList<>(activeQueueStates.values());
-        queueStates.sort(Comparator.comparing(QueueProfileStateData::getProfileName, String.CASE_INSENSITIVE_ORDER));
-
-        List<Long> profileIds = new ArrayList<>();
-        for (QueueProfileStateData state : queueStates) {
+        List<LauncherTitleFormatter.ProfileEntry> entries = new ArrayList<>();
+        for (QueueProfileStateData state : activeQueueStates.values()) {
             if (state != null && state.getProfileId() != null) {
-                profileIds.add(state.getProfileId());
+                entries.add(buildWindowTitleEntry(state.getProfileId()));
             }
         }
 
-        if (profileIds.isEmpty() && currentProfile != null && currentProfile.getId() != null) {
-            profileIds.add(currentProfile.getId());
+        if (entries.isEmpty() && currentProfile != null && currentProfile.getId() != null) {
+            entries.add(buildWindowTitleEntry(currentProfile.getId()));
         }
 
-        List<String> parts = new ArrayList<>();
-        for (Long profileId : profileIds) {
-            ProfileAux profile = findProfileById(profileId);
-            String profileName = profile != null && profile.getName() != null && !profile.getName().isBlank()
-                    ? profile.getName()
-                    : resolveQueueProfileName(profileId);
-            int stamina = StaminaService.getServices().getCurrentStamina(profileId);
-            parts.add(String.format("%s [Stamina: %d]", profileName, stamina));
-        }
+        return LauncherTitleFormatter.formatProfileSegment(entries);
+    }
 
-        return String.join(" | ", parts);
+    private LauncherTitleFormatter.ProfileEntry buildWindowTitleEntry(Long profileId) { /* internal */
+        ProfileAux profile = findProfileById(profileId);
+        String profileName = profile != null && profile.getName() != null && !profile.getName().isBlank()
+                ? profile.getName()
+                : resolveQueueProfileName(profileId);
+        int stamina = StaminaService.getServices().getCurrentStamina(profileId);
+        return new LauncherTitleFormatter.ProfileEntry(profileId, profileName, stamina);
     }
 
     private String resolveQueueProfileName(Long profileId) { /* internal */
@@ -787,6 +783,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
                 buttonStartStop.setDisable(false);
                 buttonPauseResume.setDisable(true);
                 resetPauseStates();
+                updateWindowTitle();
                 estado = false;
                 isStartup = false;
                 scheduleAutoStart();

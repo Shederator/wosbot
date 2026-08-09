@@ -149,7 +149,8 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
     public void run() {
         staminaDeferral = null;
         refreshProfileFromDb();
-        boolean switchedProfileOnEmulator = markAndDetectProfileSwitchFlow();
+        boolean switchedProfileOnEmulator = tpTask != TpDailyTaskEnum.INITIALIZE
+                && markAndDetectProfileSwitchFlow();
         if (switchedProfileOnEmulator) {
             // Changed by pernerch | Date: 2026-07-02 | Why: publish active-profile changes
             // so UI title/profile context tracks the account currently controlling the emulator.
@@ -165,6 +166,9 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
                     || tpTask == TpDailyTaskEnum.SKIP_TUTORIAL
                     || tpTask == TpDailyTaskEnum.CREATE_CHARACTER) {
                 execute();
+                if (tpTask == TpDailyTaskEnum.INITIALIZE && markAndDetectProfileSwitchFlow()) {
+                    scheduleService.notifyActiveProfile(profile.getId());
+                }
                 return;
             }
 

@@ -29,7 +29,9 @@ import dev.frostguard.api.domain.TaskStateData;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.emulator.QueuePositionListener;
 import dev.frostguard.engine.error.ADBConnectionException;
+import dev.frostguard.engine.error.CharacterSwitchFailedException;
 import dev.frostguard.engine.error.HomeNotFoundException;
+import dev.frostguard.engine.error.InitializationFailedException;
 import dev.frostguard.engine.error.ProfileInReconnectStateException;
 import dev.frostguard.engine.error.StopExecutionException;
 import dev.frostguard.engine.input.TapInteractionService;
@@ -70,8 +72,8 @@ public class TaskQueue {
     private AccountDescriptor   profile;
     private volatile ExecutionContext   runningContext;
     private volatile LocalDateTime      sessionOrigin;
-    // Changed by pernerch | Date: 2026-07-04 | Why: ensure first startup cycle runs Initialize regardless of idle heuristics.
-    private volatile boolean    forceInitialInitialize = true;
+    private final TaskInitializationGate initializationGate = new TaskInitializationGate();
+    private volatile boolean    slotReacquisitionRequired = false;
     private volatile boolean    shuttingDown = false;
 
     public TaskQueue(AccountDescriptor profile) { this.profile = profile; }
@@ -264,8 +266,7 @@ public class TaskQueue {
 
     public void start() {
         if (statusModel.isRunning()) return;
-        // Changed by pernerch | Date: 2026-07-04 | Why: reset startup Initialize gate on each queue start.
-        forceInitialInitialize = true;
+        initializationGate.requireInitialization();
         statusModel.setRunning(true);
         executor = Thread.ofVirtual().unstarted(this::mainLoop);
         executor.setName("TaskQueue-" + profile.getName());
@@ -306,6 +307,9 @@ public class TaskQueue {
         DelayedTask ref = DelayedTaskRegistry.create(kind, profile);
         if (ref == null) { emitWarn("Task not found: " + kind); return; }
         statusModel.setNeedsReconnect(true);
+        if (kind == TpDailyTaskEnum.INITIALIZE) {
+            initializationGate.requireInitialization();
+        }
 
         DelayedTask present = taskBacklog.stream().filter(ref::equals).findFirst().orElse(null);
         if (present != null) {
@@ -342,6 +346,11 @@ public class TaskQueue {
                     .filter(p -> p.getId().equals(profile.getId())).findFirst().orElse(profile);
 
             if (statusModel.isPaused())                { onPausedTick(); continue; }
+            if (slotReacquisitionRequired) {
+                acquireSlot();
+                if (Thread.currentThread().isInterrupted()) break;
+                slotReacquisitionRequired = false;
+            }
             if (statusModel.isReadyToReconnect() && !deviceBridge.isRunning(profile.getEmulatorNumber())) {
                 emitInfo("Device offline - re-acquiring slot"); acquireSlot();
             }
@@ -372,6 +381,10 @@ public class TaskQueue {
     }
 
     private synchronized DelayedTask selectNextTask() {
+        if (initializationGate.isInitializationRequired()) {
+            return selectRequiredInitialize();
+        }
+
         DelayedTask head = taskBacklog.peek();
         if (head == null) { statusModel.setDelayUntil(LocalDateTime.now().plusSeconds(1)); return null; }
         if (head.getDelay(TimeUnit.MILLISECONDS) > 0) { statusModel.setDelayUntil(head.getScheduled()); return null; }
@@ -386,6 +399,30 @@ public class TaskQueue {
                 .orElse(batch.get(0));
         batch.stream().filter(t -> t != winner).forEach(taskBacklog::offer);
         return winner;
+    }
+
+    private DelayedTask selectRequiredInitialize() {
+        DelayedTask initialize = taskBacklog.stream()
+                .filter(task -> initializationGate.allows(task.getTpTask()))
+                .min(Comparator.comparing(
+                        DelayedTask::getScheduled,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
+                .orElse(null);
+
+        if (initialize == null) {
+            emitError("Initialization required but no Initialize retry is scheduled; pausing queue");
+            statusModel.userPause();
+            broadcastStatus("PAUSED - initialization required");
+            return null;
+        }
+
+        if (initialize.getDelay(TimeUnit.MILLISECONDS) > 0) {
+            statusModel.setDelayUntil(initialize.getScheduled());
+            return null;
+        }
+
+        taskBacklog.remove(initialize);
+        return initialize;
     }
 
     private void tryIdleInjection() {
@@ -428,9 +465,8 @@ public class TaskQueue {
             AnalyticsService.getInstance().trackTaskStarted(task.getTaskName());
             task.setLastExecutionTime(LocalDateTime.now());
             task.run();
-            // Changed by pernerch | Date: 2026-07-04 | Why: clear forced-Initialize mode once Initialize completed successfully.
             if (task.getTpTask() == TpDailyTaskEnum.INITIALIZE) {
-                forceInitialInitialize = false;
+                initializationGate.completeInitialization();
             }
             long elapsed = (System.currentTimeMillis() - t0) / 1000;
             LocalDateTime scheduledAfterRun = task.getScheduled();
@@ -443,6 +479,11 @@ public class TaskQueue {
             emitWarnTask(task, "PREEMPTED: " + ex.getReasoning());
             AnalyticsService.getInstance().trackTaskCompleted(task.getTaskName(), "preempted", (System.currentTimeMillis()-t0)/1000);
             task.reschedule(LocalDateTime.now()); ok = false;
+        } catch (CharacterSwitchFailedException ex) {
+            handleCharacterSwitchFailure(task, ex);
+            AnalyticsService.getInstance().trackTaskCompleted(
+                    task.getTaskName(), "failed", (System.currentTimeMillis() - t0) / 1000);
+            ok = false;
         } catch (Exception ex) {
             if (shuttingDown) {
                 emitInfo("Task interrupted during shutdown: " + task.getTaskName());
@@ -521,8 +562,7 @@ public class TaskQueue {
     }
 
     private boolean shouldRunInitialize() {
-        // Changed by pernerch | Date: 2026-07-04 | Why: keep first Initialize mandatory, then fall back to previous worth-check behavior.
-        return forceInitialInitialize || isInitializeWorthRunning();
+        return initializationGate.isInitializationRequired() || isInitializeWorthRunning();
     }
 
     private TaskStateData recordPreExecution(DelayedTask task) {
@@ -558,18 +598,66 @@ public class TaskQueue {
 
     private void routeError(DelayedTask task, Exception ex) {
         if (ex instanceof HomeNotFoundException) {
+            initializationGate.requireInitialization();
             emitErrorTask(task, "Home not found: " + ex.getMessage());
             enqueue(DelayedTaskRegistry.create(TpDailyTaskEnum.INITIALIZE, profile));
+        } else if (ex instanceof InitializationFailedException) {
+            initializationGate.requireInitialization();
+            emitErrorTask(task, "Initialization failed: " + ex.getMessage());
         } else if (ex instanceof StopExecutionException) {
             emitErrorTask(task, "Execution stopped: " + ex.getMessage());
+            if (task.getTpTask() == TpDailyTaskEnum.INITIALIZE) {
+                initializationGate.requireInitialization();
+                statusModel.userPause();
+                broadcastStatus("PAUSED - initialization stopped");
+            }
         } else if (ex instanceof ProfileInReconnectStateException) {
+            initializationGate.requireInitialization();
             onReconnectNeeded((ProfileInReconnectStateException) ex);
         } else if (ex instanceof ADBConnectionException) {
+            initializationGate.requireInitialization();
             emitErrorTask(task, "ADB error: " + ex.getMessage());
             enqueue(DelayedTaskRegistry.create(TpDailyTaskEnum.INITIALIZE, profile));
         } else {
             emitErrorTask(task, "Unexpected error: " + ex.getMessage());
         }
+    }
+
+    private void handleCharacterSwitchFailure(DelayedTask task, CharacterSwitchFailedException ex) {
+        ProfileSwitchRecoveryPolicy.Decision decision = ProfileSwitchRecoveryPolicy.decide(
+                hasEnabledSiblingOnSameEmulator(), LocalDateTime.now());
+
+        initializationGate.requireInitialization();
+        task.setRecurring(true);
+        task.reschedule(decision.retryAt());
+
+        if (!decision.keepEmulatorRunning()) {
+            try {
+                deviceBridge.closeEmulator(profile.getEmulatorNumber());
+            } catch (Exception closeFailure) {
+                emitWarnTask(task, "Could not close emulator after character switch failure: "
+                        + closeFailure.getMessage());
+            }
+        }
+
+        try {
+            deviceBridge.releaseEmulatorSlot(profile);
+            sessionOrigin = null;
+            slotReacquisitionRequired = true;
+        } catch (Exception releaseFailure) {
+            emitWarnTask(task, "Could not release emulator slot after character switch failure: "
+                    + releaseFailure.getMessage());
+        }
+
+        statusModel.setDelayUntil(decision.retryAt());
+        statusModel.setPaused(true);
+
+        String emulatorAction = decision.keepEmulatorRunning()
+                ? "keeping emulator open for same-emulator sibling queues"
+                : "closing emulator because no enabled sibling can take over";
+        emitErrorTask(task, "Character switch failed (" + ex.getResult() + "); "
+                + emulatorAction + "; retrying initialization at " + decision.retryAt().format(TS_FMT));
+        broadcastStatus("Character switch failed; retry at " + decision.retryAt().format(TS_FMT));
     }
 
     private void onReconnectNeeded(ProfileInReconnectStateException ex) {
@@ -602,6 +690,7 @@ public class TaskQueue {
 
     private void handleIdleTransitions() {
         if (Thread.currentThread().isInterrupted()) return;
+        if (statusModel.isPaused()) return;
         if (statusModel.getLoopState().isExecutedTask() || taskBacklog.isEmpty()) return;
         IdleBehaviorEnum idleBehavior = resolveIdleBehavior();
         if (!idleBehavior.requiresIdleTimeout()) {
