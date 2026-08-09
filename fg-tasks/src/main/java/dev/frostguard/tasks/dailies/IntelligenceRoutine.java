@@ -441,10 +441,10 @@ private int redeemCompletedMissions() {
 			logInfo(routineLogIntelligenceLine("Detected " + completed.size() + " completed missions. Collecting them now."));
 
 			for (ImageSearchResultData completedMission : completed) {
-				tapPoint(completedMission.getPoint());
+				tapInside(completedMission);
 				claimedRewards++;
 				sleepTask(500);
-				tapRandomPoint(new PointData(700, 1270), new PointData(710, 1280), 3, 100);
+				tapInside(new PointData(700, 1270), new PointData(710, 1280), 3, 100);
 				sleepTask(500);
 			}
 		}
@@ -567,8 +567,8 @@ private void recallGatherTroopsFlow() {
 
 			if (foundReturning) {
 				logInfo(routineLogIntelligenceLine("Returning arrow detected - attempting to tap recall button"));
-				tapRandomPoint(returningArrow.getPoint(), returningArrow.getPoint(), 1, 300);
-				tapRandomPoint(new PointData(446, 780), new PointData(578, 800), 1, 200);
+				tapInside(returningArrow.getPoint(), returningArrow.getPoint(), 1, 300);
+				tapInside(new PointData(446, 780), new PointData(578, 800), 1, 200);
 			}
 
 			if (foundView || foundSpeedup) {
@@ -620,8 +620,8 @@ private void recallGatherTroopsFlow() {
 				}
 
 				for (ImageSearchResultData recallButton : uniqueRecallButtons.values()) {
-					tapRandomPoint(recallButton.getPoint(), recallButton.getPoint(), 1, 300);
-					tapRandomPoint(new PointData(446, 780), new PointData(578, 800), 1, 200);
+					tapInside(recallButton.getPoint(), recallButton.getPoint(), 1, 300);
+					tapInside(new PointData(446, 780), new PointData(578, 800), 1, 200);
 					sleepTask(500);
 					tapped++;
 				}
@@ -650,7 +650,7 @@ private record TabRecallResult(MarchStatusShape status, int tappedButtons) {
 	}
 
 private boolean tapGatherRowThenRecallFlow(GatherMarchCandidate candidate, SearchConfig searchConfig) {
-		tapRandomPoint(candidate.rowPoint(), candidate.rowPoint(), 1, 300);
+		tapInside(candidate.rowPoint(), candidate.rowPoint(), 1, 300);
 		sleepTask(350);
 
 		ImageSearchResultData recallButton = locatePatternWithMonoFallback(
@@ -665,8 +665,8 @@ private boolean tapGatherRowThenRecallFlow(GatherMarchCandidate candidate, Searc
 			return false;
 		}
 
-		tapRandomPoint(recallButton.getPoint(), recallButton.getPoint(), 1, 300);
-		tapRandomPoint(MARCH_RECALL_CONFIRM_TOP_LEFT, MARCH_RECALL_CONFIRM_BOTTOM_RIGHT, 1, 200);
+		tapInside(recallButton.getPoint(), recallButton.getPoint(), 1, 300);
+		tapInside(MARCH_RECALL_CONFIRM_TOP_LEFT, MARCH_RECALL_CONFIRM_BOTTOM_RIGHT, 1, 200);
 		sleepTask(500);
 		return true;
 	}
@@ -782,8 +782,8 @@ private boolean recallGatherMarchByQueueFlow(int queueIndex) {
 				return false;
 			}
 
-			tapRandomPoint(bestRowButton.getPoint(), bestRowButton.getPoint(), 1, 200);
-			tapRandomPoint(MARCH_RECALL_CONFIRM_TOP_LEFT, MARCH_RECALL_CONFIRM_BOTTOM_RIGHT, 1, 200);
+			tapInside(bestRowButton.getPoint(), bestRowButton.getPoint(), 1, 200);
+			tapInside(MARCH_RECALL_CONFIRM_TOP_LEFT, MARCH_RECALL_CONFIRM_BOTTOM_RIGHT, 1, 200);
 			logInfo(routineLogIntelligenceLine("Recalled gather march from queue #" + (queueIndex + 1)
 					+ " for smart Intel prioritization."));
 			return true;
@@ -1013,7 +1013,7 @@ private void handleSurvivor(ImageSearchResultData result) {
 			survivorMissionsSincePause = 0;
 		}
 
-		tapPoint(result.getPoint());
+		tapInside(result);
 		sleepTask(2000);
 
 		ImageSearchResultData view = templateSearchHelper.locatePattern(TemplatesEnum.INTEL_VIEW, SearchConfigConstants.SINGLE_WITH_RETRIES);
@@ -1023,7 +1023,7 @@ private void handleSurvivor(ImageSearchResultData result) {
 			return;
 		}
 
-		tapPoint(view.getPoint());
+		tapInside(view);
 		sleepTask(500);
 
 		ImageSearchResultData rescue = templateSearchHelper.locatePattern(TemplatesEnum.INTEL_RESCUE, SearchConfigConstants.SINGLE_WITH_RETRIES);
@@ -1035,7 +1035,7 @@ private void handleSurvivor(ImageSearchResultData result) {
 			return;
 		}
 
-		tapPoint(rescue.getPoint());
+		tapInside(rescue);
 		sleepTask(500);
 		survivorMissionsSincePause++;
 		StaminaService.getServices().subtractStamina(profile.getId(), SURVIVOR_STAMINA_COST_VALUE);
@@ -1043,7 +1043,7 @@ private void handleSurvivor(ImageSearchResultData result) {
 	}
 
 private void handleJourney(ImageSearchResultData result) {
-		tapPoint(result.getPoint());
+		tapInside(result);
 		sleepTask(2000);
 
 		ImageSearchResultData view = templateSearchHelper.locatePattern(TemplatesEnum.INTEL_VIEW, SearchConfigConstants.SINGLE_WITH_RETRIES);
@@ -1053,7 +1053,7 @@ private void handleJourney(ImageSearchResultData result) {
 			return;
 		}
 
-		tapPoint(view.getPoint());
+		tapInside(view);
 		sleepTask(500);
 
 		ImageSearchResultData explore = templateSearchHelper.locatePattern(TemplatesEnum.INTEL_EXPLORE, SearchConfigConstants.SINGLE_WITH_RETRIES);
@@ -1065,9 +1065,9 @@ private void handleJourney(ImageSearchResultData result) {
 			return;
 		}
 
-		tapPoint(explore.getPoint());
+		tapInside(explore);
 		sleepTask(500);
-		tapPoint(new PointData(520, 1200));
+		tapNear(new PointData(520, 1200));
 		sleepTask(1000);
 		pressBack();
 		StaminaService.getServices().subtractStamina(profile.getId(), JOURNEY_STAMINA_COST_VALUE);
@@ -1085,7 +1085,7 @@ private void handleBeast(ImageSearchResultData beast) {
 			return;
 		}
 
-		tapPoint(beast.getPoint());
+		tapInside(beast);
 		sleepTask(2000);
 
 		ImageSearchResultData view = templateSearchHelper.locatePattern(TemplatesEnum.INTEL_VIEW, SearchConfigConstants.SINGLE_WITH_RETRIES);
@@ -1094,7 +1094,7 @@ private void handleBeast(ImageSearchResultData beast) {
 			pressBack();
 			return;
 		}
-		tapPoint(view.getPoint());
+		tapInside(view);
 		sleepTask(500);
 
 		ImageSearchResultData attack = templateSearchHelper.locatePattern(TemplatesEnum.INTEL_ATTACK, SearchConfigConstants.SINGLE_WITH_RETRIES);
@@ -1105,7 +1105,7 @@ private void handleBeast(ImageSearchResultData beast) {
 
 			return;
 		}
-		tapPoint(attack.getPoint());
+		tapInside(attack);
 		sleepTask(500);
 
 
@@ -1149,16 +1149,16 @@ private void handleBeast(ImageSearchResultData beast) {
 			return;
 		}
 
-		tapPoint(deploy.getPoint());
+		tapInside(deploy);
 		sleepTask(1000);
 
 
 		ImageSearchResultData confirmDialog = templateSearchHelper.locatePattern(TemplatesEnum.DEPLOY_CONFIRMATION_DIALOG, SearchConfigConstants.SINGLE_WITH_RETRIES);
 		if (confirmDialog.isFound()) {
 			logInfo(routineLogIntelligenceLine("Deployment confirmation dialog detected (troop imbalance). Confirming deployment."));
-			tapPoint(new PointData(211, 713));
+			tapNear(new PointData(211, 713));
 			sleepTask(300);
-			tapPoint(new PointData(509, 789));
+			tapNear(new PointData(509, 789));
 			sleepTask(300);
 		}
 

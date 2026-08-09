@@ -515,8 +515,8 @@ public class GatherRoutine extends DelayedTask {
                     continue;
                 }
 
-                tapRandomPoint(recallButton.getPoint(), recallButton.getPoint(), 1, 200);
-                tapRandomPoint(RECALL_CONFIRM_TL, RECALL_CONFIRM_BR, 1, 200);
+                tapInside(recallButton.getPoint(), recallButton.getPoint(), 1, 200);
+                tapInside(RECALL_CONFIRM_TL, RECALL_CONFIRM_BR, 1, 200);
                 sleepTask(400);
                 recalled++;
             }
@@ -664,8 +664,8 @@ public class GatherRoutine extends DelayedTask {
                 return false;
             }
 
-            tapRandomPoint(targetButton.getPoint(), targetButton.getPoint(), 1, 200);
-            tapRandomPoint(RECALL_CONFIRM_TL, RECALL_CONFIRM_BR, 1, 200);
+            tapInside(targetButton.getPoint(), targetButton.getPoint(), 1, 200);
+            tapInside(RECALL_CONFIRM_TL, RECALL_CONFIRM_BR, 1, 200);
             // Changed by pernerch | Date: 2026-07-02 | Why: emit a deterministic recall reason
             // so operators can verify why each gather march was recalled.
             logInfo(String.format(
@@ -745,7 +745,7 @@ public class GatherRoutine extends DelayedTask {
     }
 
     private boolean openSearchMenu() {
-        tapRandomPoint(SEARCH_BTN_TL, SEARCH_BTN_BR);
+        tapInside(SEARCH_BTN_TL, SEARCH_BTN_BR);
         sleepTask(2000);
         swipe(RES_TAB_SWIPE_START, RES_TAB_SWIPE_END);
         sleepTask(500);
@@ -756,7 +756,7 @@ public class GatherRoutine extends DelayedTask {
         for (int i = 0; i < 4; i++) {
             ImageSearchResultData tile = templateSearchHelper.locatePattern(type.tile, SearchConfig.builder().build());
             if (tile.isFound()) {
-                tapPoint(tile.getPoint());
+                tapInside(tile);
                 sleepTask(500);
                 return true;
             }
@@ -776,12 +776,12 @@ public class GatherRoutine extends DelayedTask {
         if (current == null) {
             resetLevelToOne();
             if (target > 1)
-                tapRandomPoint(LEVEL_INC_TL, LEVEL_INC_BR, target - 1, 150);
+                tapInside(LEVEL_INC_TL, LEVEL_INC_BR, target - 1, 150);
         } else {
             if (current < target)
-                tapRandomPoint(LEVEL_INC_TL, LEVEL_INC_BR, target - current, 150);
+                tapInside(LEVEL_INC_TL, LEVEL_INC_BR, target - current, 150);
             else
-                tapRandomPoint(LEVEL_DEC_TL, LEVEL_DEC_BR, current - target, 150);
+                tapInside(LEVEL_DEC_TL, LEVEL_DEC_BR, current - target, 150);
         }
         return true;
     }
@@ -796,13 +796,13 @@ public class GatherRoutine extends DelayedTask {
                 .isFound();
         if (current != desired) {
             logDebug("Setting only-full-resources search to " + desired);
-            tapPoint(ONLY_FULL_RESOURCES_TOGGLE);
+            tapNear(ONLY_FULL_RESOURCES_TOGGLE);
             sleepTask(300);
         }
     }
 
     private boolean executeSearch() {
-        tapRandomPoint(SEARCH_EXEC_TL, SEARCH_EXEC_BR);
+        tapInside(SEARCH_EXEC_TL, SEARCH_EXEC_BR);
         sleepTask(3000);
         return true;
     }
@@ -816,7 +816,7 @@ public class GatherRoutine extends DelayedTask {
             return GatherDeployResult.NO_NODE_FOUND;
         }
 
-        tapPoint(btn.getPoint());
+        tapInside(btn);
         sleepTask(1000);
 
         ImageSearchResultData hero = templateSearchHelper.locatePattern(type.preferredHero,
@@ -844,7 +844,7 @@ public class GatherRoutine extends DelayedTask {
             return GatherDeployResult.BLOCKED;
         }
 
-        tapPoint(deploy.getPoint());
+        tapInside(deploy);
         sleepTask(1000);
 
         if (deploymentHelper.isMarchQueueFull()) {
@@ -877,7 +877,7 @@ public class GatherRoutine extends DelayedTask {
         btns.sort(Comparator.comparingInt(r -> r.getPoint().getX()));
 
         for (int i = 1; i < btns.size(); i++) {
-            tapPoint(btns.get(i).getPoint());
+            tapInside(btns.get(i));
             sleepTask(300);
         }
     }

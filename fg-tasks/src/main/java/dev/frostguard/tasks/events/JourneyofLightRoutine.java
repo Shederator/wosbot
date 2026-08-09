@@ -39,7 +39,7 @@ public class JourneyofLightRoutine extends DelayedTask {
             reschedule(LocalDateTime.now().plusMinutes(5));
         }
 
-        tapPoint(dealsResult.getPoint());
+        tapInside(dealsResult);
         sleepTask(1500);
 
         // Try to navigate to the event screen, retrying up to 3 times if necessary
@@ -65,7 +65,7 @@ public class JourneyofLightRoutine extends DelayedTask {
         }
 
         // Do the actual JOL things
-        tapRandomPoint(new PointData(50, 1150), new PointData(290, 1230), 5, 200);
+        tapInside(new PointData(50, 1150), new PointData(290, 1230), 5, 200);
 
         // fetch remaining time for all 4
         LocalDateTime nextScheduleTime = LocalDateTime.now().plusHours(1000);
@@ -117,7 +117,7 @@ public class JourneyofLightRoutine extends DelayedTask {
 
     private boolean navigateToEventScreen() {
         // Close any windows that may be open
-        tapRandomPoint(new PointData(529, 27), new PointData(635, 63), 5, 300);
+        tapInside(new PointData(529, 27), new PointData(635, 63), 5, 300);
 
         // Search for the Journey of Light menu within deals
         ImageSearchResultData result1 = templateSearchHelper.locatePattern(
@@ -128,11 +128,11 @@ public class JourneyofLightRoutine extends DelayedTask {
         if (result1.isFound() || result2.isFound()) {
             logInfo("Successfully navigated to the Journey of Light event.");
             sleepTask(500);
-            tapPoint(result1.isFound() ? result1.getPoint() : result2.getPoint());
+            tapInside(result1.isFound() ? result1 : result2);
             sleepTask(1000);
 
             // Tap "Journey of Light" tab to make sure "My Treasures" tab is not active
-            tapRandomPoint(new PointData(50, 220), new PointData(350, 260));
+            tapInside(new PointData(50, 220), new PointData(350, 260));
             sleepTask(500);
 
             return true;
@@ -164,7 +164,7 @@ public class JourneyofLightRoutine extends DelayedTask {
             return;
         }
 
-        tapPoint(result.getPoint());
+        tapInside(result);
         sleepTask(500);
 
         ImageSearchResultData freeWatch = templateSearchHelper.locatePattern(
@@ -175,6 +175,6 @@ public class JourneyofLightRoutine extends DelayedTask {
             return;
         }
 
-        tapPoint(freeWatch.getPoint());
+        tapInside(freeWatch);
     }
 }

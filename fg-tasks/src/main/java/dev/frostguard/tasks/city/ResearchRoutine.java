@@ -203,7 +203,7 @@ public ResearchRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
         logInfo(routineLogResearchLine("Research text template detected."));
 
 
-                tapPoint(researchTextResult.getPoint());
+                tapInside(researchTextResult);
                 sleepTask(500);
 
 
@@ -257,11 +257,11 @@ private boolean replenishResourcesAndRetryStart(PointData researchButton) {
         // An unaffordable research opens the shared "Obtain more" screen instead
         // of Help/Speedup. Use owned resource items, confirm, then retry Research.
         logInfo(routineLogResearchLine("Insufficient resources detected. Replenishing and retrying start."));
-        tapPoint(replenishAllButton.getPoint());
+        tapInside(replenishAllButton);
         sleepTask(500);
-        tapPoint(REPLENISH_CONFIRM_POINT);
+        tapNear(REPLENISH_CONFIRM_POINT);
         sleepTask(1000);
-        tapPoint(researchButton);
+        tapNear(researchButton);
         sleepTask(800);
 
         replenishAllButton = templateSearchHelper.locatePattern(
@@ -283,7 +283,7 @@ private boolean ensureResearchIsRunningAfterHelp() {
 
         if (isFound(helpButton)) {
             logInfo(routineLogResearchLine("Research Help button detected. Pressing it."));
-            tapPoint(helpButton.getPoint());
+            tapInside(helpButton);
             sleepTask(300);
         } else {
             ImageSearchResultData speedupButton = templateSearchHelper.locatePattern(
@@ -312,7 +312,7 @@ private boolean ensureResearchIsRunningAfterHelp() {
                 TemplatesEnum.RESEARCH_HELP_BUTTON, RESEARCH_ACTION_RECHECK);
         if (isFound(remainingHelpButton)) {
             logInfo(routineLogResearchLine("Help button remained visible. Retrying the tap once."));
-            tapPoint(remainingHelpButton.getPoint());
+            tapInside(remainingHelpButton);
             sleepTask(300);
 
             speedupButton = templateSearchHelper.locatePattern(
@@ -372,7 +372,7 @@ private boolean openResearchTree() {
 
             logDebug(routineLogResearchLine("Pressing Research Center (entry attempt "
                     + attempt + "/" + RESEARCH_ENTRY_ATTEMPTS + ")"));
-            tapPoint(researchCenter.getPoint());
+            tapInside(researchCenter);
             sleepTask(1000);
 
             PointData handTarget = findResearchEntryHandTarget();
@@ -383,7 +383,7 @@ private boolean openResearchTree() {
             }
 
             logInfo(routineLogResearchLine("Research entry hand detected. Pressing it with offset."));
-            tapPoint(handTarget);
+            tapNear(handTarget);
             sleepTask(300);
 
             if (isResearchTreeVisible()) {
@@ -479,9 +479,9 @@ private ImageSearchResultData findResearchInPriorityCategories() {
 
 private void tapCategoryTab(ResearchCategoryEnum category) {
         switch (category) {
-            case GROWTH -> tapRandomPoint(new PointData(58, 88), new PointData(211, 137));
-            case ECONOMY -> tapRandomPoint(new PointData(274, 84), new PointData(445, 142));
-            case BATTLE -> tapRandomPoint(new PointData(499, 99), new PointData(671, 139));
+            case GROWTH -> tapInside(new PointData(58, 88), new PointData(211, 137));
+            case ECONOMY -> tapInside(new PointData(274, 84), new PointData(445, 142));
+            case BATTLE -> tapInside(new PointData(499, 99), new PointData(671, 139));
         }
     }
 
@@ -509,7 +509,7 @@ private ImageSearchResultData findStartableResearchNode() {
                 logInfo(routineLogResearchLine("Detected " + rows.size()
                         + " visible incomplete research row(s)."));
             }
-            if (!rows.isEmpty() && rows.get(0).candidates().get(0).tapPoint().getY() < RESEARCH_SAFE_TAP_Y) {
+            if (!rows.isEmpty() && rows.get(0).candidates().get(0).tapTarget().getY() < RESEARCH_SAFE_TAP_Y) {
                 if (topRowRepositioned) {
                     logWarning(routineLogResearchLine(
                             "Top incomplete row remains hidden behind the category header; refusing an unsafe tap."));
@@ -526,11 +526,11 @@ private ImageSearchResultData findStartableResearchNode() {
             for (ResearchRow row : rows) {
                 boolean centerCapped = false;
                 for (ResearchNode node : row.candidates()) {
-                    PointData tap = node.tapPoint();
+                    PointData tap = node.tapTarget();
                     logInfo(routineLogResearchLine("Trying row candidate " + node.currentLevel() + "/"
                             + node.maximumLevel() + " at badge (" + node.badgePoint().getX() + ", "
                             + node.badgePoint().getY() + "), tap (" + tap.getX() + ", " + tap.getY() + ")."));
-                    tapPoint(tap);
+                    tapNear(tap);
                     sleepTask(1000);
 
                     ResearchDialogInspection inspection = inspectResearchDialog();

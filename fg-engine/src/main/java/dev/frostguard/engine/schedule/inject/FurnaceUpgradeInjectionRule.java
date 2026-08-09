@@ -6,6 +6,8 @@ import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.RawImageData;
+import dev.frostguard.engine.input.TapInteractionService;
+import dev.frostguard.engine.input.TapJitterPolicy;
 import dev.frostguard.engine.schedule.DelayedTask;
 
 /**
@@ -34,6 +36,7 @@ public class FurnaceUpgradeInjectionRule implements InjectionRule {
                                  DelayedTask activeTask) {
         activeTask.logDebug("FurnaceUpgrade injection starting");
         String devIdx = profile.getEmulatorNumber();
+        TapInteractionService taps = TapInteractionService.forController(controller, devIdx);
         try {
             // Verify the pack is still visible
             ImageSearchResultData packResult = controller.locatePattern(
@@ -43,7 +46,7 @@ public class FurnaceUpgradeInjectionRule implements InjectionRule {
                 return;
             }
 
-            controller.touchPoint(devIdx, packResult.getPoint());
+            taps.tapInside(packResult);
             Thread.sleep(500);
 
             // Locate and tap the claim button
@@ -57,9 +60,9 @@ public class FurnaceUpgradeInjectionRule implements InjectionRule {
                 return;
             }
 
-            controller.touchPoint(devIdx, claimResult.getPoint());
+            taps.tapInside(claimResult);
             Thread.sleep(200);
-            controller.touchPoint(devIdx, CONFIRM_COORD);
+            taps.tapNear(CONFIRM_COORD, TapJitterPolicy.DEFAULT_POINT_JITTER_RADIUS);
             Thread.sleep(200);
             controller.pressBack(devIdx);
             Thread.sleep(200);

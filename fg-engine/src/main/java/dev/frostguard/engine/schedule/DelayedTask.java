@@ -9,9 +9,13 @@ import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.error.HomeNotFoundException;
 import dev.frostguard.vision.logging.ProfileContextLogger;
+import dev.frostguard.api.domain.AreaData;
+import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.TesseractSettingsData;
+import dev.frostguard.engine.input.TapInteractionService;
+import dev.frostguard.engine.input.TapJitterPolicy;
 import dev.frostguard.engine.service.LoggingService;
 import dev.frostguard.engine.service.ProfileService;
 import dev.frostguard.engine.service.ScheduleService;
@@ -56,6 +60,7 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
 
     // ── services ────────────────────────────────────────────────────
     protected EmulatorController emuManager = EmulatorController.getInstance();
+    private TapInteractionService tapService;
     protected ScheduleService scheduleService = ScheduleService.obtain();
     protected LoggingService loggingService = LoggingService.obtain();
     private ProfileContextLogger logger;
@@ -117,6 +122,7 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
         this.allianceHelper = new AllianceHelper(emuManager, EMULATOR_NUMBER,
                 templateSearchHelper, navigationHelper, profile);
         this.eventHelper = new EventHelper(emuManager, EMULATOR_NUMBER, profile);
+        this.tapService = TapInteractionService.forController(emuManager, EMULATOR_NUMBER, this::checkPreemption);
     }
 
     // ── abstract / hook methods ─────────────────────────────────────
@@ -265,19 +271,74 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
 
     // ── emulator interaction ────────────────────────────────────────
 
-    public void tapPoint(PointData point) {
-        checkPreemption();
-        emuManager.touchPoint(EMULATOR_NUMBER, point);
+    // All tap input funnels through TapInteractionService so randomization,
+    // preemption checks, clamping, and repeated-tap timing stay consistent.
+
+    /**
+     * Taps a randomized coordinate inside the actual matched bounding region
+     * of a template-search result. Prefer this over tapping the raw match
+     * center; it is a no-op returning {@code false} for misses.
+     */
+    public boolean tapInside(ImageSearchResultData result) {
+        return tapService.tapInside(result);
     }
 
-    public void tapRandomPoint(PointData p1, PointData p2) {
-        checkPreemption();
-        emuManager.touchArea(EMULATOR_NUMBER, p1, p2);
+    /** Repeated variant of {@link #tapInside(ImageSearchResultData)}. */
+    public boolean tapInside(ImageSearchResultData result, int count, int delayMs) {
+        return tapService.tapInside(result, count, delayMs);
     }
 
-    public void tapRandomPoint(PointData p1, PointData p2, int count, int delay) {
-        checkPreemption();
-        emuManager.touchArea(EMULATOR_NUMBER, p1, p2, count, delay);
+    /** Taps a randomized coordinate inside a known safe UI area. */
+    public void tapInside(AreaData area) {
+        tapService.tapInside(area);
+    }
+
+    /** Repeated variant of {@link #tapInside(AreaData)}. */
+    public void tapInside(AreaData area, int count, int delayMs) {
+        tapService.tapInside(area, count, delayMs);
+    }
+
+    /**
+     * Taps within the default jitter radius
+     * ({@link TapJitterPolicy#DEFAULT_POINT_JITTER_RADIUS} px) of the given
+     * point. Standard replacement for legacy fixed-coordinate taps; prefer
+     * {@link #tapInside(AreaData)} whenever a safe area is known.
+     */
+    public void tapNear(PointData point) {
+        tapService.tapNear(point);
+    }
+
+    /**
+     * Precision tap with explicitly bounded jitter. Use for small controls
+     * or minigame interactions where a large area is not safe.
+     */
+    public void tapNear(PointData point, int radius) {
+        tapService.tapNear(point, radius);
+    }
+
+    /** Repeated variant of {@link #tapNear(PointData, int)}. */
+    public void tapNear(PointData point, int radius, int count, int delayMs) {
+        tapService.tapNear(point, radius, count, delayMs);
+    }
+
+    /**
+     * Taps a randomized coordinate inside the rectangle bounded by two
+     * diagonal corners. Convenience overload of {@link #tapInside(AreaData)};
+     * degenerate rectangles (both corners equal) receive bounded jitter
+     * instead of a fixed tap.
+     */
+    public void tapInside(PointData corner1, PointData corner2) {
+        tapService.tapInside(new AreaData(corner1, corner2));
+    }
+
+    /**
+     * Repeated variant of {@link #tapInside(PointData, PointData)}; performs
+     * exactly {@code count} taps ({@code count <= 0} taps nothing),
+     * re-samples every coordinate, and applies the delay after every tap
+     * including the last.
+     */
+    public void tapInside(PointData corner1, PointData corner2, int count, int delayMs) {
+        tapService.tapInside(new AreaData(corner1, corner2), count, delayMs);
     }
 
     public void swipe(PointData start, PointData end) {

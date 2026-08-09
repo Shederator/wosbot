@@ -128,7 +128,7 @@ private void performDiscountedRFCPurchase() {
                 SearchConfig.builder().build());
 
         if (refineResult.isFound()) {
-            tapPoint(refineResult.getPoint());
+            tapInside(refineResult);
             sleepTask(500);
 
             logInfo(routineLogCrystalLaboratoryLine("Discounted RFC purchased finished cleanly."));
@@ -147,7 +147,7 @@ private void performBulkRefinementsFlow(int currentRFC) {
                 SearchConfig.builder().build());
 
         if (refineResult.isFound()) {
-            tapRandomPoint(refineResult.getPoint(), refineResult.getPoint(), refinesToDo, 500);
+            tapInside(refineResult.getPoint(), refineResult.getPoint(), refinesToDo, 500);
             logInfo(routineLogCrystalLaboratoryLine("Bulk refinements completed."));
         } else {
             logWarning(routineLogCrystalLaboratoryLine("Could not find RFC refine button for bulk refinements."));
@@ -169,7 +169,7 @@ private void purchaseDiscountedRFCFlow() {
     }
 
 private boolean openUpCrystalLabInterface() {
-        tapRandomPoint(new PointData(637, 903), new PointData(692, 914), 1, 500);
+        tapInside(new PointData(637, 903), new PointData(692, 914), 1, 500);
 
         ImageSearchResultData validationResult = templateSearchHelper.locatePattern(
                 VALIDATION_CRYSTAL_LAB_UI,
@@ -193,7 +193,7 @@ private boolean locateAndTapTroopsButton() {
             return false;
         }
 
-        tapPoint(troopsResult.getPoint());
+        tapInside(troopsResult);
         sleepTask(1000);
 
         return true;
@@ -241,7 +241,7 @@ private void performCrystalClaimLoop(ImageSearchResultData initialClaimResult) {
         while (claimResult.isFound() && consecutiveFailures < MAX_CONSECUTIVE_FAILED_CLAIMS_LIMIT) {
             logDebug(routineLogCrystalLaboratoryLine("Collecting crystal..."));
 
-            tapRandomPoint(claimResult.getPoint(), claimResult.getPoint());
+            tapInside(claimResult.getPoint(), claimResult.getPoint());
             sleepTask(100);
 
 

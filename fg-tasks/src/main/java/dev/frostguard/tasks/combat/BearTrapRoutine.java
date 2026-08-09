@@ -459,10 +459,10 @@ private boolean confirmExecutionWindow() {
 private boolean touchBearTrapGoButton(int trapNumber) {
         switch (trapNumber) {
             case 1:
-                tapRandomPoint(BEAR_TRAP_1_GO_BUTTON_TL_VALUE, BEAR_TRAP_1_GO_BUTTON_BR_VALUE, 1, 300);
+                tapInside(BEAR_TRAP_1_GO_BUTTON_TL_VALUE, BEAR_TRAP_1_GO_BUTTON_BR_VALUE, 1, 300);
                 return true;
             case 2:
-                tapRandomPoint(BEAR_TRAP_2_GO_BUTTON_TL_VALUE, BEAR_TRAP_2_GO_BUTTON_BR_VALUE, 1, 300);
+                tapInside(BEAR_TRAP_2_GO_BUTTON_TL_VALUE, BEAR_TRAP_2_GO_BUTTON_BR_VALUE, 1, 300);
                 return true;
             default:
                 logError(routineLogBearTrapLine("Invalid trap number: " + trapNumber));
@@ -598,7 +598,7 @@ private void queueRallyFlagReset(long marchSeconds) {
     }
 
 private void disableAutojoinFlow() {
-        tapRandomPoint(ALLIANCE_BUTTON_TL_VALUE, ALLIANCE_BUTTON_BR_VALUE);
+        tapInside(ALLIANCE_BUTTON_TL_VALUE, ALLIANCE_BUTTON_BR_VALUE);
         sleepTask(3000);
 
 
@@ -614,15 +614,15 @@ private void disableAutojoinFlow() {
             return;
         }
 
-        tapRandomPoint(warButton.getPoint(), warButton.getPoint(), 1, 1000);
+        tapInside(warButton.getPoint(), warButton.getPoint(), 1, 1000);
         sleepTask(1000);
 
 
-        tapRandomPoint(AUTOJOIN_BUTTON_TL_VALUE, AUTOJOIN_BUTTON_BR_VALUE, 1, 1500);
+        tapInside(AUTOJOIN_BUTTON_TL_VALUE, AUTOJOIN_BUTTON_BR_VALUE, 1, 1500);
         sleepTask(500);
 
 
-        tapRandomPoint(AUTOJOIN_STOP_BUTTON_TL_VALUE, AUTOJOIN_STOP_BUTTON_BR_VALUE, 1, 500);
+        tapInside(AUTOJOIN_STOP_BUTTON_TL_VALUE, AUTOJOIN_STOP_BUTTON_BR_VALUE, 1, 500);
         sleepTask(500);
 
 
@@ -749,7 +749,7 @@ private void handleJoinRallies2() {
 
                 if (warButton.isFound()) {
                     logInfo(routineLogBearTrapLine("Entering war section to check for rallies"));
-                    tapPoint(warButton.getPoint());
+                    tapInside(warButton);
                     manageJoinRallies(freeMarches);
                 }
             }
@@ -782,12 +782,12 @@ private void manageJoinRallies(int freeMarches) {
         int selectedFlag = resolveNextJoinFlag();
         logInfo(routineLogBearTrapLine("Joining rally with flag #" + selectedFlag + " (rotation: " + joinFlags + ")"));
 
-        tapRandomPoint(plusIcon.getPoint(), plusIcon.getPoint(), 1, 100);
+        tapInside(plusIcon.getPoint(), plusIcon.getPoint(), 1, 100);
         sleepTask(300);
 
 
         PointData flagPoint = RallyFlagCoordinates.pointForFlag(selectedFlag);
-        tapRandomPoint(flagPoint, flagPoint, 1, 0);
+        tapInside(flagPoint, flagPoint, 1, 0);
         sleepTask(300);
 
 
@@ -801,7 +801,7 @@ private void manageJoinRallies(int freeMarches) {
         if (!deploy.isFound()) {
             logWarning(routineLogBearTrapLine("Deploy button not detected after selecting flag."));
         } else {
-            tapPoint(deploy.getPoint());
+            tapInside(deploy);
             sleepTask(500);
 
         }
@@ -876,11 +876,11 @@ private void recallMarchFlow() {
                         .build());
 
         if (recallButton.isFound()) {
-            tapRandomPoint(recallButton.getPoint(), recallButton.getPoint(), 1, 300);
+            tapInside(recallButton.getPoint(), recallButton.getPoint(), 1, 300);
             sleepTask(300);
 
 
-            tapRandomPoint(RECALL_CONFIRM_BUTTON_TL_VALUE, RECALL_CONFIRM_BUTTON_BR_VALUE, 1, 200);
+            tapInside(RECALL_CONFIRM_BUTTON_TL_VALUE, RECALL_CONFIRM_BUTTON_BR_VALUE, 1, 200);
             sleepTask(500);
 
         }
@@ -934,19 +934,19 @@ private void enablePetsFlow() {
             return;
         }
 
-        tapRandomPoint(petsButton.getPoint(), petsButton.getPoint(), 1, 500);
+        tapInside(petsButton.getPoint(), petsButton.getPoint(), 1, 500);
         sleepTask(1000);
 
 
-        tapRandomPoint(PET_RAZORBACK_TL_VALUE, PET_RAZORBACK_BR_VALUE, 1, 500);
+        tapInside(PET_RAZORBACK_TL_VALUE, PET_RAZORBACK_BR_VALUE, 1, 500);
         sleepTask(300);
 
 
-        tapRandomPoint(PET_QUICK_USE_BUTTON_TL_VALUE, PET_QUICK_USE_BUTTON_BR_VALUE, 1, 500);
+        tapInside(PET_QUICK_USE_BUTTON_TL_VALUE, PET_QUICK_USE_BUTTON_BR_VALUE, 1, 500);
         sleepTask(300);
 
 
-        tapRandomPoint(PET_USE_BUTTON_TL_VALUE, PET_USE_BUTTON_BR_VALUE, 1, 100);
+        tapInside(PET_USE_BUTTON_TL_VALUE, PET_USE_BUTTON_BR_VALUE, 1, 100);
         sleepTask(500);
 
 
@@ -975,7 +975,7 @@ private long scanMarchTime() {
     }
 
 private boolean reachBearTrap(int trapNumber) {
-        tapRandomPoint(ALLIANCE_BUTTON_TL_VALUE, ALLIANCE_BUTTON_BR_VALUE);
+        tapInside(ALLIANCE_BUTTON_TL_VALUE, ALLIANCE_BUTTON_BR_VALUE);
         sleepTask(3000);
 
 
@@ -990,11 +990,11 @@ private boolean reachBearTrap(int trapNumber) {
             return false;
         }
 
-        tapRandomPoint(territoryButton.getPoint(), territoryButton.getPoint(), 1, 2000);
+        tapInside(territoryButton.getPoint(), territoryButton.getPoint(), 1, 2000);
         sleepTask(1000);
 
 
-        tapRandomPoint(SPECIAL_BUILDINGS_BUTTON_TL_VALUE, SPECIAL_BUILDINGS_BUTTON_BR_VALUE, 1, 300);
+        tapInside(SPECIAL_BUILDINGS_BUTTON_TL_VALUE, SPECIAL_BUILDINGS_BUTTON_BR_VALUE, 1, 300);
         sleepTask(500);
 
 
@@ -1016,7 +1016,7 @@ private long beginOwnRally() {
 
         logInfo(routineLogBearTrapLine("Calling own rally..."));
 
-        tapRandomPoint(BEAR_CENTER_POINT_VALUE, BEAR_CENTER_POINT_VALUE, 1, 200);
+        tapInside(BEAR_CENTER_POINT_VALUE, BEAR_CENTER_POINT_VALUE, 1, 200);
         sleepTask(500);
 
 
@@ -1034,7 +1034,7 @@ private long beginOwnRally() {
         }
 
         logInfo(routineLogBearTrapLine("Entering rally menu..."));
-        tapRandomPoint(rallyButton.getPoint(), rallyButton.getPoint(), 1, 200);
+        tapInside(rallyButton.getPoint(), rallyButton.getPoint(), 1, 200);
         sleepTask(500);
 
 
@@ -1051,12 +1051,12 @@ private long beginOwnRally() {
             return 0;
         }
 
-        tapRandomPoint(holdRallyButton.getPoint(), holdRallyButton.getPoint(), 1, 200);
+        tapInside(holdRallyButton.getPoint(), holdRallyButton.getPoint(), 1, 200);
         sleepTask(300);
 
 
         PointData flagPoint = RallyFlagCoordinates.pointForFlag(ownRallyFlag);
-        tapRandomPoint(flagPoint, flagPoint, 1, 200);
+        tapInside(flagPoint, flagPoint, 1, 200);
         sleepTask(300);
 
 
@@ -1081,7 +1081,7 @@ private long beginOwnRally() {
             return 0;
         }
 
-        tapPoint(deploy.getPoint());
+        tapInside(deploy);
         sleepTask(500);
 
 

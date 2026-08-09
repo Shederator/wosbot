@@ -154,7 +154,7 @@ private void manageMonthlyVipPurchase() {
 private void redeemDailyChestRewards() {
 		logInfo(routineLogVipLine("Collecting daily VIP chest rewards"));
 
-		tapRandomPoint(
+		tapInside(
 				DAILY_CHEST_REWARDS_TOP_LEFT_VALUE,
 				DAILY_CHEST_REWARDS_BOTTOM_RIGHT_VALUE,
 				3,
@@ -169,17 +169,17 @@ private void redeemDailyChestRewards() {
 private void purchaseMonthlyVipFlow(PointData unlockButtonPoint) {
 
 
-		tapPoint(unlockButtonPoint);
+		tapNear(unlockButtonPoint);
 		sleepTask(1000);
 
 
 		logDebug(routineLogVipLine("Confirming VIP purchase (step 1/2)"));
-		tapRandomPoint(PURCHASE_CONFIRM_TOP_LEFT_VALUE, PURCHASE_CONFIRM_BOTTOM_RIGHT_VALUE);
+		tapInside(PURCHASE_CONFIRM_TOP_LEFT_VALUE, PURCHASE_CONFIRM_BOTTOM_RIGHT_VALUE);
 		sleepTask(500);
 
 
 		logDebug(routineLogVipLine("Confirming VIP purchase (step 2/2)"));
-		tapRandomPoint(PURCHASE_FINAL_CONFIRM_TOP_LEFT_VALUE, PURCHASE_FINAL_CONFIRM_BOTTOM_RIGHT_VALUE);
+		tapInside(PURCHASE_FINAL_CONFIRM_TOP_LEFT_VALUE, PURCHASE_FINAL_CONFIRM_BOTTOM_RIGHT_VALUE);
 		sleepTask(500);
 
 
@@ -193,7 +193,7 @@ private void purchaseMonthlyVipFlow(PointData unlockButtonPoint) {
 private void redeemVipPointRewards() {
 		logInfo(routineLogVipLine("Collecting VIP point rewards"));
 
-		tapRandomPoint(
+		tapInside(
 				VIP_POINT_REWARDS_TOP_LEFT_VALUE,
 				VIP_POINT_REWARDS_BOTTOM_RIGHT_VALUE,
 				3,
@@ -269,7 +269,7 @@ private void dismissVipMenu() {
 private boolean openUpVipMenu() {
 		logDebug(routineLogVipLine("Entering VIP menu"));
 
-		tapRandomPoint(VIP_MENU_BUTTON_TOP_LEFT_VALUE, VIP_MENU_BUTTON_BOTTOM_RIGHT_VALUE);
+		tapInside(VIP_MENU_BUTTON_TOP_LEFT_VALUE, VIP_MENU_BUTTON_BOTTOM_RIGHT_VALUE);
 		sleepTask(1000);
 
 

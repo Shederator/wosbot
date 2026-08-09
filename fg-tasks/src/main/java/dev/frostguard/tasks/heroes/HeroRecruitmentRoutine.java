@@ -154,10 +154,10 @@ public class HeroRecruitmentRoutine extends DelayedTask {
     private void navigateToHeroRecruitment() {
         logInfo("Navigating to hero recruitment interface");
 
-        tapRandomPoint(NAV_TAP_1_MIN, NAV_TAP_1_MAX);
+        tapInside(NAV_TAP_1_MIN, NAV_TAP_1_MAX);
         sleepTask(500); // Wait for first menu to open
 
-        tapRandomPoint(NAV_TAP_2_MIN, NAV_TAP_2_MAX);
+        tapInside(NAV_TAP_2_MIN, NAV_TAP_2_MAX);
         sleepTask(500); // Wait for hero recruitment interface to load
     }
 
@@ -283,7 +283,7 @@ public class HeroRecruitmentRoutine extends DelayedTask {
 
         if (claimResult.isFound()) {
             logInfo(type + " recruitment reward available. Claiming now.");
-            tapRandomPoint(claimMin, claimMax);
+            tapInside(claimMin, claimMax);
             sleepTask(1000); // Wait for claim animation
         } else {
             logInfo(type + " recruitment reward not available yet.");

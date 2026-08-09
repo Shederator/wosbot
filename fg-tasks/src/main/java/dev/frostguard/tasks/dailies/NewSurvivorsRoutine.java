@@ -25,7 +25,7 @@ public NewSurvivorsRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
         ImageSearchResultData newSurvivors = templateSearchHelper.locatePattern(
                 TemplatesEnum.GAME_HOME_NEW_SURVIVORS, SearchConfigConstants.DEFAULT_SINGLE);
         if (newSurvivors.isFound()) {
-            tapPoint(newSurvivors.getPoint());
+            tapInside(newSurvivors);
             sleepTask(1000);
 
 
@@ -33,11 +33,11 @@ public NewSurvivorsRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
             ImageSearchResultData welcomeIn = templateSearchHelper.locatePattern(
                     TemplatesEnum.GAME_HOME_NEW_SURVIVORS_WELCOME_IN, SearchConfigConstants.DEFAULT_SINGLE);
             if (welcomeIn.isFound()) {
-                tapPoint(welcomeIn.getPoint());
+                tapInside(welcomeIn);
                 logInfo(routineLogNewSurvivorsLine("Waiting briefly before reassigning survivors to buildings."));
                 sleepTask(10000);
 
-                tapPoint(new PointData(309, 20));
+                tapNear(new PointData(309, 20), 3);
                 sleepTask(300);
 
 
@@ -49,7 +49,7 @@ public NewSurvivorsRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
                 while ((plusButton = templateSearchHelper.locatePattern(
                         TemplatesEnum.GAME_HOME_NEW_SURVIVORS_PLUS_BUTTON, SearchConfigConstants.DEFAULT_SINGLE))
                         .isFound()) {
-                    emuManager.touchPoint(EMULATOR_NUMBER, plusButton.getPoint());
+                    tapInside(plusButton);
                     sleepTask(50);
                 }
 
@@ -59,7 +59,7 @@ public NewSurvivorsRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
                 while ((plusButton = templateSearchHelper.locatePattern(
                         TemplatesEnum.GAME_HOME_NEW_SURVIVORS_PLUS_BUTTON, SearchConfigConstants.DEFAULT_SINGLE))
                         .isFound()) {
-                    emuManager.touchPoint(EMULATOR_NUMBER, plusButton.getPoint());
+                    tapInside(plusButton);
                     sleepTask(50);
                 }
 

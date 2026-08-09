@@ -6,6 +6,7 @@ import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.RawImageData;
+import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.schedule.DelayedTask;
 
 /**
@@ -39,7 +40,7 @@ public class HelpAllianceInjectionRule implements InjectionRule {
                     profile.getEmulatorNumber(),
                     TemplatesEnum.GAME_HOME_SHORTCUTS_HELP_REQUEST2, 90);
             if (result.isFound()) {
-                controller.touchPoint(profile.getEmulatorNumber(), result.getPoint());
+                TapInteractionService.forController(controller, profile.getEmulatorNumber()).tapInside(result);
                 Thread.sleep(1000);
             }
         } catch (Exception ex) {

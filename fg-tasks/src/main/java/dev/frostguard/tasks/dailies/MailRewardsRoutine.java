@@ -111,7 +111,7 @@ private LocalDateTime computeNextExecutionTime() {
 
 private void redeemAllVisibleRewards() {
         logInfo(routineLogMailRewardsLine("Collecting rewards in current tab."));
-        tapRandomPoint(
+        tapInside(
                 CLAIM_BUTTON_TOP_LEFT_VALUE,
                 CLAIM_BUTTON_BOTTOM_RIGHT_VALUE,
                 CLAIM_BUTTON_TAP_COUNT_VALUE,
@@ -207,7 +207,7 @@ private void handleAllMailTabs() {
     }
 
 private void switchToTabFlow(PointData tabButton) {
-        tapPoint(tabButton);
+        tapNear(tabButton);
         sleepTask(200);
 
     }
@@ -235,7 +235,7 @@ private boolean openUpMailMenu() {
             return false;
         }
 
-        tapPoint(mailMenu.getPoint());
+        tapInside(mailMenu);
         sleepTask(500);
 
 

@@ -32,7 +32,7 @@ public class expert_idle_exploration extends DelayedTask {
             checkPreemption();
             switch (__state) {
                 case 2: {
-                    tapRandomPoint(new PointData(1, 500), new PointData(25, 600));
+                    tapInside(new PointData(1, 500), new PointData(25, 600));
                     __state = 3;
                     break;
                 }
@@ -47,7 +47,7 @@ public class expert_idle_exploration extends DelayedTask {
                     break;
                 }
                 case 5: {
-                    tapRandomPoint(new PointData(384, 810), new PointData(420, 835));
+                    tapInside(new PointData(384, 810), new PointData(420, 835));
                     __state = 6;
                     break;
                 }
@@ -57,22 +57,22 @@ public class expert_idle_exploration extends DelayedTask {
                     break;
                 }
                 case 7: {
-                    tapRandomPoint(new PointData(500, 30), new PointData(600, 50));
+                    tapInside(new PointData(500, 30), new PointData(600, 50));
                     __state = 8;
                     break;
                 }
                 case 8: {
-                    tapRandomPoint(new PointData(400, 150), new PointData(500, 300));
+                    tapInside(new PointData(400, 150), new PointData(500, 300));
                     __state = 9;
                     break;
                 }
                 case 9: {
-                    tapRandomPoint(new PointData(580, 1150), new PointData(670, 1200));
+                    tapInside(new PointData(580, 1150), new PointData(670, 1200));
                     __state = 10;
                     break;
                 }
                 case 10: {
-                    tapRandomPoint(new PointData(210, 820), new PointData(490, 850));
+                    tapInside(new PointData(210, 820), new PointData(490, 850));
                     __state = -1;
                     break;
                 }
@@ -82,7 +82,7 @@ public class expert_idle_exploration extends DelayedTask {
                     break;
                 }
                 case 12: {
-                    tapRandomPoint(new PointData(500, 510), new PointData(650, 610));
+                    tapInside(new PointData(500, 510), new PointData(650, 610));
                     __state = 13;
                     break;
                 }

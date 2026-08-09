@@ -81,7 +81,7 @@ public class BeastSlayRoutine extends DelayedTask {
 
 			sleepTask(6000);
 			// Open the creature search menu
-			tapRandomPoint(new PointData(25, 850), new PointData(67, 898));
+			tapInside(new PointData(25, 850), new PointData(67, 898));
 			sleepTask(1500);
 
 			// Select the "Beasts" tab by template, swiping the tab row until found.
@@ -99,21 +99,21 @@ public class BeastSlayRoutine extends DelayedTask {
 			swipe(new PointData(180, 1050), new PointData(1, 1050));
 
 			// select beast level
-			tapRandomPoint(new PointData(470, 1040), new PointData(500, 1070), beastLevel - 1, 100);
+			tapInside(new PointData(470, 1040), new PointData(500, 1070), beastLevel - 1, 100);
 			sleepTask(1000);
 			// click search
-			tapRandomPoint(new PointData(301, 1200), new PointData(412, 1229));
+			tapInside(new PointData(301, 1200), new PointData(412, 1229));
 			sleepTask(6000);
 
 			// click attack - search for the attack button template
 
-			tapRandomPoint(new PointData(270, 600), new PointData(460, 630));
+			tapInside(new PointData(270, 600), new PointData(460, 630));
 			sleepTask(6000);
 			
 			ImageSearchResultData attackBtn = templateSearchHelper.locatePattern(
 					TemplatesEnum.GAME_HOME_SHORTCUTS_ATTACK, SearchConfig.builder().build());
 			if (attackBtn != null && attackBtn.isFound()) {
-				tapPoint(attackBtn.getPoint());
+				tapInside(attackBtn);
 			}
 			
 			sleepTask(3000);
@@ -154,7 +154,7 @@ public class BeastSlayRoutine extends DelayedTask {
 					updateReschedule(LocalDateTime.now().plusMinutes(5));
 					break;
 				}
-				tapPoint(deploy.getPoint());
+				tapInside(deploy);
 				sleepTask(1000);
 
 				if (deploymentHelper.isSameTargetDialog()) {
@@ -226,7 +226,7 @@ public class BeastSlayRoutine extends DelayedTask {
 		if (beastTab == null || !beastTab.isFound()) {
 			return false;
 		}
-		tapPoint(beastTab.getPoint());
+		tapInside(beastTab);
 		sleepTask(1000);
 		return true;
 	}

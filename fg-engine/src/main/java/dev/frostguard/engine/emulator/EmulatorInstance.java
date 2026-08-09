@@ -268,10 +268,13 @@ public abstract class EmulatorInstance {
 
     // --- input ---
 
-    public boolean touchArea(String idx, PointData a, PointData b)                    { return tap(idx, a, b, 1, 0); }
-    public boolean touchArea(String idx, PointData a, PointData b, int n, int delMs) { return tap(idx, a, b, n, delMs); }
+    // Package-private on purpose: only EmulatorController (same package) may
+    // dispatch physical taps, and it is itself restricted to the shared input
+    // layer by the repository-wide TapInputArchitectureTest rules.
+    boolean touchArea(String idx, PointData a, PointData b)                    { return tap(idx, a, b, 1, 0); }
+    boolean touchArea(String idx, PointData a, PointData b, int n, int delMs) { return tap(idx, a, b, n, delMs); }
 
-    protected boolean tap(String idx, PointData c1, PointData c2, int reps, int delMs) {
+    private boolean tap(String idx, PointData c1, PointData c2, int reps, int delMs) {
         return withRetries(idx, dev -> {
             Random rng = new Random();
             int x0 = Math.min(c1.getX(), c2.getX()), x1 = Math.max(c1.getX(), c2.getX());

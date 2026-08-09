@@ -100,7 +100,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
                 TemplatesEnum.LEFT_MENU_LABYRINTH_BUTTON,
                 SearchConfigConstants.DEFAULT_SINGLE);
         if (labyrinthResult.isFound()) {
-            tapPoint(labyrinthResult.getPoint());
+            tapInside(labyrinthResult);
             sleepTask(LABYRINTH_LOAD_DELAY);
             logInfo("Successfully navigated to the Labyrinth menu.");
             return true;
@@ -152,7 +152,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
             return false;
         }
 
-        tapPoint(labyrinthResult.getPoint());
+        tapInside(labyrinthResult);
         sleepTask(TAB_SWITCH_DELAY);
 
         // Try quick challenge first
@@ -173,20 +173,20 @@ public class DailyLabyrinthRoutine extends DelayedTask {
      * Attempts to execute a quick challenge
      */
     private boolean attemptQuickChallenge(int dungeonNumber) {
-        tapPoint(new PointData(700, 1200));
+        tapNear(new PointData(700, 1200));
         sleepTask(100);
         ImageSearchResultData quickChallengeResult = templateSearchHelper.locatePattern(
                 TemplatesEnum.LABYRINTH_QUICK_CHALLENGE,
                 SearchConfigConstants.DEFAULT_SINGLE);
         if (quickChallengeResult.isFound()) {
             logInfo("'Quick Challenge' is available for dungeon " + dungeonNumber + ".");
-            tapPoint(quickChallengeResult.getPoint());
+            tapInside(quickChallengeResult);
             sleepTask(MENU_NAVIGATION_DELAY);
 
             // Skip battle animation
-            tapPoint(SKIP_BUTTON);
+            tapNear(SKIP_BUTTON);
             sleepTask(300);
-            tapRandomPoint(SKIP_BUTTON, SKIP_BUTTON, 10, 50);
+            tapInside(SKIP_BUTTON, SKIP_BUTTON, 10, 50);
             pressBack();
             return true;
         }
@@ -202,9 +202,9 @@ public class DailyLabyrinthRoutine extends DelayedTask {
                 SearchConfigConstants.DEFAULT_SINGLE);
         if (raidResult.isFound()) {
             logInfo("'Raid Challenge' is available for dungeon " + dungeonNumber + ".");
-            tapPoint(raidResult.getPoint());
+            tapInside(raidResult);
             sleepTask(400);
-            tapRandomPoint(SKIP_BUTTON, SKIP_BUTTON, 10, 50);
+            tapInside(SKIP_BUTTON, SKIP_BUTTON, 10, 50);
             pressBack();
             sleepTask(400);
             pressBack();
@@ -225,7 +225,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
             return false;
         }
 
-        tapPoint(normalChallengeResult.getPoint());
+        tapInside(normalChallengeResult);
         sleepTask(300);
 
         // Try quick deploy first
@@ -234,7 +234,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
                 SearchConfigConstants.DEFAULT_SINGLE);
         if (quickDeployResult.isFound()) {
             logInfo("'Quick Deploy' button found. Deploying for dungeon " + dungeonNumber + ".");
-            tapPoint(quickDeployResult.getPoint());
+            tapInside(quickDeployResult);
             sleepTask(100);
         }
 
@@ -244,11 +244,11 @@ public class DailyLabyrinthRoutine extends DelayedTask {
                 SearchConfigConstants.DEFAULT_SINGLE);
         if (deployResult.isFound()) {
             logInfo("'Deploy' button found. Deploying troops for dungeon " + dungeonNumber + ".");
-            tapPoint(deployResult.getPoint());
+            tapInside(deployResult);
             sleepTask(BATTLE_COMPLETION_DELAY);
 
             // Skip battle results
-            tapRandomPoint(RESULT_SKIP_BUTTON, RESULT_SKIP_BUTTON, 10, 50);
+            tapInside(RESULT_SKIP_BUTTON, RESULT_SKIP_BUTTON, 10, 50);
             pressBack();
             return true;
         }

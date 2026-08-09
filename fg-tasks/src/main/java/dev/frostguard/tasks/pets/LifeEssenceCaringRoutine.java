@@ -141,7 +141,7 @@ public class LifeEssenceCaringRoutine extends DelayedTask {
 
 		// Open Life Essence menu
 		logInfo("Life Essence menu found. Opening.");
-		tapPoint(lifeEssenceMenu.getPoint());
+		tapInside(lifeEssenceMenu);
 		sleepTask(3000); // Wait for menu to fully load
 
 		logInfo("Successfully navigated to Life Essence area");
@@ -162,7 +162,7 @@ public class LifeEssenceCaringRoutine extends DelayedTask {
 
 		// Open the Caring tab (alliance caring list)
 		logDebug("Opening Caring tab");
-		tapPoint(CARING_TAB_BUTTON);
+		tapNear(CARING_TAB_BUTTON);
 		sleepTask(2000);
 
 		// Search for daily attempt indicator
@@ -235,7 +235,7 @@ public class LifeEssenceCaringRoutine extends DelayedTask {
 		logInfo("Navigating to island location");
 
 		// Click "Go to Island" to navigate on world map
-		tapPoint(gotoButton.getPoint());
+		tapInside(gotoButton);
 		sleepTask(5000);
 
 		// Search for the caring button multiple times
@@ -252,11 +252,11 @@ public class LifeEssenceCaringRoutine extends DelayedTask {
 				logInfo("Caring button found. Performing caring action.");
 
 				// Click the caring button
-				tapPoint(caringButton.getPoint());
+				tapInside(caringButton);
 				sleepTask(5000);
 
 				// Go back to our island view we're back on main map
-				tapPoint(BACK_TO_MAP_BUTTON);
+				tapNear(BACK_TO_MAP_BUTTON);
 				sleepTask(3000);
 
 				logInfo("Caring action completed successfully");
@@ -273,7 +273,7 @@ public class LifeEssenceCaringRoutine extends DelayedTask {
 				" attempts. Island may not need care or UI didn't load properly.");
 
 		// Return to world map even if caring failed
-		tapPoint(BACK_TO_MAP_BUTTON);
+		tapNear(BACK_TO_MAP_BUTTON);
 		sleepTask(1000);
 
 		return false;
@@ -288,7 +288,7 @@ public class LifeEssenceCaringRoutine extends DelayedTask {
 	private void closeAllMenus() {
 		logDebug("Closing all menus and returning to world map");
 		sleepTask(300);
-		tapRandomPoint(BACK_TO_MAP_BUTTON, BACK_TO_MAP_BUTTON, 2, 1000);
+		tapInside(BACK_TO_MAP_BUTTON, BACK_TO_MAP_BUTTON, 2, 1000);
 	}
 
 	@Override

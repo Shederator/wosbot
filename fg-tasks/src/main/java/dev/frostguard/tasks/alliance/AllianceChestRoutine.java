@@ -62,7 +62,7 @@ private boolean openUpAllianceChestScreen() {
 			return false;
 		}
 
-		tapPoint(allianceChestResult.getPoint());
+		tapInside(allianceChestResult);
 		sleepTask(TAB_CHANGE_WAIT_TIME_MS);
 		return true;
 	}
@@ -80,7 +80,7 @@ private void gatherIndividualGifts() {
 
 			if (claimButton.isFound()) {
 				logDebug(routineLogAllianceChestLine("Collecting individual gift #" + (giftsClaimed + 1)));
-				tapPoint(claimButton.getPoint());
+				tapInside(claimButton);
 				sleepTask(CLAIM_WAIT_TIME_MS);
 				giftsClaimed++;
 				consecutiveFailures = 0;
@@ -108,13 +108,13 @@ private void gatherIndividualGifts() {
 private void dismissPopupIfPresent() {
 
 
-		tapRandomPoint(new PointData(578, 1180), new PointData(641, 1200), 2, 200);
+		tapInside(new PointData(578, 1180), new PointData(641, 1200), 2, 200);
 		sleepTask(SHORT_WAIT_TIME_MS);
 	}
 
 private boolean reachAllianceScreen() {
 		logInfo(routineLogAllianceChestLine("Moving to alliance screen"));
-		tapRandomPoint(new PointData(493, 1187), new PointData(561, 1240));
+		tapInside(new PointData(493, 1187), new PointData(561, 1240));
 		sleepTask(3000);
 
 
@@ -126,7 +126,7 @@ private boolean reachAllianceScreen() {
 
 private void gatherAllianceGifts() {
 		logInfo(routineLogAllianceChestLine("Entering alliance gifts section."));
-		tapRandomPoint(new PointData(410, 375), new PointData(626, 420));
+		tapInside(new PointData(410, 375), new PointData(626, 420));
 		sleepTask(TAB_CHANGE_WAIT_TIME_MS);
 
 
@@ -136,7 +136,7 @@ private void gatherAllianceGifts() {
 
 		if (claimAllButton.isFound()) {
 			logInfo(routineLogAllianceChestLine("'Claim All' button detected. Collecting all gifts."));
-			tapPoint(claimAllButton.getPoint());
+			tapInside(claimAllButton);
 			sleepTask(CLAIM_WAIT_TIME_MS);
 
 
@@ -160,11 +160,11 @@ private void restoreHomeScreen() {
 
 private void gatherLootChests() {
 		logInfo(routineLogAllianceChestLine("Collecting loot chests."));
-		tapRandomPoint(new PointData(56, 375), new PointData(320, 420));
+		tapInside(new PointData(56, 375), new PointData(320, 420));
 		sleepTask(TAB_CHANGE_WAIT_TIME_MS);
 
 
-		tapPoint(new PointData(360, 1204));
+		tapNear(new PointData(360, 1204));
 		sleepTask(CLAIM_WAIT_TIME_MS);
 
 
@@ -177,7 +177,7 @@ private void gatherHonorChest() {
 
 		if (honorChestEnabled) {
 			logInfo(routineLogAllianceChestLine("Collecting honor chest."));
-			tapRandomPoint(new PointData(320, 200), new PointData(400, 250));
+			tapInside(new PointData(320, 200), new PointData(400, 250));
 			sleepTask(TAB_CHANGE_WAIT_TIME_MS);
 
 

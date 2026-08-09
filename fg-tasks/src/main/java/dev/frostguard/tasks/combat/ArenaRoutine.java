@@ -323,11 +323,11 @@ public class ArenaRoutine extends DelayedTask {
             return false;
         }
 
-        tapPoint(marksmanResult.getPoint());
+        tapInside(marksmanResult);
         sleepTask(1000);
 
         logInfo("Entering arena");
-        tapPoint(ARENA_ICON);
+        tapNear(ARENA_ICON);
         sleepTask(1000);
 
         return true;
@@ -374,7 +374,7 @@ public class ArenaRoutine extends DelayedTask {
             return false;
         }
 
-        tapPoint(challengeResult.getPoint());
+        tapInside(challengeResult);
         sleepTask(1000);
 
         return true;
@@ -988,7 +988,7 @@ public class ArenaRoutine extends DelayedTask {
         }
 
         attemptedOpponentSlots.add(opponent.number());
-        tapPoint(new PointData(OPPONENT_CHALLENGE_BUTTON_X, opponent.opponentY()));
+        tapNear(new PointData(OPPONENT_CHALLENGE_BUTTON_X, opponent.opponentY()));
         sleepTask(2000);
 
         executeBattleSequence();
@@ -1035,16 +1035,16 @@ public class ArenaRoutine extends DelayedTask {
     private void executeBattleSequence() {
         logInfo("Executing battle sequence (with animation skip)");
 
-        tapPoint(QUICK_DEPLOY_BUTTON);
+        tapNear(QUICK_DEPLOY_BUTTON);
         sleepTask(500);
 
-        tapPoint(BATTLE_START_BUTTON);
+        tapNear(BATTLE_START_BUTTON);
         sleepTask(3000);
 
-        tapPoint(BATTLE_PAUSE_BUTTON);
+        tapNear(BATTLE_PAUSE_BUTTON);
         sleepTask(500);
 
-        tapPoint(BATTLE_RETREAT_BUTTON);
+        tapNear(BATTLE_RETREAT_BUTTON);
         sleepTask(1000);
     }
 
@@ -1073,7 +1073,7 @@ public class ArenaRoutine extends DelayedTask {
 
     private int buyExtraAttempts() {
         logDebug("Opening extra attempts purchase dialog");
-        tapPoint(EXTRA_ATTEMPTS_BUTTON);
+        tapNear(EXTRA_ATTEMPTS_BUTTON);
         sleepTask(1000);
 
         ImageSearchResultData confirmResult = templateSearchHelper.locatePattern(
@@ -1106,7 +1106,7 @@ public class ArenaRoutine extends DelayedTask {
                 remainingAttempts, expectedPrice, previousAttempts));
 
         if (remainingAttempts > 1) {
-            tapRandomPoint(
+            tapInside(
                     PURCHASE_COUNTER_INCREMENT_TOP_LEFT,
                     PURCHASE_COUNTER_INCREMENT_BOTTOM_RIGHT,
                     remainingAttempts - 1,
@@ -1114,7 +1114,7 @@ public class ArenaRoutine extends DelayedTask {
             sleepTask(300);
         }
 
-        tapPoint(PURCHASE_CONFIRM_BUTTON);
+        tapNear(PURCHASE_CONFIRM_BUTTON);
         sleepTask(500);
 
         StatisticsService.obtain().addToCounter(profile, "Arena Gems Spent", expectedPrice);
@@ -1190,7 +1190,7 @@ public class ArenaRoutine extends DelayedTask {
             if (freeRefreshResult.isFound()) {
                 freeRefreshCount++;
                 logInfo(String.format("Using free refresh (%d/%d)", freeRefreshCount, MAX_FREE_REFRESHES));
-                tapPoint(freeRefreshResult.getPoint());
+                tapInside(freeRefreshResult);
                 sleepTask(1000);
                 attemptedOpponentSlots.clear();
                 StatisticsService.obtain().addToCounter(profile, "Arena Refreshes", 1);
@@ -1220,7 +1220,7 @@ public class ArenaRoutine extends DelayedTask {
 
         logInfo(String.format("Opening gem list refresh (%d/%d)", gemRefreshCount + 1, MAX_GEM_REFRESHES));
 
-        tapPoint(gemsRefreshResult.getPoint());
+        tapInside(gemsRefreshResult);
         sleepTask(500);
 
         ImageSearchResultData confirmResult = templateSearchHelper.locatePattern(
@@ -1230,7 +1230,7 @@ public class ArenaRoutine extends DelayedTask {
         if (confirmResult.isFound()) {
             gemRefreshCount++;
             logInfo(String.format("Confirming gem list refresh (%d/%d)", gemRefreshCount, MAX_GEM_REFRESHES));
-            tapPoint(confirmResult.getPoint());
+            tapInside(confirmResult);
             sleepTask(1000);
             attemptedOpponentSlots.clear();
             StatisticsService.obtain().addToCounter(profile, "Arena Refreshes", 1);

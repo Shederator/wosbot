@@ -176,7 +176,7 @@ public class MercenaryEventRoutine extends DelayedTask {
                     logInfo("Found unselected " + initiationTypes[i] + " Initiation tab. Tapping to open.");
 
                     // Tap the unselected tab to open it
-                    tapPoint(unselectedTab.getPoint());
+                    tapInside(unselectedTab);
                     sleepTask(1500);
 
                     // Verify that the tab changed to selected (not locked)
@@ -210,16 +210,16 @@ public class MercenaryEventRoutine extends DelayedTask {
                 for (DifficultyLevel level : difficultyLevels) {
                     logDebug("Attempting to select difficulty: " + level.name() + " in " + initiationTypes[i]
                             + " Initiation.");
-                    tapPoint(level.point());
+                    tapNear(level.point());
                     sleepTask(2000);
                     ImageSearchResultData challengeCheck = templateSearchHelper.locatePattern(
                             TemplatesEnum.MERCENARY_DIFFICULTY_CHALLENGE,
                             SearchConfigConstants.SINGLE_WITH_RETRIES);
                     if (challengeCheck.isFound()) {
                         sleepTask(1000);
-                        tapPoint(challengeCheck.getPoint());
+                        tapInside(challengeCheck);
                         sleepTask(1000);
-                        tapPoint(new PointData(504, 788)); // Tap the confirm button
+                        tapNear(new PointData(504, 788)); // Tap the confirm button
                         logInfo("Selected mercenary event difficulty: " + level.name() + " in " + initiationTypes[i]
                                 + " Initiation.");
                         sleepTask(2000);
@@ -300,7 +300,7 @@ public class MercenaryEventRoutine extends DelayedTask {
         }
 
         // Click on the button (whether it's scout or challenge)
-        tapPoint(eventButton.getPoint());
+        tapInside(eventButton);
         sleepTask(4000); // Wait to travel to mercenary location on map
 
         // Determine whether to rally or attack
@@ -330,11 +330,11 @@ public class MercenaryEventRoutine extends DelayedTask {
             return;
         }
         logInfo(rally ? "Rallying mercenary." : "Attacking mercenary.");
-        tapPoint(attackOrRallyButton.getPoint());
+        tapInside(attackOrRallyButton);
         sleepTask(1000);
 
         if (rally) {
-            tapRandomPoint(new PointData(275, 821), new PointData(444, 856));
+            tapInside(new PointData(275, 821), new PointData(444, 856));
             sleepTask(500);
         }
 
@@ -377,7 +377,7 @@ public class MercenaryEventRoutine extends DelayedTask {
         // Validate travel time before deploying
         if (travelTimeSeconds <= 0) {
             logError("Failed to parse valid march time via OCR. Using conservative 10 minute fallback reschedule.");
-            tapPoint(deployButton.getPoint()); // Deploy anyway since we're already in the march screen
+            tapInside(deployButton); // Deploy anyway since we're already in the march screen
             sleepTask(2000);
 
             if (deploymentHelper.isSameTargetDialog()) {
@@ -408,7 +408,7 @@ public class MercenaryEventRoutine extends DelayedTask {
         }
 
         // Deploy march with known travel time
-        tapPoint(deployButton.getPoint());
+        tapInside(deployButton);
         sleepTask(2000);
 
         if (deploymentHelper.isSameTargetDialog()) {

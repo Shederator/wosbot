@@ -5,6 +5,8 @@ import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.engine.input.TapInteractionService;
+import dev.frostguard.engine.input.TapJitterPolicy;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.vision.color.GameColors;
@@ -38,6 +40,7 @@ public class DeploymentHelper {
 
     private final EmulatorController emu;
     private final String device;
+    private final TapInteractionService taps;
     private final TemplateSearchHelper templates;
     private final ResilientOcrExecutor<Integer> integerReader;
     private final ResilientOcrExecutor<Duration> durationReader;
@@ -50,6 +53,7 @@ public class DeploymentHelper {
                             AccountDescriptor profile) {
         this.emu = emuManager;
         this.device = emulatorNumber;
+        this.taps = TapInteractionService.forController(emuManager, emulatorNumber);
         this.templates = templateSearchHelper;
         this.integerReader = integerReader;
         this.durationReader = durationReader;
@@ -163,7 +167,7 @@ public class DeploymentHelper {
             return false;
         }
         log.warn("March queue full popup at " + popup.getPoint() + " score=" + popup.getMatchScore());
-        emu.touchPoint(device, CommonGameAreas.RALLY_MARCH_QUEUE_FULL_CLOSE);
+        taps.tapNear(CommonGameAreas.RALLY_MARCH_QUEUE_FULL_CLOSE, TapJitterPolicy.DEFAULT_POINT_JITTER_RADIUS);
         return true;
     }
 
@@ -191,7 +195,7 @@ public class DeploymentHelper {
             log.warn("Equalize button not found in the bottom button bar");
             return false;
         }
-        emu.touchPoint(device, equalize.getPoint());
+        taps.tapInside(equalize);
         return true;
     }
 

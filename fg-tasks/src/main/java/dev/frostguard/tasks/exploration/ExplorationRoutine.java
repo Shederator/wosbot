@@ -55,7 +55,7 @@ public class ExplorationRoutine extends DelayedTask {
 
 	private boolean openExplorationScreen() {
 		for (int attempt = 1; attempt <= MAX_OPEN_ATTEMPTS; attempt++) {
-			tapRandomPoint(EXPLORATION_ENTRY_TOP_LEFT, EXPLORATION_ENTRY_BOTTOM_RIGHT);
+			tapInside(EXPLORATION_ENTRY_TOP_LEFT, EXPLORATION_ENTRY_BOTTOM_RIGHT);
 			sleepTask(1000);
 
 			if (isExplorationScreenVisible()) {
@@ -137,7 +137,7 @@ public class ExplorationRoutine extends DelayedTask {
 	private void tapClaimButton(ImageSearchResultData claimResult) {
 		SizeData templateSize = claimResult.getTemplateSize();
 		if (templateSize == null || templateSize.getWidth() <= 0 || templateSize.getHeight() <= 0) {
-			tapPoint(claimResult.getPoint());
+			tapInside(claimResult);
 			return;
 		}
 
@@ -148,11 +148,11 @@ public class ExplorationRoutine extends DelayedTask {
 		PointData bottomRight = new PointData(
 				center.getX() + templateSize.getWidth() / 2,
 				center.getY() + templateSize.getHeight() / 2);
-		tapRandomPoint(topLeft, bottomRight);
+		tapInside(topLeft, bottomRight);
 	}
 
 	private void dismissRewardPopup() {
-		tapRandomPoint(REWARD_POPUP_TOP_LEFT, REWARD_POPUP_BOTTOM_RIGHT);
+		tapInside(REWARD_POPUP_TOP_LEFT, REWARD_POPUP_BOTTOM_RIGHT);
 		sleepTask(500);
 	}
 

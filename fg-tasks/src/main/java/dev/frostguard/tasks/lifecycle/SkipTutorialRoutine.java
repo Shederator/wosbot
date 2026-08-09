@@ -102,7 +102,7 @@ public class SkipTutorialRoutine extends DelayedTask {
                         new PointData(537, 44), new PointData(715, 140), 80.0);
                 if (skipResult != null && skipResult.isFound()) {
                     logInfo("Skip button found! Clicking it.");
-                    tapPoint(skipResult.getPoint());
+                    tapInside(skipResult);
                     sleepTask(50);
                 }
             }
@@ -124,7 +124,7 @@ public class SkipTutorialRoutine extends DelayedTask {
                         PointData handPoint = mirrorResult.getPoint();
                         adjustedPoint = new PointData(handPoint.getX() - HAND_CLICK_OFFSET_X, handPoint.getY() + HAND_CLICK_OFFSET_Y);
                     }
-                    tapPoint(adjustedPoint);
+                    tapNear(adjustedPoint);
                 }
             }
             

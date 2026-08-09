@@ -43,7 +43,7 @@ public class MyriadBazaarEventRoutine extends DelayedTask {
         }
         logInfo("Myriad Bazaar is active, claiming free rewards");
         // wait for the event window to open
-        tapPoint(bazaarIcon.getPoint());
+        tapInside(bazaarIcon);
         sleepTask(2000);
 
         // define area to search for free rewards
@@ -63,7 +63,7 @@ public class MyriadBazaarEventRoutine extends DelayedTask {
         while (true) {
             if (freeReward != null && freeReward.isFound()) {
                 logInfo("Claiming free rewards");
-                tapPoint(freeReward.getPoint());
+                tapInside(freeReward);
                 sleepTask(1000);
                 failCount = 0;
             } else {

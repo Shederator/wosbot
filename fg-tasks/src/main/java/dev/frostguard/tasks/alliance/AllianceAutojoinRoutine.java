@@ -88,10 +88,10 @@ private String routineLogAllianceAutojoinLine(String note) {
 private void configureTroopSelectionFlow() {
 		if (useAllTroops) {
 			logInfo(routineLogAllianceAutojoinLine("Selecting 'Use all troops' option"));
-			tapPoint(USE_ALL_TROOPS_BUTTON_VALUE);
+			tapNear(USE_ALL_TROOPS_BUTTON_VALUE);
 		} else {
 			logInfo(routineLogAllianceAutojoinLine("Selecting 'Specific formation' option"));
-			tapPoint(SPECIFIC_FORMATION_BUTTON_VALUE);
+			tapNear(SPECIFIC_FORMATION_BUTTON_VALUE);
 		}
 		sleepTask(700);
 
@@ -99,12 +99,12 @@ private void configureTroopSelectionFlow() {
 
 private boolean openUpAutoJoinSettings() {
 		logDebug(routineLogAllianceAutojoinLine("Entering rally section"));
-		tapRandomPoint(RALLY_SECTION_TAB_VALUE.topLeft(), RALLY_SECTION_TAB_VALUE.bottomRight());
+		tapInside(RALLY_SECTION_TAB_VALUE.topLeft(), RALLY_SECTION_TAB_VALUE.bottomRight());
 		sleepTask(500);
 
 
 		logDebug(routineLogAllianceAutojoinLine("Entering auto-join ocrPreset popup"));
-		tapRandomPoint(AUTOJOIN_SETTINGS_BUTTON_VALUE.topLeft(), AUTOJOIN_SETTINGS_BUTTON_VALUE.bottomRight());
+		tapInside(AUTOJOIN_SETTINGS_BUTTON_VALUE.topLeft(), AUTOJOIN_SETTINGS_BUTTON_VALUE.bottomRight());
 		sleepTask(1500);
 
 
@@ -123,7 +123,7 @@ private void setAutoJoinQueuesFlow(int count) {
 
 		if (count > 1) {
 			logDebug(routineLogAllianceAutojoinLine("Incrementing queue counter " + (count - 1) + " times"));
-			tapRandomPoint(
+			tapInside(
 					QUEUE_INCREMENT_BUTTON_VALUE.topLeft(),
 					QUEUE_INCREMENT_BUTTON_VALUE.bottomRight(),
 					(count - 1),
@@ -177,7 +177,7 @@ private void hydrateConfiguration() {
 
 private void enableAutoJoinFlow() {
 		logInfo(routineLogAllianceAutojoinLine("Enabling auto-join"));
-		tapRandomPoint(ENABLE_AUTOJOIN_BUTTON_VALUE.topLeft(), ENABLE_AUTOJOIN_BUTTON_VALUE.bottomRight());
+		tapInside(ENABLE_AUTOJOIN_BUTTON_VALUE.topLeft(), ENABLE_AUTOJOIN_BUTTON_VALUE.bottomRight());
 		sleepTask(500);
 
 		logDebug(routineLogAllianceAutojoinLine("Auto-join activation command sent"));

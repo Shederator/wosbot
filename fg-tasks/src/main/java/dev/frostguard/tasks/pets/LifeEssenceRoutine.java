@@ -100,7 +100,7 @@ public class LifeEssenceRoutine extends DelayedTask {
 						.build());
 		if (likeButton.isFound()) {
 			logInfo("Liking the island");
-			tapPoint(likeButton.getPoint());
+			tapInside(likeButton);
 			sleepTask(500); // Wait for like action
 		}
 	}
@@ -191,7 +191,7 @@ public class LifeEssenceRoutine extends DelayedTask {
 
 		// Open Life Essence menu
 		logInfo("Life Essence menu found. Opening.");
-		tapPoint(lifeEssenceMenu.getPoint());
+		tapInside(lifeEssenceMenu);
 		sleepTask(3000); // Wait for menu to fully load
 
 		logInfo("Successfully navigated to Life Essence area");
@@ -247,7 +247,7 @@ public class LifeEssenceRoutine extends DelayedTask {
 			// Claim each found essence
 			logDebug("Found " + essenceList.size() + " claimable essence items");
 			for (ImageSearchResultData essence : essenceList) {
-				tapPoint(essence.getPoint());
+				tapInside(essence);
 				sleepTask(500); // Wait for claim animation
 				totalClaimed++;
 			}
@@ -309,7 +309,7 @@ public class LifeEssenceRoutine extends DelayedTask {
 
 		// Navigate to shop tab
 		logDebug("Opening shop tab");
-		tapPoint(SHOP_TAB_BUTTON);
+		tapNear(SHOP_TAB_BUTTON);
 		sleepTask(1000); // Wait for tab transition
 
 		// Search for weekly free scroll offer
@@ -328,13 +328,13 @@ public class LifeEssenceRoutine extends DelayedTask {
 			setShouldUpdateConfig(true);
 			logInfo("Next scroll purchase check scheduled for: " + nextScrollTime);
 
-			tapPoint(EXIT_BUTTON);
+			tapNear(EXIT_BUTTON);
 			return;
 		}
 
 		// Click scroll to open purchase dialog
 		logInfo("Weekly free scroll found. Opening purchase dialog.");
-		tapPoint(scrollOffer.getPoint());
+		tapInside(scrollOffer);
 		sleepTask(500); // Wait for dialog
 
 		// Search for buy button
@@ -346,13 +346,13 @@ public class LifeEssenceRoutine extends DelayedTask {
 			logWarning("Buy button not found. Purchase may have failed.");
 			pressBack(); // Close dialog
 			sleepTask(500);
-			tapPoint(EXIT_BUTTON); // Exit shop
+			tapNear(EXIT_BUTTON); // Exit shop
 			sleepTask(500);
 			return;
 		}
 
 		// Confirm purchase
-		tapPoint(buyButton.getPoint());
+		tapInside(buyButton);
 		sleepTask(500); // Wait for purchase to complete
 
 		logInfo("Weekly free scroll purchased successfully");
@@ -363,7 +363,7 @@ public class LifeEssenceRoutine extends DelayedTask {
 		logInfo("Next scroll purchase available at: " + nextScrollTime);
 
 		// Exit shop
-		tapPoint(EXIT_BUTTON);
+		tapNear(EXIT_BUTTON);
 		sleepTask(500);
 	}
 
@@ -415,7 +415,7 @@ public class LifeEssenceRoutine extends DelayedTask {
 	private void exitAndReschedule(int claimedCount) {
 		// Exit Life Essence interface
 		logDebug("Exiting Life Essence interface");
-		tapPoint(EXIT_BUTTON);
+		tapNear(EXIT_BUTTON);
 		sleepTask(1000); // Wait for menu close
 
 		// Reset failure count on successful execution

@@ -191,7 +191,7 @@ public class PetAdventureChestRoutine extends DelayedTask {
 		}
 
 		logDebug("Opening Pets menu");
-		tapRandomPoint(petsResult.getPoint(), petsResult.getPoint());
+		tapInside(petsResult.getPoint(), petsResult.getPoint());
 		sleepTask(3000); // Wait for Pets menu to fully load
 
 		// Search for Beast Cage button
@@ -206,11 +206,11 @@ public class PetAdventureChestRoutine extends DelayedTask {
 		}
 
 		logDebug("Opening Beast Cage");
-		tapPoint(beastCageResult.getPoint());
+		tapInside(beastCageResult);
 		sleepTask(500); // Wait for Beast Cage to open
 
 		logDebug("Opening Adventure Map");
-		tapRandomPoint(
+		tapInside(
 				ADVENTURE_MAP_BUTTON.topLeft(),
 				ADVENTURE_MAP_BUTTON.bottomRight());
 		sleepTask(500); // Wait for adventure map to load
@@ -273,11 +273,11 @@ public class PetAdventureChestRoutine extends DelayedTask {
 	private void claimSingleChest(ImageSearchResultData chest) {
 		logDebug("Claiming completed chest");
 
-		tapRandomPoint(chest.getPoint(), chest.getPoint());
+		tapInside(chest.getPoint(), chest.getPoint());
 		sleepTask(1000); // Wait for chest detail screen
 
 		// Claim chest
-		tapPoint(CHEST_CLAIM_POINT);
+		tapNear(CHEST_CLAIM_POINT);
 		sleepTask(2000);
 		pressBack();
 		sleepTask(2000);
@@ -289,7 +289,7 @@ public class PetAdventureChestRoutine extends DelayedTask {
 
 		if (shareButton.isFound()) {
 			logDebug("Sharing completed chest with alliance");
-			tapRandomPoint(shareButton.getPoint(), shareButton.getPoint());
+			tapInside(shareButton.getPoint(), shareButton.getPoint());
 			sleepTask(1000); // Wait for share action
 		}
 
@@ -392,7 +392,7 @@ public class PetAdventureChestRoutine extends DelayedTask {
 		logInfo("Found " + chestTemplate + ". Attempting to start adventure");
 
 		// Open chest detail screen
-		tapRandomPoint(chestResult.getPoint(), chestResult.getPoint());
+		tapInside(chestResult.getPoint(), chestResult.getPoint());
 		sleepTask(500); // Wait for detail screen
 
 		// Tap Select button
@@ -405,7 +405,7 @@ public class PetAdventureChestRoutine extends DelayedTask {
 			return ChestStartResult.NOT_FOUND;
 		}
 
-		tapPoint(selectButton.getPoint());
+		tapInside(selectButton);
 		sleepTask(500); // Wait for confirmation screen
 
 		// Check for Start button (attempts available)
@@ -415,7 +415,7 @@ public class PetAdventureChestRoutine extends DelayedTask {
 
 		if (startButton.isFound()) {
 			// Start the adventure
-			tapPoint(startButton.getPoint());
+			tapInside(startButton);
 			sleepTask(500); // Wait for start confirmation
 
 			staminaHelper.subtractStamina(STAMINA_PER_CHEST, false);

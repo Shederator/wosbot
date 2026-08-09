@@ -156,12 +156,12 @@ public class StorehouseChestRoutine extends DelayedTask {
         }
 
         logDebug("Tapping Research Center");
-        tapPoint(researchCenter.getPoint());
+        tapInside(researchCenter);
         sleepTask(1000); // Wait for Research Center to open
 
         // Navigate to Storehouse
         logDebug("Tapping on Storehouse to navigate");
-        tapRandomPoint(STOREHOUSE_LOCATION_TOP_LEFT, STOREHOUSE_LOCATION_BOTTOM_RIGHT);
+        tapInside(STOREHOUSE_LOCATION_TOP_LEFT, STOREHOUSE_LOCATION_BOTTOM_RIGHT);
         sleepTask(1000);
 
         pressBack();
@@ -180,7 +180,7 @@ public class StorehouseChestRoutine extends DelayedTask {
 
         if (chest.isFound()) {
             logInfo("Chest found. Claiming reward.");
-            tapPoint(chest.getPoint());
+            tapInside(chest);
             sleepTask(500); // Wait for reward screen
 
             nextChestTime = readChestTimer();
@@ -191,7 +191,7 @@ public class StorehouseChestRoutine extends DelayedTask {
             }
 
             // Close reward screen
-            tapRandomPoint(STOREHOUSE_SCROLL_START, STOREHOUSE_SCROLL_END, SCROLL_ATTEMPT_COUNT, SCROLL_REPEAT_DELAY);
+            tapInside(STOREHOUSE_SCROLL_START, STOREHOUSE_SCROLL_END, SCROLL_ATTEMPT_COUNT, SCROLL_REPEAT_DELAY);
             return;
         }
 
@@ -295,7 +295,7 @@ public class StorehouseChestRoutine extends DelayedTask {
 
         if (stamina.isFound()) {
             logInfo("Stamina icon found. Tapping to open popup.");
-            tapPoint(stamina.getPoint());
+            tapInside(stamina);
             
             // Changed by pernerch | Date: 2026-07-02 | Why: wait for claim button visibility confirmation (not blind wait) before proceeding with claim.
             logDebug("Waiting for claim button to appear in popup...");
@@ -361,7 +361,7 @@ public class StorehouseChestRoutine extends DelayedTask {
         logDebug("Clearing tutorial overlays if present");
         try {
             // Tap center-left area to dismiss any hand tutorials without interfering with stamina display
-            tapRandomPoint(new PointData(200, 600), new PointData(250, 700), 1, 200);
+            tapInside(new PointData(200, 600), new PointData(250, 700), 1, 200);
             sleepTask(300);
         } catch (Exception e) {
             logDebug("Overlay clear attempt failed or not needed: " + e.getMessage());
@@ -382,7 +382,7 @@ public class StorehouseChestRoutine extends DelayedTask {
         // Claim button - ensure proper delay before clicking
         sleepTask(500);
         logDebug("Clicking stamina claim button at region " + STAMINA_CLAIM_BUTTON_TOP_LEFT + " - " + STAMINA_CLAIM_BUTTON_BOTTOM_RIGHT);
-        tapRandomPoint(STAMINA_CLAIM_BUTTON_TOP_LEFT, STAMINA_CLAIM_BUTTON_BOTTOM_RIGHT);
+        tapInside(STAMINA_CLAIM_BUTTON_TOP_LEFT, STAMINA_CLAIM_BUTTON_BOTTOM_RIGHT);
         sleepTask(4000); // Wait for claim animation
 
         // Update stamina service

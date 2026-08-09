@@ -210,7 +210,7 @@ public class BankRoutine extends DelayedTask {
 			return false;
 		}
 
-		tapRandomPoint(dealsResult.getPoint(), dealsResult.getPoint());
+		tapInside(dealsResult.getPoint(), dealsResult.getPoint());
 		sleepTask(2000); // Wait for deals menu to open
 		return true;
 	}
@@ -247,7 +247,7 @@ public class BankRoutine extends DelayedTask {
 			return false;
 		}
 
-		tapRandomPoint(bankResult.getPoint(), bankResult.getPoint());
+		tapInside(bankResult.getPoint(), bankResult.getPoint());
 		sleepTask(1000); // Wait for bank interface to load
 
 		logInfo("Successfully navigated to bank");
@@ -354,7 +354,7 @@ public class BankRoutine extends DelayedTask {
 				SearchConfigConstants.DEFAULT_SINGLE);
 
 		if (withdrawResult.isFound()) {
-			tapRandomPoint(withdrawResult.getPoint(), withdrawResult.getPoint());
+			tapInside(withdrawResult.getPoint(), withdrawResult.getPoint());
 			sleepTask(1000); // Wait for withdrawal to process
 
 			closeWithdrawalScreen();
@@ -373,7 +373,7 @@ public class BankRoutine extends DelayedTask {
 	 * all popups and animations are dismissed.
 	 */
 	private void closeWithdrawalScreen() {
-		tapRandomPoint(
+		tapInside(
 				CLOSE_BUTTON_POINT,
 				CLOSE_BUTTON_POINT,
 				CLOSE_SCREEN_TAP_COUNT,
@@ -456,7 +456,7 @@ public class BankRoutine extends DelayedTask {
 	private void executeDepositCreation(DepositConfig config, ImageSearchResultData depositResult) {
 		logInfo("Creating " + config.displayName + " deposit");
 
-		tapRandomPoint(depositResult.getPoint(), depositResult.getPoint());
+		tapInside(depositResult.getPoint(), depositResult.getPoint());
 		sleepTask(2000); // Wait for deposit interface to load
 
 		confirmDeposit();
@@ -472,7 +472,7 @@ public class BankRoutine extends DelayedTask {
 	 */
 	private void confirmDeposit() {
 		swipe(CONFIRM_SWIPE_START, CONFIRM_SWIPE_END);
-		tapRandomPoint(CONFIRM_TAP_MIN, CONFIRM_TAP_MAX);
+		tapInside(CONFIRM_TAP_MIN, CONFIRM_TAP_MAX);
 	}
 
 	/**
@@ -540,7 +540,7 @@ public class BankRoutine extends DelayedTask {
 				SearchConfigConstants.DEFAULT_SINGLE);
 
 		if (activeDepositResult.isFound()) {
-			tapPoint(activeDepositResult.getPoint());
+			tapInside(activeDepositResult);
 			sleepTask(200); // Wait for time display to appear
 		}
 	}

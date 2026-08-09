@@ -7,11 +7,14 @@ import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.RawImageData;
+import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.AutomationBlueprint;
 import dev.frostguard.api.domain.AutomationStep;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import dev.frostguard.engine.input.TapInteractionService;
+import dev.frostguard.engine.input.TapJitterPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,6 +48,7 @@ public class TaskBuilderService {
     private final ObjectMapper mapper;
     private AutomationBlueprint currentDefinition;
     private String activeEmulatorNumber;
+    private TapInteractionService tapService;
 
     public TaskBuilderService() {
         this.emuManager = EmulatorController.getInstance();
@@ -74,6 +78,7 @@ public class TaskBuilderService {
     public void startSession(String taskName, String emulatorNumber) {
         this.currentDefinition = new AutomationBlueprint(taskName);
         this.activeEmulatorNumber = emulatorNumber;
+        this.tapService = TapInteractionService.forController(emuManager, emulatorNumber);
         logger.info("Task Builder session started: '{}' on emulator {}", taskName, emulatorNumber);
     }
 
@@ -274,11 +279,17 @@ public class TaskBuilderService {
             return false;
         }
 
-        int x = (tlX == brX) ? tlX : tlX + new java.util.Random().nextInt(Math.abs(brX - tlX) + 1);
-        int y = (tlY == brY) ? tlY : tlY + new java.util.Random().nextInt(Math.abs(brY - tlY) + 1);
-
-        emuManager.touchPoint(activeEmulatorNumber, new PointData(x, y));
+        // Route through the shared input layer so randomization and clamping
+        // behave exactly like production task taps.
+        tapInputService().tapInside(AreaData.of(tlX, tlY, Math.max(tlX, brX), Math.max(tlY, brY)));
         return true;
+    }
+
+    private TapInteractionService tapInputService() {
+        if (tapService == null) {
+            tapService = TapInteractionService.forController(emuManager, activeEmulatorNumber);
+        }
+        return tapService;
     }
 
     // ── Wait ───────────────────────────────────────────────────────────────
@@ -469,7 +480,12 @@ public class TaskBuilderService {
         if (found && tapIfFound && result != null) {
             int tapX = result.getPoint().getX() + offsetX;
             int tapY = result.getPoint().getY() + offsetY;
-            emuManager.touchPoint(activeEmulatorNumber, new PointData(tapX, tapY));
+            if (offsetX == 0 && offsetY == 0) {
+                // No offset: tap inside the actual matched bounding region.
+                tapInputService().tapInside(result);
+            } else {
+                tapInputService().tapNear(new PointData(tapX, tapY), TapJitterPolicy.DEFAULT_POINT_JITTER_RADIUS);
+            }
             node.setParam("__lastTappedAt", tapX + ", " + tapY);
             logger.info("Tapped at {}, {}", tapX, tapY);
         } else {

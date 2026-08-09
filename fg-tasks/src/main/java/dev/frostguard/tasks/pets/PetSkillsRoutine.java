@@ -322,7 +322,7 @@ public class PetSkillsRoutine extends DelayedTask {
         }
 
         logInfo("Pets button found. Opening menu.");
-        tapPoint(petsButton.getPoint());
+        tapInside(petsButton);
         sleepTask(1000); // Wait for Pets menu to load
 
         return true;
@@ -405,7 +405,7 @@ public class PetSkillsRoutine extends DelayedTask {
      * @param skill the skill whose icon to tap
      */
     private void tapSkillIcon(PetSkill skill) {
-        tapRandomPoint(skill.getTopLeft(), skill.getBottomRight());
+        tapInside(skill.getTopLeft(), skill.getBottomRight());
         sleepTask(300); // Wait for details overlay to appear
     }
 
@@ -469,7 +469,7 @@ public class PetSkillsRoutine extends DelayedTask {
         }
 
         logDebug("Use button found. Using skill.");
-        tapRandomPoint(
+        tapInside(
                 useButton.getPoint(),
                 useButton.getPoint(),
                 3, // Number of taps
@@ -803,7 +803,7 @@ public class PetSkillsRoutine extends DelayedTask {
     private boolean openResourceSearchMenu() {
         logDebug("Opening resource search menu");
 
-        tapRandomPoint(new PointData(25, 850), new PointData(67, 898));
+        tapInside(new PointData(25, 850), new PointData(67, 898));
         sleepTask(2000); // Wait for search menu to open
 
         // Swipe left to find resource tiles tab
@@ -865,7 +865,7 @@ public class PetSkillsRoutine extends DelayedTask {
             }
 
             logDebug("Tapping gather button");
-            tapPoint(gatherButton.getPoint());
+            tapInside(gatherButton);
             sleepTask(1000); // Wait for march configuration screen
 
             // Step 5: Deploy the march
@@ -879,7 +879,7 @@ public class PetSkillsRoutine extends DelayedTask {
             }
 
             logInfo("Deploying gather march");
-            tapPoint(deployButton.getPoint());
+            tapInside(deployButton);
             sleepTask(1000); // Wait for deployment confirmation
 
             logInfo(String.format("%s march deployed successfully!", resourceType.name()));
@@ -913,7 +913,7 @@ public class PetSkillsRoutine extends DelayedTask {
 
             if (tile.isFound()) {
                 logInfo(String.format("%s tile found", resourceType.name()));
-                tapPoint(tile.getPoint());
+                tapInside(tile);
                 sleepTask(500); // Wait for tile selection
                 return true;
             }
@@ -986,7 +986,7 @@ public class PetSkillsRoutine extends DelayedTask {
             resetLevelToOne();
 
             if (DESIRED_LEVEL > 1) {
-                tapRandomPoint(
+                tapInside(
                         LEVEL_INCREMENT_BUTTON_TOP_LEFT,
                         LEVEL_INCREMENT_BUTTON_BOTTOM_RIGHT,
                         DESIRED_LEVEL - 1,
@@ -998,14 +998,14 @@ public class PetSkillsRoutine extends DelayedTask {
 
             if (currentLevel < DESIRED_LEVEL) {
                 int taps = DESIRED_LEVEL - currentLevel;
-                tapRandomPoint(
+                tapInside(
                         LEVEL_INCREMENT_BUTTON_TOP_LEFT,
                         LEVEL_INCREMENT_BUTTON_BOTTOM_RIGHT,
                         taps,
                         LEVEL_BUTTON_TAP_DELAY);
             } else {
                 int taps = currentLevel - DESIRED_LEVEL;
-                tapRandomPoint(
+                tapInside(
                         LEVEL_DECREMENT_BUTTON_TOP_LEFT,
                         LEVEL_DECREMENT_BUTTON_BOTTOM_RIGHT,
                         taps,
@@ -1074,7 +1074,7 @@ public class PetSkillsRoutine extends DelayedTask {
 
         if (!tick.isFound()) {
             logDebug("Level not locked, tapping lock button");
-            tapPoint(levelLockButton);
+            tapNear(levelLockButton);
             sleepTask(300); // Wait for checkbox animation
         }
     }
@@ -1087,7 +1087,7 @@ public class PetSkillsRoutine extends DelayedTask {
     private boolean executeResourceSearch() {
         logInfo("Executing resource search");
 
-        tapRandomPoint(new PointData(301, 1200), new PointData(412, 1229));
+        tapInside(new PointData(301, 1200), new PointData(412, 1229));
         sleepTask(3000); // Wait for search to complete and map to load
 
         return true;

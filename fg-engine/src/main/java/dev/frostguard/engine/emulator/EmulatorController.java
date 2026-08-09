@@ -12,6 +12,7 @@ import dev.frostguard.vision.match.OpenCvPatternLocator;
 import dev.frostguard.api.configs.*;
 import dev.frostguard.engine.emulator.instance.*;
 import dev.frostguard.api.domain.*;
+import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.schedule.QueuedEmulatorTask;
 import dev.frostguard.engine.service.ConfigService;
 import dev.frostguard.engine.service.ProfileService;
@@ -96,22 +97,18 @@ public class EmulatorController {
 
     // --- input dispatch ---
 
-    public void touchPoint(String idx, PointData pt) {
+    public TapInteractionService tapInteractions(String idx) {
+        return tapInteractions(idx, null);
+    }
+
+    public TapInteractionService tapInteractions(String idx, TapInteractionService.PreTapCheck preTapCheck) {
+        return new TapInteractionService(target -> dispatchTap(idx, target), preTapCheck, null);
+    }
+
+    private void dispatchTap(String idx, PointData pt) {
         requireBackend();
         LOG.info("{} tap ({},{}) dev {}", label(idx), pt.getX(), pt.getY(), idx);
         backend.touchArea(idx, pt, pt);
-    }
-
-    public boolean touchArea(String idx, PointData a, PointData b) {
-        requireBackend();
-        LOG.info("{} area tap dev {}", label(idx), idx);
-        return backend.touchArea(idx, a, b);
-    }
-
-    public boolean touchArea(String idx, PointData a, PointData b, int n, int ms) {
-        requireBackend();
-        LOG.info("{} multi-tap x{} dev {}", label(idx), n, idx);
-        return backend.touchArea(idx, a, b, n, ms);
     }
 
     public void swipeScreen(String idx, PointData from, PointData to) {
