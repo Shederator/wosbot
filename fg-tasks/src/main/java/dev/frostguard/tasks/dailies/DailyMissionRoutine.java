@@ -104,7 +104,7 @@ private boolean switchToDailyMissionsTabFlow() {
 		}
 
 		logInfo(routineLogDailyMissionLine("Switching to daily missions tab at " + dailyTabButton.getPoint()));
-		tapPoint(dailyTabButton.getPoint());
+		tapInside(dailyTabButton);
 		sleepTask(500);
 
 		dailyScreenTitle = templateSearchHelper.locatePattern(
@@ -171,7 +171,7 @@ private boolean redeemRewardsIndividually() {
 			PointData claimPoint = claimResult.getPoint();
 			logDebug(routineLogDailyMissionLine("Collecting individual reward #" + claimedCount + " at " + claimPoint));
 
-			tapPoint(claimPoint);
+			tapNear(claimPoint);
 			dismissRewardPopupsFlow();
 			sleepTask(500);
 
@@ -206,7 +206,7 @@ private void hydrateTaskConfiguration() {
 	}
 
 private void dismissRewardPopupsFlow() {
-		tapRandomPoint(
+		tapInside(
 				POPUP_DISMISS_MIN_VALUE,
 				POPUP_DISMISS_MAX_VALUE,
 				POPUP_DISMISS_TAP_COUNT_VALUE,
@@ -218,7 +218,7 @@ private void dismissRewardPopupsFlow() {
 private void redeemAllRewardsAtOnce(ImageSearchResultData claimAllResult) {
 		logInfo(routineLogDailyMissionLine("'Claim All' button detected. Collecting all rewards at once"));
 
-		tapPoint(claimAllResult.getPoint());
+		tapInside(claimAllResult);
 		dismissRewardPopupsFlow();
 	}
 
@@ -231,7 +231,7 @@ private ImageSearchResultData seekForClaimAllButton() {
 private void reachDailyMissions() {
 		logInfo(routineLogDailyMissionLine("Moving to daily missions interface"));
 
-		tapPoint(DAILY_MISSIONS_BUTTON_VALUE);
+		tapNear(DAILY_MISSIONS_BUTTON_VALUE);
 		sleepTask(3000);
 
 	}

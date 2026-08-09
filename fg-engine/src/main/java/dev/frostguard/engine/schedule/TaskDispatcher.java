@@ -217,9 +217,20 @@ public class TaskDispatcher implements PreemptionListener, StaminaChangeListener
     // ── internal helpers ────────────────────────────────────────────
 
     private int resolveIdleLimit() {
-        return Optional.ofNullable(ConfigService.obtain().loadGlobalSettings())
+        int configured = Optional.ofNullable(ConfigService.obtain().loadGlobalSettings())
                 .map(cfg -> cfg.get(ConfigurationKeyEnum.MAX_IDLE_TIME_INT.name()))
-                .map(Integer::parseInt)
+                .map(TaskDispatcher::parseInteger)
                 .orElse(Integer.parseInt(ConfigurationKeyEnum.MAX_IDLE_TIME_INT.getDefaultValue()));
+        return configured > 0
+                ? configured
+                : Integer.parseInt(ConfigurationKeyEnum.MAX_IDLE_TIME_INT.getDefaultValue());
+    }
+
+    private static Integer parseInteger(String value) {
+        try {
+            return Integer.valueOf(value);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 }

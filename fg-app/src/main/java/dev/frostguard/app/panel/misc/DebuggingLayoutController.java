@@ -348,6 +348,39 @@ public class DebuggingLayoutController {
             event.setDropCompleted(success);
             event.consume();
         });
+
+        imageContainer.sceneProperty().addListener((obs, oldScene, newScene) -> {
+            if (newScene != null) {
+                newScene.addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, event -> {
+                    if (event.isShortcutDown() && event.getCode() == javafx.scene.input.KeyCode.V) {
+                        javafx.scene.input.Clipboard clipboard = javafx.scene.input.Clipboard.getSystemClipboard();
+                        if (clipboard.hasImage()) {
+                            Image image = clipboard.getImage();
+                            screenshotImageView.setImage(image);
+                            dragDropHint.setVisible(false);
+                            try {
+                                File tempFile = File.createTempFile("clipboard_screenshot", ".png");
+                                tempFile.deleteOnExit();
+                                javax.imageio.ImageIO.write(javafx.embed.swing.SwingFXUtils.fromFXImage(image, null), "png", tempFile);
+                                currentScreenshotFile = tempFile;
+                                log("Loaded screenshot from clipboard");
+                                log("Size: " + image.getWidth() + "x" + image.getHeight());
+                            } catch (Exception e) {
+                                log("Error saving clipboard image to temp file: " + e.getMessage());
+                            }
+                        } else if (clipboard.hasFiles()) {
+                            for (File file : clipboard.getFiles()) {
+                                String name = file.getName().toLowerCase();
+                                if (name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".bmp")) {
+                                    loadScreenshot(file);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        });
     }
 
     private void loadScreenshot(File file) {
@@ -646,6 +679,15 @@ public class DebuggingLayoutController {
             });
 
             try {
+                // Initialize backend if this is run independently before the engine starts
+                try {
+                    dev.frostguard.engine.emulator.EmulatorController.getInstance().captureScreen(selected.getEmulatorNumber());
+                } catch (IllegalStateException e) {
+                    if (e.getMessage().contains("Backend not initialised")) {
+                        dev.frostguard.engine.emulator.EmulatorController.getInstance().initialize();
+                    }
+                }
+
                 // We use EmulatorController to get the raw image dynamically
                 dev.frostguard.api.domain.RawImageData rawImage = dev.frostguard.engine.emulator.EmulatorController.getInstance()
                         .captureScreen(selected.getEmulatorNumber());

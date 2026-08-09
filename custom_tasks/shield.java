@@ -103,12 +103,12 @@ public class shield extends DelayedTask implements CustomTaskConfigurable {
             return;
         }
 
-        tapPoint(cityHit.getPoint());
-        tapRandomPoint(new PointData(380, 1035), new PointData(540, 1070));
+        tapNear(cityHit.getPoint());
+        tapInside(new PointData(380, 1035), new PointData(540, 1070));
         sleepTask(200L);
-        tapRandomPoint(new PointData(150, 200), new PointData(620, 300));
+        tapInside(new PointData(150, 200), new PointData(620, 300));
         sleepTask(200L);
-        tapRandomPoint(new PointData(515, 400), new PointData(650, 440));
+        tapInside(new PointData(515, 400), new PointData(650, 440));
 
         if (!followUpPending) {
             LocalDateTime followUpExecution = nowUtc().plus(followUpDelay);

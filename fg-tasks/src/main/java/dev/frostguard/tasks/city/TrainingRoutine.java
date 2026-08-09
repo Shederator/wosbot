@@ -204,7 +204,13 @@ protected void loadConfiguration() {
 
 
         List<LocalDateTime> newCompletionTimes = trainAllReadyQueuesFlow(readyQueues);
-        allCompletionTimes.addAll(newCompletionTimes);
+
+        logInfo(routineLogTrainingLine("Verifying final queue states via sidebar."));
+        navigationHelper.ensureCorrectScreenLocation(LaunchPoint.HOME);
+        marchHelper.openLeftMenuCitySection(true);
+        List<QueueSlot> verifiedQueues = inspectAllQueues();
+        allCompletionTimes.clear();
+        allCompletionTimes.addAll(extractExistingCompletionTimesFlow(verifiedQueues));
 
         deferToEarliestCompletion(allCompletionTimes);
     }
@@ -262,7 +268,7 @@ private boolean shouldLimitTrainingForAppointmentFlow() {
         }
     }
 
-private void performLimitedTrainingForAppointment(QueueSlot queue) {
+private boolean performLimitedTrainingForAppointment(QueueSlot queue) {
         LocalDateTime now = LocalDateTime.now();
 
 
@@ -276,7 +282,7 @@ private void performLimitedTrainingForAppointment(QueueSlot queue) {
 
         if (selectHighestUnlockedTroopLevel(troopTypeBeingTrained) == -1) {
             logWarning(routineLogTrainingLine("No unlocked troop level confirmed. Skipping limited training."));
-            return;
+            return false;
         }
 
         emuManager.captureScreen(EMULATOR_NUMBER);
@@ -289,15 +295,17 @@ private void performLimitedTrainingForAppointment(QueueSlot queue) {
 
 
             pressTrainButton();
-            return;
+            isPromotionTraining = true;
+            return true;
         }
 
         if (maxTroops == 0) {
             logWarning(routineLogTrainingLine("Max troops is zero. Zero training possible."));
-            return;
+            return false;
         }
 
         trainOptimalTroopCountFlow(trainTime, maxTroops, neededTime);
+        return true;
     }
 
 private void refreshMinistryAppointmentIfNeeded() {
@@ -398,14 +406,14 @@ private LocalDateTime extractTrainingCompletionTimeFlow() {
         return null;
     }
 
-private void performPromotionPriorityTraining(QueueSlot queue) {
+private boolean performPromotionPriorityTraining(QueueSlot queue) {
         logInfo(routineLogTrainingLine("Executing promotion-priority training for " + queue.type().name()));
 
         int maxLevel = selectHighestUnlockedTroopLevel(queue.type());
 
         if (maxLevel == -1) {
             logWarning(routineLogTrainingLine("No unlocked troop level confirmed. Skipping training."));
-            return;
+            return false;
         }
 
         logInfo(routineLogTrainingLine("Maximum unlocked troop level: " + maxLevel));
@@ -415,15 +423,17 @@ private void performPromotionPriorityTraining(QueueSlot queue) {
 
         if (promotionExecuted) {
             logInfo(routineLogTrainingLine("Promotion executed finished cleanly."));
+            return true;
         } else {
             logInfo(routineLogTrainingLine("Zero promotable troops detected. Reselecting highest unlocked level for normal training."));
             int selectedLevel = selectHighestUnlockedTroopLevel(queue.type());
             if (selectedLevel == -1) {
                 logWarning(routineLogTrainingLine("Could not reselect an unlocked troop level. Skipping normal training."));
-                return;
+                return false;
             }
             logInfo(routineLogTrainingLine("Reselected level " + selectedLevel + " for normal training."));
             pressTrainButton();
+            return true;
         }
     }
 
@@ -461,7 +471,7 @@ private boolean attemptSingleTroopPromotionFlow(TemplatesEnum template) {
         }
 
         if (troop.isFound()) {
-            tapPoint(troop.getPoint());
+            tapInside(troop);
             sleepTask(300);
 
 
@@ -483,8 +493,8 @@ private boolean attemptSingleTroopPromotionFlow(TemplatesEnum template) {
     }
 
 private void applyForMinistryAppointmentFlow() {
-        tapRandomPoint(MINISTRY_DETAILS_MIN_VALUE, MINISTRY_DETAILS_MAX_VALUE, 1, 300);
-        tapRandomPoint(MINISTRY_MORE_DETAILS_MIN_VALUE, MINISTRY_MORE_DETAILS_MAX_VALUE, 1, 300);
+        tapInside(MINISTRY_DETAILS_MIN_VALUE, MINISTRY_DETAILS_MAX_VALUE, 1, 300);
+        tapInside(MINISTRY_MORE_DETAILS_MIN_VALUE, MINISTRY_MORE_DETAILS_MAX_VALUE, 1, 300);
 
         ImageSearchResultData applyButton = templateSearchHelper.locatePattern(
                 SUNFIRE_MINISTRY_APPLY_BUTTON,
@@ -492,8 +502,8 @@ private void applyForMinistryAppointmentFlow() {
 
         if (applyButton.isFound()) {
             logInfo(routineLogTrainingLine("Applying for ministry appointment"));
-            tapRandomPoint(applyButton.getPoint(), applyButton.getPoint(), 1, 1000);
-            tapRandomPoint(MINISTRY_CONFIRM_MIN_VALUE, MINISTRY_CONFIRM_MAX_VALUE, 1, 2500);
+            tapInside(applyButton.getPoint(), applyButton.getPoint(), 1, 1000);
+            tapInside(MINISTRY_CONFIRM_MIN_VALUE, MINISTRY_CONFIRM_MAX_VALUE, 1, 2500);
         } else {
             logInfo(routineLogTrainingLine("Apply button not detected. May already have active appointment."));
         }
@@ -566,7 +576,7 @@ private boolean seekSunfireCastleWithSwipe() {
                     SearchConfigConstants.DEFAULT_SINGLE);
 
             if (sunfireCastle.isFound()) {
-                tapRandomPoint(sunfireCastle.getPoint(), sunfireCastle.getPoint(), 1, 500);
+                tapInside(sunfireCastle.getPoint(), sunfireCastle.getPoint(), 1, 500);
                 return true;
             }
 
@@ -766,19 +776,79 @@ private Integer extractMaxTroopCountFlow() {
                 text -> RegexNumberParser.extractByPattern(text, Pattern.compile(".*?(\\d+).*")));
     }
 
-private List<LocalDateTime> trainAllReadyQueuesFlow(List<QueueSlot> readyQueues) {
+    private List<LocalDateTime> trainAllReadyQueuesFlow(List<QueueSlot> readyQueues) {
         List<LocalDateTime> completionTimes = new ArrayList<>();
+        if (readyQueues.isEmpty()) return completionTimes;
+
+        boolean inTrainingInterface = false;
 
         for (QueueSlot queue : readyQueues) {
             troopTypeBeingTrained = queue.type();
-            LocalDateTime completionTime = trainSingleQueueFlow(queue);
+            boolean trainingStartedSuccessfully = false;
 
-            if (completionTime != null) {
-                completionTimes.add(completionTime);
+            if (!inTrainingInterface) {
+                navigationHelper.ensureCorrectScreenLocation(LaunchPoint.HOME);
+                marchHelper.openLeftMenuCitySection(true);
+                AreaData areaToTap = resolvePipelineArea(queue.type());
+                tapInside(areaToTap.topLeft(), areaToTap.bottomRight(), 1, 500);
+                tapInside(TRAINING_CAMP_TAP_MIN_VALUE, TRAINING_CAMP_TAP_MAX_VALUE, 10, 100);
+                if (openUpTrainingInterface()) {
+                    inTrainingInterface = true;
+                }
+            } else {
+                logInfo(routineLogTrainingLine("Switching to tab: " + queue.type().name()));
+                switchTrainingTab(queue.type());
+                sleepTask(500); // UI transition delay
+            }
+
+            if (inTrainingInterface) {
+                promotionCompletionTime = null;
+                isPromotionTraining = false;
+
+                if (performTrainingForQueue(queue)) {
+                    trainingStartedSuccessfully = true;
+                    LocalDateTime completionTime = extractTrainingCompletionTimeFlow();
+                    if (completionTime != null) {
+                        completionTimes.add(completionTime);
+                    }
+                }
+            }
+
+            if (!trainingStartedSuccessfully) {
+                logWarning(routineLogTrainingLine("Multi-tab flow failed for " + queue.type().name() + ". Falling back to single queue flow."));
+                
+                // Reset state by forcing a menu close (which acts as a generic back/reset in many cases)
+                marchHelper.closeLeftMenu();
+                for (int i = 0; i < 3; i++) {
+                    dismissPopupsFlow();
+                }
+                
+                inTrainingInterface = false;
+
+                LocalDateTime fallbackTime = trainSingleQueueFlow(queue);
+                if (fallbackTime != null) {
+                    completionTimes.add(fallbackTime);
+                }
             }
         }
 
         return completionTimes;
+    }
+
+    private void switchTrainingTab(TroopTypeShape type) {
+        switch (type) {
+            case INFANTRY -> tapNear(new dev.frostguard.api.domain.PointData(120, 1213));
+            case LANCER -> tapNear(new dev.frostguard.api.domain.PointData(360, 1213));
+            case MARKSMAN -> tapNear(new dev.frostguard.api.domain.PointData(600, 1213));
+        }
+    }
+
+    private boolean performTrainingForQueue(QueueSlot queue) {
+        if (shouldLimitTrainingForAppointmentFlow()) {
+            return performLimitedTrainingForAppointment(queue);
+        } else {
+            return performMaximumTraining(queue);
+        }
     }
 
 private void resetTroopListToEndFlow() {
@@ -787,14 +857,6 @@ private void resetTroopListToEndFlow() {
         swipe(TROOP_LIST_RIGHT_VALUE, TROOP_LIST_LEFT_VALUE);
         sleepTask(200);
 
-    }
-
-private void performTrainingForQueue(QueueSlot queue) {
-        if (shouldLimitTrainingForAppointmentFlow()) {
-            performLimitedTrainingForAppointment(queue);
-        } else {
-            performMaximumTraining(queue);
-        }
     }
 
 private boolean openUpTrainingInterface() {
@@ -806,7 +868,7 @@ private boolean openUpTrainingInterface() {
             return false;
         }
 
-        tapRandomPoint(trainingButton.getPoint(), trainingButton.getPoint(), 1, 1000);
+        tapInside(trainingButton.getPoint(), trainingButton.getPoint(), 1, 1000);
         return true;
     }
 
@@ -931,7 +993,7 @@ private TrainingTierSelector.TierState probeTroopTier(TemplatesEnum template) {
             return TrainingTierSelector.TierState.NOT_VISIBLE;
         }
 
-        tapPoint(troop.getPoint());
+        tapInside(troop);
         sleepTask(250);
         emuManager.captureScreen(EMULATOR_NUMBER);
         ImageSearchResultData lockedIndicator = templateSearchHelper.locatePattern(
@@ -1030,19 +1092,21 @@ private List<TemplatesEnum> resolveTroopsTemplates(TroopTypeShape type) {
         };
     }
 
-private void performMaximumTraining(QueueSlot queue) {
+    private boolean performMaximumTraining(QueueSlot queue) {
         logInfo(routineLogTrainingLine("Training maximum troops (no appointment constraints)."));
 
         if (!ministryAppointmentEnabled && prioritizePromotion) {
-            performPromotionPriorityTraining(queue);
+            return performPromotionPriorityTraining(queue);
         } else {
             if (selectHighestUnlockedTroopLevel(troopTypeBeingTrained) != -1) {
                 pressTrainButton();
-            } else {
-                logWarning(routineLogTrainingLine("No unlocked troop level confirmed. Skipping normal training."));
+                return true;
             }
         }
+        return false;
     }
+
+
 
 private void manageNoQueuesSelected() {
         logInfo(routineLogTrainingLine("Zero troop types selected for training. Disabling task."));
@@ -1091,7 +1155,7 @@ private boolean reachSunfireCastleTab() {
                 SearchConfigConstants.DEFAULT_SINGLE);
 
         if (sunfireCastle.isFound()) {
-            tapRandomPoint(sunfireCastle.getPoint(), sunfireCastle.getPoint(), 1, 500);
+            tapInside(sunfireCastle.getPoint(), sunfireCastle.getPoint(), 1, 500);
             return true;
         }
 
@@ -1171,9 +1235,9 @@ private LocalDateTime trainSingleQueueFlow(QueueSlot queue) {
         AreaData areaToTap = resolvePipelineArea(queue.type());
 
         logInfo(routineLogTrainingLine("Preparing to train " + queue.type().name()));
-        tapRandomPoint(areaToTap.topLeft(), areaToTap.bottomRight(), 1, 500);
+        tapInside(areaToTap.topLeft(), areaToTap.bottomRight(), 1, 500);
 
-        tapRandomPoint(TRAINING_CAMP_TAP_MIN_VALUE, TRAINING_CAMP_TAP_MAX_VALUE, 10, 100);
+        tapInside(TRAINING_CAMP_TAP_MIN_VALUE, TRAINING_CAMP_TAP_MAX_VALUE, 10, 100);
 
         if (!openUpTrainingInterface()) {
             return manageTrainingButtonNotFound(queue);
@@ -1258,7 +1322,7 @@ private void manageNoReadyQueues() {
     }
 
 private void inputTroopCountFlow(int count) {
-        tapRandomPoint(TROOP_COUNT_INPUT_MIN_VALUE, TROOP_COUNT_INPUT_MAX_VALUE, 1, 100);
+        tapInside(TROOP_COUNT_INPUT_MIN_VALUE, TROOP_COUNT_INPUT_MAX_VALUE, 1, 100);
         emuManager.clearText(EMULATOR_NUMBER, 6);
         emuManager.writeText(EMULATOR_NUMBER, count + "\n");
         sleepTask(1000);
@@ -1300,7 +1364,7 @@ private boolean pressEventsButton() {
             return false;
         }
 
-        tapPoint(eventsButton.getPoint());
+        tapInside(eventsButton);
         sleepTask(1000);
 
         return true;
@@ -1323,7 +1387,7 @@ private QueueSlot inspectQueueState(AreaData queueArea, TroopTypeShape troopType
     }
 
 private void dismissPopupsFlow() {
-        tapRandomPoint(POPUP_DISMISS_MIN_VALUE, POPUP_DISMISS_MAX_VALUE, 5, 200);
+        tapInside(POPUP_DISMISS_MIN_VALUE, POPUP_DISMISS_MAX_VALUE, 5, 200);
     }
 
 private void pressTrainButton() {
@@ -1332,7 +1396,7 @@ private void pressTrainButton() {
                 SearchConfigConstants.DEFAULT_SINGLE);
 
         if (trainButton.isFound()) {
-            tapRandomPoint(trainButton.getPoint(), trainButton.getPoint(), 1, 500);
+            tapInside(trainButton.getPoint(), trainButton.getPoint(), 1, 500);
 
             emuManager.captureScreen(EMULATOR_NUMBER);
             ImageSearchResultData replenishAll = templateSearchHelper.locatePattern(
@@ -1341,11 +1405,11 @@ private void pressTrainButton() {
 
             if (replenishAll.isFound()) {
                 logInfo(routineLogTrainingLine("Filling resources."));
-                tapRandomPoint(replenishAll.getPoint(), replenishAll.getPoint(), 1, 300);
+                tapInside(replenishAll.getPoint(), replenishAll.getPoint(), 1, 300);
                 sleepTask(300);
                 PointData replenishConfirm = new PointData(442, 1064);
-                tapRandomPoint(replenishConfirm, replenishConfirm, 3, 100);
-                tapRandomPoint(trainButton.getPoint(), trainButton.getPoint(), 1, 500);
+                tapInside(replenishConfirm, replenishConfirm, 3, 100);
+                tapInside(trainButton.getPoint(), trainButton.getPoint(), 1, 500);
             }
         } else {
             logWarning(routineLogTrainingLine("Train button not detected."));
@@ -1356,13 +1420,13 @@ private boolean performPromotion(TemplatesEnum template, ImageSearchResultData p
         logInfo(routineLogTrainingLine("Executing promotion for: " + template.name()));
         isPromotionTraining = true;
 
-        tapRandomPoint(promoteButton.getPoint(), promoteButton.getPoint());
+        tapInside(promoteButton.getPoint(), promoteButton.getPoint());
         sleepTask(300);
 
 
         capturePromotionCompletionTimeFlow();
 
-        tapPoint(PROMOTION_CONFIRM_POINT_VALUE);
+        tapNear(PROMOTION_CONFIRM_POINT_VALUE);
         sleepTask(300);
 
 

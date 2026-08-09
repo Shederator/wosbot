@@ -65,7 +65,7 @@ public class MysteryShopRoutine extends DelayedTask {
 		}
 
 		// Tap on shop button
-		tapRandomPoint(shopButtonResult.getPoint(), shopButtonResult.getPoint());
+		tapInside(shopButtonResult.getPoint(), shopButtonResult.getPoint());
 		sleepTask(1000);
 
 		// STEP 2: Search for mystery shop within the shop menu
@@ -82,7 +82,7 @@ public class MysteryShopRoutine extends DelayedTask {
 		}
 
 		// Tap on mystery shop
-		tapRandomPoint(mysteryShopResult.getPoint(), mysteryShopResult.getPoint());
+		tapInside(mysteryShopResult.getPoint(), mysteryShopResult.getPoint());
 		sleepTask(1000);
 		logInfo("Successfully navigated to the Mystery Shop.");
 		return true;
@@ -204,11 +204,11 @@ public class MysteryShopRoutine extends DelayedTask {
 			// If found, claim the reward
 			if (freeRewardResult.isFound()) {
 				// Tap on the free reward
-				tapRandomPoint(freeRewardResult.getPoint(), freeRewardResult.getPoint());
+				tapInside(freeRewardResult.getPoint(), freeRewardResult.getPoint());
 				sleepTask(400);
 
 				// Confirm the claim (tap on confirm button or area)
-				tapPoint(new PointData(360, 830));
+				tapNear(new PointData(360, 830));
 				sleepTask(300);
 
 				logInfo("A free reward has been claimed.");
@@ -236,7 +236,7 @@ public class MysteryShopRoutine extends DelayedTask {
 
 		if (dailyRefreshResult.isFound()) {
 			// Tap on daily refresh
-			tapRandomPoint(dailyRefreshResult.getPoint(), dailyRefreshResult.getPoint());
+			tapInside(dailyRefreshResult.getPoint(), dailyRefreshResult.getPoint());
 			sleepTask(1000);
 
 			logInfo("Daily refresh used successfully");
@@ -331,11 +331,11 @@ public class MysteryShopRoutine extends DelayedTask {
 				}
 
 				// Tap on the hero widget buy button
-				tapPoint(heroWidgetResult.getPoint());
+				tapInside(heroWidgetResult);
 				sleepTask(600);
 
 				// Confirm the purchase (tap on confirm button or area)
-				tapPoint(new PointData(360, 830));
+				tapNear(new PointData(360, 830));
 				sleepTask(600);
 
 				logInfo("250 Hero Widget found and purchased on attempt " + purchaseAttempt + ".");
@@ -382,11 +382,11 @@ public class MysteryShopRoutine extends DelayedTask {
 			// If found, purchase the item
 			if (buyButtonResult.isFound()) {
 				// Tap on the buy button
-				tapRandomPoint(buyButtonResult.getPoint(), buyButtonResult.getPoint());
+				tapInside(buyButtonResult.getPoint(), buyButtonResult.getPoint());
 				sleepTask(600);
 
 				// Confirm the purchase (tap on confirm button or area)
-				tapPoint(new PointData(360, 830));
+				tapNear(new PointData(360, 830));
 				sleepTask(600);
 
 				logInfo(itemName + " has been purchased.");

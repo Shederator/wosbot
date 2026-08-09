@@ -10,6 +10,7 @@ import java.util.Map;
  * configured idle timeout window.
  */
 public enum IdleBehaviorEnum {
+    KEEP_RUNNING      ("Keep Running",   false),
     CLOSE_EMULATOR    ("Close Emulator", false),
     SEND_TO_BACKGROUND("Close Game",     true),
     PC_SLEEP          ("PC Sleep",       false);
@@ -49,7 +50,12 @@ public enum IdleBehaviorEnum {
      * or puts the host machine to sleep.
      */
     public boolean terminatesSession() {
-        return !backgroundsApp;
+        return this == CLOSE_EMULATOR || this == PC_SLEEP;
+    }
+
+    /** Whether this mode needs a positive idle timeout before taking action. */
+    public boolean requiresIdleTimeout() {
+        return this != KEEP_RUNNING;
     }
 
     /**

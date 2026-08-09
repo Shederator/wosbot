@@ -104,6 +104,7 @@ public PolarTerrorHuntingRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTa
 
     private enum RallyLaunchOutcome {
         SUCCESS,
+        BEAR_TRAP_PROTECTED,
         SEARCH_FAILED,
         NO_SPECIAL_REWARDS,
         RALLY_BUTTON_MISSING,
@@ -241,6 +242,10 @@ private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
                 return;
             }
 
+            if (result.outcome() == RallyLaunchOutcome.BEAR_TRAP_PROTECTED) {
+                return;
+            }
+
             if (result.outcome() == RallyLaunchOutcome.STAMINA_ITEMS_INSUFFICIENT) {
                 logInfo(routineLogPolarTerrorHuntingLine(
                         "Confirmed usable stamina items cannot fund the rally; waiting for regeneration."));
@@ -356,7 +361,7 @@ private RallyLaunchResult launchSingleRallyFlow(int polarLevel, boolean useFlag,
             }
             logInfo(routineLogPolarTerrorHuntingLine(
                     "Special rewards remain; searching from the retained Polar Terror panel."));
-            tapRandomPoint(
+            tapInside(
                     CommonGameAreas.POLAR_SEARCH_BUTTON.topLeft(),
                     CommonGameAreas.POLAR_SEARCH_BUTTON.bottomRight());
             sleepTask(1500);
@@ -409,7 +414,7 @@ private RallyLaunchResult launchSingleRallyFlow(int polarLevel, boolean useFlag,
             }
 
             logInfo(routineLogPolarTerrorHuntingLine("Stamina gate: pressing Deploy to open the obtain-more dialog"));
-            tapPoint(deploy.getPoint());
+            tapInside(deploy);
             sleepTask(1000);
 
             StaminaTopUpResult refill = staminaHelper.refillFromOpenDialog(
@@ -432,7 +437,11 @@ private RallyLaunchResult launchSingleRallyFlow(int polarLevel, boolean useFlag,
         logInfo(routineLogPolarTerrorHuntingLine(String.format(
                 "Deployment decision: Deploy found at %s score=%.2f; pressing",
                 deploy.getPoint(), deploy.getMatchScore())));
-        tapPoint(deploy.getPoint());
+        if (deferIfBearTrapBlocksRallyStart()) {
+            return fail(RallyLaunchOutcome.BEAR_TRAP_PROTECTED,
+                    "Bear Trap protection became active before deployment");
+        }
+        tapInside(deploy);
         sleepTask(2000);
 
         if (deploymentHelper.isSameTargetDialog()) {
@@ -641,14 +650,14 @@ private SpecialRewardsStatus inspectSpecialRewards() {
             return SpecialRewardsStatus.READ_FAILED;
         }
 
-        tapPoint(magnifyingGlass.getPoint());
+        tapInside(magnifyingGlass);
         sleepTask(2000);
 
         PolarSpecialRewardsScanner.Result result = PolarSpecialRewardsScanner.scan(
                 this::readVisibleSpecialRewardsCount,
                 () -> swipe(new PointData(363, 1088), new PointData(363, 1030)),
                 this::sleepTask);
-        tapPoint(CommonGameAreas.POLAR_REWARD_DETAILS_CLOSE);
+        tapNear(CommonGameAreas.POLAR_REWARD_DETAILS_CLOSE);
         sleepTask(500);
         return switch (result) {
             case AVAILABLE -> SpecialRewardsStatus.AVAILABLE;
@@ -690,7 +699,7 @@ private boolean openUpPolarsMenu(int polarLevel) {
             navigationHelper.ensureCorrectScreenLocation(getRequiredStartLocation());
             logInfo(routineLogPolarTerrorHuntingLine(String.format(
                     "Search panel attempt %d/2: opening world search area", attempt)));
-            tapRandomPoint(new PointData(25, 850), new PointData(67, 898));
+            tapInside(new PointData(25, 850), new PointData(67, 898));
             sleepTask(1200);
 
             swipe(new PointData(40, 913), new PointData(678, 913));
@@ -720,7 +729,7 @@ private boolean openUpPolarsMenu(int polarLevel) {
             return false;
         }
 
-        tapPoint(polarTerror.getPoint());
+        tapInside(polarTerror);
         sleepTask(500);
         if (polarLevel != -1) {
             if (huntHighestLevel) {
@@ -735,7 +744,7 @@ private boolean openUpPolarsMenu(int polarLevel) {
             }
         }
 
-        tapRandomPoint(
+        tapInside(
                 CommonGameAreas.POLAR_SEARCH_BUTTON.topLeft(),
                 CommonGameAreas.POLAR_SEARCH_BUTTON.bottomRight());
         sleepTask(1500);
@@ -757,7 +766,11 @@ private RallyLaunchResult openUpRallyMenu() {
         logInfo(routineLogPolarTerrorHuntingLine(String.format(
                 "Rally button found at %s score=%.2f",
                 rallyButton.getPoint(), rallyButton.getMatchScore())));
-        tapPoint(rallyButton.getPoint());
+        if (deferIfBearTrapBlocksRallyStart()) {
+            return fail(RallyLaunchOutcome.BEAR_TRAP_PROTECTED,
+                    "Bear Trap protection became active before opening the rally");
+        }
+        tapInside(rallyButton);
         sleepTask(1000);
 
         if (deploymentHelper.isMarchQueueFull()) {
@@ -776,7 +789,7 @@ private RallyLaunchResult openUpRallyMenu() {
         }
 
         rallySetTimeSeconds = deploymentHelper.readRallySetTimeSeconds(DEFAULT_RALLY_SET_TIME_SECONDS);
-        tapPoint(holdRallyButton.getPoint());
+        tapInside(holdRallyButton);
         sleepTask(1000);
         return ok("Hold Rally opened formation screen");
     }
@@ -792,7 +805,7 @@ private void selectHighestPolarLevel() {
         }
 
         for (int attempt = 1; attempt <= LEVEL_SELECTOR_MAX_ADJUSTMENTS; attempt++) {
-            tapRandomPoint(LEVEL_PLUS_BUTTON, LEVEL_PLUS_BUTTON, LEVEL_SELECTOR_SWEEP_TAPS, 40);
+            tapInside(LEVEL_PLUS_BUTTON, LEVEL_PLUS_BUTTON, LEVEL_SELECTOR_SWEEP_TAPS, 40);
             sleepTask(500);
 
             Integer updatedLevel = readPolarLevelSelection();
@@ -823,7 +836,7 @@ private void selectPolarLevel(int polarLevel) {
         if (currentLevel == null) {
             logWarning(routineLogPolarTerrorHuntingLine(
                     "Level selector: OCR unreadable; resetting to the selector minimum before retrying"));
-            tapRandomPoint(LEVEL_MINUS_BUTTON, LEVEL_MINUS_BUTTON, LEVEL_SELECTOR_SWEEP_TAPS, 40);
+            tapInside(LEVEL_MINUS_BUTTON, LEVEL_MINUS_BUTTON, LEVEL_SELECTOR_SWEEP_TAPS, 40);
             sleepTask(500);
             currentLevel = readPolarLevelSelection();
         }
@@ -839,7 +852,7 @@ private void selectPolarLevel(int polarLevel) {
             logInfo(routineLogPolarTerrorHuntingLine(String.format(
                     "Level selector: current=%d target=%d; adjusting with %d %s tap(s)",
                     currentLevel, polarLevel, Math.abs(delta), delta > 0 ? "plus" : "minus")));
-            tapRandomPoint(button, button, Math.abs(delta), 60);
+            tapInside(button, button, Math.abs(delta), 60);
             sleepTask(500);
 
             Integer updatedLevel = readPolarLevelSelection();

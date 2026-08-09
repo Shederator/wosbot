@@ -338,7 +338,7 @@ private void refreshRemainingCoins(int qty, int itemPrice) {
 private boolean reachShopAndReadCoins() {
         logDebug(routineLogAllianceShopLine("Moving to Alliance Shop..."));
 
-        tapRandomPoint(ALLIANCE_BUTTON_TOP_LEFT_VALUE, ALLIANCE_BUTTON_BOTTOM_RIGHT_VALUE);
+        tapInside(ALLIANCE_BUTTON_TOP_LEFT_VALUE, ALLIANCE_BUTTON_BOTTOM_RIGHT_VALUE);
         sleepTask(3000);
 
 
@@ -355,10 +355,10 @@ private boolean reachShopAndReadCoins() {
         }
 
         logDebug(routineLogAllianceShopLine("Shop button detected at: " + shopButton.getPoint()));
-        tapRandomPoint(shopButton.getPoint(), shopButton.getPoint(), 1, 1000);
+        tapInside(shopButton.getPoint(), shopButton.getPoint(), 1, 1000);
 
         logDebug(routineLogAllianceShopLine("Entering shop details to read coins..."));
-        tapRandomPoint(SHOP_DETAILS_TOP_LEFT_VALUE, SHOP_DETAILS_BOTTOM_RIGHT_VALUE, 1, 1000);
+        tapInside(SHOP_DETAILS_TOP_LEFT_VALUE, SHOP_DETAILS_BOTTOM_RIGHT_VALUE, 1, 1000);
 
         currentCoins = scanCurrentCoins();
 
@@ -370,7 +370,7 @@ private boolean reachShopAndReadCoins() {
         logInfo(routineLogAllianceShopLine("Current alliance coins: " + currentCoins + ". Minimum to save: " + minCoins));
 
 
-        tapRandomPoint(CLOSE_TOP_LEFT_VALUE, CLOSE_BOTTOM_RIGHT_VALUE, 3, 200);
+        tapInside(CLOSE_TOP_LEFT_VALUE, CLOSE_BOTTOM_RIGHT_VALUE, 3, 200);
 
         return true;
     }
@@ -412,12 +412,12 @@ private boolean managePurchaseOutcome(
     }
 
 private void dismissPurchaseDialog() {
-        tapRandomPoint(CLOSE_TOP_LEFT_VALUE, CLOSE_BOTTOM_RIGHT_VALUE, 3, 200);
+        tapInside(CLOSE_TOP_LEFT_VALUE, CLOSE_BOTTOM_RIGHT_VALUE, 3, 200);
     }
 
 private void openUpPurchaseDialog(int cardIndex) {
         AreaData priceArea = resolvePriceArea(cardIndex);
-        tapRandomPoint(priceArea.topLeft(), priceArea.bottomRight(), 1, 1500);
+        tapInside(priceArea.topLeft(), priceArea.bottomRight(), 1, 1500);
     }
 
 private void hydrateConfiguration() {
@@ -453,7 +453,7 @@ private TemplatesEnum resolveItemTemplate(AllianceShopItemEnum item) {
     }
 
 private void confirmPurchaseFlow() {
-        tapRandomPoint(CONFIRM_BUTTON_TOP_LEFT_VALUE, CONFIRM_BUTTON_BOTTOM_RIGHT_VALUE, 1, 1000);
+        tapInside(CONFIRM_BUTTON_TOP_LEFT_VALUE, CONFIRM_BUTTON_BOTTOM_RIGHT_VALUE, 1, 1000);
     }
 
 private List<AllianceShopItemEnum.Availability> resolveTabsForItem(AllianceShopItemEnum item) {
@@ -546,8 +546,8 @@ private Integer resolveCardIndex(AllianceShopItemEnum item) {
 
 private void switchToTabFlow(AllianceShopItemEnum.Availability tab) {
         switch (tab) {
-            case WEEKLY -> tapRandomPoint(WEEKLY_TAB_TOP_LEFT_VALUE, WEEKLY_TAB_BOTTOM_RIGHT_VALUE, 3, 200);
-            case DAILY -> tapRandomPoint(DAILY_TAB_TOP_LEFT_VALUE, DAILY_TAB_BOTTOM_RIGHT_VALUE, 3, 200);
+            case WEEKLY -> tapInside(WEEKLY_TAB_TOP_LEFT_VALUE, WEEKLY_TAB_BOTTOM_RIGHT_VALUE, 3, 200);
+            case DAILY -> tapInside(DAILY_TAB_TOP_LEFT_VALUE, DAILY_TAB_BOTTOM_RIGHT_VALUE, 3, 200);
             case BOTH -> {
 
 
@@ -685,11 +685,11 @@ private void chooseQuantity(int qty, int availableQuantity) {
         if (qty == availableQuantity) {
 
 
-            tapRandomPoint(MAX_BUTTON_TOP_LEFT_LIMIT, MAX_BUTTON_BOTTOM_RIGHT_LIMIT, 1, 300);
+            tapInside(MAX_BUTTON_TOP_LEFT_LIMIT, MAX_BUTTON_BOTTOM_RIGHT_LIMIT, 1, 300);
         } else {
 
 
-            tapRandomPoint(PLUS_BUTTON_TOP_LEFT_VALUE, PLUS_BUTTON_BOTTOM_RIGHT_VALUE, qty - 1, 300);
+            tapInside(PLUS_BUTTON_TOP_LEFT_VALUE, PLUS_BUTTON_BOTTOM_RIGHT_VALUE, qty - 1, 300);
         }
     }
 

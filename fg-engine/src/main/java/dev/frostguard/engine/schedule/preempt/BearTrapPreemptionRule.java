@@ -1,6 +1,6 @@
 package dev.frostguard.engine.schedule.preempt;
 
-import java.time.LocalDateTime;
+import java.time.Clock;
 
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
@@ -9,17 +9,24 @@ import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.engine.schedule.BearTrapVisualProtection;
 
 /**
- * Fires when the Bear Trap running indicator is visible on-screen,
- * causing the scheduler to interrupt the current task and launch the
- * bear-trap routine instead.
+ * Detects the Bear Trap running indicator and always registers temporary
+ * rally protection. It preempts into Bear participation only when the
+ * profile explicitly enables icon fallback.
  */
 public class BearTrapPreemptionRule implements PreemptionRule {
 
-    // Changed by pernerch | Date: 2026-07-02 | Why: suppress repeated triggers to prevent Bear Trap preemption storms.
-    private static final long SUPPRESS_DURATION_SECONDS = 30L;
-    private LocalDateTime suppressUntil = LocalDateTime.MIN;
+    private final Clock clock;
+
+    public BearTrapPreemptionRule() {
+        this(Clock.systemUTC());
+    }
+
+    BearTrapPreemptionRule(Clock clock) {
+        this.clock = clock;
+    }
 
     @Override
     public boolean shouldPreempt(EmulatorController controller,
@@ -28,11 +35,7 @@ public class BearTrapPreemptionRule implements PreemptionRule {
         if (profile == null || profile.getEmulatorNumber() == null) {
             return false;
         }
-        // Changed by pernerch | Date: 2026-07-02 | Why: preempt only when Bear Trap is enabled for this profile.
-        if (Boolean.FALSE.equals(profile.getConfig(ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL, Boolean.class))) {
-            return false;
-        }
-        if (LocalDateTime.now().isBefore(suppressUntil)) {
+        if (BearTrapVisualProtection.releaseAt(profile.getId(), clock).isPresent()) {
             return false;
         }
         try {
@@ -42,11 +45,18 @@ public class BearTrapPreemptionRule implements PreemptionRule {
             if (!match.isFound()) {
                 return false;
             }
-            suppressUntil = LocalDateTime.now().plusSeconds(SUPPRESS_DURATION_SECONDS);
-            return true;
+            BearTrapVisualProtection.markDetected(profile.getId(), clock);
+            return iconMayStartParticipation(profile);
         } catch (Exception ignored) {
             return false;
         }
+    }
+
+    static boolean iconMayStartParticipation(AccountDescriptor profile) {
+        return Boolean.TRUE.equals(profile.getConfig(ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL, Boolean.class))
+                && Boolean.TRUE.equals(profile.getConfig(
+                        ConfigurationKeyEnum.BEAR_TRAP_ICON_PARTICIPATION_FALLBACK_BOOL,
+                        Boolean.class));
     }
 
     @Override

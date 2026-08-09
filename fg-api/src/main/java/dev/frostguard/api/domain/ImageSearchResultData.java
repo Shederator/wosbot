@@ -15,6 +15,11 @@ public class ImageSearchResultData {
     private double matchScore;
     private int hitX;
     private int hitY;
+    /**
+     * On-screen size of the matched template region ({@code null} when
+     * unknown). For multi-scale matches this reflects the scaled size,
+     * not the raw template size.
+     */
     private SizeData templateSize;
 
     /* ── static factories ── */
@@ -32,6 +37,17 @@ public class ImageSearchResultData {
         ImageSearchResultData r = hit(x, y, score);
         r.templateSize = templateSize;
         return r;
+    }
+
+    /**
+     * Factory for a successful match that also records the actual matched
+     * bounding region. {@code x}/{@code y} are the region center; the width
+     * and height reflect the (possibly scaled) template size on screen.
+     * This is especially important for multi-scale matches, where the
+     * effective on-screen size differs from the raw template size.
+     */
+    public static ImageSearchResultData hit(int x, int y, double score, int width, int height) {
+        return hit(x, y, score, new SizeData(Math.max(0, width), Math.max(0, height)));
     }
 
     public static ImageSearchResultData miss() {
@@ -65,6 +81,34 @@ public class ImageSearchResultData {
     public boolean isLocated()                          { return outcome == MatchOutcome.HIT; }
     public boolean isAboveThreshold(double threshold)   { return matchScore >= threshold; }
 
+    /** True when the matched bounding region dimensions are known. */
+    public boolean hasMatchedArea() {
+        return isLocated() && getMatchWidth() > 0 && getMatchHeight() > 0;
+    }
+
+    /**
+     * Returns the actual matched bounding region on screen, or {@code null}
+     * when the result is a miss or the region dimensions are unknown.
+     * Callers should pass this region to the input layer instead of
+     * reconstructing or guessing the clickable area themselves.
+     *
+     * <p>Both corners are <em>inclusive</em>, matching the convention used
+     * by {@link AreaData} and the emulator tap implementation: a region of
+     * {@code matchWidth} pixels spans exactly {@code matchWidth} distinct
+     * column coordinates, so the bottom-right column is
+     * {@code topLeftX + matchWidth - 1} (and equivalently for rows).</p>
+     */
+    public AreaData getMatchedArea() {
+        if (!hasMatchedArea()) return null;
+        int matchWidth = getMatchWidth();
+        int matchHeight = getMatchHeight();
+        int topLeftX = hitX - matchWidth / 2;
+        int topLeftY = hitY - matchHeight / 2;
+        return new AreaData(
+                new PointData(topLeftX, topLeftY),
+                new PointData(topLeftX + matchWidth - 1, topLeftY + matchHeight - 1));
+    }
+
     /* ── accessors ── */
 
     public MatchOutcome getOutcome()                    { return outcome; }
@@ -80,7 +124,13 @@ public class ImageSearchResultData {
     public void setHitY(int y)                          { this.hitY = y; }
 
     public SizeData getTemplateSize()                   { return templateSize; }
-    public void setTemplateSize(SizeData s)              { this.templateSize = s; }
+    public void setTemplateSize(SizeData s)             { this.templateSize = s; }
+
+    /** Width of the matched template region in screen pixels (0 when unknown). */
+    public int getMatchWidth()                          { return templateSize != null ? Math.max(0, templateSize.getWidth()) : 0; }
+
+    /** Height of the matched template region in screen pixels (0 when unknown). */
+    public int getMatchHeight()                         { return templateSize != null ? Math.max(0, templateSize.getHeight()) : 0; }
 
     /* ── legacy delegates ── */
 

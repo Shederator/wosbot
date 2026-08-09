@@ -28,6 +28,11 @@ public final class CommonGameAreas {
     public static final AreaData STAMINA_OCR_AREA      = region(324, 255, 477, 289);
     public static final AreaData SPENT_STAMINA_OCR_AREA = region(540, 1215, 590, 1245);
 
+    // The cooldown stays in the top banner while Intel markers remain, then moves to the center
+    // after every completed Intel reward has been claimed.
+    public static final AreaData INTEL_COOLDOWN_WITH_MARKERS_OCR_AREA = region(378, 103, 508, 146);
+    public static final AreaData INTEL_COOLDOWN_EMPTY_MAP_OCR_AREA    = region(378, 580, 530, 640);
+
     // ── side panel navigation ────────────────────────────────────────
 
     public static final AreaData LEFT_MENU_TRIGGER        = region(1, 538, 3, 560);

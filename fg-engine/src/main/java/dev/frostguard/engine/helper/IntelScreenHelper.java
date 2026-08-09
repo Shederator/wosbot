@@ -6,6 +6,7 @@ import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.error.HomeNotFoundException;
+import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.vision.logging.ProfileContextLogger;
@@ -21,6 +22,7 @@ public class IntelScreenHelper {
 
     private final EmulatorController emu;
     private final String dev;
+    private final TapInteractionService taps;
     private final TemplateSearchHelper tpl;
     private final NavigationHelper nav;
     private final ProfileContextLogger log;
@@ -30,6 +32,7 @@ public class IntelScreenHelper {
                              NavigationHelper navigationHelper, AccountDescriptor profile) {
         this.emu = emuManager;
         this.dev = emulatorNumber;
+        this.taps = TapInteractionService.forController(emuManager, emulatorNumber);
         this.tpl = templateSearchHelper;
         this.nav = navigationHelper;
         this.log = new ProfileContextLogger(IntelScreenHelper.class, profile);
@@ -49,7 +52,7 @@ public class IntelScreenHelper {
             if (!hit.isFound()) { log.debug("Intel button absent, pass " + i); pause(300); continue; }
 
             log.info("Tapping Intel button");
-            emu.touchPoint(dev, hit.getPoint());
+            taps.tapInside(hit);
             pause(1000);
             if (isIntelScreenActive()) { log.info("Intel reached"); return; }
 

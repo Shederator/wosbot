@@ -197,7 +197,7 @@ private boolean openUpDeploymentConfiguration(boolean isUpdate) {
             return false;
         }
 
-        tapPoint(configButton.getPoint());
+        tapInside(configButton);
         sleepTask(200);
 
 
@@ -286,10 +286,10 @@ private boolean managePositionSwitching(AreaData deploymentArea) {
 
         if (switchLine.isFound()) {
             logInfo(routineLogAllianceChampionshipLine("Current deployment position does not match desired. Switching position."));
-            tapPoint(switchLine.getPoint());
+            tapInside(switchLine);
             sleepTask(1000);
 
-            tapRandomPoint(deploymentArea.topLeft(), deploymentArea.bottomRight(), 1, 500);
+            tapInside(deploymentArea.topLeft(), deploymentArea.bottomRight(), 1, 500);
             sleepTask(500);
 
         } else {
@@ -316,7 +316,7 @@ private DeploymentStatusShape inspectDeploymentStatus() {
         if (troopsButton.isFound()) {
             logInfo(routineLogAllianceChampionshipLine("Active deployment detected"));
             if (overrideDeploy) {
-                tapRandomPoint(troopsButton.getPoint(), troopsButton.getPoint(), 3, 100);
+                tapInside(troopsButton.getPoint(), troopsButton.getPoint(), 3, 100);
                 sleepTask(1000);
             }
             return DeploymentStatusShape.EXISTING_DEPLOYMENT;
@@ -332,7 +332,7 @@ private DeploymentStatusShape inspectDeploymentStatus() {
 
         if (registerButton.isFound()) {
             logInfo(routineLogAllianceChampionshipLine("Zero active deployment detected"));
-            tapRandomPoint(registerButton.getPoint(), registerButton.getPoint(), 3, 100);
+            tapInside(registerButton.getPoint(), registerButton.getPoint(), 3, 100);
             sleepTask(1000);
             return DeploymentStatusShape.NEW_DEPLOYMENT;
         } else {
@@ -343,7 +343,7 @@ private DeploymentStatusShape inspectDeploymentStatus() {
     }
 
 private void setTroopPercentageFlow(PointData topLeft, PointData bottomRight, int percentage, String troopType) {
-        tapRandomPoint(topLeft, bottomRight, 1, 400);
+        tapInside(topLeft, bottomRight, 1, 400);
         sleepTask(100);
 
         emuManager.writeText(EMULATOR_NUMBER, String.valueOf(percentage));
@@ -386,12 +386,12 @@ private AreaData resolveDeploymentArea(DeploymentPosition pos) {
     }
 
 private void confirmTroopPercentagesFlow() {
-        tapRandomPoint(CONFIRM_TROOPS_BUTTON_TL_VALUE, CONFIRM_TROOPS_BUTTON_BR_VALUE, 1, 500);
+        tapInside(CONFIRM_TROOPS_BUTTON_TL_VALUE, CONFIRM_TROOPS_BUTTON_BR_VALUE, 1, 500);
         sleepTask(500);
     }
 
 private void deployFormationFlow() {
-        tapRandomPoint(DEPLOY_BUTTON_TL_VALUE, DEPLOY_BUTTON_BR_VALUE, 1, 500);
+        tapInside(DEPLOY_BUTTON_TL_VALUE, DEPLOY_BUTTON_BR_VALUE, 1, 500);
         sleepTask(1000);
 
     }
@@ -466,7 +466,7 @@ private String resolveConfigString(ConfigurationKeyEnum key, String defaultValue
     }
 
 private void clearTroopInputFlow(PointData topLeft, PointData bottomRight, String troopType) {
-        tapRandomPoint(topLeft, bottomRight, 1, 200);
+        tapInside(topLeft, bottomRight, 1, 200);
         sleepTask(100);
 
         emuManager.clearText(EMULATOR_NUMBER, TEXT_CLEAR_BACKSPACE_COUNT_VALUE);
@@ -476,7 +476,7 @@ private void clearTroopInputFlow(PointData topLeft, PointData bottomRight, Strin
     }
 
 private void touchBalanceButton() {
-        tapRandomPoint(BALANCE_BUTTON_TL_VALUE, BALANCE_BUTTON_BR_VALUE, 1, 500);
+        tapInside(BALANCE_BUTTON_TL_VALUE, BALANCE_BUTTON_BR_VALUE, 1, 500);
         sleepTask(300);
 
     }
@@ -494,7 +494,7 @@ private boolean deployTroopsFlow(boolean isUpdate) {
         navigationHelper.clearEventTabSelection();
 
         AreaData deploymentArea = resolveDeploymentArea(position);
-        tapRandomPoint(deploymentArea.topLeft(), deploymentArea.bottomRight(), 1, 500);
+        tapInside(deploymentArea.topLeft(), deploymentArea.bottomRight(), 1, 500);
         sleepTask(500);
 
 

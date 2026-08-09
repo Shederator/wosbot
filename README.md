@@ -340,7 +340,15 @@ C:\LDPlayer\LDPlayer9\ldconsole.exe
 ## 🚀 Roadmap
 
 <div align="center">
-  <i>We are continuously working to expand the bot's capabilities.</i>
+  <i>Follow planned work, priorities, and current progress on the public FrostGuard workboard.</i>
+
+  <br/><br/>
+
+  <a href="https://github.com/users/Shederator/projects/2"><img src="https://img.shields.io/badge/Open_FrostGuard_Project-415a77?style=for-the-badge&logo=github&logoColor=white" alt="Open FrostGuard Project" /></a>
+
+  <br/><br/>
+
+  The project board is the source of truth for the roadmap. The table below highlights selected larger features.
 </div>
 
 <br/>

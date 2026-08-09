@@ -45,7 +45,7 @@ def describe(repository: str, commit: str) -> str:
     )
 
 
-def summary(repository: str, previous: str, current: str, limit: int = 5) -> str:
+def summary(repository: str, previous: str, current: str) -> str:
     if not previous or not current or previous == current:
         return "No new changes since the previous Nightly."
     try:
@@ -58,11 +58,7 @@ def summary(repository: str, previous: str, current: str, limit: int = 5) -> str
     if not commits:
         return "No new changes since the previous Nightly."
 
-    omitted = max(0, len(commits) - limit)
-    lines = [describe(repository, commit) for commit in commits[-limit:]]
-    if omitted:
-        lines.insert(0, f"• …and {omitted} earlier change{'s' if omitted != 1 else ''}")
-    return "\n".join(lines)
+    return "\n".join(describe(repository, commit) for commit in commits)
 
 
 def main() -> int:
@@ -70,9 +66,8 @@ def main() -> int:
     parser.add_argument("--repository", required=True)
     parser.add_argument("--previous", default="")
     parser.add_argument("--current", required=True)
-    parser.add_argument("--limit", type=int, default=5)
     args = parser.parse_args()
-    print(summary(args.repository, args.previous, args.current, max(1, args.limit)))
+    print(summary(args.repository, args.previous, args.current))
     return 0
 
 

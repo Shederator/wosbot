@@ -1,0 +1,30 @@
+name: Sync Discord Commands
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  sync:
+    name: Keep guild commands and remove global duplicates
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Test command synchronisation
+        run: node --test discord-bot/test_register_command.mjs
+
+      - name: Synchronise /build-pr
+        env:
+          DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
+          DISCORD_APPLICATION_ID: "1532693190879215767"
+          DISCORD_GUILD_ID: "1475434539495981137"
+        run: node discord-bot/register-command.mjs

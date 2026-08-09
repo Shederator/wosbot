@@ -141,7 +141,7 @@ public class PetAllianceTreasuresRoutine extends DelayedTask {
 		}
 
 		logDebug("Opening Pets menu");
-		tapRandomPoint(petsResult.getPoint(), petsResult.getPoint());
+		tapInside(petsResult.getPoint(), petsResult.getPoint());
 		sleepTask(3000); // Wait for Pets menu to fully load
 
 		// Search for Beast Cage button
@@ -157,7 +157,7 @@ public class PetAllianceTreasuresRoutine extends DelayedTask {
 		}
 
 		logDebug("Opening Beast Cage");
-		tapRandomPoint(beastCageResult.getPoint(), beastCageResult.getPoint());
+		tapInside(beastCageResult.getPoint(), beastCageResult.getPoint());
 		sleepTask(500); // Wait for Beast Cage to open
 
 		return true;
@@ -178,13 +178,13 @@ public class PetAllianceTreasuresRoutine extends DelayedTask {
 	 */
 	private void openAllianceTreasureScreens() {
 		logDebug("Opening Alliance Treasure Map screen");
-		tapRandomPoint(
+		tapInside(
 				ALLIANCE_TREASURE_MAP_BUTTON.topLeft(),
 				ALLIANCE_TREASURE_MAP_BUTTON.bottomRight());
 		sleepTask(500); // Wait for treasure map screen to load
 
 		logDebug("Opening Ally Treasure screen");
-		tapRandomPoint(
+		tapInside(
 				ALLY_TREASURE_BUTTON.topLeft(),
 				ALLY_TREASURE_BUTTON.bottomRight());
 		sleepTask(500); // Wait for ally treasure screen to load
@@ -217,7 +217,7 @@ public class PetAllianceTreasuresRoutine extends DelayedTask {
 
 		if (claimButton.isFound()) {
 			logInfo("Claim button found - claiming alliance treasure");
-			tapRandomPoint(claimButton.getPoint(), claimButton.getPoint());
+			tapInside(claimButton.getPoint(), claimButton.getPoint());
 			sleepTask(500); // Wait for claim animation
 			rescheduleToGameReset("Alliance treasure claimed successfully");
 		} else {

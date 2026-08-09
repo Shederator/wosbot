@@ -47,7 +47,7 @@ final class ResearchNodeSelectionPolicy {
             }
         }
 
-        PointData tapPoint() {
+        PointData tapTarget() {
             return new PointData(badgePoint.getX() - 3, badgePoint.getY() - 54);
         }
     }

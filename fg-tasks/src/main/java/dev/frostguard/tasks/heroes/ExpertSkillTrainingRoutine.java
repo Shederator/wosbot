@@ -63,7 +63,7 @@ public class ExpertSkillTrainingRoutine extends DelayedTask {
             reschedule(LocalDateTime.now().plusMinutes(10));
             return;
         }
-        tapPoint(trainingExpertButton.getPoint());
+        tapInside(trainingExpertButton);
         sleepTask(2000);
 
         ImageSearchResultData speedUpButton = templateSearchHelper.locatePattern(
@@ -72,7 +72,7 @@ public class ExpertSkillTrainingRoutine extends DelayedTask {
         if (speedUpButton.isFound()) {
             // if im here means that there's a skill being trained, get training time and
             // reschedule
-            tapRandomPoint(speedUpButton.getPoint(), speedUpButton.getPoint(), 1, 500);
+            tapInside(speedUpButton.getPoint(), speedUpButton.getPoint(), 1, 500);
             Duration trainingTime = durationHelper.attemptRecognition(
                     new PointData(292, 284),
                     new PointData(432, 314),
@@ -95,7 +95,7 @@ public class ExpertSkillTrainingRoutine extends DelayedTask {
         }
 
         // enter on cyrille
-        tapRandomPoint(new PointData(151, 414), new PointData(227, 465), 3, 1000);
+        tapInside(new PointData(151, 414), new PointData(227, 465), 3, 1000);
 
         // map the available experts to not over loop on experts that we don't have
         HashMap<EXPERTS, Boolean> expertAvailabilityMap = new HashMap<>();
@@ -142,7 +142,7 @@ public class ExpertSkillTrainingRoutine extends DelayedTask {
                         .map(this::getExpertFromTemplate)
                         .forEach(expert -> expertAvailabilityMap.putIfAbsent(expert, false));
             }
-            tapPoint(new PointData(671, 650)); // right arrow to change expert
+            tapNear(new PointData(671, 650)); // right arrow to change expert
             sleepTask(300);
         }
 
@@ -164,7 +164,7 @@ public class ExpertSkillTrainingRoutine extends DelayedTask {
         }
 
         // switch to skills tab
-        tapRandomPoint(new PointData(500, 1232), new PointData(570, 1251), 1, 500);
+        tapInside(new PointData(500, 1232), new PointData(570, 1251), 1, 500);
 
         // 3. Iterate through priorities and train skills
         EXPERTS currentExpert = null; // Track the current expert to avoid unnecessary navigation
@@ -202,7 +202,7 @@ public class ExpertSkillTrainingRoutine extends DelayedTask {
                     logInfo("Moving from " + currentExpert + " to " + expert + " - tapping " + tapsNeeded + " time(s)");
 
                     for (int i = 0; i < tapsNeeded; i++) {
-                        tapPoint(new PointData(671, 650)); // right arrow to change expert
+                        tapNear(new PointData(671, 650)); // right arrow to change expert
                         sleepTask(300);
                     }
                 } else if (tapsNeeded == 0) {
@@ -230,7 +230,7 @@ public class ExpertSkillTrainingRoutine extends DelayedTask {
             }
 
             AreaData skillArea = getSkillArea(skillItem);
-            tapRandomPoint(skillArea.topLeft(), skillArea.bottomRight(), 1, 300);
+            tapInside(skillArea.topLeft(), skillArea.bottomRight(), 1, 300);
 
             // check if skill is maxed or locked
             ImageSearchResultData learnResult = templateSearchHelper.locatePattern(
@@ -245,7 +245,7 @@ public class ExpertSkillTrainingRoutine extends DelayedTask {
                 continue;
             }
 
-            tapPoint(learnResult.getPoint());
+            tapInside(learnResult);
             sleepTask(500);
 
             // check if the skill have pending points to learn, lets search the learn button
@@ -258,7 +258,7 @@ public class ExpertSkillTrainingRoutine extends DelayedTask {
                             .build());
             if (learnResult.isFound()) {
                 logInfo("Skill " + priorityItem.getName() + " has no available skill points to learn. Skipping.");
-                tapRandomPoint(new PointData(360, 33), new PointData(374, 44), 3, 300);
+                tapInside(new PointData(360, 33), new PointData(374, 44), 3, 300);
                 continue;
             }
 
@@ -272,8 +272,8 @@ public class ExpertSkillTrainingRoutine extends DelayedTask {
 
             for (LearningTime learningTime : timesDescending) {
                 AreaData timeCheckboxArea = getLearningTimeCheckbox(learningTime);
-                tapRandomPoint(timeCheckboxArea.topLeft(), timeCheckboxArea.bottomRight(), 1, 300);
-                tapRandomPoint(new PointData(474, 888), new PointData(579, 910), 1, 400);
+                tapInside(timeCheckboxArea.topLeft(), timeCheckboxArea.bottomRight(), 1, 300);
+                tapInside(new PointData(474, 888), new PointData(579, 910), 1, 400);
                 // check if the pop-up disappeared, that mean it was successful
 
                 ImageSearchResultData badgeResult = templateSearchHelper.locatePattern(
@@ -291,11 +291,11 @@ public class ExpertSkillTrainingRoutine extends DelayedTask {
                     pressBack();
                     return;
                 } else {
-                    tapRandomPoint(new PointData(284, 329), new PointData(452, 359), 1, 300);
+                    tapInside(new PointData(284, 329), new PointData(452, 359), 1, 300);
                     if (learningTime.equals(LearningTime.TIME_00_10_00)) {
                         logInfo("All time options failed, but skill training did not start. Forcing 10 minutes option as last resort.");
-                        tapRandomPoint(timeCheckboxArea.topLeft(), timeCheckboxArea.bottomRight(), 1, 400);
-                        tapRandomPoint(new PointData(454, 777), new PointData(573, 800), 1, 400);
+                        tapInside(timeCheckboxArea.topLeft(), timeCheckboxArea.bottomRight(), 1, 400);
+                        tapInside(new PointData(454, 777), new PointData(573, 800), 1, 400);
                         return;
                     }
                 }

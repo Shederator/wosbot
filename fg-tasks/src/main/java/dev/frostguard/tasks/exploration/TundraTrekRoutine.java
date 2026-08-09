@@ -34,7 +34,7 @@ public class TundraTrekRoutine extends DelayedTask {
                     SearchConfigConstants.DEFAULT_SINGLE);
             if (trekClaimButton.isFound()) {
                 logInfo("Trek Supplies are available. Claiming now...");
-                tapPoint(trekClaimButton.getPoint());
+                tapInside(trekClaimButton);
                 sleepTask(3000);
             } else {
                 logInfo("Trek Supplies have already been claimed or are not yet available.");
@@ -78,11 +78,11 @@ public class TundraTrekRoutine extends DelayedTask {
 
             if (trekSupplies.isFound()) {
                 logInfo("Found the Tundra Trek Supplies button.");
-                tapPoint(trekSupplies.getPoint());
+                tapInside(trekSupplies);
                 sleepTask(1000);
 
                 // Open supplies claim screen
-                tapRandomPoint(new PointData(500, 29), new PointData(590, 49));
+                tapInside(new PointData(500, 29), new PointData(590, 49));
                 sleepTask(2000);
                 return true;
             } else {

@@ -33,13 +33,12 @@ class NightlyChangesTest(unittest.TestCase):
         self.assertIn("[`1234567`]", line)
         self.assertIn("/commit/123456789", line)
 
-    def test_summary_keeps_latest_changes_and_reports_omitted_count(self):
+    def test_summary_keeps_every_change(self):
         commits = "\n".join(f"commit{i}" for i in range(7))
         with mock.patch.object(changes, "git", return_value=commits), \
                 mock.patch.object(changes, "describe", side_effect=lambda _, c: c):
-            result = changes.summary("Shederator/wosbot", "old", "new", limit=5)
-        self.assertIn("2 earlier changes", result)
-        self.assertNotIn("commit0", result)
+            result = changes.summary("Shederator/wosbot", "old", "new")
+        self.assertIn("commit0", result)
         self.assertIn("commit6", result)
 
     def test_missing_history_is_a_readable_fallback(self):

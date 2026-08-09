@@ -79,22 +79,22 @@ public class CreateCharacterRoutine extends DelayedTask {
         logInfo("Max age: " + maxAgeMinutes);
 
         logInfo("Profile");
-        tapRandomPoint(PROFILE_AVATAR_TL, PROFILE_AVATAR_BR);
+        tapInside(PROFILE_AVATAR_TL, PROFILE_AVATAR_BR);
         sleepTask(500);
 
         logInfo("Settings");
-        tapRandomPoint(SETTINGS_BUTTON_TL, SETTINGS_BUTTON_BR);
+        tapInside(SETTINGS_BUTTON_TL, SETTINGS_BUTTON_BR);
         sleepTask(500);
 
         boolean Created = false;
         while(!Created) {
 
         logInfo("Character");
-        tapPoint(CHARACTER_BUTTON);
+        tapNear(CHARACTER_BUTTON);
         sleepTask(500);
 
         logInfo("Create");
-        tapPoint(CREATE_CHARACTER_BUTTON);
+        tapNear(CREATE_CHARACTER_BUTTON);
         sleepTask(500);
 
         logInfo("Check Tips");
@@ -133,9 +133,9 @@ public class CreateCharacterRoutine extends DelayedTask {
 
         if (ageTotalMinutes <= maxAgeMinutes) {
             logInfo("Accepting...");
-            tapPoint(ACCEPT_BUTTON);
+            tapNear(ACCEPT_BUTTON);
             sleepTask(300);
-            tapPoint(CONFIRM_BUTTON);
+            tapNear(CONFIRM_BUTTON);
             sleepTask(100);
             Created = true;
             logInfo("Done");
@@ -162,7 +162,7 @@ public class CreateCharacterRoutine extends DelayedTask {
         } else {
             logInfo("Age > max (" + ageTotalMinutes + "). Retry");
         }
-        tapPoint(CROSS_BUTTON);
+        tapNear(CROSS_BUTTON);
         sleepTask(500);
         }
     }

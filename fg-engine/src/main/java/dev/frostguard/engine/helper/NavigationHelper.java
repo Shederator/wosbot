@@ -3,11 +3,13 @@ package dev.frostguard.engine.helper;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpMessageSeverityEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.error.HomeNotFoundException;
 import dev.frostguard.engine.error.ProfileInReconnectStateException;
+import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.nav.ButtonConstants;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -31,6 +33,7 @@ public class NavigationHelper {
     private final TemplateSearchHelper searcher;
     private final EmulatorController emu;
     private final String device;
+    private final TapInteractionService taps;
     private final ProfileContextLogger log;
     private final String accountName;
     private final LoggingService logs;
@@ -39,6 +42,7 @@ public class NavigationHelper {
                             AccountDescriptor profile) {
         this.emu = emuManager;
         this.device = emulatorNumber;
+        this.taps = TapInteractionService.forController(emuManager, emulatorNumber);
         this.searcher = new TemplateSearchHelper(emuManager, emulatorNumber, profile);
         this.log = new ProfileContextLogger(NavigationHelper.class, profile);
         this.accountName = profile.getName();
@@ -48,9 +52,7 @@ public class NavigationHelper {
     // ── alliance menu ────────────────────────────────────────────────
 
     public boolean navigateToAllianceMenu(AllianceMenu menu) {
-        emu.touchArea(device,
-                ButtonConstants.BOTTOM_MENU_ALLIANCE_BUTTON.topLeft(),
-                ButtonConstants.BOTTOM_MENU_ALLIANCE_BUTTON.bottomRight());
+        taps.tapInside(ButtonConstants.BOTTOM_MENU_ALLIANCE_BUTTON);
 
         TemplatesEnum tpl;
         if (menu == AllianceMenu.WAR) tpl = TemplatesEnum.ALLIANCE_WAR_BUTTON;
@@ -64,7 +66,7 @@ public class NavigationHelper {
         ImageSearchResultData hit = searcher.locatePattern(tpl,
                 SearchConfigConstants.SINGLE_WITH_RETRIES);
         if (!hit.isFound()) return false;
-        emu.touchArea(device, hit.getPoint(), hit.getPoint(), 1, 1000);
+        taps.tapInside(hit, 1, 1000);
         return true;
     }
 
@@ -80,11 +82,11 @@ public class NavigationHelper {
             broadcastWarn("Events panel missed");
             return false;
         }
-        emu.touchPoint(device, evtBtn.getPoint());
+        taps.tapInside(evtBtn);
         interruptibleWait(2000);
 
         // clear existing selection
-        emu.touchArea(device, new PointData(529, 27), new PointData(635, 63), 5, 300);
+        taps.tapInside(new AreaData(new PointData(529, 27), new PointData(635, 63)), 5, 300);
         interruptibleWait(300);
 
         TemplatesEnum tpl = switch (event) {
@@ -124,7 +126,7 @@ public class NavigationHelper {
             return false;
         }
 
-        emu.touchPoint(device, tab.getPoint());
+        taps.tapInside(tab);
         interruptibleWait(1000);
         broadcastInfo("Reached " + event.name());
         return true;
@@ -140,7 +142,7 @@ public class NavigationHelper {
     }
 
     public void clearEventTabSelection() {
-        emu.touchArea(device, new PointData(529, 27), new PointData(635, 63), 5, 300);
+        taps.tapInside(new AreaData(new PointData(529, 27), new PointData(635, 63)), 5, 300);
         interruptibleWait(300);
     }
 
@@ -172,7 +174,7 @@ public class NavigationHelper {
                 ImageSearchResultData w = searcher.locatePattern(TemplatesEnum.GAME_HOME_WORLD,
                         SearchConfigConstants.DEFAULT_SINGLE);
                 if (w.isFound() && isStableScreenAnchorFlow(TemplatesEnum.GAME_HOME_WORLD)) {
-                    emu.touchPoint(device, w.getPoint());
+                    taps.tapInside(w);
                     interruptibleWait(2000);
                     if (searcher.locatePattern(TemplatesEnum.GAME_HOME_FURNACE,
                             SearchConfigConstants.DEFAULT_SINGLE).isFound()) return;
@@ -181,7 +183,7 @@ public class NavigationHelper {
                 ImageSearchResultData h = searcher.locatePattern(TemplatesEnum.GAME_HOME_FURNACE,
                         SearchConfigConstants.DEFAULT_SINGLE);
                 if (h.isFound() && isStableScreenAnchorFlow(TemplatesEnum.GAME_HOME_FURNACE)) {
-                    emu.touchPoint(device, h.getPoint());
+                    taps.tapInside(h);
                     interruptibleWait(2000);
                     if (searcher.locatePattern(TemplatesEnum.GAME_HOME_WORLD,
                             SearchConfigConstants.DEFAULT_SINGLE).isFound()) return;

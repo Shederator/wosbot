@@ -278,7 +278,7 @@ class DiscordContextTest(unittest.TestCase):
         args.channel_id = "77777"
         self.assertIn("not allowlisted", notify.validate_discord_context(args))
 
-    def test_payload_replies_and_mentions_only_the_requester(self):
+    def test_payload_links_request_and_mentions_only_the_requester(self):
         payload = payload_for(
             "failure", sample_plan(), guild_id="11111", channel_id="22222",
             requester_id="33333", message_id="44444",
@@ -287,28 +287,32 @@ class DiscordContextTest(unittest.TestCase):
         self.assertEqual(payload["allowed_mentions"], {
             "parse": [], "users": ["33333"],
         })
-        self.assertEqual(payload["message_reference"]["message_id"], "44444")
+        self.assertIn(
+            "https://discord.com/channels/11111/22222/44444",
+            all_text(payload),
+        )
+        self.assertNotIn("message_reference", payload)
 
-    def test_bot_api_posts_to_the_validated_channel(self):
-        response = mock.MagicMock()
-        response.status = 200
-        response.__enter__.return_value = response
-        response.__exit__.return_value = False
-
-        with mock.patch.object(notify.urllib.request, "urlopen",
-                               return_value=response) as urlopen:
-            notify.post_bot_message(
-                "secret-token", "22222", {"content": "<@33333>"}, 5.0,
+    def test_posts_through_the_dedicated_webhook(self):
+        webhook = "https://discord.com/api/webhooks/12345/test-token"
+        with mock.patch.object(notify, "post") as post:
+            notify.post_webhook_message(
+                webhook, {"content": "<@33333>"}, 5.0,
             )
 
-        request = urlopen.call_args.args[0]
+        self.assertEqual(post.call_args.args[0], webhook)
+        self.assertEqual(post.call_args.args[2], "application/json")
+        self.assertEqual(post.call_args.args[3], 5.0)
         self.assertEqual(
-            request.full_url,
-            "https://discord.com/api/v10/channels/22222/messages",
+            post.call_args.kwargs["credential_name"],
+            "DISCORD_PR_BUILD_WEBHOOK_URL",
         )
-        self.assertEqual(request.get_method(), "POST")
-        self.assertEqual(request.get_header("Authorization"),
-                         "Bot secret-token")
+
+    def test_rejects_non_discord_webhook_urls(self):
+        self.assertTrue(notify.valid_webhook_url(
+            "https://discord.com/api/webhooks/12345/test-token",
+        ))
+        self.assertFalse(notify.valid_webhook_url("https://example.com/hook"))
 
     def test_partial_discord_context_is_rejected(self):
         args = notify.parse_args([

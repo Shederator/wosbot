@@ -273,12 +273,22 @@ public class AnalyticsService {
 						logger.info("Analytics event sent: {}", eventName);
 					}
 				} catch (Exception e) {
-					logger.error("Failed to send analytics event {}: {}", eventName, e.getMessage(), e);
+					if (!isSilentMode()) {
+						logger.warn("Analytics event {} could not be sent; application operation is unaffected: {}",
+								eventName, describeDeliveryFailure(e));
+					}
 				}
 			});
 		} catch (Exception e) {
 			logger.error("Failed to build analytics event {}: {}", eventName, e.getMessage(), e);
 		}
+	}
+
+	static String describeDeliveryFailure(Exception exception) {
+		String message = exception.getMessage();
+		return message == null || message.isBlank()
+				? exception.getClass().getSimpleName()
+				: message;
 	}
 
 	/**

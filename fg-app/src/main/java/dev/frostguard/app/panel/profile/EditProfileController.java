@@ -13,10 +13,15 @@ import javafx.scene.control.Label;
 import javafx.scene.control.Slider;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextFormatter;
+import javafx.scene.layout.FlowPane;
 import javafx.stage.Stage;
 
 import java.net.URL;
 import java.util.ResourceBundle;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.TreeSet;
 import java.util.function.UnaryOperator;
 
 public class EditProfileController implements Initializable {
@@ -66,6 +71,14 @@ public class EditProfileController implements Initializable {
     @FXML
     private TextField txtCharacterServer;
 
+    @FXML
+    private FlowPane tagChoicesPane;
+
+    @FXML
+    private TextField txtNewTag;
+
+    private final List<CheckBox> tagChoices = new ArrayList<>();
+
     private ProfileAux profileToEdit;
     private ProfileManagerActionController actionController;
     private Stage dialogStage;
@@ -84,6 +97,7 @@ public class EditProfileController implements Initializable {
 
     public void setActionController(ProfileManagerActionController controller) {
         this.actionController = controller;
+        populateTagChoices();
     }
 
     public void setDialogStage(Stage stage) {
@@ -106,7 +120,40 @@ public class EditProfileController implements Initializable {
             txtCharacterName.setText(orBlank(profileToEdit.getCharacterName()));
             txtCharacterAllianceCode.setText(orBlank(profileToEdit.getCharacterAllianceCode()));
             txtCharacterServer.setText(orBlank(profileToEdit.getCharacterServer()));
+            populateTagChoices();
         }
+    }
+
+    private void populateTagChoices() {
+        if (profileToEdit == null || actionController == null || tagChoicesPane == null) return;
+        TreeSet<String> available = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        available.addAll(actionController.loadTags());
+        available.addAll(profileToEdit.getTags());
+        tagChoices.clear();
+        tagChoicesPane.getChildren().clear();
+        for (String tag : available) {
+            CheckBox choice = new CheckBox(tag);
+            choice.getStyleClass().add("profile-tag-choice");
+            choice.setSelected(profileToEdit.getTags().stream().anyMatch(current -> current.equalsIgnoreCase(tag)));
+            tagChoices.add(choice);
+            tagChoicesPane.getChildren().add(choice);
+        }
+    }
+
+    @FXML
+    private void handleAddTag() {
+        String name = txtNewTag.getText() == null ? "" : txtNewTag.getText().trim().replaceAll("\\s+", " ");
+        if (name.isBlank()) return;
+        tagChoices.stream().filter(choice -> choice.getText().equalsIgnoreCase(name)).findFirst()
+            .ifPresentOrElse(choice -> choice.setSelected(true), () -> {
+                CheckBox choice = new CheckBox(name.length() <= 40 ? name : name.substring(0, 40));
+                choice.getStyleClass().add("profile-tag-choice");
+                choice.setSelected(true);
+                tagChoices.add(choice);
+                tagChoices.sort(Comparator.comparing(CheckBox::getText, String.CASE_INSENSITIVE_ORDER));
+                tagChoicesPane.getChildren().setAll(tagChoices);
+            });
+        txtNewTag.clear();
     }
 
     @FXML
@@ -172,6 +219,7 @@ public class EditProfileController implements Initializable {
         profileToEdit.setCharacterName(blankToNull(txtCharacterName));
         profileToEdit.setCharacterAllianceCode(blankToNullUppercase(txtCharacterAllianceCode));
         profileToEdit.setCharacterServer(blankToNull(txtCharacterServer));
+        profileToEdit.setTags(tagChoices.stream().filter(CheckBox::isSelected).map(CheckBox::getText).toList());
     }
 
     private void requireText(TextField field, String label, StringBuilder errors) {

@@ -217,9 +217,10 @@ public class EmuConfigLayoutController {
 				cfg.getOrDefault(ConfigurationKeyEnum.MAX_RUNNING_EMULATORS_INT.name(),
 						ConfigurationKeyEnum.MAX_RUNNING_EMULATORS_INT.getDefaultValue()));
 
-		textfieldMaxIdleTime.setText(
-				cfg.getOrDefault(ConfigurationKeyEnum.MAX_IDLE_TIME_INT.name(),
-						ConfigurationKeyEnum.MAX_IDLE_TIME_INT.getDefaultValue()));
+		String maxIdleTime = normalizePositiveMinutes(
+				cfg.get(ConfigurationKeyEnum.MAX_IDLE_TIME_INT.name()),
+				ConfigurationKeyEnum.MAX_IDLE_TIME_INT.getDefaultValue());
+		textfieldMaxIdleTime.setText(maxIdleTime);
 
 		boolean maxActiveTimeOn = Boolean.parseBoolean(
 				cfg.getOrDefault(ConfigurationKeyEnum.PROFILE_MAX_ACTIVE_TIME_ENABLED_BOOL.name(),
@@ -247,8 +248,21 @@ public class EmuConfigLayoutController {
 		addFocusLostSaver(textfieldMaxConcurrentInstances,
 				ConfigurationKeyEnum.MAX_RUNNING_EMULATORS_INT);
 
-		addFocusLostSaver(textfieldMaxIdleTime,
-				ConfigurationKeyEnum.MAX_IDLE_TIME_INT);
+		textfieldMaxIdleTime.focusedProperty().addListener((obs, prev, hasFocus) -> {
+			if (hasFocus || textfieldMaxIdleTime.isDisabled()) {
+				return;
+			}
+			String rawValue = textfieldMaxIdleTime.getText();
+			String value = normalizePositiveMinutes(
+					rawValue,
+					ConfigurationKeyEnum.MAX_IDLE_TIME_INT.getDefaultValue());
+			textfieldMaxIdleTime.setText(value);
+			ScheduleService.obtain().persistEmulatorPath(
+					ConfigurationKeyEnum.MAX_IDLE_TIME_INT.name(), value);
+			if (!isPositiveMinutes(rawValue)) {
+				displayInvalidMaxIdleTimeWarning(rawValue, value);
+			}
+		});
 
 		checkboxProfileMaxActiveTimeEnabled.selectedProperty().addListener((obs, prev, active) -> {
 			textfieldProfileMaxActiveTimeMinutes.setDisable(!active);
@@ -306,10 +320,12 @@ public class EmuConfigLayoutController {
 		IdleBehaviorEnum savedIdle = IdleBehaviorEnum.fromString(
 				cfg.getOrDefault(ConfigurationKeyEnum.IDLE_BEHAVIOR_STRING.name(), "CLOSE_EMULATOR"));
 		comboboxInactivityPolicy.setValue(savedIdle);
+		updateMaxIdleTimeAvailability(savedIdle);
 
 		comboboxInactivityPolicy.setOnAction(evt -> {
 			IdleBehaviorEnum chosenBehavior = comboboxInactivityPolicy.getValue();
 			if (chosenBehavior != null) {
+				updateMaxIdleTimeAvailability(chosenBehavior);
 				ScheduleService.obtain().persistEmulatorPath(
 						ConfigurationKeyEnum.IDLE_BEHAVIOR_STRING.name(),
 						chosenBehavior.name());
@@ -318,6 +334,27 @@ public class EmuConfigLayoutController {
 				}
 			}
 		});
+	}
+
+	private void updateMaxIdleTimeAvailability(IdleBehaviorEnum behavior) {
+		textfieldMaxIdleTime.setDisable(!behavior.requiresIdleTimeout());
+	}
+
+	static String normalizePositiveMinutes(String rawValue, String defaultValue) {
+		try {
+			int value = Integer.parseInt(rawValue == null ? "" : rawValue.trim());
+			return value > 0 ? String.valueOf(value) : defaultValue;
+		} catch (NumberFormatException ex) {
+			return defaultValue;
+		}
+	}
+
+	static boolean isPositiveMinutes(String rawValue) {
+		try {
+			return Integer.parseInt(rawValue == null ? "" : rawValue.trim()) > 0;
+		} catch (NumberFormatException ex) {
+			return false;
+		}
 	}
 
 	private void configureStopBehaviorDropdowns(Map<String, String> cfg) {
@@ -479,5 +516,16 @@ public class EmuConfigLayoutController {
 		errorAlert.setHeaderText(null);
 		errorAlert.setContentText(detail);
 		errorAlert.showAndWait();
+	}
+
+	private void displayInvalidMaxIdleTimeWarning(String rawValue, String fallbackValue) {
+		String enteredValue = rawValue == null || rawValue.isBlank() ? "an empty value" : "'" + rawValue + "'";
+		Alert warning = new Alert(Alert.AlertType.WARNING);
+		warning.setTitle("Invalid Max Idle Time");
+		warning.setHeaderText("Enter a positive whole number of minutes");
+		warning.setContentText(
+				enteredValue + " is not a valid maximum idle time. The value was reset to "
+				+ fallbackValue + " minutes. Select 'Keep Running' if no idle action should occur.");
+		warning.showAndWait();
 	}
 }

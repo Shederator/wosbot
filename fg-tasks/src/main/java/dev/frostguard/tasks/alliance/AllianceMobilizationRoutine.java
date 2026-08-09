@@ -243,7 +243,7 @@ private void inspectAndCollectCompletedTasks() {
 
         if (completedResult.isFound()) {
             logInfo(routineLogAllianceMobilizationLine("Completed task detected at " + completedResult.getPoint() + " - collecting rewards"));
-            tapPoint(completedResult.getPoint());
+            tapInside(completedResult);
             sleepTask(1500);
 
             logInfo(routineLogAllianceMobilizationLine("Rewards collected from completed task"));
@@ -329,7 +329,7 @@ private void inspectAndUseAllianceMonuments() {
         PointData location = monumentsResult.getPoint();
         logInfo(routineLogAllianceMobilizationLine("Alliance Monuments button detected at " + location + " - using it"));
 
-        tapPoint(location);
+        tapNear(location);
         sleepTask(1500);
 
 
@@ -339,7 +339,7 @@ private void inspectAndUseAllianceMonuments() {
         for (int i = 0; i < ScreenSpots.MONUMENT_CLICKS.length; i++) {
             logInfo(routineLogAllianceMobilizationLine("Pressing monument position " + (i + 1) + "/" + ScreenSpots.MONUMENT_CLICKS.length + " at: " +
                     ScreenSpots.MONUMENT_CLICKS[i]));
-            tapPoint(ScreenSpots.MONUMENT_CLICKS[i]);
+            tapNear(ScreenSpots.MONUMENT_CLICKS[i]);
             sleepTask(i < 2 ? 1000 : 500);
 
         }
@@ -348,7 +348,7 @@ private void inspectAndUseAllianceMonuments() {
         for (int i = 1; i <= RoutineLimits.MONUMENT_BACK_CLICKS_COUNT; i++) {
             logInfo(routineLogAllianceMobilizationLine("Pressing back button (" + i + "/" + RoutineLimits.MONUMENT_BACK_CLICKS_COUNT + ") at: "
                     + ScreenSpots.BACK_BUTTON));
-            tapPoint(ScreenSpots.BACK_BUTTON);
+            tapNear(ScreenSpots.BACK_BUTTON);
             sleepTask(500);
 
         }
@@ -394,12 +394,12 @@ private void handleMonumentImageRecognition() {
                             " - pressing (click #" + clickCount + ")"));
 
 
-                    tapPoint(imageLocation);
+                    tapNear(imageLocation);
                     sleepTask(500);
 
 
                     logInfo(routineLogAllianceMobilizationLine("Second click on same position"));
-                    tapPoint(imageLocation);
+                    tapNear(imageLocation);
                     sleepTask(500);
 
 
@@ -580,12 +580,12 @@ private void inspectAndUseFreeMission() {
 
         if (deltaX <= SearchOffsets.FREE_MISSION_TOLERANCE && deltaY <= SearchOffsets.FREE_MISSION_TOLERANCE) {
             logInfo(routineLogAllianceMobilizationLine("Free mission button detected at " + location + " (near expected position) - using it"));
-            tapPoint(location);
+            tapNear(location);
             sleepTask(1500);
 
 
             logInfo(routineLogAllianceMobilizationLine("Pressing confirm at: " + ScreenSpots.FREE_MISSION_CONFIRM));
-            tapPoint(ScreenSpots.FREE_MISSION_CONFIRM);
+            tapNear(ScreenSpots.FREE_MISSION_CONFIRM);
             sleepTask(1500);
 
 
@@ -1236,15 +1236,15 @@ private String resolveConfigString(ConfigurationKeyEnum key, String defaultValue
     }
 
 private int pressAndRefreshTask(PointData bonusLocation) {
-        tapPoint(bonusLocation);
+        tapNear(bonusLocation);
         sleepTask(2000);
 
 
-        tapPoint(ScreenSpots.REFRESH_BUTTON);
+        tapNear(ScreenSpots.REFRESH_BUTTON);
         sleepTask(1500);
 
 
-        tapPoint(ScreenSpots.REFRESH_CONFIRM_BUTTON);
+        tapNear(ScreenSpots.REFRESH_CONFIRM_BUTTON);
         sleepTask(1500);
 
 
@@ -1262,11 +1262,11 @@ private Integer decodeTotalAttempts(String totalGroup) {
     }
 
 private void pressAndAcceptTask(PointData bonusLocation) {
-        tapPoint(bonusLocation);
+        tapNear(bonusLocation);
         sleepTask(2000);
 
 
-        tapPoint(ScreenSpots.ACCEPT_BUTTON);
+        tapNear(ScreenSpots.ACCEPT_BUTTON);
         sleepTask(1500);
 
     }

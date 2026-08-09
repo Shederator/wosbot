@@ -47,7 +47,7 @@ public PrioritiseFurnaceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDai
 
         if (worldResult.isFound()) {
             logInfo(routineLogPrioritiseFurnaceLine("World image detected (Not on correct screen). Pressing to navigate."));
-            tapPoint(worldResult.getPoint());
+            tapInside(worldResult);
         } else if (cityResult.isFound()) {
             logInfo(routineLogPrioritiseFurnaceLine("City image detected. Screen state validated."));
         } else {
@@ -55,10 +55,10 @@ public PrioritiseFurnaceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDai
         }
 
 
-        tapPoint(new PointData(15, 552));
+        tapNear(new PointData(15, 552));
         sleepTask(200);
         for (int i = 0; i < 4; i++) {
-            tapPoint(new PointData(120, 270));
+            tapNear(new PointData(120, 270));
             sleepTask(20);
         }
         sleepTask(200);
@@ -77,20 +77,20 @@ public PrioritiseFurnaceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDai
         }
 
 
-        tapPoint(new PointData(300, 20));
+        tapNear(new PointData(300, 20));
         sleepTask(500);
-        tapPoint(new PointData(80, 649));
+        tapNear(new PointData(80, 649));
         sleepTask(500);
 
         ImageSearchResultData goResult = templateSearchHelper.locatePattern(GAME_HOME_SHORTCUTS_GO,
                 SearchConfigConstants.DEFAULT_SINGLE);
 
         if (goResult.isFound()) {
-            tapPoint(goResult.getPoint());
+            tapInside(goResult);
             sleepTask(500);
-            tapPoint(new PointData(7, 440));
+            tapNear(new PointData(7, 440));
             sleepTask(500);
-            tapPoint(new PointData(136, 658));
+            tapNear(new PointData(136, 658));
             sleepTask(500);
 
             ImageSearchResultData upgradeTextResult = templateSearchHelper.locatePattern(
@@ -99,7 +99,7 @@ public PrioritiseFurnaceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDai
 
             if (upgradeTextResult.isFound()) {
                 logInfo(routineLogPrioritiseFurnaceLine("upgradetext.png detected. Pressing coordinates " + upgradeTextResult.getPoint()));
-                tapPoint(upgradeTextResult.getPoint());
+                tapInside(upgradeTextResult);
                 sleepTask(200);
 
 
@@ -161,16 +161,16 @@ public PrioritiseFurnaceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDai
                             logError(routineLogPrioritiseFurnaceLine("Issue while OCR time extraction: " + e.getMessage()));
                         }
 
-                        tapPoint(upgradeTextLoopResult.getPoint());
+                        tapInside(upgradeTextLoopResult);
                         sleepTask(1000);
                         if (obtainResult.isFound()) {
-                            tapPoint(new PointData(362, 1138));
+                            tapNear(new PointData(362, 1138));
                             sleepTask(200);
-                            tapPoint(new PointData(519, 1040));
+                            tapNear(new PointData(519, 1040));
                             sleepTask(500);
-                            tapPoint(upgradeTextLoopResult.getPoint());
+                            tapInside(upgradeTextLoopResult);
                         }
-                        tapPoint(new PointData(133, 545));
+                        tapNear(new PointData(133, 545));
 
 
                         LocalDateTime rescheduleTime;
@@ -200,13 +200,13 @@ public PrioritiseFurnaceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDai
 
                         if (goLoopResult.isFound()) {
                             logInfo(routineLogPrioritiseFurnaceLine("go.png detected. Pressing it."));
-                            tapPoint(goLoopResult.getPoint());
+                            tapInside(goLoopResult);
                             sleepTask(500);
 
 
                             for (int j = 0; j < 4; j++) {
                                 logInfo(routineLogPrioritiseFurnaceLine("Upgrade search iteration: " + (j + 1)));
-                                tapPoint(new PointData(350, 667));
+                                tapNear(new PointData(350, 667));
                                 sleepTask(200);
 
                                 ImageSearchResultData upgradeResult = templateSearchHelper.locatePattern(
@@ -215,7 +215,7 @@ public PrioritiseFurnaceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDai
 
                                 if (upgradeResult.isFound()) {
                                     logInfo(routineLogPrioritiseFurnaceLine("upgrade.png detected. Pressing it."));
-                                    tapPoint(upgradeResult.getPoint());
+                                    tapInside(upgradeResult);
                                     break;
 
                                 }
@@ -287,10 +287,10 @@ public PrioritiseFurnaceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDai
                     logError(routineLogPrioritiseFurnaceLine("Issue while OCR time extraction: " + e.getMessage()));
                 }
 
-                tapPoint(upgradeTextResult.getPoint());
+                tapInside(upgradeTextResult);
                 sleepTask(1000);
 
-                tapPoint(new PointData(362, 581));
+                tapNear(new PointData(362, 581));
 
 
                 LocalDateTime rescheduleTime;
@@ -323,11 +323,11 @@ public PrioritiseFurnaceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDai
 
                     if (obtainResult.isFound()) {
                         logInfo(routineLogPrioritiseFurnaceLine("obtain.png detected. Executing obtain sequence."));
-                        tapPoint(obtainResult.getPoint());
+                        tapInside(obtainResult);
                         sleepTask(200);
-                        tapPoint(new PointData(362, 1138));
+                        tapNear(new PointData(362, 1138));
                         sleepTask(200);
-                        tapPoint(new PointData(519, 1040));
+                        tapNear(new PointData(519, 1040));
                         sleepTask(500);
                     } else {
                         break;

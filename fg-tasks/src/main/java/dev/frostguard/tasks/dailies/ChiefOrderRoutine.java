@@ -99,7 +99,7 @@ private boolean openUpChiefOrderMenu() {
 		}
 
 		logInfo(routineLogChiefOrderLine("Chief Order menu button detected. Pressing to open menu"));
-		tapPoint(menuButton.getPoint());
+		tapInside(menuButton);
 		sleepTask(2000);
 
 
@@ -132,7 +132,7 @@ private boolean chooseOrderType() {
 		}
 
 		logInfo(routineLogChiefOrderLine(chiefOrderType.getDescription() + " button detected. Pressing to activate"));
-		tapPoint(orderButton.getPoint());
+		tapInside(orderButton);
 		sleepTask(1500);
 
 
@@ -155,7 +155,7 @@ private boolean enactOrderFlow() {
 		}
 
 		logInfo(routineLogChiefOrderLine("Enact button detected. Pressing to enact order"));
-		tapPoint(enactButton.getPoint());
+		tapInside(enactButton);
 		sleepTask(1000);
 
 

@@ -28,7 +28,7 @@ public TriumphRoutine(AccountDescriptor profile, TpDailyTaskEnum dailyMission) {
 
 
 		logInfo(routineLogTriumphLine("Pressing alliance button at bottom of screen"));
-		tapRandomPoint(new PointData(493, 1187), new PointData(561, 1240));
+		tapInside(new PointData(493, 1187), new PointData(561, 1240));
 		sleepTask(3000);
 
 
@@ -36,7 +36,7 @@ public TriumphRoutine(AccountDescriptor profile, TpDailyTaskEnum dailyMission) {
 				TemplatesEnum.ALLIANCE_TRIUMPH_BUTTON, SearchConfigConstants.DEFAULT_SINGLE);
 		if (result.isFound()) {
 			logInfo(routineLogTriumphLine("Alliance Triumph button detected. Pressing to open the menu."));
-			tapPoint(result.getPoint());
+			tapInside(result);
 			sleepTask(2000);
 
 			logInfo(routineLogTriumphLine("Inspecting daily Triumph rewards status"));
@@ -57,7 +57,7 @@ public TriumphRoutine(AccountDescriptor profile, TpDailyTaskEnum dailyMission) {
 
 				if (result.isFound()) {
 					logInfo(routineLogTriumphLine("Daily Triumph rewards are available - collecting now"));
-					tapRandomPoint(result.getPoint(), result.getPoint(), 10, 50);
+					tapInside(result.getPoint(), result.getPoint(), 10, 50);
 					sleepTask(1000);
 
 					logInfo(routineLogTriumphLine("Daily rewards collected finished cleanly"));
@@ -87,7 +87,7 @@ public TriumphRoutine(AccountDescriptor profile, TpDailyTaskEnum dailyMission) {
 
 			if (result.isFound()) {
 				logInfo(routineLogTriumphLine("Weekly Triumph rewards are available - collecting now"));
-				tapPoint(result.getPoint());
+				tapInside(result);
 				sleepTask(1500);
 
 				pressBack();

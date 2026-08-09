@@ -137,7 +137,7 @@ private String routineLogAllianceTechLine(String note) {
 private void performDonationsFlow() {
 		logInfo(routineLogAllianceTechLine("Performing " + DONATION_TAP_COUNT_VALUE + " donations to Alliance Tech"));
 
-		tapRandomPoint(
+		tapInside(
 				DONATION_BUTTON_AREA_VALUE.topLeft(),
 				DONATION_BUTTON_AREA_VALUE.bottomRight(),
 				DONATION_TAP_COUNT_VALUE,
@@ -157,7 +157,7 @@ private boolean locateDonationButton() {
 
 		if (thumbsUpResult.isFound()) {
 			logInfo(routineLogAllianceTechLine("Thumbs-up donation button detected. Proceeding with donations."));
-			tapPoint(thumbsUpResult.getPoint());
+			tapInside(thumbsUpResult);
 			sleepTask(500);
 
 			return true;
@@ -186,7 +186,7 @@ private void hydrateConfiguration() {
 
 private void reachCoinsDisplay() {
 		logDebug(routineLogAllianceTechLine("Closing donation popup"));
-		tapRandomPoint(
+		tapInside(
 				POPUP_CLOSE_AREA_VALUE.topLeft(),
 				POPUP_CLOSE_AREA_VALUE.bottomRight(),
 				3,
@@ -196,7 +196,7 @@ private void reachCoinsDisplay() {
 		);
 
 		logDebug(routineLogAllianceTechLine("Entering alliance coins popup"));
-		tapRandomPoint(
+		tapInside(
 				ALLIANCE_COINS_BUTTON_AREA_VALUE.topLeft(),
 				ALLIANCE_COINS_BUTTON_AREA_VALUE.bottomRight(),
 				1,

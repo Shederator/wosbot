@@ -32,6 +32,7 @@ public class HeroMissionEventRoutine extends DelayedTask {
     private final TaskManagementService taskManagementService = TaskManagementService.shared();
     private int flagNumber = 0;
     private boolean useFlag = false;
+    private boolean bearProtectionDeferred = false;
 
     public HeroMissionEventRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
         super(profile, tpTask);
@@ -39,6 +40,7 @@ public class HeroMissionEventRoutine extends DelayedTask {
 
     @Override
     protected void execute() {
+        bearProtectionDeferred = false;
 
         flagNumber = profile.getConfig(ConfigurationKeyEnum.HERO_MISSION_FLAG_INT, Integer.class);
         useFlag = flagNumber > 0;
@@ -122,7 +124,7 @@ public class HeroMissionEventRoutine extends DelayedTask {
         }
 
         claimAllRewards();
-        if (!rallyReaper()) {
+        if (!rallyReaper() && !bearProtectionDeferred) {
             reschedule(LocalDateTime.now().plusMinutes(5));
         }
     }
@@ -147,9 +149,9 @@ public class HeroMissionEventRoutine extends DelayedTask {
                 return false;
             }
         }
-        tapPoint(button.getPoint());
+        tapInside(button);
         sleepTask(3000);
-        tapPoint(new PointData(360, 584)); // Tap on the center of the screen to select the reaper
+        tapNear(new PointData(360, 584)); // Tap on the center of the screen to select the reaper
         sleepTask(300);
 
         // Search for rally button
@@ -165,11 +167,15 @@ public class HeroMissionEventRoutine extends DelayedTask {
             return false;
         }
 
-        tapPoint(rallyButton.getPoint());
+        if (deferIfBearTrapBlocksRallyStart()) {
+            bearProtectionDeferred = true;
+            return false;
+        }
+        tapInside(rallyButton);
         sleepTask(1000);
 
         // Tap "Hold a Rally" button
-        tapRandomPoint(new PointData(275, 821), new PointData(444, 856), 1, 400);
+        tapInside(new PointData(275, 821), new PointData(444, 856), 1, 400);
         sleepTask(500);
 
         // Select flag if needed
@@ -200,7 +206,11 @@ public class HeroMissionEventRoutine extends DelayedTask {
             return false;
         }
 
-        tapPoint(deploy.getPoint());
+        if (deferIfBearTrapBlocksRallyStart()) {
+            bearProtectionDeferred = true;
+            return false;
+        }
+        tapInside(deploy);
         sleepTask(2000);
 
         if (deploymentHelper.isSameTargetDialog()) {
@@ -262,7 +272,7 @@ public class HeroMissionEventRoutine extends DelayedTask {
 
         for (ImageSearchResultData chest : chests) {
             if (chest.isFound()) {
-                tapPoint(chest.getPoint());
+                tapInside(chest);
                 sleepTask(300);
                 pressBack();
             }

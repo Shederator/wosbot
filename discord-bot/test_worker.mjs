@@ -14,6 +14,7 @@ import {
   encodeState,
   hexToBytes,
   parsePrNumbers,
+  reportingGuidanceResponse,
 } from "./worker.js";
 
 let passed = 0;
@@ -119,6 +120,28 @@ test("wrong channel is refused when channels are configured", () => {
 test("no configuration means open access", () => {
   const env = { ALLOWED_CHANNEL_IDS: "" };
   assert.equal(accessError(env, { channel_id: "1", member: { roles: [] } }), "");
+});
+
+// --- reporting guidance ----------------------------------------------------
+
+test("reporting guidance links configured channels and explains why", () => {
+  const response = reportingGuidanceResponse({
+    BUG_REPORT_CHANNEL_ID: "111",
+    SUGGESTIONS_CHANNEL_ID: "222",
+  });
+  const description = response.data.embeds[0].description;
+  assert.equal(response.type, 4);
+  assert.match(description, /<#111>/);
+  assert.match(description, /<#222>/);
+  assert.match(description, /why/i);
+  assert.match(description, /problem/i);
+  assert.deepEqual(response.data.allowed_mentions, { parse: [] });
+});
+
+test("reporting guidance has readable fallbacks for missing channel IDs", () => {
+  const description = reportingGuidanceResponse({}).data.embeds[0].description;
+  assert.match(description, /#bug-reports/);
+  assert.match(description, /#suggestions/);
 });
 
 console.log(`\n${passed} tests passed`);

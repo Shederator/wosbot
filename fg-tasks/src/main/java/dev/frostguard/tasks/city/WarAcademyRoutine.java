@@ -136,17 +136,17 @@ private boolean redeemMaximumShardsFlow() {
 
 
         logDebug(routineLogWarAcademyLine("Pressing Redeem button"));
-        tapPoint(REDEEM_BUTTON_VALUE);
+        tapNear(REDEEM_BUTTON_VALUE);
         sleepTask(500);
 
 
         logDebug(routineLogWarAcademyLine("Selecting maximum shards"));
-        tapPoint(MAX_SHARDS_BUTTON_LIMIT);
+        tapNear(MAX_SHARDS_BUTTON_LIMIT);
         sleepTask(100);
 
 
         logDebug(routineLogWarAcademyLine("Confirming redemption"));
-        tapPoint(CONFIRM_BUTTON_VALUE);
+        tapNear(CONFIRM_BUTTON_VALUE);
         sleepTask(1000);
 
 
@@ -178,7 +178,7 @@ private Integer scanRemainingShards() {
 private boolean openUpRedeemSection() {
         logDebug(routineLogWarAcademyLine("Entering Redeem section"));
 
-        tapPoint(REDEEM_TAB_BUTTON_VALUE);
+        tapNear(REDEEM_TAB_BUTTON_VALUE);
         sleepTask(500);
 
 
@@ -214,12 +214,12 @@ private boolean reachWarAcademy() {
                 .orElseThrow(() -> new RuntimeException("No valid Research Center found"));
 
         logDebug(routineLogWarAcademyLine("Pressing War Academy (bottommost Research Center)"));
-        tapPoint(warAcademyCenter.getPoint());
+        tapInside(warAcademyCenter);
         sleepTask(1000);
 
 
         logDebug(routineLogWarAcademyLine("Pressing building center to enter"));
-        tapRandomPoint(BUILDING_TAP_CENTER_VALUE, BUILDING_TAP_CENTER_VALUE, BUILDING_TAP_COUNT_VALUE, BUILDING_TAP_DELAY_MS);
+        tapInside(BUILDING_TAP_CENTER_VALUE, BUILDING_TAP_CENTER_VALUE, BUILDING_TAP_COUNT_VALUE, BUILDING_TAP_DELAY_MS);
         sleepTask(1000);
 
 
@@ -233,7 +233,7 @@ private boolean reachWarAcademy() {
         }
 
         logDebug(routineLogWarAcademyLine("Entering Research section"));
-        tapPoint(researchButton.getPoint());
+        tapInside(researchButton);
         sleepTask(500);
 
 

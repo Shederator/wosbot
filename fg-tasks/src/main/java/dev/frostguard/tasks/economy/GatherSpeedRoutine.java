@@ -132,15 +132,15 @@ public class GatherSpeedRoutine extends DelayedTask {
 	 */
 	private boolean navigateToGatheringSpeed() {
 		logDebug("Opening profile menu");
-		tapPoint(PROFILE_MENU_BUTTON);
+		tapNear(PROFILE_MENU_BUTTON);
 		sleepTask(1000); // Wait for profile menu to open
 
 		logDebug("Switching to Growth tab");
-		tapPoint(GROWTH_TAB);
+		tapNear(GROWTH_TAB);
 		sleepTask(1000); // Wait for tab to load
 
 		logDebug("Opening Gathering Speed section");
-		tapPoint(GATHERING_SPEED_SECTION);
+		tapNear(GATHERING_SPEED_SECTION);
 		sleepTask(1000); // Wait for section to open
 
 		return true;
@@ -159,7 +159,7 @@ public class GatherSpeedRoutine extends DelayedTask {
 		logInfo(String.format("Activating %s boost (%d gems)",
 				boostType.getName(), boostType.getGemCost()));
 
-		tapPoint(useButton);
+		tapNear(useButton);
 		sleepTask(500); // Wait for dialog to appear
 
 		// Handle potential "Obtain" dialog (if boost item not in inventory)
@@ -204,7 +204,7 @@ public class GatherSpeedRoutine extends DelayedTask {
 		logInfo("Obtain dialog detected. Purchasing boost item.");
 
 		// Click buy button
-		tapPoint(OBTAIN_BUY_BUTTON);
+		tapNear(OBTAIN_BUY_BUTTON);
 		sleepTask(800); // Wait for purchase confirmation dialog
 
 		// Handle purchase confirmation
@@ -243,12 +243,12 @@ public class GatherSpeedRoutine extends DelayedTask {
 
 		// Click "Don't show this confirmation again today" checkbox
 		logDebug("Checking 'Don't show again' checkbox");
-		tapPoint(PURCHASE_DONT_SHOW_CHECKBOX);
+		tapNear(PURCHASE_DONT_SHOW_CHECKBOX);
 		sleepTask(300); // Wait for checkbox animation
 
 		// Click confirm button
 		logDebug("Confirming purchase");
-		tapPoint(PURCHASE_CONFIRM_BUTTON);
+		tapNear(PURCHASE_CONFIRM_BUTTON);
 		sleepTask(800); // Wait for purchase to complete
 
 		logInfo("Purchase confirmed.");
@@ -285,7 +285,7 @@ public class GatherSpeedRoutine extends DelayedTask {
 		if (hasActivating || hasAnother || hasBonus) {
 			logInfo("Boost replacement dialog detected. Confirming replacement.");
 
-			tapPoint(BOOST_REPLACE_CONFIRM_BUTTON);
+			tapNear(BOOST_REPLACE_CONFIRM_BUTTON);
 			sleepTask(800); // Wait for confirmation
 
 			logInfo("Confirmed replacing existing boost.");

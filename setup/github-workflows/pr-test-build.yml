@@ -67,7 +67,7 @@ on:
         type: string
         default: ""
       discord_message_id:
-        description: "Original /build-pr status message to reply to"
+        description: "Original /build-pr status message to link from the result"
         required: false
         type: string
         default: ""
@@ -477,9 +477,9 @@ jobs:
           name: pr-test-plan
           path: ${{ runner.temp }}/plan
 
-      - name: Reply with the final status in the requesting Discord channel
+      - name: Post the final status in the requesting Discord channel
         env:
-          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_PR_BUILD_WEBHOOK_URL: ${{ secrets.DISCORD_PR_BUILD_WEBHOOK_URL }}
           DISCORD_ALLOWED_GUILD_ID: ${{ vars.DISCORD_PR_BUILD_GUILD_ID }}
           DISCORD_ALLOWED_CHANNEL_IDS: ${{ vars.DISCORD_PR_BUILD_CHANNEL_IDS }}
           DISCORD_GUILD_ID: ${{ inputs.discord_guild_id }}

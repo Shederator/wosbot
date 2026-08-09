@@ -317,7 +317,7 @@ public class ExpertsRomulusTroopsRoutine extends DelayedTask {
         }
 
         logDebug("Opening " + troopType + " building view");
-        tapPoint(troopChoice.getPoint());
+        tapInside(troopChoice);
         sleepTask(1000); // Wait for camera to move to building
 
         return true;
@@ -376,7 +376,7 @@ public class ExpertsRomulusTroopsRoutine extends DelayedTask {
         }
 
         logInfo("Romulus claim button found - claiming " + troopType + " troops");
-        tapPoint(claimButton.getPoint());
+        tapInside(claimButton);
         sleepTask(1000); // Wait for claim animation to complete
 
         return true;

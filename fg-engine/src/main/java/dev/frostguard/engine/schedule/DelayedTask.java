@@ -9,9 +9,13 @@ import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.error.HomeNotFoundException;
 import dev.frostguard.vision.logging.ProfileContextLogger;
+import dev.frostguard.api.domain.AreaData;
+import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.TesseractSettingsData;
+import dev.frostguard.engine.input.TapInteractionService;
+import dev.frostguard.engine.input.TapJitterPolicy;
 import dev.frostguard.engine.service.LoggingService;
 import dev.frostguard.engine.service.ProfileService;
 import dev.frostguard.engine.service.ScheduleService;
@@ -24,12 +28,10 @@ import dev.frostguard.engine.schedule.preempt.PreemptionToken;
 import dev.frostguard.engine.schedule.inject.InjectionRule;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.util.EnumSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -58,6 +60,7 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
 
     // ── services ────────────────────────────────────────────────────
     protected EmulatorController emuManager = EmulatorController.getInstance();
+    private TapInteractionService tapService;
     protected ScheduleService scheduleService = ScheduleService.obtain();
     protected LoggingService loggingService = LoggingService.obtain();
     private ProfileContextLogger logger;
@@ -86,28 +89,6 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
     // Changed by pernerch | Date: 2026-07-02 | Why: force stamina OCR refresh after
     // emulator-local profile switches so stale stamina values cannot leak between accounts.
     private static final Map<String, Long> LAST_ACTIVE_PROFILE_BY_EMULATOR = new ConcurrentHashMap<>();
-
-        // Changed by pernerch | Date: 2026-07-02 | Why: reserve marches for Bear Trap when the
-        // profile is configured to actively play the event, while only blocking rally-heavy events otherwise.
-        private static final EnumSet<TpDailyTaskEnum> BEAR_LOCKED_MARCH_TASKS = EnumSet.of(
-            TpDailyTaskEnum.GATHER_RESOURCES,
-            TpDailyTaskEnum.INTEL,
-            TpDailyTaskEnum.BEAST_HUNTING,
-            TpDailyTaskEnum.EVENT_POLAR_TERROR,
-            TpDailyTaskEnum.EVENT_HERO_MISSION,
-            TpDailyTaskEnum.MERCENARY_EVENT,
-            TpDailyTaskEnum.EVENT_BERSERK_CRYPTID,
-            TpDailyTaskEnum.PET_SKILLS
-        );
-
-        // Changed by pernerch | Date: 2026-07-02 | Why: when Bear Trap is scheduled but not actively
-        // consuming general marches, only rally-heavy event tasks should stay out of the way.
-        private static final EnumSet<TpDailyTaskEnum> BEAR_LOCKED_RALLY_EVENT_TASKS = EnumSet.of(
-            TpDailyTaskEnum.EVENT_POLAR_TERROR,
-            TpDailyTaskEnum.EVENT_HERO_MISSION,
-            TpDailyTaskEnum.MERCENARY_EVENT,
-            TpDailyTaskEnum.EVENT_BERSERK_CRYPTID
-        );
 
     // ── preemption ──────────────────────────────────────────────────
     private PreemptionToken preemptionToken;
@@ -141,6 +122,7 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
         this.allianceHelper = new AllianceHelper(emuManager, EMULATOR_NUMBER,
                 templateSearchHelper, navigationHelper, profile);
         this.eventHelper = new EventHelper(emuManager, EMULATOR_NUMBER, profile);
+        this.tapService = TapInteractionService.forController(emuManager, EMULATOR_NUMBER, this::checkPreemption);
     }
 
     // ── abstract / hook methods ─────────────────────────────────────
@@ -196,10 +178,6 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
                 staminaHelper.updateStaminaFromProfile();
             }
 
-            if (shouldDeferForBearTrapMarchReservationFlow()) {
-                return;
-            }
-
             if (consumesStamina() && StaminaService.getServices().requiresUpdate(profile.getId())) {
                 staminaHelper.updateStaminaFromProfile();
             }
@@ -244,69 +222,28 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
         return previousProfileId != null && !previousProfileId.equals(profile.getId());
     }
 
-    private boolean shouldDeferForBearTrapMarchReservationFlow() {
-        if (profile == null || tpTask == null || tpTask == TpDailyTaskEnum.BEAR_TRAP) {
+    private boolean deferForBearTrapProtection(BearTrapProtectionPolicy.Decision decision) {
+        if (!decision.blocked()) {
             return false;
         }
 
-        if (!Boolean.TRUE.equals(profile.getConfig(ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL, Boolean.class))) {
-            return false;
-        }
-
-        LocalDateTime referenceTrapTime = profile.getConfig(ConfigurationKeyEnum.BEAR_TRAP_SCHEDULE_DATETIME_STRING, LocalDateTime.class);
-        Integer preparationMinutes = profile.getConfig(ConfigurationKeyEnum.BEAR_TRAP_PREPARATION_TIME_INT, Integer.class);
-        if (referenceTrapTime == null || preparationMinutes == null) {
-            return false;
-        }
-
-        BearTrapHelper.WindowResult window = BearTrapHelper.calculateWindow(
-            referenceTrapTime.atZone(ZoneId.of("UTC")).toInstant(),
-            preparationMinutes);
-        if (window.getState() != TimeWindowHelper.WindowState.INSIDE) {
-            return false;
-        }
-
-        boolean joinRally = Boolean.TRUE.equals(profile.getConfig(ConfigurationKeyEnum.BEAR_TRAP_JOIN_RALLY_BOOL, Boolean.class));
-        boolean callOwnRally = Boolean.TRUE.equals(profile.getConfig(ConfigurationKeyEnum.BEAR_TRAP_CALL_RALLY_BOOL, Boolean.class));
-
-        boolean reserveAllMarchesForBear = joinRally;
-        if (reserveAllMarchesForBear) {
-            return deferTaskForBearWindowFlow(BEAR_LOCKED_MARCH_TASKS.contains(tpTask),
-                    "Bear Trap is active soon and configured to use marches. Reserving all marches for Bear only.");
-        }
-
-        boolean reserveRallyTasksOnly = callOwnRally || BEAR_LOCKED_RALLY_EVENT_TASKS.contains(tpTask);
-        if (!reserveRallyTasksOnly) {
-            return false;
-        }
-
-        return deferTaskForBearWindowFlow(BEAR_LOCKED_RALLY_EVENT_TASKS.contains(tpTask),
-                "Bear Trap is active soon. Blocking rally-heavy event tasks so Bear keeps march priority.");
-    }
-
-    private boolean deferTaskForBearWindowFlow(boolean shouldDefer, String reason) {
-        if (!shouldDefer) {
-            return false;
-        }
-
-        LocalDateTime retryAt = resolveBearWindowReleaseTimeFlow();
+        LocalDateTime retryAt = LocalDateTime.ofInstant(decision.releaseAt(), ZoneId.systemDefault());
         reschedule(retryAt);
-        logInfo(reason + " Rescheduling " + taskName + " for " + retryAt.format(DATETIME_FORMATTER));
+        String reason = decision.reason() == BearTrapProtectionPolicy.BlockReason.ALL_TASKS
+                ? "all scheduled tasks are paused"
+                : "this task can start a rally";
+        logInfo("Bear Trap " + decision.trapNumbers() + " protection window is active and " + reason
+                + ". Rescheduling " + taskName + " for " + retryAt.format(DATETIME_FORMATTER));
         return true;
     }
 
-    private LocalDateTime resolveBearWindowReleaseTimeFlow() {
-        LocalDateTime referenceTrapTime = profile.getConfig(ConfigurationKeyEnum.BEAR_TRAP_SCHEDULE_DATETIME_STRING, LocalDateTime.class);
-        Integer preparationMinutes = profile.getConfig(ConfigurationKeyEnum.BEAR_TRAP_PREPARATION_TIME_INT, Integer.class);
-        if (referenceTrapTime == null || preparationMinutes == null) {
-            return LocalDateTime.now().plusMinutes(30);
-        }
-
-        BearTrapHelper.WindowResult window = BearTrapHelper.calculateWindow(
-                referenceTrapTime.atZone(ZoneId.of("UTC")).toInstant(),
-                preparationMinutes);
-        Instant releaseInstant = window.getCurrentWindowEnd().plus(Duration.ofMinutes(1));
-        return LocalDateTime.ofInstant(releaseInstant, ZoneId.systemDefault());
+    /**
+     * Rechecks the protection window immediately before a rally-producing tap.
+     * This closes the gap where a task began before the window but reached its
+     * rally screen after protection had started.
+     */
+    protected boolean deferIfBearTrapBlocksRallyStart() {
+        return deferForBearTrapProtection(BearTrapProtectionPolicy.evaluateRallyStart(profile));
     }
 
     private void verifyGameProcessActive() {
@@ -334,19 +271,74 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
 
     // ── emulator interaction ────────────────────────────────────────
 
-    public void tapPoint(PointData point) {
-        checkPreemption();
-        emuManager.touchPoint(EMULATOR_NUMBER, point);
+    // All tap input funnels through TapInteractionService so randomization,
+    // preemption checks, clamping, and repeated-tap timing stay consistent.
+
+    /**
+     * Taps a randomized coordinate inside the actual matched bounding region
+     * of a template-search result. Prefer this over tapping the raw match
+     * center; it is a no-op returning {@code false} for misses.
+     */
+    public boolean tapInside(ImageSearchResultData result) {
+        return tapService.tapInside(result);
     }
 
-    public void tapRandomPoint(PointData p1, PointData p2) {
-        checkPreemption();
-        emuManager.touchArea(EMULATOR_NUMBER, p1, p2);
+    /** Repeated variant of {@link #tapInside(ImageSearchResultData)}. */
+    public boolean tapInside(ImageSearchResultData result, int count, int delayMs) {
+        return tapService.tapInside(result, count, delayMs);
     }
 
-    public void tapRandomPoint(PointData p1, PointData p2, int count, int delay) {
-        checkPreemption();
-        emuManager.touchArea(EMULATOR_NUMBER, p1, p2, count, delay);
+    /** Taps a randomized coordinate inside a known safe UI area. */
+    public void tapInside(AreaData area) {
+        tapService.tapInside(area);
+    }
+
+    /** Repeated variant of {@link #tapInside(AreaData)}. */
+    public void tapInside(AreaData area, int count, int delayMs) {
+        tapService.tapInside(area, count, delayMs);
+    }
+
+    /**
+     * Taps within the default jitter radius
+     * ({@link TapJitterPolicy#DEFAULT_POINT_JITTER_RADIUS} px) of the given
+     * point. Standard replacement for legacy fixed-coordinate taps; prefer
+     * {@link #tapInside(AreaData)} whenever a safe area is known.
+     */
+    public void tapNear(PointData point) {
+        tapService.tapNear(point);
+    }
+
+    /**
+     * Precision tap with explicitly bounded jitter. Use for small controls
+     * or minigame interactions where a large area is not safe.
+     */
+    public void tapNear(PointData point, int radius) {
+        tapService.tapNear(point, radius);
+    }
+
+    /** Repeated variant of {@link #tapNear(PointData, int)}. */
+    public void tapNear(PointData point, int radius, int count, int delayMs) {
+        tapService.tapNear(point, radius, count, delayMs);
+    }
+
+    /**
+     * Taps a randomized coordinate inside the rectangle bounded by two
+     * diagonal corners. Convenience overload of {@link #tapInside(AreaData)};
+     * degenerate rectangles (both corners equal) receive bounded jitter
+     * instead of a fixed tap.
+     */
+    public void tapInside(PointData corner1, PointData corner2) {
+        tapService.tapInside(new AreaData(corner1, corner2));
+    }
+
+    /**
+     * Repeated variant of {@link #tapInside(PointData, PointData)}; performs
+     * exactly {@code count} taps ({@code count <= 0} taps nothing),
+     * re-samples every coordinate, and applies the delay after every tap
+     * including the last.
+     */
+    public void tapInside(PointData corner1, PointData corner2, int count, int delayMs) {
+        tapService.tapInside(new AreaData(corner1, corner2), count, delayMs);
     }
 
     public void swipe(PointData start, PointData end) {
@@ -369,7 +361,8 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
                 long left = deadline - System.currentTimeMillis();
                 if (left <= 0) break;
 
-                if (!isInjecting && acceptsInjections()) {
+                if (!isInjecting && acceptsInjections()
+                        && !BearTrapProtectionPolicy.isFullPauseActive(profile)) {
                     InjectionRule pending = GlobalMonitorService.getInstance()
                             .pollPendingInjection(profile.getId());
                     if (pending != null) {

@@ -266,6 +266,12 @@ jobs:
             --previous "${previous_sha}" \
             --current "${GITHUB_SHA}")"
 
+          notes="${notes}
+
+          ## Changes since the previous Nightly
+
+          ${changes}"
+
           if [[ -n "${previous_sha}" ]]; then
             gh release delete nightly --yes --cleanup-tag
           fi

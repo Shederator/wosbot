@@ -8,6 +8,8 @@ import dev.frostguard.api.domain.MarchResourceType;
 import dev.frostguard.api.domain.MarchSlotState;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.engine.input.TapInteractionService;
+import dev.frostguard.engine.input.TapJitterPolicy;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.engine.nav.RallyFlagCoordinates;
@@ -47,6 +49,7 @@ public class MarchHelper {
 
     private final EmulatorController emu;
     private final String device;
+    private final TapInteractionService taps;
     private final ResilientOcrExecutor<String> ocrStrings;
     private final ProfileContextLogger log;
 
@@ -54,6 +57,7 @@ public class MarchHelper {
                        ResilientOcrExecutor<String> stringHelper, AccountDescriptor profile) {
         this.emu = emuManager;
         this.device = emulatorNumber;
+        this.taps = TapInteractionService.forController(emuManager, emulatorNumber);
         this.ocrStrings = stringHelper;
         this.log = new ProfileContextLogger(MarchHelper.class, profile);
     }
@@ -205,7 +209,8 @@ public class MarchHelper {
             return false;
         }
         log.debug("Selecting flag #" + flagNumber);
-        emu.touchPoint(device, RallyFlagCoordinates.pointForFlag(flagNumber));
+        // Flag slots are narrow fixed positions — keep the jitter tightly bounded.
+        taps.tapNear(RallyFlagCoordinates.pointForFlag(flagNumber), TapJitterPolicy.DEFAULT_POINT_JITTER_RADIUS);
         interruptibleWait(300);
         return true;
     }
@@ -235,14 +240,11 @@ public class MarchHelper {
 
     public void openLeftMenuCitySection(boolean cityTab) {
         log.debug("Left menu — " + (cityTab ? "city" : "wilderness"));
-        emu.touchArea(device, CommonGameAreas.LEFT_MENU_TRIGGER.topLeft(),
-                CommonGameAreas.LEFT_MENU_TRIGGER.bottomRight(), 3, 400);
+        taps.tapInside(CommonGameAreas.LEFT_MENU_TRIGGER, 3, 400);
         if (cityTab) {
-            emu.touchArea(device, CommonGameAreas.LEFT_MENU_CITY_TAB.topLeft(),
-                    CommonGameAreas.LEFT_MENU_CITY_TAB.bottomRight(), 3, 100);
+            taps.tapInside(CommonGameAreas.LEFT_MENU_CITY_TAB, 3, 100);
         } else {
-            emu.touchArea(device, CommonGameAreas.LEFT_MENU_WILDERNESS_TAB.topLeft(),
-                    CommonGameAreas.LEFT_MENU_WILDERNESS_TAB.bottomRight(), 3, 100);
+            taps.tapInside(CommonGameAreas.LEFT_MENU_WILDERNESS_TAB, 3, 100);
         }
     }
 
@@ -253,9 +255,9 @@ public class MarchHelper {
 
     private void dismissLeftPanel() {
         log.debug("Closing left menu");
-        emu.touchPoint(device, CommonGameAreas.LEFT_MENU_CLOSE_CITY);
+        taps.tapNear(CommonGameAreas.LEFT_MENU_CLOSE_CITY, TapJitterPolicy.DEFAULT_POINT_JITTER_RADIUS);
         interruptibleWait(500);
-        emu.touchPoint(device, CommonGameAreas.LEFT_MENU_CLOSE_OUTSIDE);
+        taps.tapNear(CommonGameAreas.LEFT_MENU_CLOSE_OUTSIDE, TapJitterPolicy.DEFAULT_POINT_JITTER_RADIUS);
         interruptibleWait(500);
     }
 

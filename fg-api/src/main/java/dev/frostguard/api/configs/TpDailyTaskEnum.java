@@ -209,6 +209,13 @@ public enum TpDailyTaskEnum {
         return routineCategory == RoutineCategory.LIFECYCLE;
     }
 
+    /** Whether this routine can create a new rally rather than only joining one. */
+    public boolean canStartRally() {
+        return this == EVENT_HERO_MISSION
+            || this == EVENT_POLAR_TERROR
+            || this == MERCENARY_EVENT;
+    }
+
     /** {@code true} for shop or merchant related routines. */
     public boolean isShopRelated() {
         return routineCategory == RoutineCategory.SHOP

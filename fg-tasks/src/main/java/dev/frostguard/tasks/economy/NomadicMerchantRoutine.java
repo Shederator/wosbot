@@ -44,7 +44,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
 
         // Tap on shop button and wait for shop to load
         logInfo("Navigating to the shop.");
-        tapRandomPoint(shopButtonResult.getPoint(), shopButtonResult.getPoint());
+        tapInside(shopButtonResult.getPoint(), shopButtonResult.getPoint());
         sleepTask(2000);
 
         // STEP 2: Main loop to handle all nomadic merchant operations
@@ -75,7 +75,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
 
                     if (result.isFound()) {
                         logInfo("Found resource: " + template.name() + ". Purchasing it.");
-                        tapPoint(result.getPoint());
+                        tapInside(result);
                         sleepTask(500);
                         freeResourcesClaimedCount++;
                         foundResourceTemplate = true;
@@ -105,15 +105,15 @@ public class NomadicMerchantRoutine extends DelayedTask {
                 if (vipResult.isFound()) {
                     logInfo("Found VIP points. Purchasing with gems.");
                     // Tap slightly below the VIP template to access purchase options
-                    tapPoint(new PointData(vipResult.getPoint().getX(), vipResult.getPoint().getY() + 100));
+                    tapNear(new PointData(vipResult.getPoint().getX(), vipResult.getPoint().getY() + 100));
                     sleepTask(1000);
 
                     // Tap buy with gems button
-                    tapPoint(new PointData(368, 830));
+                    tapNear(new PointData(368, 830));
                     sleepTask(1000);
 
                     // Confirm purchase
-                    tapPoint(new PointData(355, 788));
+                    tapNear(new PointData(355, 788));
                     sleepTask(1000);
 
                     vipPointsPurchasedCount++;
@@ -135,7 +135,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
 
             if (dailyRefreshResult.isFound()) {
                 logInfo("Daily refresh is available. Using it now.");
-                tapRandomPoint(dailyRefreshResult.getPoint(), dailyRefreshResult.getPoint());
+                tapInside(dailyRefreshResult.getPoint(), dailyRefreshResult.getPoint());
                 sleepTask(2000); // Wait longer for refresh to complete
                 dailyRefreshUsedCount++;
                 // Continue the main loop to check for new items after refresh

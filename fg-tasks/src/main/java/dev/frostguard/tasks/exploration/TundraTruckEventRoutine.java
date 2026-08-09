@@ -313,7 +313,7 @@ public class TundraTruckEventRoutine extends DelayedTask {
 	 * Click the "My Trucks" tab
 	 */
 	private void clickMyTrucksTab() {
-		tapRandomPoint(MY_TRUCKS_TAB.topLeft(), MY_TRUCKS_TAB.bottomRight());
+		tapInside(MY_TRUCKS_TAB.topLeft(), MY_TRUCKS_TAB.bottomRight());
 		sleepTask(1000);
 	}
 
@@ -338,7 +338,7 @@ public class TundraTruckEventRoutine extends DelayedTask {
 
 		for (ImageSearchResultData result : arrivedsTruck) {
 			if (result.isFound()) {
-				tapPoint(result.getPoint());
+				tapInside(result);
 				sleepTask(500);
 				closeWindow();
 			}
@@ -461,7 +461,7 @@ public class TundraTruckEventRoutine extends DelayedTask {
 		end.addY(yoffset);
 
 		// Tap to open truck details
-		tapRandomPoint(start, end);
+		tapInside(start, end);
 		sleepTask(500);
 
 		// Check if already departed
@@ -508,7 +508,7 @@ public class TundraTruckEventRoutine extends DelayedTask {
 		end.addX(xoffset);
 		end.addY(yoffset);
 
-		tapRandomPoint(start, end);
+		tapInside(start, end);
 		sleepTask(500);
 
 		// Check if already departed
@@ -534,7 +534,7 @@ public class TundraTruckEventRoutine extends DelayedTask {
 		}
 
 		logInfo("Sending " + side + " truck" + (truckSSR ? " (SSR)" : ""));
-		tapPoint(escortButton.getPoint());
+		tapInside(escortButton);
 		sleepTask(1000);
 
 		// Check for "higher-level trucks" pop-up
@@ -542,9 +542,9 @@ public class TundraTruckEventRoutine extends DelayedTask {
 				TemplatesEnum.TUNDRA_TRUCK_TIPS_POPUP,
 				SearchConfigConstants.SINGLE_WITH_2_RETRIES);
 		if (tipsPopup.isFound()) {
-			tapRandomPoint(TIPS_POPUP_CHECKBOX.topLeft(), TIPS_POPUP_CHECKBOX.bottomRight(), 1, 300);
+			tapInside(TIPS_POPUP_CHECKBOX.topLeft(), TIPS_POPUP_CHECKBOX.bottomRight(), 1, 300);
 			sleepTask(100);
-			tapRandomPoint(CONFIRM_CHECKBOX.topLeft(), CONFIRM_CHECKBOX.bottomRight(), 1, 300);
+			tapInside(CONFIRM_CHECKBOX.topLeft(), CONFIRM_CHECKBOX.bottomRight(), 1, 300);
 		}
 
 		return true;
@@ -564,7 +564,7 @@ public class TundraTruckEventRoutine extends DelayedTask {
 
 		if (departedResult.isFound()) {
 			logInfo(side + " truck already departed. Skipping.");
-			tapRandomPoint(CLOSE_DETAIL.topLeft(), CLOSE_DETAIL.bottomRight());
+			tapInside(CLOSE_DETAIL.topLeft(), CLOSE_DETAIL.bottomRight());
 			closeWindow();
 			return true;
 		}
@@ -604,7 +604,7 @@ public class TundraTruckEventRoutine extends DelayedTask {
 	 * Refresh available trucks
 	 */
 	private boolean refreshTrucks() {
-		tapRandomPoint(REFRESH_BUTTON.topLeft(), REFRESH_BUTTON.bottomRight());
+		tapInside(REFRESH_BUTTON.topLeft(), REFRESH_BUTTON.bottomRight());
 		sleepTask(1000);
 
 		ImageSearchResultData freeRefresh = templateSearchHelper.locatePattern(
@@ -617,9 +617,9 @@ public class TundraTruckEventRoutine extends DelayedTask {
 
 		if (freeRefresh.isFound()) {
 			logInfo("Free refresh available - confirming");
-			tapRandomPoint(CONFIRM_CHECKBOX.topLeft(), CONFIRM_CHECKBOX.bottomRight());
+			tapInside(CONFIRM_CHECKBOX.topLeft(), CONFIRM_CHECKBOX.bottomRight());
 			sleepTask(500);
-			tapPoint(freeRefresh.getPoint());
+			tapInside(freeRefresh);
 			return true;
 		}
 
@@ -639,14 +639,14 @@ public class TundraTruckEventRoutine extends DelayedTask {
 
 		if (useGems) {
 			logInfo("Using gems for refresh (useGems=true)");
-			tapRandomPoint(CONFIRM_CHECKBOX.topLeft(), CONFIRM_CHECKBOX.bottomRight());
+			tapInside(CONFIRM_CHECKBOX.topLeft(), CONFIRM_CHECKBOX.bottomRight());
 			sleepTask(500);
-			tapPoint(gemButton.getPoint());
+			tapInside(gemButton);
 			return true;
 		}
 
 		logInfo("Declining gem refresh (useGems=false)");
-		tapRandomPoint(CANCEL_POPUP.topLeft(), CANCEL_POPUP.bottomRight());
+		tapInside(CANCEL_POPUP.topLeft(), CANCEL_POPUP.bottomRight());
 		closeWindow();
 		return false;
 	}
@@ -723,7 +723,7 @@ public class TundraTruckEventRoutine extends DelayedTask {
 	 */
 	private void closeWindow() {
 		sleepTask(300);
-		tapRandomPoint(CLOSE_WINDOW.topLeft(), CLOSE_WINDOW.bottomRight(), 2, 600);
+		tapInside(CLOSE_WINDOW.topLeft(), CLOSE_WINDOW.bottomRight(), 2, 600);
 	}
 
 	@Override

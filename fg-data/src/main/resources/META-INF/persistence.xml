@@ -20,6 +20,7 @@
         <class>dev.frostguard.data.entity.GiftCodeClaim</class>
         <class>dev.frostguard.data.entity.Profile</class>
         <class>dev.frostguard.data.entity.ProfileBuilding</class>
+        <class>dev.frostguard.data.entity.ProfileTag</class>
 
         <exclude-unlisted-classes>true</exclude-unlisted-classes>
         <shared-cache-mode>NONE</shared-cache-mode>

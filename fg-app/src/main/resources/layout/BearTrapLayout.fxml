@@ -4,8 +4,8 @@
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 <?import org.controlsfx.control.*?>
+<?import dev.frostguard.app.shared.UtcDateTimeEditor?>
 
-<!-- Bear Trap — info panel merged into main content as collapsible TitledPane -->
 <BorderPane maxHeight="Infinity" maxWidth="Infinity"
             HBox.hgrow="ALWAYS" VBox.vgrow="ALWAYS"
             xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1">
@@ -15,60 +15,115 @@
                     styleClass="task-page-scroll">
             <VBox spacing="16" styleClass="task-page-root" maxWidth="Infinity">
 
-                <!-- Main Enable Card -->
+                <VBox styleClass="content-card">
+                    <HBox maxWidth="Infinity" styleClass="header-yellow">
+                        <Label text="Bear Trap Timers &amp; Protection" />
+                    </HBox>
+                    <VBox spacing="10" styleClass="task-section-inner">
+                        <Label styleClass="task-card-description"
+                               text="Set each Bear Trap's UTC start time once; the bot repeats it every 48 hours. The shared lead time starts both preparation and task protection, even when participation automation is off."
+                               wrapText="true" />
+                        <Label fx:id="labelTimerRecommendation" maxWidth="Infinity" wrapText="true" />
+                        <HBox alignment="CENTER_LEFT" spacing="10">
+                            <VBox spacing="4">
+                                <Label styleClass="task-field-label" text="Preparation &amp; protection lead time" />
+                                <TextField fx:id="textFieldPreparationTime" prefWidth="100.0" promptText="10" />
+                            </VBox>
+                            <Label maxWidth="420" styleClass="task-card-description"
+                                   text="Minutes before each event when Bear preparation and the selected protection mode begin."
+                                   wrapText="true" />
+                        </HBox>
+
+                        <GridPane hgap="14">
+                            <columnConstraints>
+                                <ColumnConstraints percentWidth="50" hgrow="ALWAYS" />
+                                <ColumnConstraints percentWidth="50" hgrow="ALWAYS" />
+                            </columnConstraints>
+                            <VBox maxWidth="Infinity" spacing="8" styleClass="content-card"
+                                  GridPane.columnIndex="0">
+                                <Label style="-fx-font-size: 13px; -fx-font-weight: bold;" text="Bear Trap 1" />
+                                <Label styleClass="task-field-label" text="Event start (UTC, repeats every 48 hours)" />
+                                <UtcDateTimeEditor fx:id="timer1DateTimeEditor" />
+                                <Label styleClass="task-field-label"
+                                       text="Protection mode (10 min before start through event end)" />
+                                <ComboBox fx:id="comboBoxProtectionTimer1" maxWidth="Infinity" />
+                                <Label fx:id="labelProtectionHelperTimer1" maxWidth="Infinity"
+                                       styleClass="task-card-description" wrapText="true" />
+                            </VBox>
+
+                            <VBox maxWidth="Infinity" spacing="8" styleClass="content-card"
+                                  GridPane.columnIndex="1">
+                                <Label style="-fx-font-size: 13px; -fx-font-weight: bold;" text="Bear Trap 2" />
+                                <Label styleClass="task-field-label" text="Event start (UTC, repeats every 48 hours)" />
+                                <UtcDateTimeEditor fx:id="timer2DateTimeEditor" />
+                                <Label styleClass="task-field-label"
+                                       text="Protection mode (10 min before start through event end)" />
+                                <ComboBox fx:id="comboBoxProtectionTimer2" maxWidth="Infinity" />
+                                <Label fx:id="labelProtectionHelperTimer2" maxWidth="Infinity"
+                                       styleClass="task-card-description" wrapText="true" />
+                            </VBox>
+                        </GridPane>
+                    </VBox>
+                </VBox>
+
                 <VBox styleClass="content-card">
                     <HBox maxWidth="Infinity" styleClass="header-yellow">
                         <CheckBox fx:id="checkBoxEnableBearTrap" mnemonicParsing="false"
                                   style="-fx-font-size: 15px; -fx-font-weight: bold;"
-                                  text="Enable Bear Trap" />
+                                  text="Enable Bear Trap automation" />
                     </HBox>
                     <VBox spacing="10" styleClass="task-section-inner">
-                        <Label styleClass="task-card-description"
-                               text="Schedule preparation, choose the trap, and control rally behavior for the event."
-                               wrapText="true" />
-
-                        <FlowPane hgap="18" vgap="10" alignment="CENTER_LEFT">
-                            <VBox spacing="6" prefWidth="240">
-                                <Label styleClass="task-field-label" text="Next Bear Trap (UTC)" />
-                                <TextField fx:id="textFieldScheduleDateTime"
-                                           promptText="dd-MM-yyyy HH:mm" />
-                                <Label fx:id="labelDateTimeError"
-                                       style="-fx-font-size: 11px; -fx-text-fill: #ff4444;"
-                                       text="" wrapText="true" />
+                        <HBox alignment="CENTER_LEFT" spacing="18">
+                            <VBox spacing="6">
+                                <Label styleClass="task-field-label" text="Participation timer" />
+                                <ComboBox fx:id="comboBoxTrapNumber" prefWidth="205.0" />
+                                <Label fx:id="labelTrapSelectionHelper" maxWidth="220"
+                                       styleClass="task-card-description" wrapText="true" />
                             </VBox>
-                            <VBox spacing="6" prefWidth="120">
-                                <Label styleClass="task-field-label" text="Prep minutes" />
-                                <TextField fx:id="textFieldPreparationTime" prefWidth="100.0"
-                                           promptText="5" />
+                            <VBox maxWidth="320" spacing="4">
+                                <HBox alignment="CENTER_LEFT" spacing="5">
+                                    <Label styleClass="task-field-label" text="Participation trigger" />
+                                    <Label fx:id="labelParticipationTriggerInfo" pickOnBounds="true"
+                                           style="-fx-cursor: hand; -fx-padding: 0 4; -fx-text-fill: #8b949e;"
+                                           text="ⓘ" />
+                                </HBox>
+                                <ComboBox fx:id="comboBoxParticipationTrigger" maxWidth="280" prefWidth="220" />
+                                <Label fx:id="labelParticipationHelper" styleClass="task-card-description"
+                                       wrapText="true" />
+                                <Label fx:id="labelParticipationWarning"
+                                       maxWidth="300" managed="false"
+                                       style="-fx-background-color: rgba(245, 158, 11, 0.14); -fx-background-radius: 4; -fx-padding: 4 6; -fx-text-fill: #fbbf24; -fx-font-size: 11px;"
+                                       text="Bear icons cannot distinguish Trap 1 from Trap 2."
+                                       visible="false" wrapText="true" />
+                                <Label fx:id="labelSelectedTimerWarning"
+                                       maxWidth="320" managed="false"
+                                       style="-fx-background-color: rgba(245, 158, 11, 0.14); -fx-background-radius: 4; -fx-padding: 4 6; -fx-text-fill: #fbbf24; -fx-font-size: 11px;"
+                                       visible="false" wrapText="true" />
                             </VBox>
-                        </FlowPane>
+                        </HBox>
                     </VBox>
                 </VBox>
 
-                <!-- Preparation and Trap Target side-by-side -->
                 <HBox alignment="TOP_LEFT" spacing="14">
-
                     <VBox styleClass="content-card" HBox.hgrow="ALWAYS">
                         <HBox maxWidth="Infinity" styleClass="header-blue">
                             <Label text="Preparation" />
                         </HBox>
                         <VBox spacing="10" styleClass="task-section-inner">
-                            <CheckBox fx:id="checkBoxActivePets" mnemonicParsing="false"
-                                      text="Active Pets" />
-                            <CheckBox fx:id="checkBoxRecallTroops" mnemonicParsing="false"
-                                      text="Recall Gather Troops" />
+                            <CheckBox fx:id="checkBoxActivePets" maxWidth="Infinity"
+                                      mnemonicParsing="false"
+                                      text="Activate pets before Bear Trap" />
+                            <CheckBox fx:id="checkBoxRecallTroops" maxWidth="Infinity"
+                                      mnemonicParsing="false"
+                                      text="Recall gathering troops before Bear Trap" />
                         </VBox>
                     </VBox>
 
                     <VBox styleClass="content-card" HBox.hgrow="ALWAYS">
                         <HBox maxWidth="Infinity" styleClass="header-red">
-                            <Label text="Trap Target" />
+                            <Label text="Rally Behavior" />
                         </HBox>
                         <VBox spacing="10" styleClass="task-section-inner">
-                            <HBox alignment="CENTER_LEFT" spacing="10">
-                                <Label minWidth="90.0" styleClass="task-field-label" text="Trap" />
-                                <ComboBox fx:id="comboBoxTrapNumber" prefWidth="100.0" />
-                            </HBox>
                             <CheckBox fx:id="checkBoxCallRally" mnemonicParsing="false"
                                       text="Call Own Rally" />
                             <HBox alignment="CENTER_LEFT" spacing="10">
@@ -87,19 +142,20 @@
                     </VBox>
                 </HBox>
 
-                <!-- Quick guide as collapsible TitledPane instead of BorderPane.right -->
                 <TitledPane text="Quick Guide" expanded="false" collapsible="true"
                             styleClass="content-card">
                     <VBox spacing="6" style="-fx-padding: 10;">
                         <Label styleClass="task-info-panel-bullet"
-                               text="• Use UTC time in dd-MM-yyyy HH:mm format." wrapText="true" />
-                        <Label styleClass="task-info-panel-bullet"
-                               text="• Prep time starts before trap activation." wrapText="true" />
-                        <Label styleClass="task-info-panel-bullet"
-                               text="• Rally options can call your own rally or join others."
+                               text="Set each event's 48-hour UTC anchor and enable its protection independently."
                                wrapText="true" />
                         <Label styleClass="task-info-panel-bullet"
-                               text="• Gathering and autojoin are restored after the event."
+                               text="Rally-starting tasks can be blocked from 10 minutes before activation until event end."
+                               wrapText="true" />
+                        <Label styleClass="task-info-panel-bullet"
+                               text="Pause all scheduled tasks also blocks non-rally tasks from starting during that window."
+                               wrapText="true" />
+                        <Label styleClass="task-info-panel-bullet"
+                               text="Participation uses the UTC schedule selected under Participate in; protection remains independent."
                                wrapText="true" />
                     </VBox>
                 </TitledPane>

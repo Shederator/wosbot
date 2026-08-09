@@ -1,6 +1,7 @@
 package dev.frostguard.engine.listener;
 
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.api.domain.ProfileTagData;
 
 import java.util.List;
 
@@ -16,6 +17,16 @@ public interface ProfileServiceInterface {
     boolean removeAccount(AccountDescriptor profile);
 
     boolean applyBulkUpdate(AccountDescriptor templateAccount);
+
+    List<String> fetchProfileTags();
+
+    List<ProfileTagData> fetchProfileTagDefinitions();
+
+    boolean updateProfileTag(String oldName, String newName, String color);
+
+    boolean deleteProfileTag(String name);
+
+    boolean replaceProfileTags(Long profileId, List<String> tags);
 
     void registerStatusObserver(ProfileStatusChangeListener observer);
 

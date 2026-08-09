@@ -89,6 +89,22 @@ class PayloadTest(unittest.TestCase):
         )
         self.assertIn("#79", changes["value"])
 
+    def test_splits_many_changes_instead_of_truncating_at_five(self):
+        changes = "\n".join(f"• change {index} " + "x" * 180 for index in range(12))
+        fields = payload(["--changes", changes])["embeds"][0]["fields"]
+        text = "\n".join(field["value"] for field in fields)
+        self.assertGreater(len(fields), 1)
+        self.assertIn("change 0", text)
+        self.assertIn("change 11", text)
+
+    def test_overflow_links_the_complete_release_changelog(self):
+        changes = "\n".join(f"• change {index} " + "x" * 900 for index in range(8))
+        fields = payload(["--changes", changes])["embeds"][0]["fields"]
+        text = "\n".join(field["value"] for field in fields)
+        self.assertEqual(len(fields), discord_notify.MAX_CHANGE_FIELDS)
+        self.assertIn("releases/tag/nightly", text)
+        self.assertIn("change 7", text)
+
     def test_omits_internal_ci_metrics(self):
         result = payload()
         names = {f["name"] for f in result["embeds"][0]["fields"]}

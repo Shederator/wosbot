@@ -5,6 +5,7 @@ import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -51,6 +52,7 @@ public final class AllianceHelper {
 
     private final EmulatorController     emu;
     private final String                 slot;
+    private final TapInteractionService  taps;
     private final TemplateSearchHelper   tplSearch;
     private final NavigationHelper       nav;
     private final ProfileContextLogger   log;
@@ -63,6 +65,7 @@ public final class AllianceHelper {
             AccountDescriptor profile) {
         this.emu       = emuManager;
         this.slot      = emulatorNumber;
+        this.taps      = TapInteractionService.forController(emuManager, emulatorNumber);
         this.tplSearch = templateSearchHelper;
         this.nav       = navigationHelper;
         this.log       = new ProfileContextLogger(AllianceHelper.class, profile);
@@ -91,7 +94,7 @@ public final class AllianceHelper {
             log.error("War button not detected on screen");
             return WorkflowOutcome.ELEMENT_NOT_FOUND;
         }
-        emu.touchPoint(slot, warHit.getPoint());
+        taps.tapInside(warHit);
         pause(500);
 
         emitPhase(TogglePhase.SELECT_RALLY_TAB);
@@ -121,7 +124,7 @@ public final class AllianceHelper {
     }
 
     private void tap(AreaData region) {
-        emu.touchArea(slot, region.topLeft(), region.bottomRight());
+        taps.tapInside(region);
     }
 
     private static void pause(long ms) {

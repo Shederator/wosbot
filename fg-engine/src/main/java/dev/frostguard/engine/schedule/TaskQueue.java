@@ -2,6 +2,7 @@ package dev.frostguard.engine.schedule;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -31,6 +32,7 @@ import dev.frostguard.engine.error.ADBConnectionException;
 import dev.frostguard.engine.error.HomeNotFoundException;
 import dev.frostguard.engine.error.ProfileInReconnectStateException;
 import dev.frostguard.engine.error.StopExecutionException;
+import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.schedule.inject.InjectionRule;
 import dev.frostguard.engine.schedule.preempt.PreemptionRule;
 import dev.frostguard.engine.schedule.priority.DefaultTaskPriorityProvider;
@@ -124,6 +126,37 @@ public class TaskQueue {
         return ref != null && taskBacklog.stream()
                 .filter(t -> t.equals(ref))
                 .anyMatch(t -> t.getDelay(TimeUnit.SECONDS) <= withinSec);
+    }
+
+    public synchronized boolean scheduleOrRescheduleQueuedTask(
+            TpDailyTaskEnum kind,
+            AccountDescriptor updatedProfile,
+            LocalDateTime nextRun) {
+        if (kind == null || updatedProfile == null || nextRun == null) {
+            return false;
+        }
+        DelayedTask ref = DelayedTaskRegistry.create(kind, updatedProfile);
+        if (ref == null) {
+            return false;
+        }
+        DelayedTask existing = taskBacklog.stream().filter(ref::equals).findFirst().orElse(null);
+        if (existing == null) {
+            if (isExecutingTask(kind)) {
+                return false;
+            }
+            ref.reschedule(nextRun);
+            ref.setRecurring(true);
+            taskBacklog.offer(ref);
+            emitInfoTask(ref, "Enqueued with aligned schedule " + nextRun.format(TS_FMT));
+            return true;
+        }
+
+        taskBacklog.remove(existing);
+        existing.setProfile(updatedProfile);
+        existing.reschedule(nextRun);
+        taskBacklog.offer(existing);
+        emitInfoTask(existing, "Schedule realigned to " + nextRun.format(TS_FMT));
+        return true;
     }
 
         // Changed by pernerch | Date: 2026-07-02 | Why: expose overdue runnable snapshot so
@@ -356,6 +389,8 @@ public class TaskQueue {
     }
 
     private void tryIdleInjection() {
+        if (BearTrapProtectionPolicy.isFullPauseActive(profile)) return;
+
         InjectionRule pending = GlobalMonitorService.getInstance().pollPendingInjection(profile.getId());
         if (pending == null) return;
         broadcastStatus("Injection: " + pending.getRuleName());
@@ -373,6 +408,9 @@ public class TaskQueue {
     private boolean executeTask(DelayedTask task) {
         if (shuttingDown) {
             emitInfo("Skipping task execution during shutdown: " + task.getTaskName());
+            return false;
+        }
+        if (deferForBearTrapProtection(task)) {
             return false;
         }
         if (task.getTpTask() == TpDailyTaskEnum.INITIALIZE && !shouldRunInitialize()) {
@@ -422,6 +460,54 @@ public class TaskQueue {
             }
         }
         return ok;
+    }
+
+    private boolean deferForBearTrapProtection(DelayedTask task) {
+        BearTrapProtectionPolicy.Decision decision =
+                BearTrapProtectionPolicy.evaluateTask(profile, task.getTpTask());
+        if (!decision.blocked()) {
+            return false;
+        }
+
+        LocalDateTime retryAt = LocalDateTime.ofInstant(
+                decision.releaseAt(), ZoneId.systemDefault());
+        task.reschedule(retryAt);
+        enqueue(task);
+
+        String reason = decision.reason() == BearTrapProtectionPolicy.BlockReason.ALL_TASKS
+                ? "all scheduled tasks are paused"
+                : "the task can start a rally";
+        emitInfoTask(task, "Bear Trap " + decision.trapNumbers()
+                + " protection window is active and " + reason
+                + ". Deferred until " + retryAt.format(TS_FMT));
+        try {
+            recordDeferredState(task);
+            ScheduleService.obtain().persistNextSchedule(
+                    profile, task.getTpTask(), retryAt, distinctTaskLabel(task));
+        } catch (Exception ex) {
+            emitWarnTask(task, "Could not persist Bear Trap deferral: " + ex.getMessage());
+        }
+        return true;
+    }
+
+    private void recordDeferredState(DelayedTask task) {
+        String customLabel = distinctTaskLabel(task);
+        TaskStateData previous = TaskManagementService.shared().lookupTaskState(
+                profile.getId(), task.getTpDailyTaskId(), customLabel);
+        TaskStateData deferred = TaskStateData.of(
+                profile.getId(),
+                task.getTpDailyTaskId(),
+                customLabel,
+                true,
+                false,
+                previous != null ? previous.getLastExecutionTime() : task.getLastExecutionTime(),
+                task.getScheduled());
+        TaskManagementService.shared().recordTaskState(profile.getId(), deferred);
+    }
+
+    private String distinctTaskLabel(DelayedTask task) {
+        Object key = task.getDistinctKey();
+        return key != null ? key.toString() : null;
     }
 
     // ---- helpers -----------------------------------------------------------
@@ -495,7 +581,7 @@ public class TaskQueue {
     private void attemptReconnect() {
         try {
             ImageSearchResultData r = deviceBridge.locatePattern(profile.getEmulatorNumber(), TemplatesEnum.GAME_HOME_RECONNECT, 90);
-            if (r.isFound()) deviceBridge.touchPoint(profile.getEmulatorNumber(), r.getPoint());
+            if (r.isFound()) TapInteractionService.forController(deviceBridge, profile.getEmulatorNumber()).tapInside(r);
             enqueue(DelayedTaskRegistry.create(TpDailyTaskEnum.INITIALIZE, profile));
         } catch (Exception ex) { emitError("Reconnect error: " + ex.getMessage()); }
     }
@@ -517,9 +603,12 @@ public class TaskQueue {
     private void handleIdleTransitions() {
         if (Thread.currentThread().isInterrupted()) return;
         if (statusModel.getLoopState().isExecutedTask() || taskBacklog.isEmpty()) return;
-        int idleCap = Optional.ofNullable(ConfigService.obtain().loadGlobalSettings())
-                .map(c -> c.get(ConfigurationKeyEnum.MAX_IDLE_TIME_INT.name())).map(Integer::parseInt)
-                .orElse(Integer.parseInt(ConfigurationKeyEnum.MAX_IDLE_TIME_INT.getDefaultValue()));
+        IdleBehaviorEnum idleBehavior = resolveIdleBehavior();
+        if (!idleBehavior.requiresIdleTimeout()) {
+            statusModel.setIdleTimeExceeded(false);
+            return;
+        }
+        int idleCap = resolvePositiveIdleLimit();
         statusModel.setIdleTimeLimit(idleCap);
         if (runningContext != null) return;
         if (!statusModel.isIdleTimeExceeded() && statusModel.checkIdleTimeExceeded()) {
@@ -624,10 +713,7 @@ public class TaskQueue {
     }
 
     private void suspendDevice(LocalDateTime until, boolean freeSlot) {
-        IdleBehaviorEnum policy = IdleBehaviorEnum.fromString(
-                Optional.ofNullable(ConfigService.obtain().loadGlobalSettings())
-                        .map(c -> c.getOrDefault(ConfigurationKeyEnum.IDLE_BEHAVIOR_STRING.name(), ConfigurationKeyEnum.IDLE_BEHAVIOR_STRING.getDefaultValue()))
-                        .orElse(ConfigurationKeyEnum.IDLE_BEHAVIOR_STRING.getDefaultValue()));
+        IdleBehaviorEnum policy = resolveIdleBehavior();
         if (policy == IdleBehaviorEnum.SEND_TO_BACKGROUND) {
             deviceBridge.sendGameToBackground(profile.getEmulatorNumber());
             emitInfo("Device sent to background until " + until);
@@ -644,6 +730,7 @@ public class TaskQueue {
 
     private boolean enforceSessionCap() {
         if (runningContext != null || sessionOrigin == null) return false;
+        if (!resolveIdleBehavior().requiresIdleTimeout()) return false;
         Map<String,String> cfg = ConfigService.obtain().loadGlobalSettings();
         boolean on = Boolean.parseBoolean(Optional.ofNullable(cfg)
                 .map(c -> c.get(ConfigurationKeyEnum.PROFILE_MAX_ACTIVE_TIME_ENABLED_BOOL.name()))
@@ -659,6 +746,32 @@ public class TaskQueue {
         suspendDevice(statusModel.getDelayUntil(), true);
         statusModel.setIdleTimeExceeded(true);
         return true;
+    }
+
+    private IdleBehaviorEnum resolveIdleBehavior() {
+        return IdleBehaviorEnum.fromString(
+                Optional.ofNullable(ConfigService.obtain().loadGlobalSettings())
+                        .map(c -> c.getOrDefault(ConfigurationKeyEnum.IDLE_BEHAVIOR_STRING.name(),
+                                ConfigurationKeyEnum.IDLE_BEHAVIOR_STRING.getDefaultValue()))
+                        .orElse(ConfigurationKeyEnum.IDLE_BEHAVIOR_STRING.getDefaultValue()));
+    }
+
+    private int resolvePositiveIdleLimit() {
+        int configured = Optional.ofNullable(ConfigService.obtain().loadGlobalSettings())
+                .map(c -> c.get(ConfigurationKeyEnum.MAX_IDLE_TIME_INT.name()))
+                .map(TaskQueue::parseInteger)
+                .orElse(Integer.parseInt(ConfigurationKeyEnum.MAX_IDLE_TIME_INT.getDefaultValue()));
+        return configured > 0
+                ? configured
+                : Integer.parseInt(ConfigurationKeyEnum.MAX_IDLE_TIME_INT.getDefaultValue());
+    }
+
+    private static Integer parseInteger(String value) {
+        try {
+            return Integer.valueOf(value);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private void acquireSlot() {

@@ -109,7 +109,7 @@ public class TundraTrekAutoRoutine extends DelayedTask {
         }
 
         // Tap icon and verify navigation
-        tapPoint(tundraIcon.getPoint());
+        tapInside(tundraIcon);
         sleepTask(1500);
 
         logInfo("Successfully entered Tundra Trek event");
@@ -184,7 +184,7 @@ public class TundraTrekAutoRoutine extends DelayedTask {
 
         // Attempt 2: Upper screen click to reveal buttons, then try Auto
         logInfo("Auto button not visible. Trying upper screen click to reveal buttons");
-        tapPoint(UPPER_SCREEN_CLICK);
+        tapNear(UPPER_SCREEN_CLICK);
         sleepTask(3500 / 2);
 
         if (tryDirectAutoButton()) {
@@ -220,7 +220,7 @@ public class TundraTrekAutoRoutine extends DelayedTask {
         }
 
         logInfo("Auto button found - clicking it");
-        tapPoint(autoBtn.getPoint());
+        tapInside(autoBtn);
         sleepTask(500);
 
         // Verify Auto opened by checking for checkbox
@@ -247,12 +247,12 @@ public class TundraTrekAutoRoutine extends DelayedTask {
         }
 
         logInfo("Blue button found - clicking to potentially unlock Auto");
-        tapPoint(blueBtn.getPoint());
+        tapInside(blueBtn);
         sleepTask(3500);
 
         // After Blue button, try upper screen click
         logInfo("After Blue button: performing upper screen click");
-        tapPoint(UPPER_SCREEN_CLICK);
+        tapNear(UPPER_SCREEN_CLICK);
         sleepTask(1000);
 
         // Now try Auto button
@@ -281,9 +281,9 @@ public class TundraTrekAutoRoutine extends DelayedTask {
         logInfo("Skip button found - using as Auto alternative");
 
         // Double-tap skip for UI rebuild
-        tapPoint(skipBtn.getPoint());
+        tapInside(skipBtn);
         sleepTask(500);
-        tapPoint(skipBtn.getPoint());
+        tapInside(skipBtn);
         sleepTask(3500);
 
         // After skip, try Auto button
@@ -346,7 +346,7 @@ public class TundraTrekAutoRoutine extends DelayedTask {
         }
 
         logInfo("Clicking Bag button");
-        tapPoint(bagBtn.getPoint());
+        tapInside(bagBtn);
         sleepTask(500);
         return true;
     }
@@ -376,7 +376,7 @@ public class TundraTrekAutoRoutine extends DelayedTask {
         }
 
         logInfo("Activating checkbox");
-        tapPoint(inactiveCheck.getPoint());
+        tapInside(inactiveCheck);
         sleepTask(500);
 
         // Verify activation

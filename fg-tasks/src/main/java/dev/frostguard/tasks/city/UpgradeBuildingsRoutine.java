@@ -230,16 +230,16 @@ private boolean refillResourcesIfNeededFlow() {
 
                     @Override
                     public void openObtain(PointData point) {
-                        tapPoint(point);
+                        tapNear(point);
                         sleepTask(500);
                     }
 
                     @Override
                     public void replenishAndConfirm(PointData point) {
                         logInfo(routineLogUpgradeBuildingsLine("Refilling one missing resource for the upgrade..."));
-                        tapPoint(point);
+                        tapNear(point);
                         sleepTask(300);
-                        tapPoint(REPLENISH_CONFIRM_POINT);
+                        tapNear(REPLENISH_CONFIRM_POINT);
                         sleepTask(1000);
                     }
                 },
@@ -272,7 +272,7 @@ private void handleSurvivorBuilding() {
 
         while (!(survivorUpgrade = templateSearchHelper.locatePattern(BUILDING_SURVIVOR_BUTTON_UPGRADE,
                 SearchConfigConstants.SINGLE_WITH_2_RETRIES)).isFound()) {
-            tapRandomPoint(new PointData(560, 640), new PointData(650, 690), 1, 200);
+            tapInside(new PointData(560, 640), new PointData(650, 690), 1, 200);
             limit--;
             if (limit <= 0) {
                 break;
@@ -280,7 +280,7 @@ private void handleSurvivorBuilding() {
         }
 
 
-        tapRandomPoint(survivorUpgrade.getPoint(), survivorUpgrade.getPoint(), 1, 1000);
+        tapInside(survivorUpgrade.getPoint(), survivorUpgrade.getPoint(), 1, 1000);
 
 
         if (!refillResourcesIfNeededFlow()) {
@@ -288,12 +288,12 @@ private void handleSurvivorBuilding() {
         }
 
 
-        tapRandomPoint(new PointData(450, 1190), new PointData(600, 1230), 1, 1000);
+        tapInside(new PointData(450, 1190), new PointData(600, 1230), 1, 1000);
 
 
         if (tapAllianceHelp()) {
             sleepTask(500);
-            tapRandomPoint(new PointData(540, 1200), new PointData(700, 1250), 1, 1000);
+            tapInside(new PointData(540, 1200), new PointData(700, 1250), 1, 1000);
         }
     }
 
@@ -504,7 +504,7 @@ private boolean rescheduleForRetainedReservation(Set<Integer> attemptedQueues) {
 }
 
 private void tapAround(PointData center, int radius, int delayMs) {
-        tapRandomPoint(
+        tapInside(
                 new PointData(center.getX() - radius, center.getY() - radius),
                 new PointData(center.getX() + radius, center.getY() + radius),
                 1,
@@ -626,7 +626,7 @@ private void handleNewBuilding() {
 private void startBuildingAction(String actionName, PointData buttonTopLeft, PointData buttonBottomRight) {
         logInfo(routineLogUpgradeBuildingsLine("Starting building " + actionName + "..."));
 
-        tapRandomPoint(buttonTopLeft, buttonBottomRight);
+        tapInside(buttonTopLeft, buttonBottomRight);
         sleepTask(1000);
 
 
@@ -635,7 +635,7 @@ private void startBuildingAction(String actionName, PointData buttonTopLeft, Poi
         }
 
 
-        tapRandomPoint(BUILDING_CONFIRM_BUTTON_AREA_VALUE.topLeft(), BUILDING_CONFIRM_BUTTON_AREA_VALUE.bottomRight());
+        tapInside(BUILDING_CONFIRM_BUTTON_AREA_VALUE.topLeft(), BUILDING_CONFIRM_BUTTON_AREA_VALUE.bottomRight());
 
 
         tapAllianceHelp();
@@ -824,13 +824,13 @@ private boolean tapAllianceHelp() {
             return false;
         }
 
-        tapRandomPoint(help.getPoint(), help.getPoint(), 1, 500);
+        tapInside(help.getPoint(), help.getPoint(), 1, 500);
         return true;
     }
 
 private void reachCityView() {
-        tapRandomPoint(LEFT_MENU.topLeft(), LEFT_MENU.bottomRight(), 1, 1000);
-        tapRandomPoint(LEFT_MENU_CITY_TAB.topLeft(), LEFT_MENU_CITY_TAB.bottomRight(), 1,
+        tapInside(LEFT_MENU.topLeft(), LEFT_MENU.bottomRight(), 1, 1000);
+        tapInside(LEFT_MENU_CITY_TAB.topLeft(), LEFT_MENU_CITY_TAB.bottomRight(), 1,
                 1000);
     }
 
@@ -860,10 +860,7 @@ private QueueAttemptResult handleQueueAttempt(UpgradeBuildingsRoutine.QueueReado
         sleepTask(500);
 
 
-        emuManager.touchArea(
-                EMULATOR_NUMBER,
-                queueResult.queueArea.topLeft(),
-                queueResult.queueArea.bottomRight());
+        tapInside(queueResult.queueArea);
         sleepTask(500);
 
 
@@ -873,13 +870,13 @@ private QueueAttemptResult handleQueueAttempt(UpgradeBuildingsRoutine.QueueReado
         if (lowBuilding.isFound()) {
 
 
-            tapPoint(new PointData(lowBuilding.getPoint().getX() + 100, lowBuilding.getPoint().getY()));
+            tapNear(new PointData(lowBuilding.getPoint().getX() + 100, lowBuilding.getPoint().getY()));
             handleSurvivorBuilding();
             return QueueAttemptResult.completed();
         } else {
 
 
-            tapRandomPoint(new PointData(338, 799), new PointData(353, 807), 3, 100);
+            tapInside(new PointData(338, 799), new PointData(353, 807), 3, 100);
             ImageSearchResultData upgradeButton = templateSearchHelper.locatePattern(BUILDING_BUTTON_UPGRADE,
                     SearchConfigConstants.RESILIENT);
 

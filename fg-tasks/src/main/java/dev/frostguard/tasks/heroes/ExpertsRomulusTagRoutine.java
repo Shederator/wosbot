@@ -221,11 +221,11 @@ public class ExpertsRomulusTagRoutine extends DelayedTask {
         }
 
         logDebug("Opening Research Center view");
-        tapPoint(researchCenter.getPoint());
+        tapInside(researchCenter);
         sleepTask(500); // Wait for city view to load
 
         logDebug("Tapping Infirmary to move camera");
-        tapRandomPoint(
+        tapInside(
                 INFIRMARY_TAP_AREA.topLeft(),
                 INFIRMARY_TAP_AREA.bottomRight());
         sleepTask(500); // Wait for camera movement to complete
@@ -271,7 +271,7 @@ public class ExpertsRomulusTagRoutine extends DelayedTask {
         }
 
         logInfo("Romulus claim button found - claiming loyalty tags");
-        tapPoint(claimButton.getPoint());
+        tapInside(claimButton);
         sleepTask(1000); // Wait for claim animation to complete
 
         return true;

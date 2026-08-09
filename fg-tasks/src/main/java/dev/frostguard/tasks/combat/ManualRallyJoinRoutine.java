@@ -41,7 +41,7 @@ public ManualRallyJoinRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask)
 
         if (indicator.isFound()) {
             logInfo(routineLogManualRallyJoinLine("Rally indicator detected at " + indicator.getPoint()));
-            tapPoint(indicator.getPoint());
+            tapInside(indicator);
             sleepTask(1000);
 
 
@@ -109,7 +109,7 @@ public ManualRallyJoinRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask)
                 }
 
 
-                tapPoint(validJoinPoint);
+                tapNear(validJoinPoint);
                 sleepTask(1000);
 
 
@@ -175,7 +175,7 @@ public ManualRallyJoinRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask)
                     ImageSearchResultData equalizeBtn = templateSearchHelper.locatePattern(
                             TemplatesEnum.RALLY_EQUALIZE_BUTTON, SearchConfigConstants.SINGLE_WITH_RETRIES);
                     if (equalizeBtn.isFound()) {
-                        tapPoint(equalizeBtn.getPoint());
+                        tapInside(equalizeBtn);
                         sleepTask(300);
                     } else {
                         logWarning(routineLogManualRallyJoinLine("Equalize button not detected for march " + (deployedCount + 1) + "."));
@@ -198,7 +198,7 @@ public ManualRallyJoinRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask)
                 }
 
                 logInfo(routineLogManualRallyJoinLine("Pressing Deploy button."));
-                tapPoint(deployBtn.getPoint());
+                tapInside(deployBtn);
                 sleepTask(500);
                 ManualRallyJoinPreemptionRule.registerDeployment(profile.getId(), returnTime);
                 ManualRallyJoinPreemptionRule.incrementSessionJoinedCount(profile.getId());

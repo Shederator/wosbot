@@ -11,6 +11,7 @@ import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.TesseractSettingsData;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.service.BotOcrEngine;
 import dev.frostguard.vision.logging.ProfileContextLogger;
@@ -23,6 +24,7 @@ public class CharacterSwitchHelper {
 
     private final EmulatorController emu;
     private final String dev;
+    private final TapInteractionService taps;
     private final ProfileContextLogger log;
     private final TemplateSearchHelper tpl;
     private final ResilientOcrExecutor<String> ocr;
@@ -30,6 +32,7 @@ public class CharacterSwitchHelper {
     public CharacterSwitchHelper(EmulatorController emuManager, String emulatorNumber, AccountDescriptor profile) {
         this.emu = emuManager;
         this.dev = emulatorNumber;
+        this.taps = TapInteractionService.forController(emuManager, emulatorNumber);
         this.log = new ProfileContextLogger(CharacterSwitchHelper.class, profile);
         this.tpl = new TemplateSearchHelper(emuManager, emulatorNumber, profile);
         this.ocr = new ResilientOcrExecutor<>(new BotOcrEngine(emuManager, emulatorNumber));
@@ -42,8 +45,7 @@ public class CharacterSwitchHelper {
         if (blank(wantName) && blank(wantId)) { log.debug("No character config, skipping"); return true; }
         log.info("Verifying character: name='" + wantName + "' id='" + wantId + "'");
 
-        emu.touchArea(dev, CommonGameAreas.PROFILE_AVATAR.topLeft(),
-                CommonGameAreas.PROFILE_AVATAR.bottomRight(), 1, 500);
+        taps.tapInside(CommonGameAreas.PROFILE_AVATAR, 1, 500);
 
         String liveId = ocrRead(CommonGameAreas.CHARACTER_ID_OCR_AREA, idOcrCfg());
         String liveName = ocrRead(CommonGameAreas.CHARACTER_NAME_OCR_AREA, nameOcrCfg());
@@ -86,7 +88,7 @@ public class CharacterSwitchHelper {
             }
 
             // Tap and confirm
-            emu.touchArea(dev, hit.getPoint(), hit.getPoint(), 1, 500); sleep(500);
+            taps.tapInside(hit, 1, 500); sleep(500);
             if (confirmSwitch(target)) { sleep(CHARACTER_SWITCH_RELOAD_DELAY_MS); log.info("Switch OK"); return true; }
             log.warn("Confirm failed, canceling");
             cancelSwitch();
@@ -153,7 +155,7 @@ public class CharacterSwitchHelper {
                         .withArea(CommonGameAreas.PROFILE_SETTINGS_SWITCH_CHARACTER_PROMPT_BUTTON_AREA)
                         .withMaxAttempts(3).withDelay(500).withThreshold(80).build());
         if (btn == null || !btn.isFound()) emu.pressBack(dev);
-        else emu.touchArea(dev, btn.getPoint(), btn.getPoint(), 1, 500);
+        else taps.tapInside(btn, 1, 500);
         sleep(500);
     }
 
@@ -165,7 +167,7 @@ public class CharacterSwitchHelper {
         if (area != null) b.withArea(area);
         ImageSearchResultData hit = tpl.locatePattern(t, b.build());
         if (hit == null || !hit.isFound()) return false;
-        emu.touchArea(dev, hit.getPoint(), hit.getPoint(), 1, 500); return true;
+        taps.tapInside(hit, 1, 500); return true;
     }
 
     private boolean nameMatch(String ocrText, String expected) {

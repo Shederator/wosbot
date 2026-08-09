@@ -37,6 +37,7 @@ public class ProfileAux {
 	private final StringProperty characterServer;
 
 	private List<ConfigAux> configs = new ArrayList<>();
+	private List<String> tags = new ArrayList<>();
 
 	/* ────────────────────────────────────────────────
 	 *  Constructors
@@ -170,6 +171,14 @@ public class ProfileAux {
 
 	public void setConfigs(List<ConfigAux> incoming) {
 		this.configs = incoming == null ? new ArrayList<>() : incoming;
+	}
+
+	public List<String> getTags() {
+		return List.copyOf(tags);
+	}
+
+	public void setTags(List<String> incoming) {
+		tags = incoming == null ? new ArrayList<>() : new ArrayList<>(incoming);
 	}
 
 	public <T> T getConfig(ConfigurationKeyEnum key, Class<T> clazz) {

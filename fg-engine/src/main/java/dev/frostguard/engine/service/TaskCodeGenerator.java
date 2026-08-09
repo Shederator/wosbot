@@ -65,6 +65,7 @@ public class TaskCodeGenerator {
     private void writeImports(StringBuilder out) {
         out.append("package dev.frostguard.engine.listener.task.impl;\n\n");
         out.append("import dev.frostguard.api.configs.TpDailyTaskEnum;\n");
+        out.append("import dev.frostguard.api.domain.AreaData;\n");
         out.append("import dev.frostguard.api.domain.PointData;\n");
         out.append("import dev.frostguard.api.domain.AccountDescriptor;\n");
         out.append("import dev.frostguard.api.configs.TemplatesEnum;\n");
@@ -211,12 +212,14 @@ public class TaskCodeGenerator {
         int brX = node.getParamAsInt("brX", 0), brY = node.getParamAsInt("brY", 0);
         String i5 = indent(5);
 
+        // Emit shared-input-layer calls: bounded jitter for exact points,
+        // in-area randomization for rectangles.
         if (tlX == brX && tlY == brY) {
-            out.append(i5).append("tapPoint(new PointData(")
-               .append(tlX).append(", ").append(tlY).append("));\n");
+            out.append(i5).append("tapNear(new PointData(")
+               .append(tlX).append(", ").append(tlY).append("), 3);\n");
         } else {
-            out.append(i5).append("tapRandomPoint(new PointData(")
-               .append(tlX).append(", ").append(tlY).append("), new PointData(")
+            out.append(i5).append("tapInside(AreaData.of(")
+               .append(tlX).append(", ").append(tlY).append(", ")
                .append(brX).append(", ").append(brY).append("));\n");
         }
     }
@@ -376,14 +379,16 @@ public class TaskCodeGenerator {
     private void writeTapOnMatch(StringBuilder out, AutomationStep node,
                                  String var, int offX, int offY) {
         String i6 = indent(6);
+        // Generated code goes through the shared input layer (DelayedTask API)
+        // instead of low-level emulator taps, matching hand-written routines.
         if (offX != 0 || offY != 0) {
             String tapVar = "__tapPt_" + node.getId();
             out.append(i6).append("PointData ").append(tapVar)
                .append(" = new PointData(").append(var).append(".getPoint().getX() + ").append(offX)
                .append(", ").append(var).append(".getPoint().getY() + ").append(offY).append(");\n");
-            out.append(i6).append("emuManager.touchPoint(EMULATOR_NUMBER, ").append(tapVar).append(");\n");
+            out.append(i6).append("tapNear(").append(tapVar).append(", 3);\n");
         } else {
-            out.append(i6).append("emuManager.touchPoint(EMULATOR_NUMBER, ").append(var).append(".getPoint());\n");
+            out.append(i6).append("tapInside(").append(var).append(");\n");
         }
     }
 

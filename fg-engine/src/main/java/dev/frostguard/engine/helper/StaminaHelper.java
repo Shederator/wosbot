@@ -3,6 +3,8 @@ package dev.frostguard.engine.helper;
 import dev.frostguard.api.configs.TpMessageSeverityEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.engine.input.TapInteractionService;
+import dev.frostguard.engine.input.TapJitterPolicy;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.engine.schedule.StaminaWaitScheduler;
@@ -21,6 +23,7 @@ public class StaminaHelper {
 
     private final EmulatorController device;
     private final String deviceSlot;
+    private final TapInteractionService taps;
     private final ResilientOcrExecutor<Integer> numberReader;
     private final StaminaService persistence;
     private final Long accountKey;
@@ -35,6 +38,7 @@ public class StaminaHelper {
                          AccountDescriptor profile, MarchHelper marchHelper) {
         this.device = emuManager;
         this.deviceSlot = emulatorNumber;
+        this.taps = TapInteractionService.forController(emuManager, emulatorNumber);
         this.numberReader = integerHelper;
         this.persistence = StaminaService.getServices();
         this.accountKey = profile.getId();
@@ -59,9 +63,7 @@ public class StaminaHelper {
         try {
             // Touch profile avatar (timeout guard: skip if over 1 sec elapsed)
             if (System.currentTimeMillis() - startMs < 1000) {
-                device.touchArea(deviceSlot,
-                        CommonGameAreas.PROFILE_AVATAR.topLeft(),
-                        CommonGameAreas.PROFILE_AVATAR.bottomRight(), 1, 200);
+                taps.tapInside(CommonGameAreas.PROFILE_AVATAR, 1, 200);
             } else {
                 emitWarn("Stamina read timeout: profile open exceeded 1s, aborting");
                 return;
@@ -69,9 +71,7 @@ public class StaminaHelper {
 
             // Touch stamina button (timeout guard)
             if (System.currentTimeMillis() - startMs < 1500) {
-                device.touchArea(deviceSlot,
-                        CommonGameAreas.STAMINA_BUTTON.topLeft(),
-                        CommonGameAreas.STAMINA_BUTTON.bottomRight(), 1, 200);
+                taps.tapInside(CommonGameAreas.STAMINA_BUTTON, 1, 200);
             } else {
                 emitWarn("Stamina read timeout: stamina button click exceeded 1.5s, aborting");
                 device.pressBack(deviceSlot);
@@ -115,11 +115,9 @@ public class StaminaHelper {
      * @param itemReserve number of items never to spend
      */
     public StaminaTopUpResult topUpFromProfile(int targetStamina, int itemReserve) {
-        device.touchArea(deviceSlot, CommonGameAreas.PROFILE_AVATAR.topLeft(),
-                CommonGameAreas.PROFILE_AVATAR.bottomRight(), 1, 200);
+        taps.tapInside(CommonGameAreas.PROFILE_AVATAR, 1, 200);
         pause(800);
-        device.touchArea(deviceSlot, CommonGameAreas.STAMINA_BUTTON.topLeft(),
-                CommonGameAreas.STAMINA_BUTTON.bottomRight(), 1, 200);
+        taps.tapInside(CommonGameAreas.STAMINA_BUTTON, 1, 200);
         pause(1000);
 
         StaminaTopUpResult result = useItemsInOpenDialog(targetStamina, itemReserve);
@@ -134,7 +132,7 @@ public class StaminaHelper {
     public StaminaTopUpResult refillFromOpenDialog(int targetStamina, int itemReserve) {
         StaminaTopUpResult result = useItemsInOpenDialog(targetStamina, itemReserve);
         emitInfo("Closing obtain-more dialog");
-        device.touchPoint(deviceSlot, CommonGameAreas.STAMINA_DIALOG_CLOSE);
+        taps.tapNear(CommonGameAreas.STAMINA_DIALOG_CLOSE, TapJitterPolicy.DEFAULT_POINT_JITTER_RADIUS);
         pause(800);
         return result;
     }
@@ -173,7 +171,7 @@ public class StaminaHelper {
                     emitWarn("Chief Stamina Use button disappeared during top-up");
                     return false;
                 }
-                device.touchPoint(deviceSlot, currentUseButton.getPoint());
+                taps.tapInside(currentUseButton);
                 pause(600);
                 return true;
             }

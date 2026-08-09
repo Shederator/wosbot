@@ -67,7 +67,7 @@ public class DoExplorationRoutine extends DelayedTask {
 
     private void openExplorationScreen() {
         logInfo("Tapping exploration entry area...");
-        tapRandomPoint(EXPLORATION_ENTRY_TOP_LEFT, EXPLORATION_ENTRY_BOTTOM_RIGHT);
+        tapInside(EXPLORATION_ENTRY_TOP_LEFT, EXPLORATION_ENTRY_BOTTOM_RIGHT);
         sleepTask(EXPLORATION_SCREEN_LOAD_DELAY_MS);
     }
 
@@ -117,17 +117,17 @@ public class DoExplorationRoutine extends DelayedTask {
 
     private void startBattle() {
         logInfo("Tapping quick deploy...");
-        tapRandomPoint(QUICK_DEPLOY_TOP_LEFT, QUICK_DEPLOY_BOTTOM_RIGHT);
+        tapInside(QUICK_DEPLOY_TOP_LEFT, QUICK_DEPLOY_BOTTOM_RIGHT);
         sleepTask(QUICK_DEPLOY_DELAY_MS);
         logInfo("Tapping fight button...");
-        tapRandomPoint(FIGHT_BUTTON_TOP_LEFT, FIGHT_BUTTON_BOTTOM_RIGHT);
+        tapInside(FIGHT_BUTTON_TOP_LEFT, FIGHT_BUTTON_BOTTOM_RIGHT);
     }
 
     private void handleVictory() {
         logInfo("Victory! Continue...");
         StatisticsService.obtain().addToCounter(profile, "Exploration Fights Won", 1);
         logInfo("Tapping victory continue area...");
-        tapRandomPoint(VICTORY_CONTINUE_TOP_LEFT, VICTORY_CONTINUE_BOTTOM_RIGHT);
+        tapInside(VICTORY_CONTINUE_TOP_LEFT, VICTORY_CONTINUE_BOTTOM_RIGHT);
         sleepTask(VICTORY_CONTINUE_DELAY_MS);
     }
 
@@ -172,7 +172,7 @@ public class DoExplorationRoutine extends DelayedTask {
     private void tapSearchResultArea(ImageSearchResultData result) {
         SizeData templateSize = result.getTemplateSize();
         if (templateSize == null || templateSize.getWidth() <= 0 || templateSize.getHeight() <= 0) {
-            tapPoint(result.getPoint());
+            tapInside(result);
             return;
         }
 
@@ -183,7 +183,7 @@ public class DoExplorationRoutine extends DelayedTask {
         PointData bottomRight = new PointData(
                 center.getX() + templateSize.getWidth() / 2,
                 center.getY() + templateSize.getHeight() / 2);
-        tapRandomPoint(topLeft, bottomRight);
+        tapInside(topLeft, bottomRight);
     }
 
     private boolean sleepWithinFightingWindow(long durationMs, long fightingStartedAt) {

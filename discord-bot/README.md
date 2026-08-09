@@ -1,4 +1,19 @@
-# `/build-pr` — combined PR test builds from Discord
+# Frostguard Discord commands
+
+This Worker provides two guild-scoped commands:
+
+- `/build-pr` requests combined PR test builds.
+- `/please-dont-make-me-say-it-again` gives a friendly public reminder to put
+  bugs and suggestions in their dedicated channels and explain the underlying
+  problem or goal. It is limited to members with **Manage Messages**.
+
+Set `BUG_REPORT_CHANNEL_ID` and `SUGGESTIONS_CHANNEL_ID` in `wrangler.toml` to
+make the reminder link the server's channels. Without them it displays the
+plain-text fallbacks `#bug-reports` and `#suggestions`. Re-run the command-sync
+workflow after adding or changing commands; channel changes only require a
+Worker deployment.
+
+## `/build-pr` — combined PR test builds from Discord
 
 Lets Discord users request a public Windows test build that
 combines one or more **open** pull requests (including stacked PRs) without
@@ -38,8 +53,8 @@ GitHub Actions: pr-test-build.yml
    • publish (trusted)   fresh runner re-verifies the bundle, re-checks every
                          PR is still open and unchanged, publishes the
                          temporary pr-test-<digest> prerelease
-   • notify  (trusted)   replies in the requesting channel and mentions only
-                         the requester
+   • notify  (trusted)   posts through the dedicated channel webhook, mentions
+                         only the requester and links the original request
    ▼
 pr-test-cleanup.yml deletes the release after 7 days
 or when every included PR is closed.
@@ -73,15 +88,14 @@ fine), and repo admin on GitHub.
    → name it e.g. `Frostguard Test Builds`.
 2. On **General Information**, note the **Application ID** and the
    **Public Key**.
-3. On **Bot**, click **Reset Token** and note the **Bot Token** (needed for
-   command registration and the trusted workflow notification job).
-4. On **Installation**, pick *Guild Install*. Enable the `applications.commands`
-   and `bot` scopes. Grant only **View Channels**, **Send Messages** and
-   **Read Message History**, then install it through the generated link.
+3. On **OAuth2**, note the **Client Secret**. The command-sync workflow exchanges
+   it for a short-lived token scoped only to `applications.commands.update`.
+4. On **Installation**, keep *Guild Install* with only the
+   `applications.commands` scope. A bot user and the `bot` scope are not needed.
 
-> A webhook alone is not enough for this flow. Slash commands need an
-> application with an **interactions endpoint**, and the final result uses the
-> same bot identity so it can reply to the original status message.
+The Discord application owns the slash command, while its interactions endpoint
+is the Cloudflare Worker below. A dedicated channel webhook sends final build
+results, so no continuously running or server-installed bot is required.
 
 ### 2. Create the fine-grained GitHub token for the worker
 
@@ -108,40 +122,75 @@ npx wrangler secret put GITHUB_TOKEN         # from step 2
 Wrangler prints the worker URL, e.g.
 `https://frostguard-build-pr.<your-subdomain>.workers.dev`.
 
+For repeatable deployments, add `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID` as GitHub repository secrets, then run **Deploy Discord
+Build PR Worker** from the Actions tab. Existing Worker secrets remain stored
+at Cloudflare and are not committed or printed by the workflow.
+
 ### 4. Point Discord at the worker
 
 Developer Portal → your application → **General Information** →
 **Interactions Endpoint URL** → paste the worker URL → Save. Discord sends a
 signed PING; if the save succeeds, signature verification works.
 
-### 5. Register the slash command
+### 5. Synchronise the slash command
 
 ```bash
 cd discord-bot
-DISCORD_BOT_TOKEN=... DISCORD_APPLICATION_ID=... \
+DISCORD_CLIENT_SECRET=... DISCORD_APPLICATION_ID=... \
 DISCORD_GUILD_ID=<your server id> node register-command.mjs
 ```
 
-With `DISCORD_GUILD_ID` the command appears instantly; without it Discord
-takes up to an hour to propagate it globally.
+The script requires a guild ID, upserts all configured guild commands, and
+removes global copies registered for the same application. This intentionally
+leaves one guild copy of each command instead of duplicate global and guild
+entries.
+
+Alternatively, store the client secret as the GitHub repository secret
+`DISCORD_CLIENT_SECRET` and run **Sync Discord Build PR Command** from the
+Actions tab. The script requests a short-lived OAuth2 client-credentials token;
+the secret and access token are never printed.
 
 ### 6. Configure result routing
 
-Configure the channel in both systems so the workflow can validate the worker's
-Discord context again before it uses the bot token:
+Create a dedicated webhook under `#request-a-build` → **Edit Channel** →
+**Integrations** → **Webhooks**. Configure the same channel in both systems so
+the workflow validates the interaction context before using that webhook:
 
 - **Worker config** (`wrangler.toml`): set `ALLOWED_CHANNEL_IDS`, then deploy.
-- **GitHub secret**: `DISCORD_BOT_TOKEN`.
+- **GitHub secret**: `DISCORD_PR_BUILD_WEBHOOK_URL` (the dedicated webhook URL).
 - **GitHub variable**: `DISCORD_PR_BUILD_GUILD_ID`.
 - **GitHub variable**: `DISCORD_PR_BUILD_CHANNEL_IDS` (CSV).
+
+Discord's documented incoming-webhook API does not support creating a native
+reply to an arbitrary existing message. The result therefore pings only the
+requester and includes an **Open the original request** link instead.
 
 ### 7. Verify end-to-end
 
 1. In the allowed channel run `/build-pr prs: <an open PR number>`.
 2. Check the plan shows the pinned SHA, press **Build**.
 3. Watch the run under Actions → *PR Test Build*.
-4. The result arrives as a reply to the original status message and mentions
-   only the requester.
+4. The result arrives in the same channel, mentions only the requester and
+   links the original status message.
+
+## Maintainer handoff
+
+The committed configuration targets application `1532693190879215767`, server
+`1475434539495981137`, and `#request-a-build`
+(`1533460326111117322`). To make repository changes live, the application owner
+only needs to:
+
+1. Create a webhook in `#request-a-build`, then add
+   `DISCORD_PR_BUILD_WEBHOOK_URL`, `DISCORD_CLIENT_SECRET`,
+   `CLOUDFLARE_API_TOKEN`, and `CLOUDFLARE_ACCOUNT_ID` as GitHub repository
+   secrets. A repository administrator can enter them; their values cannot be
+   read back from GitHub afterward.
+2. Confirm the existing Cloudflare Worker still has `DISCORD_PUBLIC_KEY` and
+   its fine-grained `GITHUB_TOKEN` Worker secrets.
+3. Run **Deploy Discord Build PR Worker**.
+4. Run **Sync Discord Build PR Command**.
+5. Test `/build-pr` in `#request-a-build` with a non-admin account.
 
 ## Configuration reference
 
@@ -151,9 +200,12 @@ Discord context again before it uses the bot token:
 | `wrangler.toml` | `DISCORD_APPLICATION_ID` | application (client) ID |
 | `wrangler.toml` | `ALLOWED_CHANNEL_IDS` | CSV channel allowlist (empty = all) |
 | `wrangler.toml` | `COOLDOWN_MINUTES` | flood-control gap between builds |
+| `wrangler.toml` | `BUG_REPORT_CHANNEL_ID` | channel linked by the reporting reminder |
+| `wrangler.toml` | `SUGGESTIONS_CHANNEL_ID` | channel linked by the reporting reminder |
 | worker secret | `DISCORD_PUBLIC_KEY` | interaction signature verification |
 | worker secret | `GITHUB_TOKEN` | fine-grained dispatch-only token |
-| repo secret | `DISCORD_BOT_TOKEN` | bot token used only by the trusted notify job |
+| repo secret | `DISCORD_CLIENT_SECRET` | obtains a short-lived command-update token; no bot installation required |
+| repo secret | `DISCORD_PR_BUILD_WEBHOOK_URL` | dedicated `#request-a-build` result webhook |
 | repo variable | `DISCORD_PR_BUILD_GUILD_ID` | allowed server ID |
 | repo variable | `DISCORD_PR_BUILD_CHANNEL_IDS` | allowed result channel IDs (CSV) |
 

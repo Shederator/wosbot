@@ -28,6 +28,9 @@ public final class CommonOCRSettings {
     public static final TesseractSettingsData MARCH_QUEUE_TIMER_SETTINGS =
             buildLstmConfig("0123456789:", true, 255, 255, 255, PageAnalysis.SINGLE_LINE);
 
+    public static final TesseractSettingsData INTEL_COOLDOWN_SETTINGS =
+            buildLstmConfig("0123456789:", true, 255, 255, 255, PageAnalysis.SINGLE_LINE);
+
     // polar terror level: dark slate digits inside a pale pill
     public static final TesseractSettingsData POLAR_LEVEL_SETTINGS =
             TesseractSettingsData.assembler()
