@@ -40,9 +40,6 @@ public class TaskBuilderService {
 
     private static final Logger logger = LoggerFactory.getLogger(TaskBuilderService.class);
 
-    /** Sentinel prefix used for user-selected custom template files. */
-    private static final String FILE_PREFIX = "file://";
-
     private final EmulatorController emuManager;
     private final Path customTasksDir;
     private final ObjectMapper mapper;
@@ -385,7 +382,7 @@ public class TaskBuilderService {
 
             // Execute the search with retries
             ImageSearchResultData result = null;
-            boolean isCustomFile = templateName.startsWith(FILE_PREFIX);
+            boolean isCustomFile = TemplatePathResolver.isFileReference(templateName);
 
             for (int attempt = 1; attempt <= maxAttempts; attempt++) {
                 result = isCustomFile
@@ -437,7 +434,7 @@ public class TaskBuilderService {
     private ImageSearchResultData searchCustomTemplate(String templateName, boolean grayscale,
                                                        boolean hasArea, PointData topLeft, PointData bottomRight,
                                                        double thresholdPct) {
-        String absolutePath = templateName.substring(FILE_PREFIX.length());
+        String absolutePath = TemplatePathResolver.resolveFileReference(templateName);
         String method = grayscale ? "Grayscale" : "";
 
         if (hasArea) {

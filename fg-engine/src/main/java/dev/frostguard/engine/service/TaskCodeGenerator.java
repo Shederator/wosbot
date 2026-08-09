@@ -22,8 +22,6 @@ import java.util.stream.Collectors;
  */
 public class TaskCodeGenerator {
 
-    private static final String CUSTOM_TPL_SCHEME = "file://";
-
     // ── Helpers ───────────────────────────────────────────────────────
 
     /** Returns whitespace for the requested nesting depth (1 = 4 spaces). */
@@ -73,6 +71,7 @@ public class TaskCodeGenerator {
         out.append("import dev.frostguard.engine.helper.TemplateSearchHelper;\n");
         out.append("import dev.frostguard.engine.schedule.DelayedTask;\n");
         out.append("import dev.frostguard.engine.schedule.LaunchPoint;\n");
+        out.append("import dev.frostguard.engine.service.TemplatePathResolver;\n");
         out.append("import java.time.LocalDateTime;\n\n");
     }
 
@@ -294,7 +293,7 @@ public class TaskCodeGenerator {
         String tmpl = node.getParam("templatePath");
         if (tmpl == null) tmpl = "GAME_HOME_FURNACE";
 
-        boolean customFile  = tmpl.startsWith(CUSTOM_TPL_SCHEME);
+        boolean customFile  = TemplatePathResolver.isFileReference(tmpl);
         int     threshold   = node.getParamAsInt("threshold", 90);
         int     maxAttempts = node.getParamAsInt("maxAttempts", 1);
         int     delayMs     = node.getParamAsInt("delayMs", 300);
@@ -343,16 +342,20 @@ public class TaskCodeGenerator {
                                    int threshold, boolean mono, boolean bounded,
                                    String tlXs, String tlYs, String brXs, String brYs) {
         String i6 = indent(6);
-        String path   = tmpl.substring(CUSTOM_TPL_SCHEME.length()).replace("\\", "\\\\");
         String method = mono ? "locatePatternMonoFromFile" : "locatePatternFromFile";
 
         out.append(i6).append(var).append(" = emuManager.").append(method)
-           .append("(EMULATOR_NUMBER, \"").append(path).append("\", ");
+           .append("(EMULATOR_NUMBER, TemplatePathResolver.resolveFileReference(\"")
+           .append(escapeJavaString(tmpl)).append("\"), ");
         if (bounded) {
             out.append("new PointData(").append(tlXs).append(", ").append(tlYs).append("), ");
             out.append("new PointData(").append(brXs).append(", ").append(brYs).append("), ");
         }
         out.append(threshold).append(");\n");
+    }
+
+    private String escapeJavaString(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private void writeEnumSearch(StringBuilder out, String tmpl, String var,
