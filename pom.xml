@@ -51,6 +51,8 @@
 		<!-- Vision / OCR -->
 		<opencv.version>4.9.0-0</opencv.version>
 		<tess4j.version>5.14.0</tess4j.version>
+		<onnxruntime.version>1.18.0</onnxruntime.version>
+		<rapidocr.version>0.0.7</rapidocr.version>
 
 		<!-- Engine integrations -->
 		<ddmlib.version>31.11.1</ddmlib.version>
@@ -242,6 +244,21 @@
 				<groupId>org.openpnp</groupId>
 				<artifactId>opencv</artifactId>
 				<version>${opencv.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.microsoft.onnxruntime</groupId>
+				<artifactId>onnxruntime</artifactId>
+				<version>${onnxruntime.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>io.github.mymonstercat</groupId>
+				<artifactId>rapidocr</artifactId>
+				<version>${rapidocr.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>io.github.mymonstercat</groupId>
+				<artifactId>rapidocr-onnx-platform</artifactId>
+				<version>${rapidocr.version}</version>
 			</dependency>
 
 			<!-- ── Engine integrations ── -->

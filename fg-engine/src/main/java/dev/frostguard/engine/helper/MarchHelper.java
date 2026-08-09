@@ -16,7 +16,7 @@ import dev.frostguard.vision.color.PixelStats;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.logging.ProfileContextLogger;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
-import dev.frostguard.vision.ocr.TesseractOcrProvider;
+import dev.frostguard.vision.ocr.OcrEngine;
 
 import java.awt.image.BufferedImage;
 import java.time.Duration;
@@ -85,7 +85,7 @@ public class MarchHelper {
     public List<MarchSlotState> readVisibleMarchQueue() {
         try {
             RawImageData frame = emu.captureScreen(device);
-            BufferedImage image = TesseractOcrProvider.toBufferedImage(frame);
+            BufferedImage image = OcrEngine.toBufferedImage(frame);
 
             List<MarchSlotState> slots = new ArrayList<>(SLOT_COUNT);
             for (int index = 0; index < SLOT_COUNT; index++) {

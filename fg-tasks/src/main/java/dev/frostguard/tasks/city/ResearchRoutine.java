@@ -21,7 +21,7 @@ import dev.frostguard.tasks.city.ResearchNodeSelectionPolicy.ResearchNode;
 import dev.frostguard.tasks.city.ResearchNodeSelectionPolicy.ResearchRow;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.ocr.ResearchBadgeReader;
-import dev.frostguard.vision.ocr.TesseractOcrProvider;
+import dev.frostguard.vision.ocr.OcrEngine;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -607,7 +607,7 @@ private ResearchDialogInspection inspectResearchDialog() {
                 RESEARCH_GO_TOP_LEFT, RESEARCH_GO_BOTTOM_RIGHT, 85.0, 4).size();
         String requirements = "";
         try {
-            requirements = TesseractOcrProvider.recognizeText(
+            requirements = OcrEngine.recognizeText(
                     screenshot, RESEARCH_REQUIREMENTS_TOP_LEFT, RESEARCH_REQUIREMENTS_BOTTOM_RIGHT,
                     TesseractSettingsData.forTextBlock());
         } catch (TesseractException | RuntimeException exception) {

@@ -32,7 +32,7 @@ import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.vision.color.GameColors;
 import dev.frostguard.vision.color.PixelStats;
 import dev.frostguard.vision.convert.GameTimeUtils;
-import dev.frostguard.vision.ocr.TesseractOcrProvider;
+import dev.frostguard.vision.ocr.OcrEngine;
 
 /**
  * Task responsible for managing arena challenges.
@@ -892,7 +892,7 @@ public class ArenaRoutine extends DelayedTask {
     private BufferedImage captureFrameForPixelScan(String context) {
         try {
             RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
-            return TesseractOcrProvider.toBufferedImage(frame);
+            return OcrEngine.toBufferedImage(frame);
         } catch (Exception ex) {
             logError(String.format("%s color analysis failed: %s", context, ex.getMessage()));
             return null;

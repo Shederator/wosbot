@@ -6,7 +6,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 
-import dev.frostguard.vision.ocr.TesseractOcrProvider;
+import dev.frostguard.vision.ocr.OcrEngine;
 import dev.frostguard.api.configs.GameVersionEnum;
 import dev.frostguard.engine.error.ADBConnectionException;
 import dev.frostguard.api.domain.*;
@@ -382,13 +382,13 @@ public abstract class EmulatorInstance {
         RawImageData scr = captureScreenshot(idx);
         if (scr == null) throw new IOException("Capture null");
         String lang = (EmulatorController.GAME == GameVersionEnum.CHINA) ? "eng+chi_sim" : "eng";
-        return TesseractOcrProvider.recognizeText(scr, a, b, lang);
+        return OcrEngine.recognizeText(scr, a, b, lang);
     }
 
     public String readText(String idx, PointData a, PointData b, TesseractSettingsData cfg) throws IOException, TesseractException {
         RawImageData scr = (cfg != null && cfg.isReuseLastImage()) ? lastFrame.getOrDefault(idx, captureScreenshot(idx)) : captureScreenshot(idx);
         if (scr == null) throw new IOException("Capture null");
-        return TesseractOcrProvider.recognizeText(scr, a, b, cfg);
+        return OcrEngine.recognizeText(scr, a, b, cfg);
     }
 
     protected int getColorComponent(RawImage img, int base, int bit) {

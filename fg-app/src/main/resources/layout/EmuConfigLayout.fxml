@@ -105,10 +105,19 @@
                       <ComboBox fx:id="comboboxGameRegion" disable="true" maxWidth="Infinity" prefWidth="180.0" />
                   </HBox>
               </VBox>
+              <!-- Vision Settings -->
+              <VBox styleClass="content-card" VBox.vgrow="NEVER">
+                  <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-teal">
+                       <children><Label text="Vision Settings" /></children>
+                   </HBox>
+                  <HBox alignment="CENTER_LEFT" spacing="10" styleClass="content-card-inner">
+                      <Label text="OCR Engine" />
+                      <Region HBox.hgrow="ALWAYS" />
+                      <ComboBox fx:id="comboboxOcrEngine" maxWidth="Infinity" prefWidth="180.0" />
+                  </HBox>
+              </VBox>
           </children>
-      </VBox>
-
-      <!-- Analytics Settings -->
+      </VBox>      <!-- Analytics Settings -->
       <HBox spacing="16" VBox.vgrow="NEVER">
           <children>
               <VBox styleClass="content-card" HBox.hgrow="ALWAYS">

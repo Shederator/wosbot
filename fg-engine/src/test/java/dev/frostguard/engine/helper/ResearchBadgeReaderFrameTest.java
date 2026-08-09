@@ -10,7 +10,7 @@ import dev.frostguard.api.domain.ResearchBadgeData;
 import dev.frostguard.api.domain.TesseractSettingsData;
 import dev.frostguard.vision.match.OpenCvPatternLocator;
 import dev.frostguard.vision.ocr.ResearchBadgeReader;
-import dev.frostguard.vision.ocr.TesseractOcrProvider;
+import dev.frostguard.vision.ocr.OcrEngine;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.List;
@@ -151,7 +151,7 @@ class ResearchBadgeReaderFrameTest {
             throws IOException, TesseractException {
         BufferedImage image = ImageIO.read(Objects.requireNonNull(
                 ResearchBadgeReaderFrameTest.class.getResourceAsStream(resource)));
-        return TesseractOcrProvider.recognizeText(
+        return OcrEngine.recognizeText(
                 rgbaFrame(image), new PointData(80, 0), new PointData(360, 80), settings).trim();
     }
 

@@ -56,6 +56,21 @@
 			<artifactId>opencv</artifactId>
 		</dependency>
 
+		<!-- ONNX Runtime: CPU backend for PaddleOCR -->
+		<dependency>
+			<groupId>com.microsoft.onnxruntime</groupId>
+			<artifactId>onnxruntime</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>io.github.mymonstercat</groupId>
+			<artifactId>rapidocr</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>io.github.mymonstercat</groupId>
+			<artifactId>rapidocr-onnx-platform</artifactId>
+		</dependency>
+
 		<!-- ═══ Internal Module Dependencies ═══ -->
 		
 		<!-- fg-api: Shared data contracts and domain models -->

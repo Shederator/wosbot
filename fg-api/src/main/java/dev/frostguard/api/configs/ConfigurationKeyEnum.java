@@ -265,6 +265,14 @@ public enum ConfigurationKeyEnum {
     DISCORD_TOKEN_STRING                ("",            String.class,   ConfigCategory.SYSTEM),
     GAME_VERSION_STRING                 ("GLOBAL",      String.class,   ConfigCategory.SYSTEM),
     IDLE_BEHAVIOR_STRING                ("CLOSE_EMULATOR", String.class, ConfigCategory.SYSTEM),
+    /* ─────────── emulators ─────────── */
+
+    ADB_PORT_INT                        ("5555",             Integer.class,       ConfigCategory.SYSTEM),
+    EMULATOR_NAME_STRING                ("",                 String.class,        ConfigCategory.SYSTEM),
+    EMULATOR_PATH_STRING                ("",                 String.class,        ConfigCategory.SYSTEM),
+    OCR_ENGINE_STRING                   ("TESSERACT",        String.class,        ConfigCategory.SYSTEM),
+    INACTIVITY_POLICY_STRING            ("CLOSE_EMULATOR",   String.class,        ConfigCategory.SYSTEM),
+    MAX_CONCURRENT_INSTANCES_INT        ("4",                Integer.class,       ConfigCategory.SYSTEM),
     // Changed by pernerch | Date: 2026-07-04 | Why: allow explicit stop-policy selection for GUI stop action.
     STOP_BEHAVIOR_STRING                ("DO_NOTHING",  String.class,   ConfigCategory.SYSTEM),
     // Changed by pernerch | Date: 2026-07-04 | Why: separate Telegram stop behavior from local GUI stop behavior.

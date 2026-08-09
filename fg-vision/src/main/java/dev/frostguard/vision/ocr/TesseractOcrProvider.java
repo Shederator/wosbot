@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
  * <p>All public entry points are thread-safe.  The tessdata directory is
  * located once and then cached for the lifetime of the JVM.
  */
-public final class TesseractOcrProvider {
+public final class TesseractOcrProvider implements OcrProvider {
 
     private static final Logger log = LoggerFactory.getLogger(TesseractOcrProvider.class);
 
@@ -57,7 +57,7 @@ public final class TesseractOcrProvider {
      * @param lang     Tesseract language code (e.g. {@code "eng"})
      * @return trimmed text, never {@code null}
      */
-    public static String recognizeText(RawImageData capture, PointData corner1,
+    public String recognizeText(RawImageData capture, PointData corner1,
                                        PointData corner2, String lang)
             throws TesseractException {
         requireValidCapture(capture);
@@ -78,7 +78,7 @@ public final class TesseractOcrProvider {
      * @param cfg      Tesseract tuning parameters
      * @return trimmed text, never {@code null}
      */
-    public static String recognizeText(RawImageData capture, PointData corner1,
+    public String recognizeText(RawImageData capture, PointData corner1,
                                        PointData corner2, TesseractSettingsData cfg)
             throws TesseractException {
         long t0 = System.currentTimeMillis();
@@ -125,7 +125,7 @@ public final class TesseractOcrProvider {
      * @param lang    Tesseract language code
      * @return trimmed text, never {@code null}
      */
-    public static String readFromFile(File file, int x, int y, int w, int h, String lang)
+    public String readFromFile(File file, int x, int y, int w, int h, String lang)
             throws Exception {
         BufferedImage full = ImageIO.read(file);
         if (full == null) {
@@ -146,7 +146,7 @@ public final class TesseractOcrProvider {
      * {@link BufferedImage}.  Useful for diagnostic dumps only — not
      * invoked on the hot path.
      */
-    public static BufferedImage toBufferedImage(RawImageData capture) {
+    public BufferedImage toBufferedImage(RawImageData capture) {
         int w = capture.getWidth();
         int h = capture.getHeight();
         byte[] raw = capture.getData();
@@ -366,7 +366,7 @@ public final class TesseractOcrProvider {
     /**
      * Writes a side-by-side diagnostic PNG to {@code <cwd>/temp/}.
      */
-    private static void exportDiagnosticImage(RawImageData capture, BufferedImage processed,
+    private void exportDiagnosticImage(RawImageData capture, BufferedImage processed,
             int cx, int cy, int cw, int ch,
             TesseractSettingsData cfg, String text) {
         long t0 = System.currentTimeMillis();
@@ -483,4 +483,6 @@ public final class TesseractOcrProvider {
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,      RenderingHints.VALUE_ANTIALIAS_ON);
     }
+
+
 }

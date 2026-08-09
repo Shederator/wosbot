@@ -8,6 +8,8 @@ import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.engine.emulator.EmulatorType;
 import dev.frostguard.api.configs.GameVersionEnum;
 import dev.frostguard.api.configs.IdleBehaviorEnum;
+import dev.frostguard.api.configs.OcrEngineType;
+import dev.frostguard.vision.ocr.OcrEngine;
 import dev.frostguard.api.configs.StopBehaviorEnum;
 import dev.frostguard.app.panel.emulator.EmulatorAux;
 import dev.frostguard.engine.service.ConfigService;
@@ -63,6 +65,9 @@ public class EmuConfigLayoutController {
 
 	@FXML
 	private ComboBox<GameVersionEnum> comboboxGameRegion;
+
+	@FXML
+	private ComboBox<OcrEngineType> comboboxOcrEngine;
 
 	@FXML
 	private ComboBox<IdleBehaviorEnum> comboboxInactivityPolicy;
@@ -298,6 +303,22 @@ public class EmuConfigLayoutController {
 			if (picked != null) {
 				ScheduleService.obtain().persistEmulatorPath(
 						ConfigurationKeyEnum.GAME_VERSION_STRING.name(), picked.name());
+			}
+		});
+
+		// OCR Engine
+		comboboxOcrEngine.setItems(FXCollections.observableArrayList(OcrEngineType.values()));
+		OcrEngineType savedOcr = OcrEngineType.fromString(
+				cfg.getOrDefault(ConfigurationKeyEnum.OCR_ENGINE_STRING.name(), "TESSERACT"));
+		comboboxOcrEngine.setValue(savedOcr);
+		OcrEngine.setActiveEngine(savedOcr);
+
+		comboboxOcrEngine.setOnAction(evt -> {
+			OcrEngineType picked = comboboxOcrEngine.getValue();
+			if (picked != null) {
+				ScheduleService.obtain().persistEmulatorPath(
+						ConfigurationKeyEnum.OCR_ENGINE_STRING.name(), picked.name());
+				OcrEngine.setActiveEngine(picked);
 			}
 		});
 
