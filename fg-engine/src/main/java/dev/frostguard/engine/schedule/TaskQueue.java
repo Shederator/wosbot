@@ -602,9 +602,12 @@ public class TaskQueue {
     private void handleIdleTransitions() {
         if (Thread.currentThread().isInterrupted()) return;
         if (statusModel.getLoopState().isExecutedTask() || taskBacklog.isEmpty()) return;
-        int idleCap = Optional.ofNullable(ConfigService.obtain().loadGlobalSettings())
-                .map(c -> c.get(ConfigurationKeyEnum.MAX_IDLE_TIME_INT.name())).map(Integer::parseInt)
-                .orElse(Integer.parseInt(ConfigurationKeyEnum.MAX_IDLE_TIME_INT.getDefaultValue()));
+        IdleBehaviorEnum idleBehavior = resolveIdleBehavior();
+        if (!idleBehavior.requiresIdleTimeout()) {
+            statusModel.setIdleTimeExceeded(false);
+            return;
+        }
+        int idleCap = resolvePositiveIdleLimit();
         statusModel.setIdleTimeLimit(idleCap);
         if (runningContext != null) return;
         if (!statusModel.isIdleTimeExceeded() && statusModel.checkIdleTimeExceeded()) {
@@ -709,10 +712,7 @@ public class TaskQueue {
     }
 
     private void suspendDevice(LocalDateTime until, boolean freeSlot) {
-        IdleBehaviorEnum policy = IdleBehaviorEnum.fromString(
-                Optional.ofNullable(ConfigService.obtain().loadGlobalSettings())
-                        .map(c -> c.getOrDefault(ConfigurationKeyEnum.IDLE_BEHAVIOR_STRING.name(), ConfigurationKeyEnum.IDLE_BEHAVIOR_STRING.getDefaultValue()))
-                        .orElse(ConfigurationKeyEnum.IDLE_BEHAVIOR_STRING.getDefaultValue()));
+        IdleBehaviorEnum policy = resolveIdleBehavior();
         if (policy == IdleBehaviorEnum.SEND_TO_BACKGROUND) {
             deviceBridge.sendGameToBackground(profile.getEmulatorNumber());
             emitInfo("Device sent to background until " + until);
@@ -729,6 +729,7 @@ public class TaskQueue {
 
     private boolean enforceSessionCap() {
         if (runningContext != null || sessionOrigin == null) return false;
+        if (!resolveIdleBehavior().requiresIdleTimeout()) return false;
         Map<String,String> cfg = ConfigService.obtain().loadGlobalSettings();
         boolean on = Boolean.parseBoolean(Optional.ofNullable(cfg)
                 .map(c -> c.get(ConfigurationKeyEnum.PROFILE_MAX_ACTIVE_TIME_ENABLED_BOOL.name()))
@@ -744,6 +745,32 @@ public class TaskQueue {
         suspendDevice(statusModel.getDelayUntil(), true);
         statusModel.setIdleTimeExceeded(true);
         return true;
+    }
+
+    private IdleBehaviorEnum resolveIdleBehavior() {
+        return IdleBehaviorEnum.fromString(
+                Optional.ofNullable(ConfigService.obtain().loadGlobalSettings())
+                        .map(c -> c.getOrDefault(ConfigurationKeyEnum.IDLE_BEHAVIOR_STRING.name(),
+                                ConfigurationKeyEnum.IDLE_BEHAVIOR_STRING.getDefaultValue()))
+                        .orElse(ConfigurationKeyEnum.IDLE_BEHAVIOR_STRING.getDefaultValue()));
+    }
+
+    private int resolvePositiveIdleLimit() {
+        int configured = Optional.ofNullable(ConfigService.obtain().loadGlobalSettings())
+                .map(c -> c.get(ConfigurationKeyEnum.MAX_IDLE_TIME_INT.name()))
+                .map(TaskQueue::parseInteger)
+                .orElse(Integer.parseInt(ConfigurationKeyEnum.MAX_IDLE_TIME_INT.getDefaultValue()));
+        return configured > 0
+                ? configured
+                : Integer.parseInt(ConfigurationKeyEnum.MAX_IDLE_TIME_INT.getDefaultValue());
+    }
+
+    private static Integer parseInteger(String value) {
+        try {
+            return Integer.valueOf(value);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private void acquireSlot() {
