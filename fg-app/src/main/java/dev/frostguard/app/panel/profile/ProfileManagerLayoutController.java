@@ -831,9 +831,12 @@ public class ProfileManagerLayoutController implements IProfileChangeObserver {
 		loadProfiles();
 		int failed = result.failed() + preview.errors().size();
 		Alert.AlertType type = failed == 0 ? Alert.AlertType.INFORMATION : Alert.AlertType.WARNING;
+		
+		String restartNote = result.globalUpdated() > 0 ? "\n\nPlease restart the application to apply global settings changes." : "";
 		showAlert(type, "Profile import complete",
 				result.imported() + " imported; " + failed + " failed.\n"
 						+ result.globalUpdated() + " global settings updated."
+						+ restartNote
 						+ (preview.errors().isEmpty() ? "" : "\n" + String.join("\n", preview.errors())));
 	}
 
