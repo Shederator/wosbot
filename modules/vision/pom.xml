@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>dev.frostguard</groupId>
+		<artifactId>frostguard</artifactId>
+		<version>${revision}</version>
+		<relativePath>../../pom.xml</relativePath>
+	</parent>
+
+	<artifactId>frostguard-vision</artifactId>
+	<name>Frostguard Vision</name>
+	<description>Image recognition, OCR, template matching, and numeric parsing</description>
+
+	<!-- ═══════════════════════════════════════════════════════════════════
+	     VISION MODULE CONFIGURATION
+	     
+	     This module provides computer vision capabilities including:
+	     • Optical Character Recognition (OCR) via Tesseract
+	     • Template matching and pattern recognition via OpenCV
+	     • Image preprocessing and enhancement
+	     • Numeric text parsing and validation
+	     • Screen capture analysis utilities
+	     ═══════════════════════════════════════════════════════════════════ -->
+
+	<!-- ─── Dependencies (versions managed centrally by parent POM) ─── -->
+	<dependencies>
+		<!-- ═══ Logging Infrastructure ═══ -->
+		
+		<!-- SLF4J: Logging facade for abstraction -->
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-api</artifactId>
+		</dependency>
+
+		<!-- Logback: Production logging implementation -->
+		<dependency>
+			<groupId>ch.qos.logback</groupId>
+			<artifactId>logback-classic</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+
+		<!-- ═══ Computer Vision Libraries ═══ -->
+		
+		<!-- Tesseract: OCR engine for text recognition -->
+		<dependency>
+			<groupId>net.sourceforge.tess4j</groupId>
+			<artifactId>tess4j</artifactId>
+		</dependency>
+
+		<!-- OpenCV: Image processing and template matching -->
+		<dependency>
+			<groupId>org.openpnp</groupId>
+			<artifactId>opencv</artifactId>
+		</dependency>
+
+		<!-- ═══ Internal Module Dependencies ═══ -->
+		
+		<!-- frostguard-api: shared data contracts and domain models -->
+		<dependency>
+			<groupId>dev.frostguard</groupId>
+			<artifactId>frostguard-api</artifactId>
+		</dependency>
+	</dependencies>
+</project>

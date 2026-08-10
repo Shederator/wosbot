@@ -62,8 +62,9 @@ C:\Program Files\Netease\MuMuPlayer\nx_main\MuMuManager.exe
 
 ## Build from source
 
-Source builds additionally require basic Git and terminal usage, Apache Maven
-3.8 or newer, and Git LFS. Install the common tools from PowerShell:
+Source builds additionally require basic Git and terminal usage plus Git LFS.
+The checked-in Maven Wrapper downloads the pinned Maven version. Install the
+common tools from PowerShell:
 
 ```powershell
 winget install Microsoft.Git
@@ -71,12 +72,11 @@ winget install EclipseAdoptium.Temurin.21.JDK
 winget install GitHub.GitLFS
 ```
 
-Download Maven from <https://maven.apache.org/download.cgi>, add its `bin`
-directory to `PATH`, and verify the toolchain:
+Verify the toolchain from the repository root:
 
 ```powershell
 java -version
-mvn -version
+mvnw.cmd -version
 git lfs version
 ```
 
@@ -96,29 +96,32 @@ git lfs pull
 Run the full build from the repository root:
 
 ```sh
-mvn clean install package
+./mvnw package
 ```
 
-On Windows, the helper script performs the same build with one retry for transient file-lock issues:
+On Windows Command Prompt, use the wrapper batch launcher:
 
 ```batch
-fg-build.bat
+mvnw.cmd package
 ```
 
-Build outputs are written under `fg-app/target`, including
-`frostguard-<version>.jar` and the desktop bundle ZIP. End users should extract
-the ZIP and launch `Start Frostguard.bat`; the `target` path is only for source
-builds.
+The build writes module artifacts below their respective `target` directories
+and the transitional desktop bundle ZIP below `packaging/desktop/target`. End
+users should extract the ZIP and launch `Start Frostguard.bat`; individual
+module JARs are not standalone distributions.
 
 ### Run a source build
 
-Run the generated application JAR from the repository root:
+Run the application from the repository root through the same Maven Wrapper:
 
 ```sh
-java -jar fg-app/target/frostguard-<version>.jar
+./mvnw javafx:run
 ```
 
-Replace `<version>` with the generated version, for example `2.1.0`.
+On Windows Command Prompt, use `mvnw.cmd javafx:run`; in PowerShell, use
+`.\mvnw.cmd javafx:run`. The JavaFX goal compiles the required reactor modules
+and starts only the desktop module; developers do not need to locate a
+versioned JAR or assemble its classpath.
 
 ## Migrating an older installation
 

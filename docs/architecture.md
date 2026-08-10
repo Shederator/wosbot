@@ -6,14 +6,15 @@ This document gives a high-level map of the codebase for developers who need to 
 
 ```mermaid
 flowchart TD
-    User[Developer or Operator] --> App[fg-app<br/>JavaFX or headless launcher]
-    App --> Engine[fg-engine<br/>services, scheduler, helpers]
-    App --> Tasks[fg-tasks<br/>built-in routines]
-    App --> Watcher[fg-watcher<br/>Telegram watcher jar]
+    User[Developer or Operator] --> App[modules/desktop<br/>JavaFX or headless launcher]
+    App --> Engine[modules/automation<br/>services, scheduler, helpers]
+    App --> Tasks[modules/tasks<br/>built-in routines]
+    App --> Watcher[modules/watcher<br/>Telegram watcher jar]
+    App -. future update module .-> Update[platform-neutral update contracts and policy]
 
-    Engine --> Data[fg-data<br/>SQLite and repositories]
-    Engine --> Vision[fg-vision<br/>OCR and template matching]
-    Engine --> Api[fg-api<br/>shared contracts]
+    Engine --> Data[modules/persistence<br/>SQLite and repositories]
+    Engine --> Vision[modules/vision<br/>OCR and template matching]
+    Engine --> Api[modules/api<br/>shared contracts]
     Tasks --> Engine
     Tasks --> Api
     Vision --> Api
@@ -31,40 +32,54 @@ Dependencies should stay mostly downward:
 
 ```mermaid
 flowchart LR
-    fg_app[fg-app] --> fg_engine[fg-engine]
-    fg_app --> fg_tasks[fg-tasks]
-    fg_app --> fg_vision[fg-vision]
-    fg_app --> fg_api[fg-api]
+    fg_app[modules/desktop] --> fg_engine[modules/automation]
+    fg_app --> fg_tasks[modules/tasks]
+    fg_app --> fg_vision[modules/vision]
+    fg_app --> fg_api[modules/api]
 
     fg_tasks --> fg_engine
     fg_tasks --> fg_api
 
     fg_engine --> fg_api
-    fg_engine --> fg_data[fg-data]
+    fg_engine --> fg_data[modules/persistence]
     fg_engine --> fg_vision
 
     fg_data --> fg_api
     fg_vision --> fg_api
-    fg_watcher[fg-watcher] -. standalone .-> watcher_runtime[Telegram runtime]
+    fg_watcher[modules/watcher] -. standalone .-> watcher_runtime[Telegram runtime]
 ```
 
-Do not put game task business logic in `fg-app`; do not put UI concepts in `fg-engine` or `fg-tasks`.
+Do not put game task business logic in `modules/desktop`; do not put UI concepts in `modules/automation` or `modules/tasks`.
+
+| Module | Maven artifact | Responsibility |
+|---|---|---|
+| `modules/api` | `frostguard-api` | Cross-module contracts and domain values |
+| `modules/persistence` | `frostguard-persistence` | SQLite, Hibernate, entities, and repositories |
+| `modules/vision` | `frostguard-vision` | OCR, OpenCV, templates, and vision assets |
+| `modules/automation` | `frostguard-automation` | Emulator control, scheduling, and reusable interactions |
+| `modules/tasks` | `frostguard-tasks` | Game-specific automation routines |
+| `modules/desktop` | `frostguard-desktop` | JavaFX UI and desktop entry points |
+| `modules/watcher` | `frostguard-watcher` | Companion watcher process |
+| `packaging/desktop` | `frostguard-desktop-package` | Platform packaging inputs and output verification |
+
+The platform-neutral update module is introduced with its implementation rather
+than as an empty project-layout placeholder.
 
 ## Logical Decomposition
 
 ### API Layer
 
-`fg-api` contains stable cross-module contracts:
+`modules/api` contains stable cross-module contracts:
 
 - `TpDailyTaskEnum`, `ConfigurationKeyEnum`, and related enums define task and configuration identifiers.
 - `AccountDescriptor`, `TaskStateData`, `DailyTaskStatusData`, `PointData`, `AreaData`, and `ImageSearchResultData` carry state between modules.
-- `TemplatesEnum` maps logical template names to classpath resources declared in `fg-api/src/main/resources/config/templates.properties`.
+- `TemplatesEnum` maps logical template names to classpath resources declared in `modules/api/src/main/resources/config/templates.properties`.
 
 Use this module for shared data shapes only. It should not depend on services, JavaFX, repositories, or emulator code.
 
 ### Data Layer
 
-`fg-data` owns persistence:
+`modules/persistence` owns persistence:
 
 - `DataStore` and `DataSeeder` initialize the SQLite/Hibernate runtime.
 - `Profile`, `Config`, `DailyTask`, and related entities model persisted state.
@@ -74,18 +89,18 @@ Engine services are the normal callers. UI controllers should prefer engine serv
 
 ### Vision Layer
 
-`fg-vision` owns low-level image and OCR primitives:
+`modules/vision` owns low-level image and OCR primitives:
 
 - `OpenCvPatternLocator` loads OpenCV and performs template matching.
 - `TesseractOcrProvider` integrates Tess4J/Tesseract.
 - `ResilientOcrExecutor` adds retry and validation behavior around OCR extraction.
-- PNG templates live under `fg-vision/src/main/resources/templates`.
+- PNG templates live under `modules/vision/src/main/resources/templates`.
 
-Task-facing code should usually call `TemplateSearchHelper` or `BotOcrEngine` from `fg-engine`, not raw vision utilities directly.
+Task-facing code should usually call `TemplateSearchHelper` or `BotOcrEngine` from `modules/automation`, not raw vision utilities directly.
 
 ### Engine Layer
 
-`fg-engine` is the application core:
+`modules/automation` is the application core:
 
 - `ScheduleService` starts/stops automation, loads profiles/configuration, restores schedules, and publishes bot/queue state.
 - `TaskDispatcher` owns per-profile `TaskQueue` instances and starts queue threads.
@@ -97,17 +112,17 @@ Task-facing code should usually call `TemplateSearchHelper` or `BotOcrEngine` fr
 
 ### Task Layer
 
-`fg-tasks` contains game-specific routines grouped by domain:
+`modules/tasks` contains game-specific routines grouped by domain:
 
 - `alliance`, `city`, `combat`, `dailies`, `economy`, `events`, `exploration`, `heroes`, `lifecycle`, `pets`.
 - Each routine extends `DelayedTask` and implements `execute()`.
 - `TaskRegistrations.initialize()` registers the task factory with `DelayedTaskRegistry`.
 
-To add a built-in task, add the routine in `fg-tasks`, add or reuse a `TpDailyTaskEnum`, then register it in `TaskRegistrations`.
+To add a built-in task, add the routine in `modules/tasks`, add or reuse a `TpDailyTaskEnum`, then register it in `TaskRegistrations`.
 
 ### UI Layer
 
-`fg-app` contains JavaFX screens and desktop packaging:
+`modules/desktop` contains the JavaFX screens and application entry points:
 
 - `Main` initializes logging, analytics, task registrations, and launches JavaFX or headless mode.
 - `LauncherLayoutController` wires major panels together.
@@ -115,7 +130,7 @@ To add a built-in task, add the routine in `fg-tasks`, add or reuse a `TpDailyTa
 - Scheduler UI controllers call `ScheduleService`, `TaskManagementService`, and `TaskQueue` APIs.
 - Task Builder UI creates `AutomationStep` graphs and delegates generation/import/save to `TaskBuilderService`.
 
-FXML and CSS resources live in `fg-app/src/main/resources/layout` and `fg-app/src/main/resources/styles`.
+FXML and CSS resources live in `modules/desktop/src/main/resources/layout` and `modules/desktop/src/main/resources/styles`.
 
 ## Runtime Decomposition
 
@@ -130,7 +145,7 @@ sequenceDiagram
     participant Dispatcher as TaskDispatcher
     participant Queue as TaskQueue per profile
     participant Emulator as EmulatorController
-    participant DB as fg-data repositories
+    participant DB as modules/persistence repositories
 
     Main->>Tasks: initialize registry
     Main->>UI: start selected frontend
@@ -176,7 +191,7 @@ startup scheduling should go through `ScheduleService.scheduleCustomTask(...)`.
 - Preemption: `GlobalMonitorService` registers `PreemptionRule` instances. `TaskQueue` attaches preemption tokens so long-running tasks can be interrupted safely.
 - Injection: idle or sleeping tasks can execute `InjectionRule` work, such as alliance help or furnace upgrade checks.
 - Navigation: `DelayedTask.run()` validates the game process and delegates screen correction to `NavigationHelper` before `execute()`.
-- OCR and image matching: tasks use `BotOcrEngine`, `ResilientOcrExecutor`, and `TemplateSearchHelper`; those wrap `fg-vision`.
+- OCR and image matching: tasks use `BotOcrEngine`, `ResilientOcrExecutor`, and `TemplateSearchHelper`; those wrap `modules/vision`.
 - Logging and metrics: task logs flow through `LoggingService`, profile-aware SLF4J logging, `TaskManagementService`, and `StatisticsService`.
 
 ## Build and Packaging
@@ -185,13 +200,13 @@ The root `pom.xml` controls Java 21, dependency versions, plugin versions, and m
 
 ```mermaid
 flowchart TD
-    RootPom[root pom.xml<br/>versions and reactor order] --> ApiJar[fg-api jar]
-    RootPom --> DataJar[fg-data jar]
-    RootPom --> VisionJar[fg-vision jar]
-    RootPom --> EngineJar[fg-engine jar]
-    RootPom --> TasksJar[fg-tasks jar]
-    RootPom --> WatcherJar[fg-watcher shaded jar]
-    RootPom --> AppJar[fg-app executable jar]
+    RootPom[root pom.xml<br/>versions and reactor order] --> ApiJar[modules/api jar]
+    RootPom --> DataJar[modules/persistence jar]
+    RootPom --> VisionJar[modules/vision jar]
+    RootPom --> EngineJar[modules/automation jar]
+    RootPom --> TasksJar[modules/tasks jar]
+    RootPom --> WatcherJar[modules/watcher shaded jar]
+    RootPom --> AppJar[modules/desktop executable jar]
 
     ApiJar --> AppBundle[desktop bundle zip]
     DataJar --> AppBundle
@@ -202,28 +217,30 @@ flowchart TD
     AppJar --> AppBundle
 
     Tools[tools/adb and tools/tesseract] --> AppBundle
-    Templates[fg-vision templates] --> AppBundle
-    CustomTasks[custom_tasks examples] --> AppBundle
+    Templates[modules/vision templates] --> AppBundle
+    CustomTasks[examples/custom-tasks examples] --> AppBundle
 ```
 
-`fg-app` builds the desktop artifact:
+`modules/desktop` builds the Java application artifact. It is run from source
+with `./mvnw javafx:run`; its versioned JAR is not a standalone distribution.
+`packaging/desktop` consumes that artifact and the watcher artifact:
 
-- executable jar: `fg-app/target/frostguard-<version>.jar`
-- desktop zip: `fg-app/target/frostguard-<version>-desktop-bundle.zip`
-- runtime dependencies staged under `fg-app/target/lib`
+- executable jar: `modules/desktop/target/frostguard-desktop-<version>.jar`
+- transitional desktop zip: `packaging/desktop/target/frostguard-<version>-desktop-bundle.zip`
+- packaging inputs staged under `packaging/desktop/target/input`
 - ADB/Tesseract files staged from `tools/`
-- custom task examples staged from root `custom_tasks/`
-- template PNGs staged from `fg-vision/src/main/resources/templates`
+- custom task examples staged from root `examples/custom-tasks/`
+- template PNGs staged from `modules/vision/src/main/resources/templates`
 
-`fg-watcher` builds a separate shaded watcher jar.
+`modules/watcher` builds a separate shaded watcher jar.
 
 ## Where To Change Things
 
-- Add a new task: `fg-api` enum/config if needed, `fg-tasks` routine, `TaskRegistrations`.
+- Add a new task: `modules/api` enum/config if needed, `modules/tasks` routine, `TaskRegistrations`.
 - Change scheduling behavior: `ScheduleService`, `TaskDispatcher`, or `TaskQueue`.
-- Change a reusable game interaction: `fg-engine/helper`.
-- Change OCR/template matching internals: `fg-vision`.
-- Add or rename a template: resource under `fg-vision/src/main/resources/templates`, mapping in `templates.properties`, enum in `TemplatesEnum`.
-- Change persisted config/profile/task state: `fg-data` entities/repositories and engine services.
-- Change UI controls or panels: `fg-app/src/main/java/dev/frostguard/app/panel/*` plus matching FXML/CSS.
-- Change runtime packaging: `fg-app/pom.xml` or `fg-app/src/main/assembly/zip.xml`.
+- Change a reusable game interaction: `modules/automation/helper`.
+- Change OCR/template matching internals: `modules/vision`.
+- Add or rename a template: resource under `modules/vision/src/main/resources/templates`, mapping in `templates.properties`, enum in `TemplatesEnum`.
+- Change persisted config/profile/task state: `modules/persistence` entities/repositories and engine services.
+- Change UI controls or panels: `modules/desktop/src/main/java/dev/frostguard/app/panel/*` plus matching FXML/CSS.
+- Change runtime packaging: `packaging/desktop/pom.xml` or its platform sources.

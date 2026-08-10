@@ -3,7 +3,7 @@
  * Tests for the pure helpers of the /build-pr worker.
  *
  * Run with: node discord-bot/test_worker.mjs
- * (No framework: keeps the bot dependency-free, like ci/*.py.)
+ * (No framework: keeps the bot dependency-free, like build-support/*.py.)
  */
 
 import assert from "node:assert/strict";

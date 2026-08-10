@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Test the Stable notifier
-        run: python3 ci/test_stable_release_notify.py
+        run: python3 build-support/notifications/test_stable_release_notify.py
 
       - name: Resolve and publish the latest Stable release
         env:
@@ -34,7 +34,7 @@ jobs:
           download_url="https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/${asset}"
           archive_url="https://github.com/${GITHUB_REPOSITORY}/releases"
 
-          python3 ci/stable_release_notify.py \
+          python3 build-support/notifications/stable_release_notify.py \
             --version "${version}" \
             --download-url "${download_url}" \
             --release-url "${release_url}" \

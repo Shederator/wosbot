@@ -21,7 +21,7 @@ mechanic assumptions; do not narrate statements or add author/date history.
 Use named constants for meaningful coordinates, regions, delays, thresholds,
 retry limits, and execution windows. Keep `execute()` at the algorithm level and
 move details into intent-named helpers. Share reusable vision primitives through
-`fg-vision` and reusable game interactions through `fg-engine`.
+`modules/vision` and reusable game interactions through `modules/automation`.
 
 ## Detection Strategy
 

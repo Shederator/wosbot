@@ -12,7 +12,6 @@ building from source.
 
 - Windows 10 or Windows 11.
 - Java JDK 21 or newer.
-- Apache Maven 3.8 or newer.
 - Git and Git LFS.
 
 Recommended installs:
@@ -23,29 +22,24 @@ winget install EclipseAdoptium.Temurin.21.JDK
 winget install GitHub.GitLFS
 ```
 
-After installing Maven, verify:
+From the repository root, verify:
 
 ```powershell
 java -version
-mvn -version
+.\mvnw.cmd -version
 git lfs version
 ```
 
 ## Build Commands
 
-Use the standard Maven build:
+Use the checked-in Maven Wrapper:
 
 ```powershell
-mvn clean install package
+.\mvnw.cmd package
 ```
 
-Or use the Windows helper:
-
-```batch
-fg-build.bat
-```
-
-The helper stops leftover Java and ADB processes, retries once after transient resource-copy failures, verifies the packaged application JAR, and opens the generated bundle location.
+The wrapper only builds the reactor. It does not stop running processes, install
+Frostguard, or mutate user data.
 
 ## Runtime Requirements
 
@@ -69,14 +63,17 @@ versioned application JAR and reports a clear error if Java 21 is missing.
 For a source build, run from the repository root:
 
 ```powershell
-java -jar fg-app\target\frostguard-<version>.jar
+.\mvnw.cmd javafx:run
 ```
 
 For automatic startup through scripts or Task Scheduler:
 
 ```powershell
-java -jar fg-app\target\frostguard-<version>.jar --autostart
+.\mvnw.cmd "-Djavafx.args=--autostart" javafx:run
 ```
+
+Installed and extracted bundle deployments should use their supplied launcher;
+the Maven command is only for source development.
 
 ## Scheduled Automation
 

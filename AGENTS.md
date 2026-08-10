@@ -25,16 +25,20 @@ must not weaken the shared quality or verification rules here.
 
 Choose the command based on the purpose of the build:
 
-- `mvn package` builds and tests the current reactor state without deleting
+- `./mvnw package` builds and tests the current reactor state without deleting
   existing output first.
-- `mvn -pl <module> -am test` runs focused module tests plus required upstream
+- `./mvnw -pl <module> -am test` runs focused module tests plus required upstream
   modules.
-- `mvn clean install` is appropriate for reproducible clean verification, CI,
+- `./mvnw javafx:run` compiles the required reactor modules and starts the
+  desktop application from source.
+- `./mvnw clean install` is appropriate for reproducible clean verification, CI,
   and release preparation when deleting generated output is intentional.
-- `mvn clean install package` produces the fully clean packaged desktop
+- `./mvnw clean install package` produces the fully clean packaged desktop
   distribution.
-- `fg-build.bat` is the Windows packaging helper; it validates the app JAR and
-  retries known transient packaging failures.
+
+Use `mvnw.cmd` instead of `./mvnw` on Windows Command Prompt. Desktop packaging
+is owned by `packaging/desktop`; normal module builds never install or update
+Frostguard.
 
 Generated `target/` output must not be committed. A local `AGENTS.local.md` may
 select a preferred non-clean command for day-to-day work.
@@ -49,8 +53,8 @@ changes.
 
 - Use Java 21 conservatively, keep packages under `dev.frostguard`, use 4-space
   indentation and same-line braces, and match surrounding style.
-- Keep game-specific automation in `fg-tasks`, reusable game interactions in
-  `fg-engine`, and low-level image/OCR primitives in `fg-vision`.
+- Keep game-specific automation in `modules/tasks`, reusable game interactions in
+  `modules/automation`, and low-level image/OCR primitives in `modules/vision`.
 - Put shared screen regions and OCR presets in `CommonGameAreas` and
   `CommonOCRSettings`; do not hide reusable detection logic inside one task.
 - Prefer maintainable fixes over one-off patches. Do not leave dead code,
@@ -65,7 +69,7 @@ changes.
 
 Logs should make decisions explainable: include relevant profile context,
 evidence, the chosen outcome, and retry or fallback reasons without flooding hot
-loops. Runtime evidence is normally under `fg-app/target`: account logs in
+loops. Runtime evidence is normally under `modules/desktop/target`: account logs in
 `logs/`, the global log in `log/frostguard.log`, archives in `log/archive/`, and
 debug screenshots in `temp/`.
 

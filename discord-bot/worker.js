@@ -32,7 +32,7 @@
 // Small pure helpers (exported for tests)
 // ---------------------------------------------------------------------------
 
-export const MAX_PRS = 6; // must match MAX_PRS_PER_REQUEST in ci/pr_build_plan.py
+export const MAX_PRS = 6; // must match MAX_PRS_PER_REQUEST in build-support/release/pr_build_plan.py
 
 export function parsePrNumbers(raw) {
   const numbers = [];

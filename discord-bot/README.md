@@ -24,10 +24,7 @@ merging anything, e.g.:
 ```
 
 This directory contains the Discord half; the build half lives in
-[`setup/github-workflows/pr-test-build.yml`](../setup/github-workflows/pr-test-build.yml)
-(run `bash setup/install-workflows.sh` once to copy the workflows into
-`.github/workflows/` — required because workflow files cannot be pushed by
-tokens without the `workflows` permission).
+the canonical [`pr-test-build.yml`](../.github/workflows/pr-test-build.yml).
 The Discord command is optional: the same feature works today from the
 GitHub **Actions tab → PR Test Build → Run workflow** with `prs: 47,48,49,65`.
 
@@ -213,6 +210,6 @@ only needs to:
 
 ```bash
 node discord-bot/test_worker.mjs      # worker helpers
-python3 ci/test_pr_build_plan.py      # planner (real git repos)
-python3 ci/test_pr_test_notify.py     # Discord result messages
+python3 build-support/release/test_pr_build_plan.py       # planner (real git repos)
+python3 build-support/notifications/test_pr_test_notify.py # Discord result messages
 ```

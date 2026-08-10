@@ -3,16 +3,16 @@ name: Daily Windows Bundle
 on:
   push:
     branches:
-      - "ci/**"
+      - "build-support/**"
   pull_request:
     paths:
       - "**/pom.xml"
       - "**/src/**"
       - "tools/**"
-      - "custom_tasks/**"
-      - "ci/**"
-      - "fg-watcher.bat"
-      - "Start Frostguard.bat"
+      - "examples/custom-tasks/**"
+      - "build-support/**"
+      - "packaging/desktop/src/main/windows/Start-Frostguard-Watcher.bat"
+      - "packaging/desktop/src/main/windows/Start-Frostguard.bat"
       - ".gitattributes"
       - ".github/workflows/daily-windows-bundle.yml"
   schedule:
@@ -57,10 +57,10 @@ jobs:
       # The Windows OpenCV .dll, adb.exe and the .traineddata OCR models are all
       # tracked with Git LFS. If any of them is still a pointer stub the build
       # silently produces a bundle that only fails on a user's machine, so fail
-      # loudly here instead. The check lives in ci/check_lfs_assets.sh because
+      # loudly here instead. The check lives in build-support/verification/check_lfs_assets.sh because
       # the PR test build workflow needs the identical guard.
       - name: Verify Git LFS assets are real binaries
-        run: ci/check_lfs_assets.sh
+        run: build-support/verification/check_lfs_assets.sh
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -82,20 +82,22 @@ jobs:
       # Guards the bundle verifier itself. A verification script that cannot fail
       # would turn a broken release artifact into a green check mark.
       - name: Test the bundle verifier
-        run: python3 ci/test_verify_bundle.py
+        run: |
+          python3 build-support/verification/test_project_layout.py
+          python3 build-support/verification/test_verify_bundle.py
 
       # The notifier runs in a non-blocking step, so a bug in it would show up
       # as "no message arrived" rather than as a red build. Its own tests run
       # here, before the 30-minute Maven build, so a broken payload contract
       # fails in seconds.
       - name: Test the Discord notifier
-        run: python3 ci/test_discord_notify.py
+        run: python3 build-support/notifications/test_discord_notify.py
 
       - name: Resolve project version
         id: version
         run: |
           set -euo pipefail
-          version="$(mvn ${MAVEN_ARGS} -q help:evaluate \
+          version="$(./mvnw ${MAVEN_ARGS} -q help:evaluate \
             -Dexpression=project.version -DforceStdout)"
           if [[ -z "${version}" ]]; then
             echo "::error::Could not resolve the Maven project version."
@@ -111,22 +113,22 @@ jobs:
       - name: Test on Linux
         run: |
           read -r -a maven_args <<< "${MAVEN_ARGS}"
-          xvfb-run --auto-servernum mvn "${maven_args[@]}" clean test
+          xvfb-run --auto-servernum ./mvnw "${maven_args[@]}" clean test
 
       - name: Build Windows desktop bundle
         run: |
           read -r -a maven_args <<< "${MAVEN_ARGS}"
-          mvn "${maven_args[@]}" install -DskipTests -Djavafx.platform=win
+          ./mvnw "${maven_args[@]}" install -DskipTests -Djavafx.platform=win
 
       - name: Locate the desktop bundle
         id: bundle
         shell: bash
         run: |
           set -euo pipefail
-          zip_path="$(find fg-app/target -maxdepth 1 -type f \
+          zip_path="$(find packaging/desktop/target -maxdepth 1 -type f \
             -name '*-desktop-bundle.zip' | sort | tail -n 1)"
           if [[ -z "${zip_path}" ]]; then
-            echo "::error::No desktop bundle ZIP found under fg-app/target."
+            echo "::error::No desktop bundle ZIP found under packaging/desktop/target."
             exit 1
           fi
           echo "path=${zip_path}" >> "${GITHUB_OUTPUT}"
@@ -135,12 +137,12 @@ jobs:
       # Structural verification: the right files, at the right paths, and every
       # manifest Class-Path entry really present.
       - name: Verify Windows bundle contents
-        run: python3 ci/verify_bundle.py "${{ steps.bundle.outputs.path }}" --platform win
+        run: python3 build-support/verification/verify_bundle.py "${{ steps.bundle.outputs.path }}" --platform win
 
       # Launch verification: the staged JARs actually link together. Catches the
       # dropped-dependency class of breakage that a file listing cannot see.
       - name: Smoke test the desktop bundle
-        run: ci/smoke_test_bundle.sh "${{ steps.bundle.outputs.path }}"
+        run: build-support/verification/smoke_test_bundle.sh "${{ steps.bundle.outputs.path }}"
 
       # Metrics are computed once here and exposed as step outputs so the job
       # summary and the Discord notification cannot disagree with each other.
@@ -261,7 +263,7 @@ jobs:
               "repos/${GITHUB_REPOSITORY}/releases/tags/nightly" \
               --jq '.target_commitish')"
           fi
-          changes="$(python3 ci/nightly_changes.py \
+          changes="$(python3 build-support/release/nightly_changes.py \
             --repository "${GITHUB_REPOSITORY}" \
             --previous "${previous_sha}" \
             --current "${GITHUB_SHA}")"
@@ -360,7 +362,7 @@ jobs:
             discord_target=(--message-id-output "${GITHUB_OUTPUT}")
           fi
 
-          python3 ci/discord_notify.py \
+          python3 build-support/notifications/discord_notify.py \
             --status "${JOB_STATUS,,}" \
             --version "${VERSION}" \
             --bundle-name "${BUNDLE_NAME}" \

@@ -255,24 +255,25 @@ unmerged code and expire automatically.
 
 ### 🛠️ Build from source
 
-Developers need Java 21, Maven 3.8+, Git and Git LFS:
+Developers need Java 21, Git and Git LFS. The Maven Wrapper supplies Maven:
 
 ```sh
 git clone https://github.com/Shederator/wosbot.git
 cd wosbot
 git lfs install
 git lfs pull
-mvn clean install package
-java -jar fg-app/target/frostguard-<version>.jar
+./mvnw package
+./mvnw javafx:run
 ```
 
-The build creates the application JAR and Windows desktop bundle under
-`fg-app/target`. For the complete source setup, Windows helper and verification
-commands, see:
+The first command builds and tests Frostguard; the second starts the desktop
+application directly from the reactor. The transitional Windows desktop bundle
+is written below `packaging/desktop/target`. For the complete source setup and
+verification commands, see:
 
 - **[Installation and source build](docs/installation.md)**
 - **[Windows-specific setup](docs/windows.md)**
-- **[CI and bundle verification](ci/README.md)**
+- **[CI and bundle verification](build-support/verification/README.md)**
 
 <br/>
 

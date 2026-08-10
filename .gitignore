@@ -42,8 +42,8 @@ TODO.md
 .nb-gradle/
 .metadata/
 nbproject/private/
-fg-*/bin
-fg-*/.settings
+modules/*/bin
+modules/*/.settings
 
 # ── Analysis / misc caches ──
 .scannerwork/
@@ -64,4 +64,4 @@ Thumbs.db
 *~
 
 # Python bytecode from the CI helper scripts
-ci/__pycache__/
+build-support/**/__pycache__/

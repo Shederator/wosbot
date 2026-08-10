@@ -119,12 +119,13 @@ jobs:
       # not silently mis-plan a merge.
       - name: Test the planner and the notifier
         run: |
-          python3 ci/test_pr_build_plan.py
-          python3 ci/test_pr_test_notify.py
+          python3 build-support/release/test_pr_build_plan.py
+          python3 build-support/notifications/test_pr_test_notify.py
+          python3 build-support/verification/test_project_layout.py
           # Compiles the inline `python3 -c` snippets used later in this
           # workflow, so a typo in one fails here in seconds instead of in the
           # publish job after a full Maven build.
-          python3 ci/check_workflow_python.py
+          python3 build-support/verification/check_workflow_python.py
 
       - name: Plan, pin and trial-merge the requested PRs
         id: plan
@@ -140,7 +141,7 @@ jobs:
         # the requester gets the explanation instead of a bare red X.
         continue-on-error: true
         run: |
-          python3 ci/pr_build_plan.py plan \
+          python3 build-support/release/pr_build_plan.py plan \
             --prs "${INPUT_PRS}" \
             --order "${INPUT_ORDER}" \
             --pinned "${INPUT_PINNED}" \
@@ -193,14 +194,18 @@ jobs:
           fetch-depth: 0
           lfs: true
 
-      # Everything under ci/ that runs AFTER the merge must come from main,
+      # Everything under build-support/ that runs AFTER the merge must come from main,
       # not from the merged workspace, or a malicious PR could replace the
       # verifier with `exit 0`. The copy happens while the workspace is still
       # pristine main.
       - name: Stash trusted CI scripts before merging PR code
         run: |
-          mkdir -p "${RUNNER_TEMP}/trusted-ci"
-          cp -r ci/. "${RUNNER_TEMP}/trusted-ci/"
+          mkdir -p "${RUNNER_TEMP}/trusted-build-support/verification"
+          mkdir -p "${RUNNER_TEMP}/trusted-build-support/release"
+          mkdir -p "${RUNNER_TEMP}/trusted-build-support/notifications"
+          cp -r build-support/verification/. "${RUNNER_TEMP}/trusted-build-support/verification/"
+          cp -r build-support/release/. "${RUNNER_TEMP}/trusted-build-support/release/"
+          cp -r build-support/notifications/. "${RUNNER_TEMP}/trusted-build-support/notifications/"
 
       - name: Download the plan
         uses: actions/download-artifact@v4
@@ -213,14 +218,14 @@ jobs:
       # builder cannot silently diverge.
       - name: Reproduce the planned merge
         run: |
-          python3 "${RUNNER_TEMP}/trusted-ci/pr_build_plan.py" merge \
+          python3 "${RUNNER_TEMP}/trusted-build-support/release/pr_build_plan.py" merge \
             --plan "${RUNNER_TEMP}/plan/plan.json" \
             --workspace .
 
       # The merged tree may have changed LFS pointers; materialise and verify
       # them the same way the nightly does.
       - name: Verify Git LFS assets are real binaries
-        run: bash "${RUNNER_TEMP}/trusted-ci/check_lfs_assets.sh" .
+        run: bash "${RUNNER_TEMP}/trusted-build-support/verification/check_lfs_assets.sh" .
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -241,22 +246,22 @@ jobs:
       - name: Test the combined tree on Linux
         run: |
           read -r -a maven_args <<< "${MAVEN_ARGS}"
-          xvfb-run --auto-servernum mvn "${maven_args[@]}" clean test
+          xvfb-run --auto-servernum ./mvnw "${maven_args[@]}" clean test
 
       - name: Build Windows desktop bundle from the merged tree
         run: |
           read -r -a maven_args <<< "${MAVEN_ARGS}"
-          mvn "${maven_args[@]}" install -DskipTests -Djavafx.platform=win
+          ./mvnw "${maven_args[@]}" install -DskipTests -Djavafx.platform=win
 
       - name: Locate the desktop bundle
         id: bundle
         shell: bash
         run: |
           set -euo pipefail
-          zip_path="$(find fg-app/target -maxdepth 1 -type f \
+          zip_path="$(find packaging/desktop/target -maxdepth 1 -type f \
             -name '*-desktop-bundle.zip' | sort | tail -n 1)"
           if [[ -z "${zip_path}" ]]; then
-            echo "::error::No desktop bundle ZIP found under fg-app/target."
+            echo "::error::No desktop bundle ZIP found under packaging/desktop/target."
             exit 1
           fi
           echo "path=${zip_path}" >> "${GITHUB_OUTPUT}"
@@ -267,7 +272,7 @@ jobs:
       # before anything becomes public.
       - name: Verify bundle contents (advisory)
         run: |
-          python3 "${RUNNER_TEMP}/trusted-ci/verify_bundle.py" \
+          python3 "${RUNNER_TEMP}/trusted-build-support/verification/verify_bundle.py" \
             "${{ steps.bundle.outputs.path }}" --platform win
 
       - name: Upload the unverified bundle
@@ -336,11 +341,11 @@ jobs:
       # claimed counts until the trusted verifier and smoke test agree.
       - name: Verify bundle contents (authoritative)
         run: |
-          python3 ci/verify_bundle.py \
+          python3 build-support/verification/verify_bundle.py \
             "${{ steps.bundle.outputs.path }}" --platform win
 
       - name: Smoke test the bundle (authoritative)
-        run: ci/smoke_test_bundle.sh "${{ steps.bundle.outputs.path }}"
+        run: build-support/verification/smoke_test_bundle.sh "${{ steps.bundle.outputs.path }}"
 
       # A PR that was closed, merged or force-pushed between planning and now
       # must block publishing: the advertised "PR #47 @ sha" facts would be
@@ -352,7 +357,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python3 ci/pr_build_plan.py recheck \
+          python3 build-support/release/pr_build_plan.py recheck \
             --plan "${RUNNER_TEMP}/artifacts/pr-test-plan/plan.json"
 
       - name: Stop when the plan went stale
@@ -555,4 +560,4 @@ jobs:
             args+=(--reason "The planning step crashed before producing a plan; see the workflow log.")
           fi
 
-          python3 ci/pr_test_notify.py "${args[@]}" "${extra[@]}"
+          python3 build-support/notifications/pr_test_notify.py "${args[@]}" "${extra[@]}"
