@@ -119,9 +119,17 @@ public class ProfileManagerActionController implements ProfileStatusChangeListen
 					globalConfigs.addAll(transfer.globalConfigs());
 				}
 				for (AccountDescriptor descriptor : transfer.profiles()) {
-					String name = availableName(descriptor.getName(), occupiedNames);
-					descriptor.setName(name);
-					occupiedNames.add(name);
+					java.util.Optional<ProfileAux> existing = existingProfiles.stream()
+							.filter(p -> p.getName() != null && p.getName().equalsIgnoreCase(descriptor.getName()))
+							.findFirst();
+
+					if (existing.isPresent()) {
+						descriptor.setId(existing.get().getId());
+					} else {
+						String name = availableName(descriptor.getName(), occupiedNames);
+						descriptor.setName(name);
+						occupiedNames.add(name);
+					}
 					prepared.add(descriptor);
 				}
 			} catch (Exception ex) {
@@ -136,7 +144,13 @@ public class ProfileManagerActionController implements ProfileStatusChangeListen
 		int imported = 0;
 		int failed = 0;
 		for (AccountDescriptor descriptor : profiles) {
-			if (iModel.addProfile(descriptor)) imported++; else failed++;
+			boolean success;
+			if (descriptor.getId() != null) {
+				success = iModel.saveProfile(descriptor);
+			} else {
+				success = iModel.addProfile(descriptor);
+			}
+			if (success) imported++; else failed++;
 		}
 		
 		int globalUpdated = 0;
