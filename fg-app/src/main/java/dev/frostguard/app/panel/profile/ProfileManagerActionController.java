@@ -151,7 +151,7 @@ public class ProfileManagerActionController implements ProfileStatusChangeListen
 						}
 					}
 				} catch (Exception ex) {
-					// Ignore invalid global configs
+					log(TpMessageSeverityEnum.WARNING, "Failed to apply global configuration " + gCfg.name() + ": " + ex.getMessage());
 				}
 			}
 		}
