@@ -8,6 +8,7 @@ import java.util.List;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ConfigData;
@@ -22,15 +23,29 @@ final class ProfileTransferService {
 	private final ObjectMapper mapper;
 
 	ProfileTransferService() {
-		mapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+		mapper = new ObjectMapper()
+			.enable(SerializationFeature.INDENT_OUTPUT)
+			.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
 	}
 
-	void write(Path destination, List<ProfileAux> profiles) throws IOException {
+	void write(Path destination, List<ProfileAux> profiles, boolean excludeTelegram) throws IOException {
 		List<TransferredProfile> exported = profiles.stream().map(this::fromProfile).toList();
-		mapper.writeValue(destination.toFile(), new TransferFile(FORMAT_VERSION, exported));
+		
+		List<TransferredConfig> globalConfigs = new ArrayList<>();
+		java.util.LinkedHashMap<String, String> settings = dev.frostguard.engine.service.ConfigService.obtain().loadGlobalSettings();
+		if (settings != null) {
+			for (java.util.Map.Entry<String, String> entry : settings.entrySet()) {
+				if (excludeTelegram && entry.getKey() != null && entry.getKey().toUpperCase().startsWith("TELEGRAM_")) {
+					continue;
+				}
+				globalConfigs.add(new TransferredConfig(entry.getKey(), entry.getValue()));
+			}
+		}
+
+		mapper.writeValue(destination.toFile(), new TransferFile(FORMAT_VERSION, exported, globalConfigs));
 	}
 
-	List<AccountDescriptor> read(Path source) throws IOException {
+	TransferResult read(Path source) throws IOException {
 		if (!Files.isRegularFile(source) || Files.size(source) > MAX_FILE_SIZE_BYTES) {
 			throw new IOException("Profile file must be a regular JSON file no larger than 5 MB");
 		}
@@ -45,7 +60,7 @@ final class ProfileTransferService {
 		for (TransferredProfile imported : transfer.profiles()) {
 			profiles.add(toDescriptor(imported));
 		}
-		return profiles;
+		return new TransferResult(profiles, transfer.globalConfigs() != null ? transfer.globalConfigs() : new ArrayList<>());
 	}
 
 	AccountDescriptor duplicate(ProfileAux source, String newName) throws IOException {
@@ -124,7 +139,10 @@ final class ProfileTransferService {
 		return value == null || value.isBlank() ? null : value.trim();
 	}
 
-	record TransferFile(int formatVersion, List<TransferredProfile> profiles) {
+	record TransferFile(int formatVersion, List<TransferredProfile> profiles, List<TransferredConfig> globalConfigs) {
+	}
+
+	record TransferResult(List<AccountDescriptor> profiles, List<TransferredConfig> globalConfigs) {
 	}
 
 	record TransferredProfile(String name, String emulatorNumber, Boolean enabled, Long priority,

@@ -87,24 +87,38 @@ public class ProfileManagerActionController implements ProfileStatusChangeListen
 		}
 	}
 
-	public void exportProfiles(Path destination, List<ProfileAux> selectedProfiles) throws IOException {
-		transferService.write(destination, selectedProfiles);
-		log(TpMessageSeverityEnum.INFO, "Exported " + selectedProfiles.size() + " profiles to " + destination);
+	public void exportProfiles(Path destination, List<ProfileAux> selectedProfiles, boolean excludeTelegram) throws IOException {
+		transferService.write(destination, selectedProfiles, excludeTelegram);
+		log(TpMessageSeverityEnum.INFO, "Exported " + selectedProfiles.size() + " profiles and global configs to " + destination);
+	}
+
+	public void resetProfileConfigs(List<ProfileAux> selectedProfiles) {
+		if (selectedProfiles == null || selectedProfiles.isEmpty()) return;
+		for (ProfileAux profile : selectedProfiles) {
+			profile.getConfigs().clear();
+			saveProfile(profile);
+		}
+		log(TpMessageSeverityEnum.INFO, "Reset configurations for " + selectedProfiles.size() + " profiles");
 	}
 
 	public ImportResult importProfiles(List<Path> sources, List<ProfileAux> existingProfiles) {
 		ImportPreview preview = prepareImport(sources, existingProfiles);
-		ImportResult imported = importPrepared(preview.profiles());
-		return new ImportResult(imported.imported(), imported.failed() + preview.errors().size());
+		ImportResult imported = importPrepared(preview.profiles(), preview.globalConfigs());
+		return new ImportResult(imported.imported(), imported.failed() + preview.errors().size(), imported.globalUpdated());
 	}
 
 	public ImportPreview prepareImport(List<Path> sources, List<ProfileAux> existingProfiles) {
 		List<String> occupiedNames = new ArrayList<>(existingProfiles.stream().map(ProfileAux::getName).toList());
 		List<AccountDescriptor> prepared = new ArrayList<>();
 		List<String> errors = new ArrayList<>();
+		List<ProfileTransferService.TransferredConfig> globalConfigs = new ArrayList<>();
 		for (Path source : sources) {
 			try {
-				for (AccountDescriptor descriptor : transferService.read(source)) {
+				ProfileTransferService.TransferResult transfer = transferService.read(source);
+				if (transfer.globalConfigs() != null) {
+					globalConfigs.addAll(transfer.globalConfigs());
+				}
+				for (AccountDescriptor descriptor : transfer.profiles()) {
 					String name = availableName(descriptor.getName(), occupiedNames);
 					descriptor.setName(name);
 					occupiedNames.add(name);
@@ -115,16 +129,33 @@ public class ProfileManagerActionController implements ProfileStatusChangeListen
 				log(TpMessageSeverityEnum.ERROR, "Failed to import " + source + ": " + ex.getMessage());
 			}
 		}
-		return new ImportPreview(prepared, errors);
+		return new ImportPreview(prepared, errors, globalConfigs);
 	}
 
-	public ImportResult importPrepared(List<AccountDescriptor> profiles) {
+	public ImportResult importPrepared(List<AccountDescriptor> profiles, List<ProfileTransferService.TransferredConfig> globalConfigs) {
 		int imported = 0;
 		int failed = 0;
 		for (AccountDescriptor descriptor : profiles) {
 			if (iModel.addProfile(descriptor)) imported++; else failed++;
 		}
-		return new ImportResult(imported, failed);
+		
+		int globalUpdated = 0;
+		if (globalConfigs != null) {
+			dev.frostguard.engine.service.ConfigService configService = dev.frostguard.engine.service.ConfigService.obtain();
+			for (ProfileTransferService.TransferredConfig gCfg : globalConfigs) {
+				try {
+					ConfigurationKeyEnum key = ConfigurationKeyEnum.fromName(gCfg.name());
+					if (key != null) {
+						if (configService.writeGlobalSetting(key, gCfg.value())) {
+							globalUpdated++;
+						}
+					}
+				} catch (Exception ex) {
+					// Ignore invalid global configs
+				}
+			}
+		}
+		return new ImportResult(imported, failed, globalUpdated);
 	}
 
 	private String availableName(String requested, List<String> occupiedNames) {
@@ -141,11 +172,11 @@ public class ProfileManagerActionController implements ProfileStatusChangeListen
 		return names.stream().anyMatch(name -> name != null && name.equalsIgnoreCase(candidate));
 	}
 
-	public record ImportResult(int imported, int failed) {
+	public record ImportResult(int imported, int failed, int globalUpdated) {
 		public boolean successful() { return failed == 0; }
 	}
 
-	public record ImportPreview(List<AccountDescriptor> profiles, List<String> errors) {
+	public record ImportPreview(List<AccountDescriptor> profiles, List<String> errors, List<ProfileTransferService.TransferredConfig> globalConfigs) {
 	}
 
 	public boolean saveProfile(ProfileAux currentProfile) {
