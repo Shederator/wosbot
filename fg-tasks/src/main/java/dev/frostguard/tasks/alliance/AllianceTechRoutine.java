@@ -9,6 +9,7 @@ import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.TesseractSettingsData;
 import dev.frostguard.engine.helper.NavigationHelper;
+import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -32,6 +33,20 @@ private static final AreaData ALLIANCE_COINS_BUTTON_AREA_VALUE = new AreaData(
 private static final AreaData COIN_COUNT_OCR_AREA_VALUE = new AreaData(
 			new PointData(272, 257),
 			new PointData(443, 285));
+
+private static final PointData TREE_RESET_SWIPE_START_VALUE = new PointData(360, 600);
+
+private static final PointData TREE_RESET_SWIPE_END_VALUE = new PointData(360, 984);
+
+private static final PointData TREE_SCROLL_SWIPE_START_VALUE = new PointData(360, 900);
+
+private static final PointData TREE_SCROLL_SWIPE_END_VALUE = new PointData(360, 540);
+
+private static final int TREE_RESET_SWIPE_COUNT_VALUE = 5;
+
+private static final int TREE_SCROLL_ATTEMPT_COUNT_VALUE = 5;
+
+private static final long TREE_SCROLL_SETTLE_MILLIS_VALUE = 500;
 
 private static final int DONATION_TAP_COUNT_VALUE = 25;
 
@@ -151,9 +166,13 @@ private void performDonationsFlow() {
 private boolean locateDonationButton() {
 		logDebug(routineLogAllianceTechLine("Scanning for thumbs-up donation button"));
 
-		ImageSearchResultData thumbsUpResult = templateSearchHelper.locatePattern(
-				TemplatesEnum.ALLIANCE_TECH_THUMB_UP,
-				SearchConfigConstants.SINGLE_WITH_RETRIES);
+		ImageSearchResultData thumbsUpResult = findThumbsUp(SearchConfigConstants.SINGLE_WITH_RETRIES);
+
+		if (!thumbsUpResult.isFound()) {
+			logInfo(routineLogAllianceTechLine(
+					"Thumbs-up marker is not visible at the opened position. Searching all Tech trees."));
+			thumbsUpResult = searchTechTrees();
+		}
 
 		if (thumbsUpResult.isFound()) {
 			logInfo(routineLogAllianceTechLine("Thumbs-up donation button detected. Proceeding with donations."));
@@ -163,8 +182,77 @@ private boolean locateDonationButton() {
 			return true;
 		}
 
-		logWarning(routineLogAllianceTechLine("Thumbs-up donation button not detected after retries"));
+		logWarning(routineLogAllianceTechLine("Thumbs-up donation button not detected after scanning all Tech trees"));
 		return false;
+	}
+
+private ImageSearchResultData searchTechTrees() {
+		ImageSearchResultData lastResult = null;
+		for (TechCategory category : TechCategory.values()) {
+			checkPreemption();
+			selectTechCategory(category);
+			lastResult = findThumbsUp(SearchConfigConstants.QUICK_SEARCH);
+			if (lastResult.isFound()) {
+				logInfo(routineLogAllianceTechLine("Found the thumbs-up marker at the remembered '"
+						+ category.label + "' tree position."));
+				return lastResult;
+			}
+
+			logInfo(routineLogAllianceTechLine("Searching the '" + category.label + "' Tech tree."));
+			resetTreeToTop();
+
+			for (int viewport = 0; viewport <= TREE_SCROLL_ATTEMPT_COUNT_VALUE; viewport++) {
+				checkPreemption();
+				lastResult = findThumbsUp(SearchConfigConstants.QUICK_SEARCH);
+				if (lastResult.isFound()) {
+					logInfo(routineLogAllianceTechLine("Found the thumbs-up marker in '"
+							+ category.label + "' at viewport " + (viewport + 1) + "."));
+					return lastResult;
+				}
+
+				if (viewport < TREE_SCROLL_ATTEMPT_COUNT_VALUE) {
+					swipe(TREE_SCROLL_SWIPE_START_VALUE, TREE_SCROLL_SWIPE_END_VALUE);
+					sleepTask(TREE_SCROLL_SETTLE_MILLIS_VALUE);
+				}
+			}
+
+			logDebug(routineLogAllianceTechLine(
+					"No thumbs-up marker found in the bounded '" + category.label + "' tree scan."));
+		}
+		return lastResult;
+	}
+
+private void selectTechCategory(TechCategory category) {
+		tapInside(category.tabArea.topLeft(), category.tabArea.bottomRight());
+		sleepTask(TREE_SCROLL_SETTLE_MILLIS_VALUE);
+	}
+
+private void resetTreeToTop() {
+		for (int swipeAttempt = 0; swipeAttempt < TREE_RESET_SWIPE_COUNT_VALUE; swipeAttempt++) {
+			checkPreemption();
+			swipe(TREE_RESET_SWIPE_START_VALUE, TREE_RESET_SWIPE_END_VALUE);
+			sleepTask(TREE_SCROLL_SETTLE_MILLIS_VALUE);
+		}
+	}
+
+private ImageSearchResultData findThumbsUp(SearchConfig searchConfig) {
+		return templateSearchHelper.locatePattern(
+				TemplatesEnum.ALLIANCE_TECH_THUMB_UP,
+				searchConfig);
+	}
+
+private enum TechCategory {
+		GROWTH("Growth", new AreaData(new PointData(22, 236), new PointData(244, 316))),
+		TERRITORY("Territory", new AreaData(new PointData(251, 236), new PointData(470, 316))),
+		BATTLE("Battle", new AreaData(new PointData(477, 236), new PointData(698, 316)));
+
+		private final String label;
+		private final AreaData tabArea;
+
+		TechCategory(String label, AreaData tabArea) {
+			this.label = label;
+			this.tabArea = tabArea;
+		}
 	}
 
 private void hydrateConfiguration() {
