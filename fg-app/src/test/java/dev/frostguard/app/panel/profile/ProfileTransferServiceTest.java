@@ -23,16 +23,16 @@ class ProfileTransferServiceTest {
 		ProfileAux second = profile(8L, "Farm Two");
 		Path export = tempDirectory.resolve("profiles.json");
 
-		service.write(export, List.of(first, second));
+		service.write(export, List.of(first, second), true);
 		var imported = service.read(export);
 
-		assertEquals(2, imported.size());
-		assertNull(imported.get(0).getId());
-		assertEquals("Farm One", imported.get(0).getName());
-		assertEquals("1234", imported.get(0).getCharacterServer());
-		assertEquals(List.of("Farm", "SVS"), imported.get(0).getTags());
-		assertEquals(1, imported.get(0).getConfigs().size());
-		assertEquals("GATHER_TASK_BOOL", imported.get(0).getConfigs().get(0).getConfigurationName());
+		assertEquals(2, imported.profiles().size());
+		assertNull(imported.profiles().get(0).getId());
+		assertEquals("Farm One", imported.profiles().get(0).getName());
+		assertEquals("1234", imported.profiles().get(0).getCharacterServer());
+		assertEquals(List.of("Farm", "SVS"), imported.profiles().get(0).getTags());
+		assertEquals(1, imported.profiles().get(0).getConfigs().size());
+		assertEquals("GATHER_TASK_BOOL", imported.profiles().get(0).getConfigs().get(0).getConfigurationName());
 	}
 
 	@Test

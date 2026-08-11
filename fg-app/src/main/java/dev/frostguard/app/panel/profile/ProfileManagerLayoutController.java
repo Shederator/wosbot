@@ -134,6 +134,8 @@ public class ProfileManagerLayoutController implements IProfileChangeObserver {
 	@FXML
 	private Button btnTagsSelected;
 	@FXML
+	private Button btnResetSelected;
+	@FXML
 	private Label lblSelectionCount;
 	@FXML
 	private Separator selectionSeparator;
@@ -624,6 +626,9 @@ public class ProfileManagerLayoutController implements IProfileChangeObserver {
 		setVisibleAndManaged(btnEnableSelected, hasSelection);
 		setVisibleAndManaged(btnDisableSelected, hasSelection);
 		setVisibleAndManaged(btnTagsSelected, hasSelection);
+		if (btnResetSelected != null) {
+			setVisibleAndManaged(btnResetSelected, hasSelection);
+		}
 		setVisibleAndManaged(selectionSeparator, hasSelection);
 
 		long visibleCount = sortedProfiles.stream().filter(profile -> profile.getId() != null).count();
@@ -762,6 +767,23 @@ public class ProfileManagerLayoutController implements IProfileChangeObserver {
 	}
 
 	@FXML
+	private void handleResetSelectedProfiles(ActionEvent event) {
+		List<ProfileAux> selected = selectedProfiles();
+		if (selected.isEmpty()) {
+			return;
+		}
+		Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+				"Are you sure you want to reset all configurations for the " + selected.size() + " selected profile(s)?",
+				ButtonType.YES, ButtonType.CANCEL);
+		if (confirm.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.YES) {
+			profileManagerActionController.resetProfileConfigs(selected);
+			loadProfiles();
+			showAlert(Alert.AlertType.INFORMATION, "Profiles Reset",
+					"Successfully reset configs for " + selected.size() + " profile(s).");
+		}
+	}
+
+	@FXML
 	private void handleExportProfiles(ActionEvent event) {
 		List<ProfileAux> selected = selectedProfiles();
 		if (selected.isEmpty()) {
@@ -769,13 +791,26 @@ public class ProfileManagerLayoutController implements IProfileChangeObserver {
 					"Select one or more profiles to export.");
 			return;
 		}
+		
+		ButtonType withTelegram = new ButtonType("Yes (Include Telegram)");
+		ButtonType withoutTelegram = new ButtonType("No (Safe Export)");
+		ButtonType cancel = new ButtonType("Cancel", javafx.scene.control.ButtonBar.ButtonData.CANCEL_CLOSE);
+		
+		Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+				"Do you want to include Telegram settings in this backup?",
+				withTelegram, withoutTelegram, cancel);
+		
+		ButtonType choice = confirm.showAndWait().orElse(cancel);
+		if (choice == cancel) return;
+		boolean excludeTelegram = choice == withoutTelegram;
+
 		FileChooser chooser = profileJsonChooser("Export Profiles");
 		chooser.setInitialFileName(selected.size() == 1
 				? safeFileName(selected.get(0).getName()) + ".json" : "frostguard-profiles.json");
 		File destination = chooser.showSaveDialog(btnExportProfiles.getScene().getWindow());
 		if (destination == null) return;
 		try {
-			profileManagerActionController.exportProfiles(destination.toPath(), selected);
+			profileManagerActionController.exportProfiles(destination.toPath(), selected, excludeTelegram);
 			showAlert(Alert.AlertType.INFORMATION, "Profiles exported",
 					selected.size() + (selected.size() == 1 ? " profile exported." : " profiles exported."));
 		} catch (Exception ex) {
@@ -792,12 +827,16 @@ public class ProfileManagerLayoutController implements IProfileChangeObserver {
 				sources.stream().map(File::toPath).toList(), new ArrayList<>(profiles));
 		List<AccountDescriptor> selected = showImportPreview(preview);
 		if (selected == null) return;
-		var result = profileManagerActionController.importPrepared(selected);
+		var result = profileManagerActionController.importPrepared(selected, preview.globalConfigs());
 		loadProfiles();
 		int failed = result.failed() + preview.errors().size();
 		Alert.AlertType type = failed == 0 ? Alert.AlertType.INFORMATION : Alert.AlertType.WARNING;
+		
+		String restartNote = result.globalUpdated() > 0 ? "\n\nPlease restart the application to apply global settings changes." : "";
 		showAlert(type, "Profile import complete",
-				result.imported() + " imported; " + failed + " failed."
+				result.imported() + " imported; " + failed + " failed.\n"
+						+ result.globalUpdated() + " global settings updated."
+						+ restartNote
 						+ (preview.errors().isEmpty() ? "" : "\n" + String.join("\n", preview.errors())));
 	}
 

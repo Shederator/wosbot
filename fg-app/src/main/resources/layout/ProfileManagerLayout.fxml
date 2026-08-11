@@ -92,6 +92,9 @@
             <Button fx:id="btnTagsSelected" mnemonicParsing="false"
                     onAction="#handleTagsSelected" text="Tags ▾"
                     visible="false" managed="false" styleClass="action-button-tags" />
+            <Button fx:id="btnResetSelected" mnemonicParsing="false"
+                    onAction="#handleResetSelectedProfiles" text="Reset"
+                    visible="false" managed="false" styleClass="action-button-disable" />
             <Separator fx:id="selectionSeparator" orientation="VERTICAL"
                        visible="false" managed="false" prefHeight="24" />
             <Button fx:id="btnImportProfiles" mnemonicParsing="false"
