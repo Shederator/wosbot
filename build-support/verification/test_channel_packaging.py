@@ -137,6 +137,12 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertNotIn("if (gh release view", workflow)
         self.assertIn("Where-Object { $_.name -ceq $assetName }", workflow)
         self.assertNotIn('--jq ".assets[]', workflow)
+        self.assertIn(
+            '"https://github.com/$($env:GITHUB_REPOSITORY)" +', workflow)
+        self.assertIn(
+            '"/releases/download/$($env:TAG)/$assetName"', workflow)
+        self.assertIn('"download_url=$publicInstallerUrl"', workflow)
+        self.assertNotIn("$asset.browser_download_url", workflow)
         self.assertNotIn("gh release view updates-nightly", workflow)
         self.assertNotIn("releases/tags/$($env:TAG)", workflow)
         self.assertGreaterEqual(
