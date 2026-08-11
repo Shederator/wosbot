@@ -34,10 +34,20 @@ class UpdateSelectorTest {
     }
 
     @Test
-    void buildWithoutPinnedPublisherCannotUpdate() throws Exception {
+    void buildWithoutPinnedProjectKeyCannotUpdate() throws Exception {
         RunningBuild build = new RunningBuild(SemanticVersion.parse("3.0.0"), SemanticVersion.parse("3.0.0"),
-                RuntimeChannel.STABLE, windowsX64(), false, "");
+                RuntimeChannel.STABLE, windowsX64(), false, new ManifestVerificationKey("", ""), "");
         assertFalse(selector.select(manifest(), build).isPresent());
+    }
+
+    @Test
+    void selectsProjectAuthenticatedReleaseWithoutAuthenticode() throws Exception {
+        UpdateManifest manifest = codec.read(
+                ManifestCodecTest.validUnsignedManifest().getBytes(StandardCharsets.UTF_8));
+        RunningBuild build = new RunningBuild(SemanticVersion.parse("3.0.0"), SemanticVersion.parse("3.0.0"),
+                RuntimeChannel.STABLE, windowsX64(), false, TestManifestKeys.trustedKey(), "");
+
+        assertEquals(SemanticVersion.parse("3.0.1"), selector.select(manifest, build).orElseThrow().version());
     }
 
     @Test
@@ -57,7 +67,7 @@ class UpdateSelectorTest {
     @Test
     void rejectsUpdaterBelowManifestMinimum() throws Exception {
         RunningBuild build = new RunningBuild(SemanticVersion.parse("2.9.0"), SemanticVersion.parse("2.9.0"),
-                RuntimeChannel.STABLE, windowsX64(), false, TRUSTED_PUBLISHER);
+                RuntimeChannel.STABLE, windowsX64(), false, TestManifestKeys.trustedKey(), TRUSTED_PUBLISHER);
         assertThrows(UpdateException.class, () -> selector.select(manifest(), build));
     }
 
@@ -83,7 +93,7 @@ class UpdateSelectorTest {
 
     private static RunningBuild running(RuntimeChannel channel, String version, boolean pullRequest) {
         return new RunningBuild(SemanticVersion.parse(version), SemanticVersion.parse(version),
-                channel, windowsX64(), pullRequest, TRUSTED_PUBLISHER);
+                channel, windowsX64(), pullRequest, TestManifestKeys.trustedKey(), TRUSTED_PUBLISHER);
     }
 
     static UpdatePlatform windowsX64() {

@@ -70,10 +70,13 @@ Do not put game task business logic in `modules/desktop`; do not put UI concepts
 `modules/update` owns the platform-neutral update trust boundary:
 
 - strict schema-versioned manifest parsing;
+- Ed25519 verification of the exact manifest payload against the project public
+  key embedded in every eligible build;
 - semantic-version, channel, operating-system, and architecture selection;
 - restart-safe downloads below the selected workspace cache;
 - byte-size and SHA-256 verification;
-- a build-pinned Windows Authenticode identity and token-authorized external handoff.
+- optional build-pinned Windows Authenticode verification and token-authorized
+  external handoff.
 
 The desktop module owns presentation and runtime shutdown. Update code does not
 depend on JavaFX, persistence, scheduling, or GitHub APIs. Development and
@@ -293,6 +296,12 @@ Frostguard authorizes the staged waiter, stops queues and workspace-owned
 services, closes SQLite and the workspace lock, and exits. A failed shutdown
 cancels the authorization, and the waiter cannot start the installer while the
 Frostguard PID is alive. Frostguard never replaces its own running files.
+
+The release feed is a signed envelope whose Ed25519 signature covers the exact
+manifest bytes. The embedded project public key is the primary update trust
+root. The manifest then binds the immutable installer URL, filename, size, and
+SHA-256. Authenticode is an additional check when a release build embeds a
+publisher identity; it is not required for project-signed releases.
 
 `modules/watcher` builds a separate shaded watcher jar.
 

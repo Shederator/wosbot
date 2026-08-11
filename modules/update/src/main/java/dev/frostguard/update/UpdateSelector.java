@@ -35,10 +35,13 @@ public final class UpdateSelector {
         if (!artifactPlatform.equals(running.platform())) {
             throw new UpdateException("Selected artifact platform does not match the running application");
         }
-        String manifestPublisher = artifact.signature() == null ? null : artifact.signature().publisher();
-        if (manifestPublisher == null || !running.authenticodePublisher()
-                .equalsIgnoreCase(manifestPublisher.trim())) {
-            throw new UpdateException("Manifest signer does not match the publisher pinned in this build");
+        String pinnedPublisher = running.authenticodePublisher();
+        String manifestPublisher = artifact.signature() == null ? "" : artifact.signature().publisher().trim();
+        if (!pinnedPublisher.isBlank() || !manifestPublisher.isBlank()) {
+            if (pinnedPublisher.isBlank() || manifestPublisher.isBlank()
+                    || !pinnedPublisher.equalsIgnoreCase(manifestPublisher)) {
+                throw new UpdateException("Manifest Authenticode publisher does not match this build");
+            }
         }
         return Optional.of(new UpdateCandidate(manifestChannel, release, Instant.parse(manifest.publishedAt()),
                 URI.create(manifest.releaseNotesUrl()), artifactPlatform, artifact));

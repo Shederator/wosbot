@@ -76,9 +76,9 @@ public final class ManifestCodec {
         HexFormat.of().parseHex(hash);
         if (platform.operatingSystem() == UpdatePlatform.OperatingSystem.WINDOWS) {
             SignatureRequirement signature = artifact.signature();
-            if (signature == null || !"authenticode".equalsIgnoreCase(signature.type())
-                    || required(signature.publisher(), "Authenticode publisher").isBlank()) {
-                throw new IllegalArgumentException("Windows artifacts require an Authenticode publisher");
+            if (signature != null && (!"authenticode".equalsIgnoreCase(signature.type())
+                    || required(signature.publisher(), "Authenticode publisher").isBlank())) {
+                throw new IllegalArgumentException("Windows Authenticode requirement is invalid");
             }
         }
     }

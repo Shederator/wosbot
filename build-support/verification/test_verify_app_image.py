@@ -41,6 +41,11 @@ class VerifyAppImageTest(unittest.TestCase):
                 verify_app_image.BUILD_METADATA,
                 "pullRequestBuild=false\nauthenticodePublisher=CN=Frostguard Project, O=Frostguard\n",
             )
+        with zipfile.ZipFile(self.image / "app/lib/frostguard-update-3.0.0.jar", "w") as update_jar:
+            update_jar.writestr(
+                verify_app_image.UPDATE_KEY,
+                verify_app_image.REPO_UPDATE_KEY.read_text(encoding="utf-8"),
+            )
         common_options = "\n".join((
             "java-options=-Dfrostguard.channel=stable",
             "java-options=-Dfrostguard.application.id=dev.frostguard.desktop",
@@ -98,6 +103,25 @@ class VerifyAppImageTest(unittest.TestCase):
     def test_rejects_desktop_jar_without_embedded_identity(self):
         (self.image / "app/frostguard-desktop-3.0.0.jar").write_bytes(b"not a jar")
         self.assertTrue(any("no valid embedded PR-build" in item
+                            for item in verify_app_image.inspect_image(self.image)))
+
+    def test_rejects_update_jar_without_project_key(self):
+        with zipfile.ZipFile(
+                self.image / "app/lib/frostguard-update-3.0.0.jar", "w"
+        ) as update_jar:
+            update_jar.writestr("placeholder", "missing key")
+        self.assertTrue(any("project update key" in item
+                            for item in verify_app_image.inspect_image(self.image)))
+
+    def test_rejects_update_jar_with_unexpected_project_key(self):
+        with zipfile.ZipFile(
+                self.image / "app/lib/frostguard-update-3.0.0.jar", "w"
+        ) as update_jar:
+            update_jar.writestr(
+                verify_app_image.UPDATE_KEY,
+                "keyId=untrusted\npublicKey=MCowBQYDK2VwAyEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\n",
+            )
+        self.assertTrue(any("unexpected project update key" in item
                             for item in verify_app_image.inspect_image(self.image)))
 
     def test_rejects_runtime_data(self):

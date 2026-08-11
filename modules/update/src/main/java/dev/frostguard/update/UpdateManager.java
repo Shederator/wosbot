@@ -27,7 +27,7 @@ public final class UpdateManager {
     }
 
     public Optional<UpdateCandidate> check(URI manifestUri, RunningBuild running) throws UpdateException {
-        return exclusive(() -> selector.select(manifests.fetch(manifestUri), running));
+        return exclusive(() -> selector.select(manifests.fetch(manifestUri, running.manifestKey()), running));
     }
 
     public PreparedUpdate prepare(UpdateCandidate candidate, Path workspaceCache) throws UpdateException {

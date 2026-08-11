@@ -36,7 +36,28 @@ class WriteUpdateManifestTest(unittest.TestCase):
             self.assertEqual(16, manifest["artifacts"]["windows-x64"]["size"])
             self.assertEqual(64, len(manifest["artifacts"]["windows-x64"]["sha256"]))
             self.assertEqual("3.0.0-nightly.0", manifest["minimumUpdaterVersion"])
+            self.assertEqual("CN=Frostguard Project, O=Frostguard",
+                             manifest["artifacts"]["windows-x64"]["signature"]["publisher"])
             self.assertEqual(manifest, json.loads(output.read_text(encoding="utf-8")))
+
+    def test_omits_optional_authenticode_requirement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            installer = root / "Frostguard-3.0.1-windows-x64.exe"
+            installer.write_bytes(b"unsigned but project-authenticated")
+
+            manifest = write_manifest(
+                channel="stable",
+                version="3.0.1",
+                minimum_updater_version="3.0.0",
+                published_at="2026-08-12T00:00:00Z",
+                release_notes_url="https://example.com/releases/3.0.1",
+                installer_url=f"https://example.com/releases/3.0.1/{installer.name}",
+                installer=installer,
+                output=root / "manifest.json",
+            )
+
+            self.assertNotIn("signature", manifest["artifacts"]["windows-x64"])
 
     def test_rejects_mutable_or_cross_channel_inputs(self):
         with tempfile.TemporaryDirectory() as directory:

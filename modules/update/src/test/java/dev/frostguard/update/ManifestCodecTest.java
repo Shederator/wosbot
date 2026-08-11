@@ -45,9 +45,19 @@ class ManifestCodecTest {
     }
 
     @Test
-    void rejectsUnsignedWindowsArtifact() {
+    void acceptsProjectAuthenticatedWindowsArtifactWithoutAuthenticode() throws Exception {
+        UpdateManifest manifest = codec.read(validUnsignedManifest().getBytes(StandardCharsets.UTF_8));
+        assertEquals(null, manifest.artifacts().get("windows-x64").signature());
+    }
+
+    @Test
+    void rejectsInvalidOptionalAuthenticodeRequirement() {
         String json = validManifest().replace("\"type\": \"authenticode\"", "\"type\": \"none\"");
         assertThrows(UpdateException.class, () -> codec.read(json.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    static String validUnsignedManifest() {
+        return validManifest().replaceAll(",\\s*\"signature\"\\s*:\\s*\\{[^}]+}", "");
     }
 
     static String validManifest() {

@@ -10,21 +10,21 @@ import java.time.Duration;
 public final class ManifestClient {
     private static final int MAX_MANIFEST_BYTES = 1024 * 1024;
     private final HttpClient client;
-    private final ManifestCodec codec;
+    private final SignedManifestCodec codec;
 
     public ManifestClient() {
         this(HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .followRedirects(HttpClient.Redirect.NORMAL)
-                .build(), new ManifestCodec());
+                .build(), new SignedManifestCodec());
     }
 
-    ManifestClient(HttpClient client, ManifestCodec codec) {
+    ManifestClient(HttpClient client, SignedManifestCodec codec) {
         this.client = client;
         this.codec = codec;
     }
 
-    public UpdateManifest fetch(URI uri) throws UpdateException {
+    public UpdateManifest fetch(URI uri, ManifestVerificationKey trustedKey) throws UpdateException {
         requireHttps(uri);
         HttpRequest request = HttpRequest.newBuilder(uri)
                 .timeout(Duration.ofSeconds(20))
@@ -45,7 +45,7 @@ public final class ManifestClient {
             if (body.length > MAX_MANIFEST_BYTES) {
                 throw new UpdateException("Manifest exceeds the 1 MiB safety limit");
             }
-            return codec.read(body);
+            return codec.read(body, trustedKey);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new UpdateException("Manifest request was interrupted", exception);

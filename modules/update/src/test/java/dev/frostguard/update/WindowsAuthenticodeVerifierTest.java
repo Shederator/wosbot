@@ -25,6 +25,17 @@ class WindowsAuthenticodeVerifierTest {
     }
 
     @Test
+    void acceptsProjectAuthenticatedInstallerWhenAuthenticodeIsNotRequired() throws Exception {
+        Path installer = Files.writeString(temp.resolve("project-signed-installer.exe"), "test");
+        WindowsAuthenticodeVerifier verifier = new WindowsAuthenticodeVerifier(
+                (command, environment, timeout) -> {
+                    throw new AssertionError("PowerShell should not run without an Authenticode requirement");
+                });
+
+        assertDoesNotThrow(() -> verifier.verify(installer, null));
+    }
+
+    @Test
     void rejectsUnsignedInstaller() throws Exception {
         Path installer = Files.writeString(temp.resolve("installer.exe"), "test");
         WindowsAuthenticodeVerifier verifier = new WindowsAuthenticodeVerifier(

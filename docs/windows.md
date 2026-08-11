@@ -3,7 +3,7 @@
 This document summarizes Windows-specific setup for Frostguard.
 
 The [latest Stable release](https://github.com/Shederator/wosbot/releases/latest)
-provides the tested signed Windows installer. Signed Nightly releases appear in
+provides the tested Windows installer. Authenticated Nightly releases appear in
 the [release history](https://github.com/Shederator/wosbot/releases) as a
 separate product identity. Git, Git LFS, Maven, and a JDK are needed only when
 building from source.
@@ -25,15 +25,15 @@ identity has a configured release manifest. The update flow:
 1. selects only a newer artifact for the running channel, Windows, and x64;
 2. shows the version, release notes, channel, and size before confirmation;
 3. downloads below the selected workspace's `cache\updates` directory;
-4. verifies the declared size, SHA-256, and exact Authenticode signer;
+4. verifies the project Ed25519 signature, declared size, SHA-256, and any
+   configured Authenticode signer;
 5. stops scheduling and workspace services, closes SQLite, and releases the
    workspace lock;
 6. exits before an external waiter launches the installer.
 
-Development and PR-test packages cannot use automatic release updates. An
-unsigned installer is never handed off. Public automatic updates remain
-disabled until the release workflow can provide signed Frostguard 3.0
-installers and atomically promoted manifests.
+Development and PR-test packages cannot use automatic release updates. A
+release whose manifest is not validly signed by the embedded project key is
+never handed off. Authenticode remains an optional additional check.
 
 Interrupted downloads remain `.part` files and resume when the server supports
 byte ranges. A failed size, hash, or signature check prevents installer handoff
@@ -113,9 +113,10 @@ The application currently packages Windows ADB and Tesseract assets from `tools/
 
 ## Starting Frostguard
 
-After downloading a signed Frostguard 3.0 installer, verify its Windows
-publisher and complete the per-user installation. Run the installed
-`Frostguard.exe` or `Frostguard Nightly.exe`.
+After downloading a Frostguard 3.0 installer from the official GitHub release,
+complete the per-user installation. The installer currently has no Windows
+verified publisher, so an **Unknown publisher** or SmartScreen warning is
+expected. Run the installed `Frostguard.exe` or `Frostguard Nightly.exe`.
 The per-user installer defaults to `%LOCALAPPDATA%\Frostguard`, while
 all mutable databases, configuration, logs, watcher state, and custom tasks
 remain in the selected workspace below `%USERPROFILE%\.frostguard`. The

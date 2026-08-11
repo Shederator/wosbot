@@ -84,7 +84,7 @@ jobs:
             exit 1
           fi
           if (( ${VERSION%%.*} >= 3 )); then
-            echo "::error::Frostguard 3.x must use Signed Windows Channel Release; the legacy ZIP workflow cannot publish an installed Stable identity."
+            echo "::error::Frostguard 3.x must use Windows Channel Release; the legacy ZIP workflow cannot publish an installed Stable identity."
             exit 1
           fi
           project_version="$(./mvnw -B --no-transfer-progress -q help:evaluate -Dexpression=project.version -DforceStdout)"

@@ -115,18 +115,21 @@ class ChannelPackagingTest(unittest.TestCase):
         ):
             self.assertIn(contract, installer)
 
-    def test_signed_release_publishes_manifest_after_signed_installer_verification(self):
+    def test_release_publishes_project_signed_manifest_after_installer_verification(self):
         workflow = (REPO_ROOT / ".github/workflows/signed-windows-channel-release.yml").read_text(
             encoding="utf-8")
         ordered_steps = (
-            "Sign and verify immutable installer",
+            "Prepare immutable installer and verify optional Authenticode",
             "Create draft release and verify uploaded installer",
-            "Generate update manifest from the signed installer",
+            "Generate and project-sign update manifest",
             "Publish immutable release and channel manifest last",
         )
         positions = [workflow.index(step) for step in ordered_steps]
         self.assertEqual(sorted(positions), positions)
+        self.assertIn("FROSTGUARD_UPDATE_SIGNING_PRIVATE_KEY_BASE64", workflow)
+        self.assertIn("ProjectManifestSigner", workflow)
         self.assertIn("FROSTGUARD_WINDOWS_SIGNING_CERTIFICATE_BASE64", workflow)
+        self.assertIn("Configure optional Authenticode certificate", workflow)
         self.assertIn("Get-AuthenticodeSignature", workflow)
         self.assertIn("windows_installer_version.py", workflow)
         self.assertIn("gh release upload updates-nightly $env:MANIFEST", workflow)
@@ -134,7 +137,7 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertIn("--cleanup-tag --yes", workflow)
         legacy_stable = (REPO_ROOT / ".github/workflows/stable-windows-release.yml").read_text(
             encoding="utf-8")
-        self.assertIn("Frostguard 3.x must use Signed Windows Channel Release", legacy_stable)
+        self.assertIn("Frostguard 3.x must use Windows Channel Release", legacy_stable)
 
 
 if __name__ == "__main__":

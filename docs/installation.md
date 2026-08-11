@@ -8,18 +8,21 @@ required emulator, and building the project from source on Windows.
 | Build | Use it when | Download |
 |:------|:------------|:---------|
 | Stable | You want a tested, versioned build that changes only with a release | [Latest Stable release](https://github.com/Shederator/wosbot/releases/latest) |
-| Nightly | You want the latest signed preview without replacing Stable | [Nightly releases](https://github.com/Shederator/wosbot/releases) |
+| Nightly | You want the latest authenticated preview without replacing Stable | [Nightly releases](https://github.com/Shederator/wosbot/releases) |
 | PR build | You want to test one or more open pull requests | Run `/build-pr` in Discord `#request-a-build` |
 
-Stable and Nightly use self-contained, signed Windows installers and do not
-require a separately installed Java runtime. Nightly may contain unfinished
-changes; PR builds additionally contain unmerged code and continue to use the
-temporary ZIP format.
+Stable and Nightly use self-contained Windows installers and do not require a
+separately installed Java runtime. Their automatic update feeds are signed by
+the Frostguard project. The installers currently have no Windows verified
+publisher, so Windows may show an **Unknown publisher** or SmartScreen warning.
+Nightly may contain unfinished changes; PR builds additionally contain
+unmerged code and continue to use the temporary ZIP format.
 
 ## Install a downloaded build
 
 1. Open the desired release and download its Windows x64 EXE installer.
-2. Confirm that Windows reports the expected Frostguard publisher before running it.
+2. Confirm that the download comes from the official `Shederator/wosbot`
+   GitHub release. A Windows publisher identity is not currently expected.
 3. Choose whether to create a desktop shortcut and complete the per-user
    installation. The final page starts `Frostguard` or `Frostguard Nightly` by
    default; clear the checkbox if you do not want to launch it yet.
@@ -159,12 +162,14 @@ python build-support/verification/verify_app_image.py `
 Nightly uses its own application ID, upgrade UUID, installation directory,
 shortcut, launcher identity, workspace channel, and update feed.
 
-Signed Stable and Nightly builds expose a channel-specific update feed in
+Stable and Nightly release builds expose a channel-specific update feed in
 **Config > Updates**. Development and pull-request builds cannot install from
-release feeds. Frostguard accepts an update only after the manifest identity,
-download size, SHA-256, and Windows Authenticode signer all match. The current
-public ZIP feeds are not used by this updater; automatic installer updates stay
-disabled in ordinary local and PR builds.
+release feeds. Frostguard first verifies the project Ed25519 signature over the
+manifest, then requires the manifest identity, immutable download, size, and
+SHA-256 to match. A Windows Authenticode signer is checked in addition when the
+build and manifest declare one. The current public ZIP feeds are not used by
+this updater; automatic installer updates stay disabled in ordinary local and
+PR builds.
 
 ### Run a source build
 

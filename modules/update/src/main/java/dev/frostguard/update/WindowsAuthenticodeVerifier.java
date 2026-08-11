@@ -29,9 +29,12 @@ public final class WindowsAuthenticodeVerifier implements InstallerTrustVerifier
         if (!Files.isRegularFile(installer)) {
             throw new UpdateException("Verified installer does not exist: " + installer);
         }
-        if (requirement == null || !"authenticode".equalsIgnoreCase(requirement.type())
+        if (requirement == null) {
+            return;
+        }
+        if (!"authenticode".equalsIgnoreCase(requirement.type())
                 || requirement.publisher() == null || requirement.publisher().isBlank()) {
-            throw new UpdateException("Windows update is missing its Authenticode trust requirement");
+            throw new UpdateException("Windows update has an invalid Authenticode trust requirement");
         }
         try {
             CommandRunner.CommandResult result = runner.run(List.of(

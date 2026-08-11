@@ -1,4 +1,4 @@
-name: Signed Windows Channel Release
+name: Windows Channel Release
 
 on:
   workflow_dispatch:
@@ -23,12 +23,12 @@ on:
 permissions: {}
 
 concurrency:
-  group: signed-windows-${{ inputs.channel }}-release
+  group: windows-${{ inputs.channel }}-release
   cancel-in-progress: false
 
 jobs:
   release:
-    name: Sign and publish ${{ inputs.channel }} Windows release
+    name: Authenticate and publish ${{ inputs.channel }} Windows release
     if: github.ref == 'refs/heads/main'
     runs-on: windows-latest
     timeout-minutes: 75
@@ -39,7 +39,6 @@ jobs:
       CHANNEL: ${{ inputs.channel }}
       VERSION: ${{ inputs.version }}
       MINIMUM_UPDATER_VERSION: ${{ inputs.minimum_updater_version }}
-      AUTHENTICODE_PUBLISHER: ${{ secrets.FROSTGUARD_AUTHENTICODE_PUBLISHER }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
@@ -82,9 +81,6 @@ jobs:
           if ($env:CHANNEL -eq 'stable' -and $env:VERSION.Contains('-')) {
               throw "Stable releases must not use a prerelease version"
           }
-          if ([string]::IsNullOrWhiteSpace($env:AUTHENTICODE_PUBLISHER)) {
-              throw "FROSTGUARD_AUTHENTICODE_PUBLISHER is not configured"
-          }
           $manifestName = "frostguard-$($env:CHANNEL)-manifest.json"
           $feedTag = if ($env:CHANNEL -eq 'nightly') {
               if (gh release view updates-nightly --repo $env:GITHUB_REPOSITORY 2>$null) {
@@ -101,7 +97,17 @@ jobs:
                   $previousManifest = Join-Path $env:RUNNER_TEMP "previous-$manifestName"
                   gh api "repos/$($env:GITHUB_REPOSITORY)/releases/assets/$assetId" `
                       -H "Accept: application/octet-stream" > $previousManifest
-                  $previousVersion = (Get-Content -Raw -LiteralPath $previousManifest |
+                  $previousEnvelope = Get-Content -Raw -LiteralPath $previousManifest | ConvertFrom-Json
+                  $projectKey = Get-Content -Raw `
+                      modules/update/src/main/resources/dev/frostguard/update/project-update-key.properties `
+                      | ConvertFrom-StringData
+                  if ($previousEnvelope.envelopeVersion -ne 1 -or
+                      $previousEnvelope.algorithm -cne 'Ed25519' -or
+                      $previousEnvelope.keyId -cne $projectKey.keyId) {
+                      throw "Previous update feed is not a supported project-signed manifest"
+                  }
+                  $payloadBytes = [Convert]::FromBase64String($previousEnvelope.payload)
+                  $previousVersion = ([Text.Encoding]::UTF8.GetString($payloadBytes) |
                       ConvertFrom-Json).version
               }
           }
@@ -132,16 +138,27 @@ jobs:
               throw "Immutable release $tag already exists"
           }
 
-      - name: Import release-signing certificate
+      - name: Configure optional Authenticode certificate
         id: certificate
         env:
           SIGNING_CERTIFICATE_BASE64: ${{ secrets.FROSTGUARD_WINDOWS_SIGNING_CERTIFICATE_BASE64 }}
           SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.FROSTGUARD_WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
+          AUTHENTICODE_PUBLISHER: ${{ secrets.FROSTGUARD_AUTHENTICODE_PUBLISHER }}
         shell: pwsh
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:SIGNING_CERTIFICATE_BASE64) -or
-              [string]::IsNullOrWhiteSpace($env:SIGNING_CERTIFICATE_PASSWORD)) {
-              throw "Windows signing certificate secrets are not configured"
+          $configuredCount = @(
+              $env:SIGNING_CERTIFICATE_BASE64,
+              $env:SIGNING_CERTIFICATE_PASSWORD,
+              $env:AUTHENTICODE_PUBLISHER
+          ).Where({ -not [string]::IsNullOrWhiteSpace($_) }).Count
+          if ($configuredCount -eq 0) {
+              "enabled=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+              "publisher=" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+              Write-Output "Authenticode is not configured; project signing remains mandatory."
+              exit 0
+          }
+          if ($configuredCount -ne 3) {
+              throw "Authenticode certificate, password, and publisher must be configured together"
           }
           $certificatePath = Join-Path $env:RUNNER_TEMP "frostguard-release-signing.pfx"
           [IO.File]::WriteAllBytes($certificatePath,
@@ -157,12 +174,16 @@ jobs:
               -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "path=$certificatePath" | Out-File `
               -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "enabled=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "publisher=$($certificate.Subject)" | Out-File `
+              -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Build channel application image and installer
         shell: pwsh
         env:
           WINDOWS_VERSION: ${{ steps.identity.outputs.windows_version }}
           EXTRA_PROFILE: ${{ steps.identity.outputs.profile }}
+          AUTHENTICODE_PUBLISHER: ${{ steps.certificate.outputs.publisher }}
         run: |
           $mavenArgs = $env:MAVEN_ARGS -split " "
           $profiles = "windows-app-image,windows-installer$($env:EXTRA_PROFILE)"
@@ -187,12 +208,14 @@ jobs:
               -File build-support/verification/smoke_test_app_image.ps1 `
               -ImagePath $image -Channel $env:CHANNEL -ProductName $env:PRODUCT_NAME
 
-      - name: Sign and verify immutable installer
+      - name: Prepare immutable installer and verify optional Authenticode
         id: installer
         shell: pwsh
         env:
           IMMUTABLE_NAME: ${{ steps.identity.outputs.installer_name }}
           CERTIFICATE_THUMBPRINT: ${{ steps.certificate.outputs.thumbprint }}
+          AUTHENTICODE_ENABLED: ${{ steps.certificate.outputs.enabled }}
+          AUTHENTICODE_PUBLISHER: ${{ steps.certificate.outputs.publisher }}
         run: |
           $source = @(Get-ChildItem "packaging/desktop/target/installers/$($env:CHANNEL)" `
               -Filter '*.exe' -File)
@@ -201,22 +224,26 @@ jobs:
           }
           $installer = Join-Path $env:RUNNER_TEMP $env:IMMUTABLE_NAME
           Copy-Item -LiteralPath $source[0].FullName -Destination $installer
-          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" `
-              -Recurse -Filter signtool.exe | Where-Object FullName -Match '\\x64\\' `
-              | Sort-Object FullName -Descending | Select-Object -First 1
-          if ($null -eq $signtool) {
-              throw "Windows SDK signtool.exe was not found"
-          }
-          & $signtool.FullName sign /sha1 $env:CERTIFICATE_THUMBPRINT /fd SHA256 `
-              /td SHA256 /tr http://timestamp.digicert.com $installer
-          & $signtool.FullName verify /pa /v $installer
-          if ($LASTEXITCODE -ne 0) {
-              throw "Authenticode verification failed"
-          }
-          $signature = Get-AuthenticodeSignature -LiteralPath $installer
-          if ($signature.Status -ne 'Valid' -or
-              $signature.SignerCertificate.Subject -cne $env:AUTHENTICODE_PUBLISHER) {
-              throw "Signed installer does not match the pinned publisher"
+          if ($env:AUTHENTICODE_ENABLED -eq 'true') {
+              $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" `
+                  -Recurse -Filter signtool.exe | Where-Object FullName -Match '\\x64\\' `
+                  | Sort-Object FullName -Descending | Select-Object -First 1
+              if ($null -eq $signtool) {
+                  throw "Windows SDK signtool.exe was not found"
+              }
+              & $signtool.FullName sign /sha1 $env:CERTIFICATE_THUMBPRINT /fd SHA256 `
+                  /td SHA256 /tr http://timestamp.digicert.com $installer
+              & $signtool.FullName verify /pa /v $installer
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Authenticode verification failed"
+              }
+              $signature = Get-AuthenticodeSignature -LiteralPath $installer
+              if ($signature.Status -ne 'Valid' -or
+                  $signature.SignerCertificate.Subject -cne $env:AUTHENTICODE_PUBLISHER) {
+                  throw "Signed installer does not match the pinned publisher"
+              }
+          } else {
+              Write-Warning "Installer has no Windows verified publisher; the project-signed manifest is the trust root."
           }
           "path=$installer" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
@@ -250,7 +277,7 @@ jobs:
           "download_url=$($parts[1])" | Out-File `
               -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-      - name: Generate update manifest from the signed installer
+      - name: Generate and project-sign update manifest
         id: manifest
         shell: pwsh
         env:
@@ -258,16 +285,35 @@ jobs:
           INSTALLER_URL: ${{ steps.draft.outputs.download_url }}
           MANIFEST_NAME: ${{ steps.identity.outputs.manifest_name }}
           TAG: ${{ steps.identity.outputs.tag }}
+          AUTHENTICODE_PUBLISHER: ${{ steps.certificate.outputs.publisher }}
+          FROSTGUARD_UPDATE_SIGNING_PRIVATE_KEY_BASE64: ${{ secrets.FROSTGUARD_UPDATE_SIGNING_PRIVATE_KEY_BASE64 }}
         run: |
           $manifest = Join-Path $env:RUNNER_TEMP $env:MANIFEST_NAME
+          $payload = Join-Path $env:RUNNER_TEMP "payload-$($env:MANIFEST_NAME)"
           $publishedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
           $releaseNotes = "https://github.com/$($env:GITHUB_REPOSITORY)/releases/tag/$($env:TAG)"
-          python build-support/release/write_update_manifest.py `
-              --channel $env:CHANNEL --version $env:VERSION `
-              --minimum-updater-version $env:MINIMUM_UPDATER_VERSION `
-              --published-at $publishedAt --release-notes-url $releaseNotes `
-              --installer-url $env:INSTALLER_URL --installer $env:INSTALLER `
-              --publisher $env:AUTHENTICODE_PUBLISHER --output $manifest
+          $manifestArgs = @(
+              '--channel', $env:CHANNEL, '--version', $env:VERSION,
+              '--minimum-updater-version', $env:MINIMUM_UPDATER_VERSION,
+              '--published-at', $publishedAt, '--release-notes-url', $releaseNotes,
+              '--installer-url', $env:INSTALLER_URL, '--installer', $env:INSTALLER,
+              '--output', $payload
+          )
+          if (-not [string]::IsNullOrWhiteSpace($env:AUTHENTICODE_PUBLISHER)) {
+              $manifestArgs += @('--publisher', $env:AUTHENTICODE_PUBLISHER)
+          }
+          python build-support/release/write_update_manifest.py @manifestArgs
+          if ([string]::IsNullOrWhiteSpace($env:FROSTGUARD_UPDATE_SIGNING_PRIVATE_KEY_BASE64)) {
+              throw "FROSTGUARD_UPDATE_SIGNING_PRIVATE_KEY_BASE64 is not configured"
+          }
+          java -cp modules/update/target/classes dev.frostguard.update.ProjectManifestSigner `
+              sign $payload $manifest
+          $verificationClasspath = "modules/update/target/classes;modules/api/target/classes;packaging/desktop/target/input/lib/*"
+          java -cp $verificationClasspath dev.frostguard.update.ProjectManifestSigner verify $manifest
+          if ($LASTEXITCODE -ne 0) {
+              throw "Project-signed update manifest verification failed"
+          }
+          Remove-Item -LiteralPath $payload -Force
           "path=$manifest" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Publish immutable release and channel manifest last
@@ -285,7 +331,7 @@ jobs:
               if (-not (gh release view updates-nightly --repo $env:GITHUB_REPOSITORY 2>$null)) {
                   gh release create updates-nightly --repo $env:GITHUB_REPOSITORY `
                       --target $env:GITHUB_SHA --title "Frostguard Nightly update feed" `
-                      --notes "The manifest asset is replaced only after a signed immutable Nightly release is verified." `
+                      --notes "The manifest asset is replaced only after an authenticated immutable Nightly release is verified." `
                       --prerelease
               }
               gh release upload updates-nightly $env:MANIFEST --repo $env:GITHUB_REPOSITORY --clobber
@@ -303,10 +349,10 @@ jobs:
               gh release delete $env:TAG --repo $env:GITHUB_REPOSITORY --cleanup-tag --yes
           }
 
-      - name: Upload signed release evidence
+      - name: Upload authenticated release evidence
         uses: actions/upload-artifact@v4
         with:
-          name: frostguard-${{ inputs.channel }}-${{ inputs.version }}-signed-release
+          name: frostguard-${{ inputs.channel }}-${{ inputs.version }}-authenticated-release
           path: |
             ${{ steps.installer.outputs.path }}
             ${{ steps.manifest.outputs.path }}

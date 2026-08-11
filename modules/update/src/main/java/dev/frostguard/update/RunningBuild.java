@@ -8,16 +8,18 @@ public record RunningBuild(
         RuntimeChannel channel,
         UpdatePlatform platform,
         boolean pullRequestBuild,
+        ManifestVerificationKey manifestKey,
         String authenticodePublisher) {
 
     public RunningBuild {
         if (version == null || updaterVersion == null || channel == null || platform == null) {
             throw new IllegalArgumentException("Running build identity is incomplete");
         }
+        manifestKey = manifestKey == null ? new ManifestVerificationKey("", "") : manifestKey;
         authenticodePublisher = authenticodePublisher == null ? "" : authenticodePublisher.trim();
     }
 
     public boolean permitsAutomaticUpdates() {
-        return channel != RuntimeChannel.DEVELOPMENT && !pullRequestBuild && !authenticodePublisher.isBlank();
+        return channel != RuntimeChannel.DEVELOPMENT && !pullRequestBuild && manifestKey.isUsable();
     }
 }

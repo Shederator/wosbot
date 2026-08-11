@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a schema-1 Frostguard update manifest from a signed installer."""
+"""Create a schema-1 Frostguard update payload from an immutable installer."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ SEMANTIC_VERSION = re.compile(
 def write_manifest(
         *, channel: str, version: str, minimum_updater_version: str,
         published_at: str, release_notes_url: str, installer_url: str,
-        installer: Path, publisher: str, output: Path) -> dict:
+        installer: Path, output: Path, publisher: str = "") -> dict:
     if channel not in {"stable", "nightly"}:
         raise ValueError("channel must be stable or nightly")
     for value, label in ((version, "version"),
@@ -46,9 +46,6 @@ def write_manifest(
         raise ValueError("installer URL must end with the exact installer file name")
     if version not in installer.name:
         raise ValueError("installer file name must contain the immutable release version")
-    if not publisher.strip():
-        raise ValueError("Authenticode publisher must not be blank")
-
     manifest = {
         "schemaVersion": 1,
         "channel": channel,
@@ -64,13 +61,14 @@ def write_manifest(
                 "url": installer_url,
                 "sha256": hashlib.sha256(installer.read_bytes()).hexdigest(),
                 "size": installer.stat().st_size,
-                "signature": {
-                    "type": "authenticode",
-                    "publisher": publisher.strip(),
-                },
             }
         },
     }
+    if publisher.strip():
+        manifest["artifacts"]["windows-x64"]["signature"] = {
+            "type": "authenticode",
+            "publisher": publisher.strip(),
+        }
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(output.suffix + ".tmp")
     temporary.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
@@ -87,7 +85,7 @@ def main() -> int:
     parser.add_argument("--release-notes-url", required=True)
     parser.add_argument("--installer-url", required=True)
     parser.add_argument("--installer", required=True, type=Path)
-    parser.add_argument("--publisher", required=True)
+    parser.add_argument("--publisher", default="")
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     write_manifest(

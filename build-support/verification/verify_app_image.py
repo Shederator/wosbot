@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import re
 import zipfile
 from pathlib import Path
@@ -24,6 +26,24 @@ FORBIDDEN_NAMES = {
     "telegram-watcher.properties",
 }
 BUILD_METADATA = "dev/frostguard/app/frostguard-build.properties"
+UPDATE_KEY = "dev/frostguard/update/project-update-key.properties"
+REPO_UPDATE_KEY = (
+    Path(__file__).resolve().parents[2]
+    / "modules/update/src/main/resources"
+    / UPDATE_KEY
+)
+
+
+def _read_properties(content: str) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for line in content.splitlines():
+        if not line or line.lstrip().startswith("#"):
+            continue
+        key, separator, value = line.partition("=")
+        if not separator or not key or key in values:
+            return {}
+        values[key] = value
+    return values
 
 
 def inspect_image(
@@ -133,6 +153,33 @@ def inspect_image(
                         )
         except (KeyError, UnicodeDecodeError, zipfile.BadZipFile):
             problems.append("Desktop JAR has no valid embedded PR-build update identity")
+
+    update_jars = [
+        path for name, path in files.items()
+        if re.match(r"^app/lib/frostguard-update-[^/]+\.jar$", name)
+    ]
+    if len(update_jars) == 1:
+        try:
+            with zipfile.ZipFile(update_jars[0]) as update_jar:
+                embedded_key = update_jar.read(UPDATE_KEY).decode("utf-8")
+            expected_key = REPO_UPDATE_KEY.read_text(encoding="utf-8")
+            key_values = _read_properties(embedded_key)
+            expected_values = _read_properties(expected_key)
+            public_key = base64.b64decode(
+                key_values.get("publicKey", ""), validate=True
+            )
+            if (set(key_values) != {"keyId", "publicKey"}
+                    or not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,63}",
+                                        key_values.get("keyId", ""))
+                    or len(public_key) != 44
+                    or not public_key.startswith(bytes.fromhex("302a300506032b6570032100"))
+                    or key_values != expected_values):
+                problems.append("Update module has an invalid or unexpected project update key")
+        except (KeyError, UnicodeDecodeError, binascii.Error, ValueError,
+                OSError, zipfile.BadZipFile):
+            problems.append("Update module has no valid embedded project update key")
+    elif len(update_jars) > 1:
+        problems.append("Application image contains multiple update modules")
 
     for relative in files:
         path = Path(relative)

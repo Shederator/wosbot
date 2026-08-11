@@ -6,6 +6,7 @@ import dev.frostguard.app.BuildMetadata;
 import dev.frostguard.app.bootstrap.ApplicationLifecycle;
 import dev.frostguard.update.InstallerHandoff;
 import dev.frostguard.update.PreparedUpdate;
+import dev.frostguard.update.ProjectUpdateKey;
 import dev.frostguard.update.RunningBuild;
 import dev.frostguard.update.SemanticVersion;
 import dev.frostguard.update.UpdateCandidate;
@@ -70,7 +71,7 @@ public final class UpdateLayoutController {
             } else if (runningBuild.channel() == RuntimeChannel.DEVELOPMENT) {
                 labelStatus.setText("Development builds do not use release update feeds.");
             } else {
-                labelStatus.setText("This build has no pinned release-signing identity.");
+                labelStatus.setText("This build has no valid pinned project update key.");
             }
         } else if (runningBuild.platform().operatingSystem() != UpdatePlatform.OperatingSystem.WINDOWS) {
             buttonCheck.setDisable(true);
@@ -127,11 +128,12 @@ public final class UpdateLayoutController {
         confirmation.setHeaderText("Install Frostguard " + candidate.version() + "?");
         confirmation.setContentText("Channel: " + candidate.channel().directoryName() + "\n"
                 + "Download: " + formatSize(candidate.artifact().size()) + "\n\n"
-                + "Frostguard will stop automation, close its workspace, exit, and then launch the signed installer.");
+                + "Frostguard will verify the project-signed release, stop automation, close its workspace, "
+                + "exit, and then launch the installer. Windows may show an unknown-publisher warning.");
         if (confirmation.showAndWait().filter(ButtonType.OK::equals).isEmpty()) {
             return;
         }
-        setBusy(true, "Downloading and verifying the signed installer...");
+        setBusy(true, "Downloading and verifying the authenticated installer...");
         runAsync(() -> manager.prepare(candidate, WorkspacePaths.current().cache()), this::beginHandoff);
     }
 
@@ -234,7 +236,7 @@ public final class UpdateLayoutController {
         BuildMetadata metadata = BuildMetadata.current();
         return new RunningBuild(SemanticVersion.parse(version), SemanticVersion.parse(version),
                 WorkspacePaths.current().channel(), UpdatePlatform.current(),
-                metadata.pullRequestBuild(), metadata.authenticodePublisher());
+                metadata.pullRequestBuild(), ProjectUpdateKey.current(), metadata.authenticodePublisher());
     }
 
     static String formatSize(long bytes) {

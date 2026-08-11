@@ -218,12 +218,14 @@ Stable and Nightly use separate, self-contained Windows applications. Git,
 Maven, and a separately installed Java runtime are not required.
 
 - **[Latest Stable release](https://github.com/Shederator/wosbot/releases/latest)**
-- **[Signed Nightly releases](https://github.com/Shederator/wosbot/releases)**
+- **[Nightly releases](https://github.com/Shederator/wosbot/releases)**
 
 After choosing a build:
 
 1. Download the Windows x64 EXE for the desired channel.
-2. Verify the Frostguard publisher shown by Windows and run the installer.
+2. Confirm the download is from the official `Shederator/wosbot` release and
+   run the installer. A Windows **Unknown publisher** warning is currently
+   expected.
 3. Start **Frostguard** or **Frostguard Nightly** from its shortcut.
 4. Open **Configuration** and select your emulator's command-line controller.
 
