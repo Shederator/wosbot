@@ -138,6 +138,9 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertIn("Where-Object { $_.name -ceq $assetName }", workflow)
         self.assertNotIn('--jq ".assets[]', workflow)
         self.assertNotIn("gh release view updates-nightly", workflow)
+        self.assertNotIn("releases/tags/$($env:TAG)", workflow)
+        self.assertGreaterEqual(
+            workflow.count("Where-Object { $_.tag_name -ceq $env:TAG }"), 2)
         self.assertIn("gh release upload updates-nightly $env:MANIFEST", workflow)
         self.assertIn("Remove an abandoned draft release", workflow)
         self.assertIn('gh api --method DELETE `', workflow)

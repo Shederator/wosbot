@@ -287,11 +287,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
               throw "Draft release creation failed"
           }
-          $releaseJson = gh api "repos/$($env:GITHUB_REPOSITORY)/releases/tags/$($env:TAG)"
+          $releasesJson = gh api "repos/$($env:GITHUB_REPOSITORY)/releases?per_page=100"
           if ($LASTEXITCODE -ne 0) {
-              throw "Draft release could not be resolved"
+              throw "Draft releases could not be listed"
           }
-          $release = $releaseJson | ConvertFrom-Json
+          $releases = $releasesJson | ConvertFrom-Json
+          $matchingReleases = @($releases |
+              Where-Object { $_.tag_name -ceq $env:TAG })
+          if ($matchingReleases.Count -ne 1 -or -not $matchingReleases[0].draft) {
+              throw "Draft release could not be resolved uniquely"
+          }
+          $release = $matchingReleases[0]
           $assetName = [IO.Path]::GetFileName($env:INSTALLER)
           $matchingAssets = @($release.assets | Where-Object { $_.name -ceq $assetName })
           if ($matchingAssets.Count -ne 1) {
