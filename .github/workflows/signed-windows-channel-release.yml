@@ -82,12 +82,23 @@ jobs:
               throw "Stable releases must not use a prerelease version"
           }
           $manifestName = "frostguard-$($env:CHANNEL)-manifest.json"
+          $releaseTags = @(gh release list --repo $env:GITHUB_REPOSITORY `
+              --limit 1000 --json tagName --jq '.[].tagName')
+          if ($LASTEXITCODE -ne 0) {
+              throw "Could not list existing releases"
+          }
           $feedTag = if ($env:CHANNEL -eq 'nightly') {
-              if (gh release view updates-nightly --repo $env:GITHUB_REPOSITORY 2>$null) {
+              if ($releaseTags -contains 'updates-nightly') {
                   'updates-nightly'
               }
           } else {
-              gh release view --repo $env:GITHUB_REPOSITORY --json tagName --jq .tagName 2>$null
+              $latestStable = @(gh release list --repo $env:GITHUB_REPOSITORY `
+                  --exclude-drafts --exclude-pre-releases --limit 1 `
+                  --json tagName --jq '.[].tagName')
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Could not resolve the latest Stable release"
+              }
+              $latestStable | Select-Object -First 1
           }
           $previousVersion = $null
           if (-not [string]::IsNullOrWhiteSpace($feedTag)) {
@@ -134,7 +145,7 @@ jobs:
           }.GetEnumerator() | ForEach-Object {
               "$($_.Key)=$($_.Value)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           }
-          if (gh release view $tag --repo $env:GITHUB_REPOSITORY 2>$null) {
+          if ($releaseTags -contains $tag) {
               throw "Immutable release $tag already exists"
           }
 
