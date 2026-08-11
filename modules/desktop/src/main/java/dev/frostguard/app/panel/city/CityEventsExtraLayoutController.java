@@ -54,6 +54,8 @@ public class CityEventsExtraLayoutController extends AbstractProfileController {
     @FXML
     private CheckBox checkBoxArenaRefreshWithGems;
     @FXML
+    private CheckBox checkBoxArenaAttackQuickDeploy;
+    @FXML
     private TextField textFieldArenaActivationHour;
     @FXML
     private Label labelArenaProfileAlliance;
@@ -96,6 +98,7 @@ public class CityEventsExtraLayoutController extends AbstractProfileController {
             new ToggleBinding(checkBoxTrekSupplies, ConfigurationKeyEnum.TUNDRA_TREK_SUPPLIES_BOOL),
             new ToggleBinding(checkBoxTrekAutomation, ConfigurationKeyEnum.TUNDRA_TREK_AUTOMATION_BOOL),
             new ToggleBinding(checkBoxArena, ConfigurationKeyEnum.ARENA_TASK_BOOL),
+            new ToggleBinding(checkBoxArenaAttackQuickDeploy, ConfigurationKeyEnum.ARENA_TASK_ATTACK_QUICK_DEPLOY_BOOL),
             new ToggleBinding(checkBoxArenaRefreshWithGems, ConfigurationKeyEnum.ARENA_TASK_REFRESH_WITH_GEMS_BOOL)
         );
     }
@@ -156,7 +159,8 @@ public class CityEventsExtraLayoutController extends AbstractProfileController {
 
     private final class ArenaSection {
         private void install() {
-            List.of(checkBoxArenaRefreshWithGems, textFieldArenaActivationHour, comboBoxArenaExtraAttempts)
+            List.of(checkBoxArenaAttackQuickDeploy, checkBoxArenaRefreshWithGems,
+                    textFieldArenaActivationHour, comboBoxArenaExtraAttempts)
                 .forEach(CityEventsExtraLayoutController.this::disableWhenArenaOff);
             comboBoxArenaAlliancePolicy.disableProperty().bind(
                 checkBoxArena.selectedProperty().not()

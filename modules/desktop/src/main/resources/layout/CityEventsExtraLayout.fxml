@@ -50,6 +50,11 @@
                                 <CheckBox fx:id="checkBoxArenaRefreshWithGems" mnemonicParsing="false"
                                           text="Allow paid list refreshes"
                                           GridPane.columnIndex="1" GridPane.rowIndex="3" />
+
+                                <Label styleClass="task-field-label" text="Attack formation" GridPane.columnIndex="0" GridPane.rowIndex="4" />
+                                <CheckBox fx:id="checkBoxArenaAttackQuickDeploy" mnemonicParsing="false"
+                                          text="Use Quick Deploy for attacks"
+                                          GridPane.columnIndex="1" GridPane.rowIndex="4" />
                             </GridPane>
 
                             <Separator style="-fx-opacity: 0.15;" />

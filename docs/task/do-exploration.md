@@ -5,6 +5,10 @@ battle results, but quick deploy, fight, and victory continuation still use
 fixed tap regions. Those taps are not confirmation that the requested state
 transition succeeded.
 
+Quick Deploy is enabled by default for backward compatibility. Profiles may
+disable it to preserve their saved exploration formation; the routine then
+taps Fight without changing the selected heroes.
+
 The routine therefore treats an unreadable result as an unknown or locked
 battle and exits conservatively. Both the overall fighting loop and result
 polling are time-bounded so a missed victory or defeat cannot trap the task.

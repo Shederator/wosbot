@@ -1032,11 +1032,18 @@ public class ArenaRoutine extends DelayedTask {
         return saturatedBluePixels > scaleSampledThreshold(250) && saturatedBluePixels > greyPixels;
     }
 
-    private void executeBattleSequence() {
+    void executeBattleSequence() {
         logInfo("Executing battle sequence (with animation skip)");
 
-        tapNear(QUICK_DEPLOY_BUTTON);
-        sleepTask(500);
+        boolean useQuickDeploy = profile.getConfig(
+                ConfigurationKeyEnum.ARENA_TASK_ATTACK_QUICK_DEPLOY_BOOL, Boolean.class);
+        if (useQuickDeploy) {
+            logInfo("Tapping Quick Deploy for the Arena attack.");
+            tapNear(QUICK_DEPLOY_BUTTON);
+            sleepTask(500);
+        } else {
+            logInfo("Arena attack Quick Deploy is disabled. Keeping the saved attack formation.");
+        }
 
         tapNear(BATTLE_START_BUTTON);
         sleepTask(3000);

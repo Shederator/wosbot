@@ -39,6 +39,8 @@
                     <!-- Exploration row -->
                     <CheckBox fx:id="checkBoxDoExploration" graphicTextGap="6.0"
                               mnemonicParsing="false" text="Do Exploration" />
+                    <CheckBox fx:id="checkBoxExplorationQuickDeploy" graphicTextGap="6.0"
+                              mnemonicParsing="false" text="Use Quick Deploy before each fight" />
 
                     <HBox alignment="CENTER_LEFT" spacing="14">
                         <CheckBox fx:id="checkBoxExplorationChest" graphicTextGap="6.0"

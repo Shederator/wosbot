@@ -100,6 +100,7 @@ public enum ConfigurationKeyEnum {
     ARENA_TASK_ACTIVATION_TIME_STRING   ("23:50",   String.class,   ConfigCategory.DAILIES),
     ARENA_TASK_BOOL                     ("false",   Boolean.class,  ConfigCategory.DAILIES),
     ARENA_TASK_EXTRA_ATTEMPTS_INT       ("0",       Integer.class,  ConfigCategory.DAILIES),
+    ARENA_TASK_ATTACK_QUICK_DEPLOY_BOOL ("true",    Boolean.class,  ConfigCategory.DAILIES),
     /** Legacy arena state filter key retained only so existing persisted profiles can still be read. */
     ARENA_TASK_PLAYER_STATE_INT         ("0",       Integer.class,  ConfigCategory.DAILIES, true),
     ARENA_TASK_SERVER_POLICY_STRING     ("Any server", String.class, ConfigCategory.DAILIES),
@@ -248,6 +249,7 @@ public enum ConfigurationKeyEnum {
     BOOL_CRYSTAL_LAB_DAILY_DISCOUNTED_RFC   ("false",   Boolean.class,  ConfigCategory.SHOPS),
     BOOL_CRYSTAL_LAB_FC                     ("false",   Boolean.class,  ConfigCategory.SHOPS),
     BOOL_DO_EXPLORATION                     ("false",   Boolean.class,  ConfigCategory.SHOPS),
+    DO_EXPLORATION_QUICK_DEPLOY_BOOL        ("true",    Boolean.class,  ConfigCategory.SHOPS),
     BOOL_EXPLORATION_CHEST                  ("false",   Boolean.class,  ConfigCategory.SHOPS),
     BOOL_HERO_RECRUITMENT                   ("false",   Boolean.class,  ConfigCategory.SHOPS),
     BOOL_MYSTERY_SHOP                       ("false",   Boolean.class,  ConfigCategory.SHOPS),

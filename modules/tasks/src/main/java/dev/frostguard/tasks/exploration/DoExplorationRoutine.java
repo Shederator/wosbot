@@ -1,5 +1,6 @@
 package dev.frostguard.tasks.exploration;
 
+import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
@@ -115,10 +116,16 @@ public class DoExplorationRoutine extends DelayedTask {
         return true;
     }
 
-    private void startBattle() {
-        logInfo("Tapping quick deploy...");
-        tapInside(QUICK_DEPLOY_TOP_LEFT, QUICK_DEPLOY_BOTTOM_RIGHT);
-        sleepTask(QUICK_DEPLOY_DELAY_MS);
+    void startBattle() {
+        boolean useQuickDeploy = profile.getConfig(
+                ConfigurationKeyEnum.DO_EXPLORATION_QUICK_DEPLOY_BOOL, Boolean.class);
+        if (useQuickDeploy) {
+            logInfo("Tapping quick deploy...");
+            tapInside(QUICK_DEPLOY_TOP_LEFT, QUICK_DEPLOY_BOTTOM_RIGHT);
+            sleepTask(QUICK_DEPLOY_DELAY_MS);
+        } else {
+            logInfo("Quick Deploy is disabled. Keeping the saved exploration formation.");
+        }
         logInfo("Tapping fight button...");
         tapInside(FIGHT_BUTTON_TOP_LEFT, FIGHT_BUTTON_BOTTOM_RIGHT);
     }

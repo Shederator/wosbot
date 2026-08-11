@@ -16,7 +16,7 @@ public class CityEventsLayoutController extends AbstractProfileController {
 	@FXML
 	private CheckBox checkBoxCrystalLabFC, checkBoxDailyDiscountedRFC, checkBoxExplorationChest, checkBoxMailRewards,
 			checkBoxLifeEssence, checkBoxWeeklyScroll, checkBoxDailyMission, checkBoxAutoScheduleDailyMission,
-			checkBoxWarAcademyShards, checkBoxDoExploration;
+			checkBoxWarAcademyShards, checkBoxDoExploration, checkBoxExplorationQuickDeploy;
 
 	@FXML
 	private TextField textfieldExplorationOffset, textfieldMailOffset, textfieldLifeEssenceOffset,
@@ -31,6 +31,7 @@ public class CityEventsLayoutController extends AbstractProfileController {
 		offsetFields().forEach(binding -> textFieldMappings.put(binding.control(), binding.configKey()));
 		comboBoxMondayRefinements.getItems().setAll(WEEKLY_REFINEMENT_WINDOWS);
 		comboBoxMappings.put(comboBoxMondayRefinements, ConfigurationKeyEnum.INT_WEEKLY_RFC);
+		checkBoxExplorationQuickDeploy.disableProperty().bind(checkBoxDoExploration.selectedProperty().not());
 		initializeChangeEvents();
 	}
 
@@ -40,6 +41,7 @@ public class CityEventsLayoutController extends AbstractProfileController {
 			new CitySwitch(checkBoxDailyDiscountedRFC, ConfigurationKeyEnum.BOOL_CRYSTAL_LAB_DAILY_DISCOUNTED_RFC),
 			new CitySwitch(checkBoxExplorationChest, ConfigurationKeyEnum.BOOL_EXPLORATION_CHEST),
 			new CitySwitch(checkBoxDoExploration, ConfigurationKeyEnum.BOOL_DO_EXPLORATION),
+			new CitySwitch(checkBoxExplorationQuickDeploy, ConfigurationKeyEnum.DO_EXPLORATION_QUICK_DEPLOY_BOOL),
 			new CitySwitch(checkBoxWarAcademyShards, ConfigurationKeyEnum.WAR_ACADEMY_TASK_BOOL),
 			new CitySwitch(checkBoxMailRewards, ConfigurationKeyEnum.MAIL_REWARDS_BOOL),
 			new CitySwitch(checkBoxLifeEssence, ConfigurationKeyEnum.LIFE_ESSENCE_BOOL),
