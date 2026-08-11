@@ -223,8 +223,20 @@ newer is required; Git and Maven are not.
 After choosing a build:
 
 1. Extract the complete ZIP into an empty folder. Do not run it from inside the ZIP.
-2. Double-click **`Start Frostguard.bat`**.
+2. Double-click the versioned **`frostguard-<version>.jar`** file.
 3. Open **Configuration** and select your emulator's command-line controller.
+
+> [!NOTE]
+> The included `Start Frostguard.bat` launcher is currently unsigned and may be
+> blocked by Windows 11 Smart App Control. Do not disable Windows security solely
+> to run Frostguard. If double-clicking the JAR does not start Frostguard, or if
+> you want to see its startup output, open PowerShell in the extracted folder and
+> run:
+>
+> ```powershell
+> $appJar = Get-ChildItem -File "frostguard-*.jar" | Select-Object -First 1
+> java --enable-native-access=ALL-UNNAMED -jar $appJar.FullName
+> ```
 
 > [!IMPORTANT]
 > Keep the extracted folder together. The launcher, application JAR, runtime
