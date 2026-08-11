@@ -102,12 +102,24 @@ jobs:
           }
           $previousVersion = $null
           if (-not [string]::IsNullOrWhiteSpace($feedTag)) {
-              $assetId = gh api "repos/$($env:GITHUB_REPOSITORY)/releases/tags/$feedTag" `
-                  --jq ".assets[] | select(.name == \"$manifestName\") | .id"
-              if (-not [string]::IsNullOrWhiteSpace($assetId)) {
+              $feedReleaseJson = gh api `
+                  "repos/$($env:GITHUB_REPOSITORY)/releases/tags/$feedTag"
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Previous update feed could not be resolved"
+              }
+              $feedRelease = $feedReleaseJson | ConvertFrom-Json
+              $manifestAssets = @($feedRelease.assets |
+                  Where-Object { $_.name -ceq $manifestName })
+              if ($manifestAssets.Count -gt 1) {
+                  throw "Previous update feed contains duplicate manifest assets"
+              }
+              if ($manifestAssets.Count -eq 1) {
                   $previousManifest = Join-Path $env:RUNNER_TEMP "previous-$manifestName"
-                  gh api "repos/$($env:GITHUB_REPOSITORY)/releases/assets/$assetId" `
+                  gh api "repos/$($env:GITHUB_REPOSITORY)/releases/assets/$($manifestAssets[0].id)" `
                       -H "Accept: application/octet-stream" > $previousManifest
+                  if ($LASTEXITCODE -ne 0) {
+                      throw "Previous update manifest could not be downloaded"
+                  }
                   $previousEnvelope = Get-Content -Raw -LiteralPath $previousManifest | ConvertFrom-Json
                   $projectKey = Get-Content -Raw `
                       modules/update/src/main/resources/dev/frostguard/update/project-update-key.properties `
@@ -272,20 +284,31 @@ jobs:
           }
           gh release create $env:TAG $env:INSTALLER --repo $env:GITHUB_REPOSITORY `
               --target $env:GITHUB_SHA --title $title --generate-notes --draft
-          $asset = gh api "repos/$($env:GITHUB_REPOSITORY)/releases/tags/$($env:TAG)" `
-              --jq ".assets[] | select(.name == \"$([IO.Path]::GetFileName($env:INSTALLER))\") | [.id,.browser_download_url] | @tsv"
-          $parts = $asset -split "`t"
-          if ($parts.Count -ne 2) {
+          if ($LASTEXITCODE -ne 0) {
+              throw "Draft release creation failed"
+          }
+          $releaseJson = gh api "repos/$($env:GITHUB_REPOSITORY)/releases/tags/$($env:TAG)"
+          if ($LASTEXITCODE -ne 0) {
+              throw "Draft release could not be resolved"
+          }
+          $release = $releaseJson | ConvertFrom-Json
+          $assetName = [IO.Path]::GetFileName($env:INSTALLER)
+          $matchingAssets = @($release.assets | Where-Object { $_.name -ceq $assetName })
+          if ($matchingAssets.Count -ne 1) {
               throw "Uploaded installer could not be resolved"
           }
+          $asset = $matchingAssets[0]
           $downloaded = Join-Path $env:RUNNER_TEMP "uploaded-installer.exe"
-          gh api "repos/$($env:GITHUB_REPOSITORY)/releases/assets/$($parts[0])" `
+          gh api "repos/$($env:GITHUB_REPOSITORY)/releases/assets/$($asset.id)" `
               -H "Accept: application/octet-stream" > $downloaded
+          if ($LASTEXITCODE -ne 0) {
+              throw "Uploaded installer could not be downloaded for verification"
+          }
           if ((Get-FileHash $downloaded -Algorithm SHA256).Hash -ne
               (Get-FileHash $env:INSTALLER -Algorithm SHA256).Hash) {
               throw "Uploaded installer hash does not match the signed source"
           }
-          "download_url=$($parts[1])" | Out-File `
+          "download_url=$($asset.browser_download_url)" | Out-File `
               -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Generate and project-sign update manifest
@@ -335,17 +358,37 @@ jobs:
           MANIFEST: ${{ steps.manifest.outputs.path }}
         run: |
           gh release upload $env:TAG $env:MANIFEST --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) {
+              throw "Signed manifest could not be uploaded to the immutable release"
+          }
           if ($env:CHANNEL -eq 'stable') {
               gh release edit $env:TAG --repo $env:GITHUB_REPOSITORY --draft=false --latest
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Stable release could not be published"
+              }
           } else {
               gh release edit $env:TAG --repo $env:GITHUB_REPOSITORY --draft=false --prerelease
-              if (-not (gh release view updates-nightly --repo $env:GITHUB_REPOSITORY 2>$null)) {
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Nightly immutable release could not be published"
+              }
+              $releaseTags = @(gh release list --repo $env:GITHUB_REPOSITORY `
+                  --limit 1000 --json tagName --jq '.[].tagName')
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Could not list releases before Nightly feed promotion"
+              }
+              if (-not ($releaseTags -contains 'updates-nightly')) {
                   gh release create updates-nightly --repo $env:GITHUB_REPOSITORY `
                       --target $env:GITHUB_SHA --title "Frostguard Nightly update feed" `
                       --notes "The manifest asset is replaced only after an authenticated immutable Nightly release is verified." `
                       --prerelease
+                  if ($LASTEXITCODE -ne 0) {
+                      throw "Nightly update feed could not be created"
+                  }
               }
               gh release upload updates-nightly $env:MANIFEST --repo $env:GITHUB_REPOSITORY --clobber
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Nightly update manifest could not be promoted"
+              }
           }
 
       - name: Remove an abandoned draft release
@@ -354,10 +397,19 @@ jobs:
         env:
           TAG: ${{ steps.identity.outputs.tag }}
         run: |
-          $release = gh release view $env:TAG --repo $env:GITHUB_REPOSITORY `
-              --json isDraft 2>$null | ConvertFrom-Json
-          if ($null -ne $release -and $release.isDraft) {
-              gh release delete $env:TAG --repo $env:GITHUB_REPOSITORY --cleanup-tag --yes
+          $releasesJson = gh api "repos/$($env:GITHUB_REPOSITORY)/releases?per_page=100"
+          if ($LASTEXITCODE -ne 0) {
+              throw "Could not inspect releases during draft cleanup"
+          }
+          $releases = $releasesJson | ConvertFrom-Json
+          $release = $releases | Where-Object { $_.tag_name -ceq $env:TAG } |
+              Select-Object -First 1
+          if ($null -ne $release -and $release.draft) {
+              gh api --method DELETE `
+                  "repos/$($env:GITHUB_REPOSITORY)/releases/$($release.id)"
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Abandoned draft release could not be removed"
+              }
           }
 
       - name: Upload authenticated release evidence
