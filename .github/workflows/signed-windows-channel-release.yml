@@ -525,7 +525,7 @@ jobs:
               }
               gh release edit nightly --repo $env:GITHUB_REPOSITORY `
                   --title "Frostguard Nightly - Latest" --notes $channelNotes `
-                  --prerelease
+                  --target $env:GITHUB_SHA --prerelease
               if ($LASTEXITCODE -ne 0) {
                   throw "Permanent Nightly channel metadata could not be updated"
               }
@@ -561,7 +561,6 @@ jobs:
               '--release-url', $env:RELEASE_URL,
               '--channel-url', $env:CHANNEL_URL,
               '--run-url', "$($env:GITHUB_SERVER_URL)/$($env:GITHUB_REPOSITORY)/actions/runs/$($env:GITHUB_RUN_ID)",
-              '--run-number', $env:GITHUB_RUN_NUMBER,
               '--repository', $env:GITHUB_REPOSITORY,
               '--message-id', $env:DISCORD_DAILY_MESSAGE_ID
           )

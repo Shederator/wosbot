@@ -218,6 +218,23 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertIn("Stable installer URL returned HTTP", workflow)
         self.assertNotIn("frostguard-windows-desktop-bundle.zip", workflow)
 
+    def test_nightly_discord_refresh_uses_the_verified_permanent_feed(self):
+        workflow = (REPO_ROOT / ".github/workflows/refresh-nightly-discord.yml").read_text(
+            encoding="utf-8")
+
+        self.assertIn("name: Refresh Nightly Discord Message", workflow)
+        self.assertIn("  workflow_dispatch:", workflow)
+        self.assertIn("  contents: read", workflow)
+        self.assertNotIn("contents: write", workflow)
+        self.assertIn('channel_tag="nightly"', workflow)
+        self.assertIn("ProjectManifestSigner verify", workflow)
+        self.assertIn('if [[ "$(jq -r \'.channel\' <<< "${payload}")" != "nightly" ]]',
+                      workflow)
+        self.assertIn("does not match exactly one public installer asset", workflow)
+        self.assertIn("Nightly installer URL returned HTTP", workflow)
+        self.assertIn("build-support/notifications/discord_notify.py", workflow)
+        self.assertNotIn("gh release create", workflow)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

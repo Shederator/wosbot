@@ -1,0 +1,93 @@
+name: Refresh Nightly Discord Message
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    name: Update the maintained Nightly download
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21.0.12+8.0"
+          cache: maven
+
+      - name: Test the Nightly notifier
+        run: python3 build-support/notifications/test_discord_notify.py
+
+      - name: Compile the project manifest verifier
+        run: >-
+          ./mvnw -B --no-transfer-progress -Dstyle.color=never
+          -pl modules/update -am -DskipTests package dependency:copy-dependencies
+
+      - name: Resolve, verify, and publish the current Nightly
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DISCORD_NIGHTLY_WEBHOOK_URL: ${{ secrets.DISCORD_NIGHTLY_WEBHOOK_URL }}
+          DISCORD_DAILY_MESSAGE_ID: ${{ vars.DISCORD_DAILY_MESSAGE_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          channel_tag="nightly"
+          manifest_name="frostguard-nightly-manifest.json"
+          channel_url="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${channel_tag}"
+          channel_release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${channel_tag}")"
+          manifest_id="$(jq -r --arg name "${manifest_name}" \
+            '[.assets[] | select(.name == $name)] | if length == 1 then .[0].id else empty end' \
+            <<< "${channel_release}")"
+          if [[ -z "${manifest_id}" ]]; then
+            echo "::error::Permanent Nightly channel does not contain exactly one ${manifest_name}."
+            exit 1
+          fi
+
+          manifest="$(mktemp)"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/assets/${manifest_id}" \
+            -H "Accept: application/octet-stream" > "${manifest}"
+          java -cp 'modules/update/target/classes:modules/api/target/classes:modules/update/target/dependency/*' \
+            dev.frostguard.update.ProjectManifestSigner verify "${manifest}"
+
+          payload="$(jq -r '.payload' "${manifest}" | base64 --decode)"
+          if [[ "$(jq -r '.channel' <<< "${payload}")" != "nightly" ]]; then
+            echo "::error::The permanent Nightly manifest carries the wrong channel."
+            exit 1
+          fi
+          version="$(jq -r '.version' <<< "${payload}")"
+          release_url="$(jq -r '.releaseNotesUrl' <<< "${payload}")"
+          installer_name="$(jq -r '.artifacts["windows-x64"].fileName' <<< "${payload}")"
+          installer_url="$(jq -r '.artifacts["windows-x64"].url' <<< "${payload}")"
+          immutable_tag="${release_url##*/}"
+          immutable_release="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/releases/tags/${immutable_tag}")"
+          published_url="$(jq -r --arg name "${installer_name}" \
+            '[.assets[] | select(.name == $name)] | if length == 1 then .[0].browser_download_url else empty end' \
+            <<< "${immutable_release}")"
+          if [[ -z "${published_url}" || "${published_url}" != "${installer_url}" ]]; then
+            echo "::error::Signed Nightly manifest does not match exactly one public installer asset."
+            exit 1
+          fi
+          code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 120 \
+            --fail --retry 12 --retry-delay 5 --retry-all-errors \
+            -r 0-1023 "${installer_url}" || true)"
+          if [[ "${code}" != "200" && "${code}" != "206" ]]; then
+            echo "::error::Nightly installer URL returned HTTP ${code}."
+            exit 1
+          fi
+
+          python3 build-support/notifications/discord_notify.py \
+            --status success \
+            --version "${version}" \
+            --download-url "${installer_url}" \
+            --release-url "${release_url}" \
+            --channel-url "${channel_url}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --message-id "${DISCORD_DAILY_MESSAGE_ID}"

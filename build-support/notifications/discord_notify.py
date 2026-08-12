@@ -187,8 +187,7 @@ def build_payload(args: argparse.Namespace) -> dict:
     }
     if args.status == "success" and args.download_url:
         embed["url"] = args.download_url
-        build_identity = f"Nightly #{args.run_number}" if args.run_number else "Nightly"
-        embed["footer"] = {"text": f"{build_identity} • updated automatically"}
+        embed["footer"] = {"text": "Nightly channel • updated automatically"}
     elif args.run_url:
         embed["url"] = args.run_url
 
@@ -314,7 +313,6 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--release-url", default="")
     parser.add_argument("--channel-url", default="")
     parser.add_argument("--run-url", default="")
-    parser.add_argument("--run-number", default="")
     parser.add_argument("--repository", default="")
     parser.add_argument("--branch", default="")
     parser.add_argument(

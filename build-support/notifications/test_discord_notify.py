@@ -41,7 +41,6 @@ BASE_ARGS = [
     "--channel-url",
     "https://github.com/Shederator/wosbot/releases/tag/nightly",
     "--run-url", "https://github.com/Shederator/wosbot/actions/runs/1",
-    "--run-number", "42",
     "--repository", "Shederator/wosbot",
     "--branch", "main",
     "--commit", "b962083c0ffee1234567890abcdefabcdefabcde",
@@ -70,7 +69,8 @@ class PayloadTest(unittest.TestCase):
         self.assertEqual(0xF1C40F, embed["color"])
         self.assertIn("3.0.0-nightly.20260812.9", embed["title"])
         self.assertIn("Frostguard Nightly", embed["title"])
-        self.assertEqual("Nightly #42 • updated automatically", embed["footer"]["text"])
+        self.assertEqual("Nightly channel • updated automatically",
+                         embed["footer"]["text"])
 
     def test_failure_payload_is_red_and_links_the_log_not_a_download(self):
         result = payload(["--status", "failure"])

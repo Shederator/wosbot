@@ -154,7 +154,8 @@ Do not post a new Discord message for every daily build. Store the webhook-owned
 message ID in the repository variable `DISCORD_DAILY_MESSAGE_ID`; successful
 native Nightly publications edit that message with the immutable MSI URL and
 permanent channel URL. Build failures link to Actions and do not replace the
-last working public download.
+last working public download. Run **Refresh Nightly Discord Message** to repair
+the card from the current project-signed feed without building another MSI.
 
 ## Migration
 
