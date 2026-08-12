@@ -89,12 +89,10 @@ jobs:
           $previousVersion = ''
           $feedReleases = @()
           if ($channel -eq 'nightly') {
-              foreach ($feedTag in @('nightly', 'updates-nightly')) {
-                  $feedJson = gh api `
-                      "repos/$($env:GITHUB_REPOSITORY)/releases/tags/$feedTag" 2>$null
-                  if ($LASTEXITCODE -eq 0) {
-                      $feedReleases += ,($feedJson | ConvertFrom-Json)
-                  }
+              $feedJson = gh api `
+                  "repos/$($env:GITHUB_REPOSITORY)/releases/tags/nightly" 2>$null
+              if ($LASTEXITCODE -eq 0) {
+                  $feedReleases += ,($feedJson | ConvertFrom-Json)
               }
           } else {
               $feedJson = gh api "repos/$($env:GITHUB_REPOSITORY)/releases/latest" 2>$null
@@ -489,22 +487,6 @@ jobs:
                   }
               }
 
-              # Builds through .8 use this old endpoint. Promote the new manifest
-              # there first so they can cross the one-release migration bridge.
-              if ($releaseTags -contains 'updates-nightly') {
-                  gh release edit updates-nightly --repo $env:GITHUB_REPOSITORY `
-                      --title "Frostguard Nightly - Compatibility Feed" `
-                      --notes "Temporary feed for Nightly builds through .8. New builds use the permanent nightly channel." `
-                      --prerelease
-                  if ($LASTEXITCODE -ne 0) {
-                      throw "Compatibility Nightly metadata could not be updated"
-                  }
-                  gh release upload updates-nightly $env:MANIFEST `
-                      --repo $env:GITHUB_REPOSITORY --clobber
-                  if ($LASTEXITCODE -ne 0) {
-                      throw "Compatibility Nightly manifest could not be promoted"
-                  }
-              }
               gh release upload nightly $env:MANIFEST --repo $env:GITHUB_REPOSITORY --clobber
               if ($LASTEXITCODE -ne 0) {
                   throw "Permanent Nightly manifest could not be promoted"

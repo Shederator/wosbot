@@ -60,12 +60,9 @@ immutable release intact and keep the previous rolling manifest active. Recover
 by verifying and promoting the manifest asset from that immutable release; do
 not rebuild or replace its installer.
 
-Nightly builds through `3.0.0-nightly.20260812.8` embed the former
-`updates-nightly` endpoint. During migration the publisher mirrors each new
-manifest there before updating `nightly`, allowing those installations to cross
-the bridge once. New builds embed only `nightly`. Remove the compatibility
-release after the supported old-client window closes; never recreate it after
-that removal.
+Nightly builds embed only the permanent `nightly` endpoint. The temporary feed
+used by pre-release development builds has been retired and must not be
+recreated.
 
 ### Unpublished Stable release candidates
 
@@ -163,8 +160,6 @@ the card from the current project-signed feed without building another MSI.
 2. Publish the first real Stable release before presenting the Stable download.
 3. Store both maintained webhook message IDs as repository variables.
 4. Move `/build-pr` results to `#request-a-build`.
-5. Keep `updates-nightly` only for the old-client migration window, then remove
-   that compatibility release permanently.
 
 ## Native installer update contract
 
