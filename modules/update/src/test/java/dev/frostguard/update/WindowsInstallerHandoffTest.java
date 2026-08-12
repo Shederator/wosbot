@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -86,6 +87,48 @@ class WindowsInstallerHandoffTest {
     }
 
     @Test
+    void restartsExistingInstallationWhenWindowsInstallerFails() throws Exception {
+        assumeTrue(System.getProperty("os.name", "").toLowerCase().contains("win"));
+        Path installer = Files.writeString(temp.resolve("Frostguard-broken.msi"), "not an MSI package");
+        Path installDirectory = Files.createDirectory(temp.resolve("installed Frostguard"));
+        Path restartMarker = temp.resolve("restart-marker.txt");
+        Path launcher = Files.writeString(installDirectory.resolve("Frostguard.cmd"),
+                "@echo off\r\n>\"" + restartMarker + "\" echo restarted\r\n");
+        Path workspace = Files.createDirectory(temp.resolve("workspace"));
+        Path persistedData = Files.writeString(workspace.resolve("frostguard.db"), "existing profile data");
+        Path fakeSystemTools = Files.createDirectory(temp.resolve("fake-system-tools"));
+        Files.copy(Path.of(System.getenv("SystemRoot"), "System32", "where.exe"),
+                fakeSystemTools.resolve("msiexec.exe"));
+        Process parent = new ProcessBuilder("powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+                "Start-Sleep -Milliseconds 750").start();
+        AtomicReference<Process> waiter = new AtomicReference<>();
+        AtomicReference<Map<String, String>> handoffEnvironment = new AtomicReference<>();
+        WindowsInstallerHandoff handoff = new WindowsInstallerHandoff((command, environment) -> {
+            String testScript = decodeScript(command).replace(
+                    "Show-UpdateFailure -Details $failureDetails",
+                    "[Console]::Error.WriteLine($failureDetails)");
+            ProcessBuilder builder = new ProcessBuilder(WindowsInstallerHandoff.createPowerShellCommand(testScript))
+                    .redirectErrorStream(true);
+            builder.environment().putAll(environment);
+            builder.environment().put("PATH", fakeSystemTools + ";" + builder.environment().get("PATH"));
+            handoffEnvironment.set(environment);
+            waiter.set(builder.start());
+        });
+
+        InstallerHandoff.HandoffSession session = handoff.stage(installer, parent.pid(), launcher, workspace);
+        session.authorize();
+
+        assertTrue(waiter.get().waitFor(20, TimeUnit.SECONDS));
+        assertEquals(1, waiter.get().exitValue());
+        waitForFile(restartMarker);
+        assertEquals("restarted", Files.readString(restartMarker).trim());
+        assertEquals("existing profile data", Files.readString(persistedData));
+        assertTrue(Files.notExists(Path.of(handoffEnvironment.get().get(WindowsInstallerHandoff.TOKEN_PATH_ENV))));
+        String output = new String(waiter.get().getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        assertTrue(output.contains("Windows Installer exited with code"), output);
+    }
+
+    @Test
     void rejectsInvalidInputsBeforeStartingWaiter() {
         WindowsInstallerHandoff handoff = new WindowsInstallerHandoff((command, environment) -> {
             throw new AssertionError("Waiter should not start");
@@ -128,5 +171,13 @@ class WindowsInstallerHandoffTest {
         assertTrue(encodedCommand >= 0);
         byte[] scriptBytes = Base64.getDecoder().decode(command.get(encodedCommand + 1));
         return new String(scriptBytes, StandardCharsets.UTF_16LE);
+    }
+
+    private static void waitForFile(Path file) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (Files.notExists(file) && System.nanoTime() < deadline) {
+            Thread.sleep(50);
+        }
+        assertTrue(Files.isRegularFile(file), "Restart launcher was not executed");
     }
 }

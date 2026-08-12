@@ -16,6 +16,7 @@ import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -125,6 +126,50 @@ class UpdateDownloaderTest {
     }
 
     @Test
+    void resumesAfterInterruptedTransfer() throws Exception {
+        UpdateCandidate candidate = candidate(INSTALLER, sha256(INSTALLER));
+        AtomicInteger requestCount = new AtomicInteger();
+        AtomicLong resumedOffset = new AtomicLong(-1L);
+        DownloadTransport transport = (uri, offset) -> {
+            if (requestCount.getAndIncrement() == 0) {
+                return response(200, new InputStream() {
+                    private int position;
+
+                    @Override
+                    public int read() throws IOException {
+                        if (position == 7) {
+                            throw new IOException("connection reset");
+                        }
+                        return position < INSTALLER.length ? INSTALLER[position++] : -1;
+                    }
+                });
+            }
+            resumedOffset.set(offset);
+            return response(206, java.util.Arrays.copyOfRange(INSTALLER, (int) offset, INSTALLER.length));
+        };
+        UpdateDownloader downloader = new UpdateDownloader(transport, new ArtifactVerifier());
+
+        assertThrows(UpdateException.class, () -> downloader.download(candidate, temp));
+        Path result = downloader.download(candidate, temp);
+
+        assertEquals(7L, resumedOffset.get());
+        assertArrayEquals(INSTALLER, Files.readAllBytes(result));
+    }
+
+    @Test
+    void rejectsDeclaredSizeMismatchWithoutPromotingArtifact() throws Exception {
+        byte[] truncated = java.util.Arrays.copyOf(INSTALLER, INSTALLER.length - 1);
+        UpdateCandidate candidate = candidate(INSTALLER, sha256(INSTALLER));
+        UpdateDownloader downloader = new UpdateDownloader((uri, offset) -> response(200, truncated),
+                new ArtifactVerifier());
+
+        assertThrows(UpdateException.class, () -> downloader.download(candidate, temp));
+
+        assertFalse(Files.exists(updateDirectory(candidate).resolve(candidate.artifact().fileName())));
+        assertFalse(Files.exists(updateDirectory(candidate).resolve(candidate.artifact().fileName() + ".part")));
+    }
+
+    @Test
     void rejectsConcurrentDownloadLock() throws Exception {
         UpdateCandidate candidate = candidate(INSTALLER, sha256(INSTALLER));
         Path lockPath = updateDirectory(candidate).resolve(candidate.artifact().fileName() + ".lock");
@@ -152,8 +197,12 @@ class UpdateDownloaderTest {
     }
 
     private static DownloadTransport.Response response(int status, byte[] body) {
+        return response(status, new ByteArrayInputStream(body));
+    }
+
+    private static DownloadTransport.Response response(int status, InputStream body) {
         return new DownloadTransport.Response() {
-            private final InputStream input = new ByteArrayInputStream(body);
+            private final InputStream input = body;
 
             @Override
             public int statusCode() {
