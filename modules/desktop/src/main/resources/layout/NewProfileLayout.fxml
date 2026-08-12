@@ -31,17 +31,26 @@
 
             <HBox alignment="CENTER_LEFT" spacing="12">
                 <Label text="Name" minWidth="150" prefWidth="170" />
-                <TextField fx:id="textfieldProfileName" HBox.hgrow="ALWAYS" />
+                <VBox HBox.hgrow="ALWAYS">
+                    <TextField fx:id="textfieldProfileName" />
+                    <Label fx:id="labelProfileNameError" wrapText="true" />
+                </VBox>
             </HBox>
 
             <HBox alignment="CENTER_LEFT" spacing="12">
                 <Label text="Emulator" minWidth="150" prefWidth="170" />
-                <TextField fx:id="textfieldEmulatorNumber" HBox.hgrow="ALWAYS" />
+                <VBox HBox.hgrow="ALWAYS">
+                    <TextField fx:id="textfieldEmulatorNumber" />
+                    <Label fx:id="labelEmulatorNumberError" wrapText="true" />
+                </VBox>
             </HBox>
 
             <HBox alignment="CENTER_LEFT" spacing="12">
                 <Label text="Reconnect (min)" minWidth="150" prefWidth="170" />
-                <TextField fx:id="textfieldReconnectionTime" text="30" HBox.hgrow="ALWAYS" />
+                <VBox HBox.hgrow="ALWAYS">
+                    <TextField fx:id="textfieldReconnectionTime" text="30" />
+                    <Label fx:id="labelReconnectionTimeError" wrapText="true" />
+                </VBox>
             </HBox>
 
             <HBox alignment="CENTER_LEFT" spacing="12">

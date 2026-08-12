@@ -20,3 +20,15 @@ Frostguard settings use the following interaction rules:
 Parsers, ranges, units, defaults, empty-value semantics, and commit policies
 belong in shared setting definitions or validators rather than controller-local
 listeners.
+
+## Migration inventory
+
+The shared approach currently covers Instance Settings, generic profile integer
+and date/time fields, Bear Trap UTC editors, Arena and Tundra `HH:mm` fields,
+Custom Tasks, and profile creation/editing.
+
+Follow-up migrations should inventory and convert the remaining controller-local
+parsing and styling in scheduler dialogs, Telegram settings, statistics filters,
+and Task Builder editors. Those surfaces are intentionally outside issue #141's
+representative migration set and must not silently acquire new validation
+patterns in the meantime.

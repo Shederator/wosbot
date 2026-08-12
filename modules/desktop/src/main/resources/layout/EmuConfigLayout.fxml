@@ -51,7 +51,7 @@
                           <HBox alignment="CENTER_LEFT" spacing="10" GridPane.columnIndex="1" GridPane.rowIndex="0">
                               <Label text="Max Concurrent Instances" />
                               <Region HBox.hgrow="ALWAYS" />
-                              <VBox alignment="CENTER_RIGHT">
+                              <VBox alignment="CENTER_RIGHT" minWidth="190.0" prefWidth="190.0" maxWidth="190.0">
                                   <TextField fx:id="textfieldMaxConcurrentInstances" maxWidth="100.0" minWidth="70.0" prefWidth="80.0" />
                                   <Label fx:id="labelMaxConcurrentInstancesError" maxWidth="220.0" wrapText="true" />
                               </VBox>
@@ -61,20 +61,25 @@
                           <HBox alignment="CENTER_LEFT" spacing="10" GridPane.columnIndex="0" GridPane.rowIndex="1">
                               <Label text="Max Idle Time (minutes)" />
                               <Region HBox.hgrow="ALWAYS" />
-                              <VBox alignment="CENTER_RIGHT">
+                              <VBox alignment="CENTER_RIGHT" minWidth="190.0" prefWidth="190.0" maxWidth="190.0">
                                   <TextField fx:id="textfieldMaxIdleTime" maxWidth="100.0" minWidth="70.0" prefWidth="80.0" />
                                   <Label fx:id="labelMaxIdleTimeError" maxWidth="220.0" wrapText="true" />
                               </VBox>
                           </HBox>
-                          <HBox alignment="CENTER_LEFT" spacing="10" GridPane.columnIndex="1" GridPane.rowIndex="1">
-                              <CheckBox fx:id="checkboxProfileMaxActiveTimeEnabled" text="Limit Profile Active Time" />
-                              <Region HBox.hgrow="ALWAYS" />
-                              <Label text="min" />
-                              <VBox alignment="CENTER_RIGHT">
-                                  <TextField fx:id="textfieldProfileMaxActiveTimeMinutes" maxWidth="100.0" minWidth="70.0" prefWidth="80.0" />
-                                  <Label fx:id="labelProfileMaxActiveTimeError" maxWidth="220.0" wrapText="true" />
-                              </VBox>
-                          </HBox>
+                          <GridPane hgap="8" vgap="4" GridPane.columnIndex="1" GridPane.rowIndex="1">
+                              <columnConstraints>
+                                  <ColumnConstraints hgrow="ALWAYS" />
+                                  <ColumnConstraints minWidth="70.0" prefWidth="100.0" />
+                                  <ColumnConstraints minWidth="28.0" />
+                              </columnConstraints>
+                              <CheckBox fx:id="checkboxProfileMaxActiveTimeEnabled" text="Limit Profile Active Time"
+                                        GridPane.columnIndex="0" GridPane.rowIndex="0" />
+                              <TextField fx:id="textfieldProfileMaxActiveTimeMinutes" maxWidth="100.0"
+                                         minWidth="70.0" prefWidth="80.0" GridPane.columnIndex="1" GridPane.rowIndex="0" />
+                              <Label text="min" GridPane.columnIndex="2" GridPane.rowIndex="0" />
+                              <Label fx:id="labelProfileMaxActiveTimeError" maxWidth="Infinity" wrapText="true"
+                                     GridPane.columnIndex="1" GridPane.columnSpan="2" GridPane.rowIndex="1" />
+                          </GridPane>
 
                           <!-- Row 3 -->
                           <HBox alignment="CENTER_LEFT" spacing="10" GridPane.columnIndex="0" GridPane.rowIndex="2">
@@ -92,15 +97,17 @@
                               <Region HBox.hgrow="ALWAYS" />
                               <ComboBox fx:id="comboboxStopBehaviorTelegram" maxWidth="Infinity" prefWidth="180.0" />
                           </HBox>
-                          <HBox alignment="CENTER_LEFT" spacing="8" GridPane.columnIndex="1" GridPane.rowIndex="3">
-                              <Label text="Delay:" />
-                              <VBox alignment="CENTER_RIGHT">
-                                  <TextField fx:id="textfieldAutoStartMinutes" maxWidth="70.0" minWidth="50.0" prefWidth="60.0" />
-                                  <Label fx:id="labelAutoStartMinutesError" maxWidth="220.0" wrapText="true" />
-                              </VBox>
-                              <Label text="min. Mode:" />
-                              <ComboBox fx:id="comboboxAutoStartMode" maxWidth="Infinity" prefWidth="150.0" />
-                          </HBox>
+                          <GridPane hgap="8" vgap="4" GridPane.columnIndex="1" GridPane.rowIndex="3">
+                              <Label text="Delay:" GridPane.columnIndex="0" GridPane.rowIndex="0" />
+                              <TextField fx:id="textfieldAutoStartMinutes" maxWidth="70.0" minWidth="50.0"
+                                         prefWidth="60.0" GridPane.columnIndex="1" GridPane.rowIndex="0" />
+                              <Label text="min" GridPane.columnIndex="2" GridPane.rowIndex="0" />
+                              <Label text="Mode:" GridPane.columnIndex="3" GridPane.rowIndex="0" />
+                              <ComboBox fx:id="comboboxAutoStartMode" maxWidth="Infinity" prefWidth="150.0"
+                                        GridPane.columnIndex="4" GridPane.rowIndex="0" />
+                              <Label fx:id="labelAutoStartMinutesError" maxWidth="Infinity" wrapText="true"
+                                     GridPane.columnIndex="1" GridPane.columnSpan="4" GridPane.rowIndex="1" />
+                          </GridPane>
                       </children>
                   </GridPane>
               </VBox>

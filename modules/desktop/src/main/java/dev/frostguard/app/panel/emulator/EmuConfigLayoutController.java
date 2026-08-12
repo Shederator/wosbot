@@ -268,6 +268,10 @@ public class EmuConfigLayoutController {
 			String label,
 			Map<String, String> cfg,
 			boolean rescheduleAutoStart) {
+		if (field.getTextFormatter() == null) {
+			field.setTextFormatter(new javafx.scene.control.TextFormatter<>(change ->
+					change.getControlNewText().matches("\\d*") ? change : null));
+		}
 		ValidatedTextFieldBinding<Integer> binding = new ValidatedTextFieldBinding<>(
 				field,
 				errorLabel,

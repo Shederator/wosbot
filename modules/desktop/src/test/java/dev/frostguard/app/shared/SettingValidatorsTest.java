@@ -39,4 +39,30 @@ class SettingValidatorsTest {
         assertFalse(validator.validate("24:00").isValid());
         assertFalse(validator.validate("9:30").isValid());
     }
+
+    @Test
+    void acceptsSignedPriorityButRejectsIntegerOverflow() {
+        SettingValidator<Integer> validator = SettingValidators.integer("Priority");
+
+        assertEquals(-10, validator.validate("-10").value());
+        assertFalse(validator.validate("999999999999999999999").isValid());
+    }
+
+    @Test
+    void validatesRequiredTextAndLongDurations() {
+        assertFalse(SettingValidators.requiredText("Name").validate("  ").isValid());
+        assertEquals("Frost", SettingValidators.requiredText("Name").validate(" Frost ").value());
+        assertEquals(0L, SettingValidators.nonNegativeLong("Delay").validate("0").value());
+        assertFalse(SettingValidators.nonNegativeLong("Delay").validate("9223372036854775808").isValid());
+    }
+
+    @Test
+    void rejectsReconnectDurationsBeyondOneWeek() {
+        SettingValidator<Long> validator = SettingValidators.rangedLong("Reconnection time", 0, 10_080);
+
+        assertEquals(10_080L, validator.validate("10080").value());
+        assertFalse(validator.validate("10081").isValid());
+        assertEquals("Reconnection time must be between 0 and 10080.",
+                validator.validate("10081").message());
+    }
 }

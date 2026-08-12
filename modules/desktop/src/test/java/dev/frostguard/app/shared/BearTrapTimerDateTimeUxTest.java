@@ -185,7 +185,7 @@ class BearTrapTimerDateTimeUxTest {
     }
 
     @Test
-    void profileIntegerFieldKeepsInvalidUserInput() throws Exception {
+    void profileIntegerFieldRejectsCharactersBeforeValidation() throws Exception {
         runOnFxThread(() -> {
             TestProfileController controller = new TestProfileController();
             TextField field = new TextField();
@@ -197,7 +197,7 @@ class BearTrapTimerDateTimeUxTest {
             field.setText("invalid");
             field.fireEvent(new ActionEvent());
 
-            assertEquals("invalid", field.getText());
+            assertEquals("", field.getText());
             assertTrue(field.getStyleClass().contains("setting-field-error"));
             assertTrue(changes.isEmpty());
 
@@ -317,7 +317,7 @@ class BearTrapTimerDateTimeUxTest {
     }
 
     @Test
-    void enabledTimerWithMissingValueShowsValidationWithoutPersistingFallback() throws Exception {
+    void enabledTimerWithMissingValueFallsBackToOffWithoutPersisting() throws Exception {
         runOnFxThread(() -> {
             LoadedBearView view = loadBearView();
             List<Change> changes = new ArrayList<>();
@@ -330,7 +330,7 @@ class BearTrapTimerDateTimeUxTest {
             view.controller().onProfileLoad(profile);
 
             assertNull(view.timer1().getDateTime());
-            assertFalse(view.timer1().getValidationMessage().isEmpty());
+            assertTrue(view.timer1().getValidationMessage().isEmpty());
             assertTrue(view.timer2().getValidationMessage().isEmpty());
             assertTrue(view.trapNumber().getItems().isEmpty());
             assertTrue(view.trapNumber().isDisabled());

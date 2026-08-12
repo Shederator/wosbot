@@ -41,20 +41,22 @@
                                 <Label styleClass="task-field-label" text="Activation time (UTC)" GridPane.columnIndex="0" GridPane.rowIndex="1" />
                                 <TextField fx:id="textFieldArenaActivationHour" maxWidth="100.0" prefWidth="90.0"
                                            promptText="HH:mm" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+                                <Label fx:id="labelDateTimeError" maxWidth="Infinity" wrapText="true"
+                                       GridPane.columnIndex="0" GridPane.columnSpan="2" GridPane.rowIndex="2" />
 
-                                <Label styleClass="task-field-label" text="Extra attempts" GridPane.columnIndex="0" GridPane.rowIndex="2" />
+                                <Label styleClass="task-field-label" text="Extra attempts" GridPane.columnIndex="0" GridPane.rowIndex="3" />
                                 <ComboBox fx:id="comboBoxArenaExtraAttempts" maxWidth="100.0" prefWidth="90.0"
-                                          promptText="0" GridPane.columnIndex="1" GridPane.rowIndex="2" />
+                                          promptText="0" GridPane.columnIndex="1" GridPane.rowIndex="3" />
 
-                                <Label styleClass="task-field-label" text="List refresh" GridPane.columnIndex="0" GridPane.rowIndex="3" />
+                                <Label styleClass="task-field-label" text="List refresh" GridPane.columnIndex="0" GridPane.rowIndex="4" />
                                 <CheckBox fx:id="checkBoxArenaRefreshWithGems" mnemonicParsing="false"
                                           text="Allow paid list refreshes"
-                                          GridPane.columnIndex="1" GridPane.rowIndex="3" />
+                                          GridPane.columnIndex="1" GridPane.rowIndex="4" />
 
-                                <Label styleClass="task-field-label" text="Attack formation" GridPane.columnIndex="0" GridPane.rowIndex="4" />
+                                <Label styleClass="task-field-label" text="Attack formation" GridPane.columnIndex="0" GridPane.rowIndex="5" />
                                 <CheckBox fx:id="checkBoxArenaAttackQuickDeploy" mnemonicParsing="false"
                                           text="Use Quick Deploy for attacks"
-                                          GridPane.columnIndex="1" GridPane.rowIndex="4" />
+                                          GridPane.columnIndex="1" GridPane.rowIndex="5" />
                             </GridPane>
 
                             <Separator style="-fx-opacity: 0.15;" />
@@ -88,9 +90,6 @@
                                 </GridPane>
                             </VBox>
 
-                            <Label fx:id="labelDateTimeError"
-                                   style="-fx-font-size: 11px; -fx-text-fill: #ff4444;"
-                                   text="" wrapText="true" />
                         </VBox>
                     </Tab>
 

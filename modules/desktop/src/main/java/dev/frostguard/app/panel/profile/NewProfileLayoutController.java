@@ -4,6 +4,10 @@ import java.util.List;
 import java.util.function.UnaryOperator;
 
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.app.shared.FieldValidationPresenter;
+import dev.frostguard.app.shared.SettingValidator;
+import dev.frostguard.app.shared.SettingValidators;
+import dev.frostguard.app.shared.ValidationResult;
 import javafx.beans.value.ChangeListener;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
@@ -13,7 +17,6 @@ import javafx.scene.control.Label;
 import javafx.scene.control.Slider;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextFormatter;
-import javafx.util.converter.IntegerStringConverter;
 
 /**
  * Handles the "New Profile" form – validates user input, enforces
@@ -21,6 +24,7 @@ import javafx.util.converter.IntegerStringConverter;
  * {@link ProfileManagerActionController}.
  */
 public class NewProfileLayoutController {
+	private static final long MAX_RECONNECTION_MINUTES = 10_080;
 
 	/** Rejects any character that is not a digit. */
 	private static final UnaryOperator<TextFormatter.Change> NUMERIC_FILTER = change ->
@@ -67,6 +71,19 @@ public class NewProfileLayoutController {
 	@FXML
 	private TextField textfieldCharacterServer;
 
+	@FXML
+	private Label labelProfileNameError;
+
+	@FXML
+	private Label labelEmulatorNumberError;
+
+	@FXML
+	private Label labelReconnectionTimeError;
+
+	private FieldValidationPresenter profileNamePresenter;
+	private FieldValidationPresenter emulatorNumberPresenter;
+	private FieldValidationPresenter reconnectionTimePresenter;
+
 	/* ── Constructor ── */
 
 	public NewProfileLayoutController(ProfileManagerActionController profileManagerActionController) {
@@ -80,6 +97,9 @@ public class NewProfileLayoutController {
 	@FXML
 	private void initialize() {
 		applyInputFormatters();
+		profileNamePresenter = new FieldValidationPresenter(textfieldProfileName, labelProfileNameError);
+		emulatorNumberPresenter = new FieldValidationPresenter(textfieldEmulatorNumber, labelEmulatorNumberError);
+		reconnectionTimePresenter = new FieldValidationPresenter(textfieldReconnectionTime, labelReconnectionTimeError);
 		linkPriorityLabelToSlider();
 		registerFieldValidationWatchers();
 		buttonSaveProfile.setDisable(!isFormValid());
@@ -90,16 +110,15 @@ public class NewProfileLayoutController {
 	 * ──────────────────────────────────────────────── */
 
 	private void applyInputFormatters() {
-		attachIntegerFormatter(textfieldEmulatorNumber, 0);
-		attachIntegerFormatter(textfieldReconnectionTime, 0);
-		attachIntegerFormatter(textfieldCharacterId, null);
+		attachIntegerFormatter(textfieldEmulatorNumber);
+		attachIntegerFormatter(textfieldReconnectionTime);
+		attachIntegerFormatter(textfieldCharacterId);
 		textfieldCharacterAllianceCode.setTextFormatter(new TextFormatter<>(TAG_FILTER));
 		textfieldCharacterServer.setTextFormatter(new TextFormatter<>(NUMERIC_FILTER));
 	}
 
-	private void attachIntegerFormatter(TextField target, Integer fallback) {
-		target.setTextFormatter(
-				new TextFormatter<>(new IntegerStringConverter(), fallback, NUMERIC_FILTER));
+	private void attachIntegerFormatter(TextField target) {
+		target.setTextFormatter(new TextFormatter<>(NUMERIC_FILTER));
 	}
 
 	/* ────────────────────────────────────────────────
@@ -118,7 +137,7 @@ public class NewProfileLayoutController {
 
 	private void registerFieldValidationWatchers() {
 		ChangeListener<String> refresher = (obs, oldVal, newVal) ->
-			buttonSaveProfile.setDisable(!isFormValid());
+			buttonSaveProfile.setDisable(!validateForm(true));
 		mandatoryFields().forEach(tf -> tf.textProperty().addListener(refresher));
 	}
 
@@ -127,31 +146,37 @@ public class NewProfileLayoutController {
 	}
 
 	private boolean isFormValid() {
-		String emuText = textfieldEmulatorNumber.getText();
-		String nameText = textfieldProfileName.getText();
-		String reconnectText = textfieldReconnectionTime.getText();
+		return validateForm(false);
+	}
 
-		if (emuText.isEmpty() || nameText.isEmpty()) {
-			return false;
-		}
+	private boolean validateForm(boolean presentErrors) {
+		boolean nameValid = validateField(
+				textfieldProfileName, SettingValidators.requiredText("Profile name"), profileNamePresenter, presentErrors);
+		boolean emulatorValid = validateField(
+				textfieldEmulatorNumber, SettingValidators.nonNegativeInteger("Emulator number"),
+				emulatorNumberPresenter, presentErrors);
+		SettingValidator<Long> reconnectValidator = input -> input == null || input.isBlank()
+				? ValidationResult.valid(0L)
+				: SettingValidators.rangedLong("Reconnection time", 0, MAX_RECONNECTION_MINUTES).validate(input);
+		boolean reconnectValid = validateField(
+				textfieldReconnectionTime, reconnectValidator, reconnectionTimePresenter, presentErrors);
+		return nameValid && emulatorValid && reconnectValid;
+	}
 
-		try {
-			int emuIndex = Integer.parseInt(emuText);
-			if (emuIndex < 0) {
-				return false;
+	private <T> boolean validateField(
+			TextField field,
+			SettingValidator<T> validator,
+			FieldValidationPresenter presenter,
+			boolean presentErrors) {
+		ValidationResult<T> result = validator.validate(field.getText());
+		if (presentErrors) {
+			if (result.isValid()) {
+				presenter.clear();
+			} else {
+				presenter.showError(result.message());
 			}
-
-			if (!reconnectText.isEmpty()) {
-				int reconnectDelay = Integer.parseInt(reconnectText);
-				if (reconnectDelay < 0) {
-					return false;
-				}
-			}
-
-			return true;
-		} catch (NumberFormatException ex) {
-			return false;
 		}
+		return result.isValid();
 	}
 
 	/* ────────────────────────────────────────────────
@@ -160,6 +185,9 @@ public class NewProfileLayoutController {
 
 	@FXML
 	private void handleSaveProfileButton(ActionEvent event) {
+		if (!validateForm(true)) {
+			return;
+		}
 		profileManagerActionController.addProfile(assembleDescriptor());
 		profileManagerActionController.closeNewProfileDialog();
 	}

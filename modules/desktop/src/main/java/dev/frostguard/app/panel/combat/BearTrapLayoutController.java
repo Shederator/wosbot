@@ -48,6 +48,9 @@ public class BearTrapLayoutController extends AbstractProfileController {
     private TextField textFieldPreparationTime;
 
     @FXML
+    private Label labelPreparationTimeError;
+
+    @FXML
     private CheckBox checkBoxActivePets;
 
     @FXML
@@ -127,7 +130,8 @@ public class BearTrapLayoutController extends AbstractProfileController {
         checkBoxMappings.put(checkBoxCallRally, ConfigurationKeyEnum.BEAR_TRAP_CALL_RALLY_BOOL);
         checkBoxMappings.put(checkBoxEnableJoin, ConfigurationKeyEnum.BEAR_TRAP_JOIN_RALLY_BOOL);
 
-        textFieldMappings.put(textFieldPreparationTime, ConfigurationKeyEnum.BEAR_TRAP_PREPARATION_TIME_INT);
+        registerTextField(textFieldPreparationTime, labelPreparationTimeError,
+                ConfigurationKeyEnum.BEAR_TRAP_PREPARATION_TIME_INT);
 
         comboBoxMappings.put(comboBoxTrapNumber, ConfigurationKeyEnum.BEAR_TRAP_NUMBER_INT);
         comboBoxMappings.put(comboBoxRallyFlag, ConfigurationKeyEnum.BEAR_TRAP_RALLY_FLAG_INT);
@@ -352,7 +356,7 @@ public class BearTrapLayoutController extends AbstractProfileController {
             timerBindings.forEach(binding -> binding.editor().setDateTime(
                     loadSavedDateTime(profile, binding.scheduleKey())));
             timerBindings.forEach(binding -> binding.protectionMode().setValue(
-                    loadProtectionMode(profile, binding)));
+                    binding.editor().hasCommittedDateTime() ? loadProtectionMode(profile, binding) : ProtectionMode.OFF));
             refreshAvailableParticipationTimers();
         } finally {
             loadingProtectionModes = false;

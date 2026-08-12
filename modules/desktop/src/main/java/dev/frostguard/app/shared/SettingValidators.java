@@ -27,6 +27,54 @@ public final class SettingValidators {
         return rangedInteger(label, 0, Integer.MAX_VALUE);
     }
 
+    public static SettingValidator<Integer> integer(String label) {
+        return input -> {
+            String candidate = trimmed(input);
+            if (!candidate.matches("-?\\d+")) {
+                return ValidationResult.invalid(label + " must be a whole number.");
+            }
+            try {
+                return ValidationResult.valid(Integer.parseInt(candidate));
+            } catch (NumberFormatException exception) {
+                return ValidationResult.invalid(label + " is outside the supported range.");
+            }
+        };
+    }
+
+    public static SettingValidator<Long> nonNegativeLong(String label) {
+        return rangedLong(label, 0, Long.MAX_VALUE);
+    }
+
+    public static SettingValidator<Long> rangedLong(String label, long minimum, long maximum) {
+        if (minimum > maximum) {
+            throw new IllegalArgumentException("Minimum must not exceed maximum");
+        }
+        return input -> {
+            String candidate = trimmed(input);
+            if (!candidate.matches("\\d+")) {
+                return ValidationResult.invalid(label + " must be a whole number.");
+            }
+            try {
+                long value = Long.parseLong(candidate);
+                if (value < minimum || value > maximum) {
+                    return ValidationResult.invalid(rangeMessage(label, minimum, maximum));
+                }
+                return ValidationResult.valid(value);
+            } catch (NumberFormatException exception) {
+                return ValidationResult.invalid(rangeMessage(label, minimum, maximum));
+            }
+        };
+    }
+
+    public static SettingValidator<String> requiredText(String label) {
+        return input -> {
+            String candidate = trimmed(input);
+            return candidate.isEmpty()
+                    ? ValidationResult.invalid(label + " cannot be empty.")
+                    : ValidationResult.valid(candidate);
+        };
+    }
+
     public static SettingValidator<Integer> rangedInteger(String label, int minimum, int maximum) {
         if (minimum > maximum) {
             throw new IllegalArgumentException("Minimum must not exceed maximum");
@@ -91,6 +139,13 @@ public final class SettingValidators {
 
     private static String rangeMessage(String label, int minimum, int maximum) {
         if (maximum == Integer.MAX_VALUE) {
+            return label + " must be at least " + minimum + ".";
+        }
+        return label + " must be between " + minimum + " and " + maximum + ".";
+    }
+
+    private static String rangeMessage(String label, long minimum, long maximum) {
+        if (maximum == Long.MAX_VALUE) {
             return label + " must be at least " + minimum + ".";
         }
         return label + " must be between " + minimum + " and " + maximum + ".";

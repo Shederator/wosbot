@@ -9,6 +9,8 @@ import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.TaskQueue;
 import dev.frostguard.api.domain.TaskStateData;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
+import dev.frostguard.app.shared.SettingValidators;
+import dev.frostguard.app.shared.ValidatedTextFieldBinding;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.geometry.Insets;
@@ -218,19 +220,16 @@ public class CustomTasksLayoutController {
             firstExecutionField.setPromptText("yyyy-MM-dd HH:mm");
 
             TextField followUpDelayField = new TextField(String.valueOf(initialFollowUpDelayHours));
-            Runnable commitTimingChange = () -> {
-                if (!commitTimingSettings(className, firstExecutionField.getText(), followUpDelayField.getText())) {
-                    firstExecutionField.setText(taskFirstExecutionUtc.getOrDefault(
-                            className, getDefaultFirstExecutionUtc(className)));
-                }
-            };
-            firstExecutionField.setOnAction(e -> commitTimingChange.run());
-            firstExecutionField.focusedProperty().addListener((obs, oldVal, newVal) -> {
-                if (!newVal) {
-                    commitTimingChange.run();
-                }
-            });
-            firstExecutionBox.getChildren().addAll(firstExecutionLabel, firstExecutionField);
+			followUpDelayField.setTextFormatter(nonNegativeIntegerFormatter());
+            Label firstExecutionError = validationLabel();
+            new ValidatedTextFieldBinding<>(
+                    firstExecutionField,
+                    firstExecutionError,
+                    SettingValidators.localDateTime("First execution", UTC_INPUT_FORMATTER),
+                    UTC_INPUT_FORMATTER::format,
+                    value -> commitTimingSettings(
+                            className, UTC_INPUT_FORMATTER.format(value), followUpDelayField.getText()));
+            firstExecutionBox.getChildren().addAll(firstExecutionLabel, firstExecutionField, firstExecutionError);
 
             VBox followUpDelayBox = new VBox(4);
             Label followUpDelayLabel = new Label("Follow-up delay (hours)");
@@ -239,19 +238,15 @@ public class CustomTasksLayoutController {
             followUpDelayField.setPrefWidth(120);
             followUpDelayField.setMaxWidth(120);
             followUpDelayField.setPromptText(String.valueOf(DEFAULT_FOLLOW_UP_DELAY_HOURS));
-            Runnable commitDelayChange = () -> {
-                if (!commitTimingSettings(className, firstExecutionField.getText(), followUpDelayField.getText())) {
-                    followUpDelayField.setText(String.valueOf(taskFollowUpDelayHours.getOrDefault(
-                            className, DEFAULT_FOLLOW_UP_DELAY_HOURS)));
-                }
-            };
-            followUpDelayField.setOnAction(e -> commitDelayChange.run());
-            followUpDelayField.focusedProperty().addListener((obs, oldVal, newVal) -> {
-                if (!newVal) {
-                    commitDelayChange.run();
-                }
-            });
-            followUpDelayBox.getChildren().addAll(followUpDelayLabel, followUpDelayField);
+            Label followUpDelayError = validationLabel();
+            new ValidatedTextFieldBinding<>(
+                    followUpDelayField,
+                    followUpDelayError,
+                    SettingValidators.positiveInteger("Follow-up delay"),
+                    String::valueOf,
+                    value -> commitTimingSettings(
+                            className, firstExecutionField.getText(), String.valueOf(value)));
+            followUpDelayBox.getChildren().addAll(followUpDelayLabel, followUpDelayField, followUpDelayError);
 
             enableBox.getChildren().addAll(firstExecutionBox, followUpDelayBox);
         }
@@ -261,23 +256,21 @@ public class CustomTasksLayoutController {
         Label offsetLabel = new Label("Offset (minutes)");
         offsetLabel.getStyleClass().add("custom-task-field-label");
         TextField offsetField = new TextField(String.valueOf(initialOffset));
+		offsetField.setTextFormatter(nonNegativeIntegerFormatter());
         offsetField.getStyleClass().add("custom-task-field");
         offsetField.setPrefWidth(100);
         offsetField.setMaxWidth(100);
-        offsetField.textProperty().addListener((obs, oldVal, newVal) -> {
-            try {
-                int offset = Integer.parseInt(newVal.trim());
-                if (offset >= 0) {
-                    taskOffsets.put(className, offset);
-                }
-            } catch (NumberFormatException ignored) {}
-        });
-        offsetField.focusedProperty().addListener((obs, oldVal, newVal) -> {
-            if (!newVal) {
-                persistCurrentSettings(className);
-            }
-        });
-        offsetBox.getChildren().addAll(offsetLabel, offsetField);
+        Label offsetError = validationLabel();
+        new ValidatedTextFieldBinding<>(
+                offsetField,
+                offsetError,
+                SettingValidators.nonNegativeInteger("Offset"),
+                String::valueOf,
+                value -> {
+                    taskOffsets.put(className, value);
+                    persistCurrentSettings(className);
+                });
+        offsetBox.getChildren().addAll(offsetLabel, offsetField, offsetError);
 
         // Priority field
         VBox priorityBox = new VBox(4);
@@ -288,18 +281,17 @@ public class CustomTasksLayoutController {
         priorityField.setPrefWidth(80);
         priorityField.setMaxWidth(80);
         priorityField.setPromptText("0");
-        priorityField.textProperty().addListener((obs, oldVal, newVal) -> {
-            try {
-                int priority = Integer.parseInt(newVal.trim());
-                taskPriorities.put(className, priority);
-            } catch (NumberFormatException ignored) {}
-        });
-        priorityField.focusedProperty().addListener((obs, oldVal, newVal) -> {
-            if (!newVal) {
-                persistCurrentSettings(className);
-            }
-        });
-        priorityBox.getChildren().addAll(priorityLabel, priorityField);
+        Label priorityError = validationLabel();
+        new ValidatedTextFieldBinding<>(
+                priorityField,
+                priorityError,
+                SettingValidators.integer("Priority"),
+                String::valueOf,
+                value -> {
+                    taskPriorities.put(className, value);
+                    persistCurrentSettings(className);
+                });
+        priorityBox.getChildren().addAll(priorityLabel, priorityField, priorityError);
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
@@ -455,6 +447,17 @@ public class CustomTasksLayoutController {
             return scheduleTask(className);
         }
         return true;
+    }
+
+    private Label validationLabel() {
+        Label label = new Label();
+        label.setWrapText(true);
+        return label;
+    }
+
+    private javafx.scene.control.TextFormatter<String> nonNegativeIntegerFormatter() {
+        return new javafx.scene.control.TextFormatter<>(change ->
+                change.getControlNewText().matches("\\d*") ? change : null);
     }
 
     private void persistCurrentSettings(String className) {

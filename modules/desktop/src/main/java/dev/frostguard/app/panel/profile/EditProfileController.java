@@ -1,8 +1,10 @@
 package dev.frostguard.app.panel.profile;
 
 import dev.frostguard.api.configs.TpMessageSeverityEnum;
-import dev.frostguard.app.panel.profile.ProfileManagerActionController;
-import dev.frostguard.app.panel.profile.ProfileAux;
+import dev.frostguard.app.shared.FieldValidationPresenter;
+import dev.frostguard.app.shared.SettingValidator;
+import dev.frostguard.app.shared.SettingValidators;
+import dev.frostguard.app.shared.ValidationResult;
 import dev.frostguard.engine.service.LoggingService;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
@@ -25,6 +27,7 @@ import java.util.TreeSet;
 import java.util.function.UnaryOperator;
 
 public class EditProfileController implements Initializable {
+	private static final long MAX_RECONNECTION_MINUTES = 10_080;
 
     private static final UnaryOperator<TextFormatter.Change> DIGITS_ONLY = change ->
         change.getControlNewText().matches("\\d*") ? change : null;
@@ -60,6 +63,15 @@ public class EditProfileController implements Initializable {
     private TextField txtReconnectionTime;
 
     @FXML
+    private Label lblProfileNameError;
+
+    @FXML
+    private Label lblEmulatorNumberError;
+
+    @FXML
+    private Label lblReconnectionTimeError;
+
+    @FXML
     private TextField txtCharacterName;
 
     @FXML
@@ -83,10 +95,17 @@ public class EditProfileController implements Initializable {
     private ProfileManagerActionController actionController;
     private Stage dialogStage;
     private boolean saveClicked = false;
+    private FieldValidationPresenter profileNamePresenter;
+    private FieldValidationPresenter emulatorNumberPresenter;
+    private FieldValidationPresenter reconnectionTimePresenter;
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
         installInputGuards();
+        profileNamePresenter = new FieldValidationPresenter(txtProfileName, lblProfileNameError);
+        emulatorNumberPresenter = new FieldValidationPresenter(txtEmulatorNumber, lblEmulatorNumberError);
+        reconnectionTimePresenter = new FieldValidationPresenter(txtReconnectionTime, lblReconnectionTimeError);
+        installValidationListeners();
         bindPriorityLabel();
     }
 
@@ -158,7 +177,7 @@ public class EditProfileController implements Initializable {
 
     @FXML
     private void handleSave() {
-        if (!validateInput()) {
+        if (!validateInput(true)) {
             return;
         }
 
@@ -181,18 +200,39 @@ public class EditProfileController implements Initializable {
         dialogStage.close();
     }
 
-    private boolean validateInput() {
-        StringBuilder errorMessage = new StringBuilder();
-        requireText(txtProfileName, "Profile name", errorMessage);
-        requireNonNegativeInt(txtEmulatorNumber, "Emulator number", "integer", errorMessage);
-        requireNonNegativeLong(txtReconnectionTime, "Reconnection time", "number", errorMessage);
+    private boolean validateInput(boolean presentErrors) {
+        boolean nameValid = validateField(
+            txtProfileName, SettingValidators.requiredText("Profile name"), profileNamePresenter, presentErrors);
+        boolean emulatorValid = validateField(
+            txtEmulatorNumber, SettingValidators.nonNegativeInteger("Emulator number"),
+            emulatorNumberPresenter, presentErrors);
+        boolean reconnectValid = validateField(
+            txtReconnectionTime, SettingValidators.rangedLong("Reconnection time", 0, MAX_RECONNECTION_MINUTES),
+            reconnectionTimePresenter, presentErrors);
+        return nameValid && emulatorValid && reconnectValid;
+    }
 
-        if (!errorMessage.isEmpty()) {
-            showAlert(Alert.AlertType.ERROR, "Invalid Input", "Please correct the following errors:", errorMessage.toString());
-            return false;
+    private <T> boolean validateField(
+            TextField field,
+            SettingValidator<T> validator,
+            FieldValidationPresenter presenter,
+            boolean presentErrors) {
+        ValidationResult<T> result = validator.validate(field.getText());
+        if (presentErrors) {
+            if (result.isValid()) {
+                presenter.clear();
+            } else {
+                presenter.showError(result.message());
+            }
         }
+        return result.isValid();
+    }
 
-        return true;
+    private void installValidationListeners() {
+        List.of(txtProfileName, txtEmulatorNumber, txtReconnectionTime).forEach(field ->
+            field.textProperty().addListener((obs, oldValue, newValue) ->
+                btnSave.setDisable(!validateInput(true))));
+        btnSave.setDisable(!validateInput(false));
     }
 
     private void installInputGuards() {
@@ -220,46 +260,6 @@ public class EditProfileController implements Initializable {
         profileToEdit.setCharacterAllianceCode(blankToNullUppercase(txtCharacterAllianceCode));
         profileToEdit.setCharacterServer(blankToNull(txtCharacterServer));
         profileToEdit.setTags(tagChoices.stream().filter(CheckBox::isSelected).map(CheckBox::getText).toList());
-    }
-
-    private void requireText(TextField field, String label, StringBuilder errors) {
-        if (field.getText() == null || field.getText().trim().isEmpty()) {
-            errors.append(label).append(" cannot be empty.\n");
-        }
-    }
-
-    private void requireNonNegativeInt(TextField field, String label, String typeName, StringBuilder errors) {
-        String value = field.getText() == null ? "" : field.getText().trim();
-        if (value.isEmpty()) {
-            errors.append(label).append(" cannot be empty.\n");
-            return;
-        }
-
-        try {
-            int parsed = Integer.parseInt(value);
-            if (parsed < 0) {
-                errors.append(label).append(" must be a non-negative ").append(typeName).append(" (0 or greater).\n");
-            }
-        } catch (NumberFormatException e) {
-            errors.append(label).append(" must be a valid ").append(typeName).append(".\n");
-        }
-    }
-
-    private void requireNonNegativeLong(TextField field, String label, String typeName, StringBuilder errors) {
-        String value = field.getText() == null ? "" : field.getText().trim();
-        if (value.isEmpty()) {
-            errors.append(label).append(" cannot be empty.\n");
-            return;
-        }
-
-        try {
-            long parsed = Long.parseLong(value);
-            if (parsed < 0) {
-                errors.append(label).append(" must be a non-negative ").append(typeName).append(" (0 or greater).\n");
-            }
-        } catch (NumberFormatException e) {
-            errors.append(label).append(" must be a valid ").append(typeName).append(".\n");
-        }
     }
 
     private long parseLongOrZero(TextField textField) {

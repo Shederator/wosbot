@@ -28,6 +28,7 @@
                             <VBox spacing="4">
                                 <Label styleClass="task-field-label" text="Preparation &amp; protection lead time" />
                                 <TextField fx:id="textFieldPreparationTime" prefWidth="100.0" promptText="10" />
+                                <Label fx:id="labelPreparationTimeError" maxWidth="190.0" wrapText="true" />
                             </VBox>
                             <Label maxWidth="420" styleClass="task-card-description"
                                    text="Minutes before each event when Bear preparation and the selected protection mode begin."

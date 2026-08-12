@@ -62,6 +62,11 @@ public abstract class AbstractProfileController implements IProfileLoadListener,
 		textFieldMappings.put(textField, configKey);
 	}
 
+	protected void registerTextField(TextField textField, Label messageLabel, ConfigurationKeyEnum configKey) {
+		textFieldMappings.put(textField, configKey);
+		fieldValidationPresenters.put(textField, new FieldValidationPresenter(textField, messageLabel));
+	}
+
 	protected void registerTimeTextField(
 			TextField textField,
 			Label messageLabel,
@@ -185,6 +190,9 @@ public abstract class AbstractProfileController implements IProfileLoadListener,
 	}
 
 	protected void setupTextFieldUpdateOnFocusOrEnter(TextField textField, ConfigurationKeyEnum configKey) {
+		if (Integer.class.equals(configKey.getType()) && textField.getTextFormatter() == null) {
+			textField.setTextFormatter(nonNegativeIntegerTextFormatter());
+		}
 		textField.focusedProperty().addListener((obs, wasFocused, focused) -> {
 			if (!focused) {
 				updateProfile(textField, configKey);
@@ -492,6 +500,10 @@ public abstract class AbstractProfileController implements IProfileLoadListener,
 			}
 			return change;
 		});
+	}
+
+	protected static @NotNull TextFormatter<String> nonNegativeIntegerTextFormatter() {
+		return new TextFormatter<>(change -> change.getControlNewText().matches("\\d*") ? change : null);
 	}
 
 	private static String timeMask(String text) {
