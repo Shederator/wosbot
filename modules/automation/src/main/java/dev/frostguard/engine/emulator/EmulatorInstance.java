@@ -1,6 +1,7 @@
 package dev.frostguard.engine.emulator;
 
 import java.io.*;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantLock;
@@ -26,6 +27,7 @@ public abstract class EmulatorInstance {
 
     protected static final int RETRY_CEILING = 10, INTER_RETRY_MS = 3000;
     protected static final int BRIDGE_PROBE_LOOPS = 10, BRIDGE_PROBE_WAIT = 500;
+    private static final Duration ADB_CONNECT_TIMEOUT = Duration.ofSeconds(10);
 
     protected String consolePath;
     protected AndroidDebugBridge bridge;
@@ -125,10 +127,18 @@ public abstract class EmulatorInstance {
         if (Thread.currentThread().isInterrupted()) return false;
         try {
             String ep = serial.startsWith("emulator-") ? "127.0.0.1:" + serial.substring(9) : serial;
-            Process p = new ProcessBuilder(adbPath(), "connect", ep)
-                    .directory(new File(adbPath()).getParentFile()).start();
-            String out = new BufferedReader(new InputStreamReader(p.getInputStream())).readLine();
-            return p.waitFor() == 0 && out != null && (out.contains("connected") || out.contains("already connected"));
+            BoundedProcessRunner.ProcessResult result = BoundedProcessRunner.run(
+                    new ProcessBuilder(adbPath(), "connect", ep)
+                            .directory(new File(adbPath()).getParentFile()),
+                    ADB_CONNECT_TIMEOUT);
+            if (result.timedOut()) {
+                LOG.error("adb connect to {} did not respond within {} seconds; killed the subprocess",
+                        ep, ADB_CONNECT_TIMEOUT.toSeconds());
+                return false;
+            }
+            String output = result.output();
+            return result.exitCode() == 0
+                    && (output.contains("connected") || output.contains("already connected"));
         } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
           catch (Exception e) { LOG.error("Connect error {}: {}", serial, e.getMessage()); }
         return false;

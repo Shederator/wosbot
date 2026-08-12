@@ -111,6 +111,10 @@ public class ArenaRoutine extends DelayedTask {
     private static final int MAX_REASONABLE_CHALLENGE_ATTEMPTS = 10;
     private static final int MAX_FREE_REFRESHES = 3;
     private static final int MAX_GEM_REFRESHES = 5;
+    static final SearchConfig TRANSIENT_BUTTON_SEARCH = SearchConfig.builder()
+            .withMaxAttempts(3)
+            .withDelay(500)
+            .build();
     private static final int[] ATTEMPT_PRICES = { 100, 200, 400, 600, 800 };
     private static final int MIN_COLORED_PIXELS_THRESHOLD = 10;
     private static final double GREEN_DOMINANCE_RATIO = 1.5;
@@ -367,7 +371,7 @@ public class ArenaRoutine extends DelayedTask {
 
         ImageSearchResultData challengeResult = templateSearchHelper.locatePattern(
                 TemplatesEnum.ARENA_CHALLENGE_BUTTON,
-                SearchConfig.builder().build());
+                TRANSIENT_BUTTON_SEARCH);
 
         if (!challengeResult.isFound()) {
             logError("Challenge button not found.");
@@ -1192,7 +1196,7 @@ public class ArenaRoutine extends DelayedTask {
         } else {
             ImageSearchResultData freeRefreshResult = templateSearchHelper.locatePattern(
                     TemplatesEnum.ARENA_FREE_REFRESH_BUTTON,
-                    SearchConfig.builder().build());
+                    TRANSIENT_BUTTON_SEARCH);
 
             if (freeRefreshResult.isFound()) {
                 freeRefreshCount++;
@@ -1218,7 +1222,7 @@ public class ArenaRoutine extends DelayedTask {
 
         ImageSearchResultData gemsRefreshResult = templateSearchHelper.locatePattern(
                 TemplatesEnum.ARENA_GEMS_REFRESH_BUTTON,
-                SearchConfig.builder().build());
+                TRANSIENT_BUTTON_SEARCH);
 
         if (!gemsRefreshResult.isFound()) {
             logDebug("Gem list refresh button not found");
