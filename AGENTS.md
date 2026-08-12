@@ -15,8 +15,9 @@ must not weaken the shared quality or verification rules here.
 - Before changing automation routines, navigation, screen interaction, OCR,
   templates, colors, pixels, or timing assumptions, read
   `docs/design-guidelines.md` and any relevant note under `docs/task/`.
-- For source setup and packaging, use `docs/installation.md`; for Windows
-  runtime or autostart behavior, also use `docs/windows.md`.
+- For source setup, build, test, and local startup, use `docs/development.md`.
+  For Windows-native packaging, runtime, or autostart behavior, also use
+  `docs/windows.md`.
 - When preparing a pull request, use `.github/pull_request_template.md` as a
   review guide and adapt it when another structure communicates the change more
   clearly.

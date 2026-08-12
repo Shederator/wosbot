@@ -1,15 +1,23 @@
 # Windows Setup
 
-This document summarizes Windows-specific setup for Frostguard.
+This document contains advanced Windows runtime and native-packaging details.
+For a normal Stable, Nightly, or PR-build setup, start with
+[Install Frostguard on Windows](installation.md). Developers should first
+complete the separate [developer setup](development.md).
 
 The [latest Stable release](https://github.com/Shederator/wosbot/releases/latest)
 provides the tested Windows installer. The permanent
 [Latest Nightly](https://github.com/Shederator/wosbot/releases/tag/nightly)
 entry points to the current authenticated preview with a separate product
-identity. Git, Git LFS, Maven, and a JDK are needed only when building from
-source.
+identity. Git, Git LFS, and a JDK are needed only when building from source; the
+checked-in Maven Wrapper supplies Maven.
 
-## Build Requirements
+## Source development requirements
+
+The following requirements and commands are for developers. They are not steps
+in the normal Stable or Nightly installation.
+
+### Requirements
 
 - Windows 10 or Windows 11.
 - Java JDK 21 or newer.
@@ -17,6 +25,22 @@ source.
 
 WiX Toolset 3.14.1 is required only when producing the native MSI installer.
 Running an installed native build does not require a separately installed JDK.
+
+Recommended installs:
+
+```powershell
+winget install Microsoft.Git
+winget install EclipseAdoptium.Temurin.21.JDK
+winget install GitHub.GitLFS
+```
+
+From the repository root, verify:
+
+```powershell
+java -version
+.\mvnw.cmd -version
+git lfs version
+```
 
 ## Native application updates
 
@@ -53,23 +77,7 @@ displays the version embedded in its application JAR. Changes to the bootstrap,
 icon, or packaged JDK require a new Windows reputation decision; Authenticode
 signing remains the durable solution.
 
-Recommended installs:
-
-```powershell
-winget install Microsoft.Git
-winget install EclipseAdoptium.Temurin.21.JDK
-winget install GitHub.GitLFS
-```
-
-From the repository root, verify:
-
-```powershell
-java -version
-.\mvnw.cmd -version
-git lfs version
-```
-
-## Build Commands
+## Source build commands and native packaging
 
 Use the checked-in Maven Wrapper:
 
@@ -98,8 +106,8 @@ then run:
 
 Outputs remain below `packaging/desktop/target`: the directly runnable image is
 at `app-image/Frostguard`, and the installer is under `installers/stable`. Native
-packaging is opt-in because it is Windows-specific; ordinary `mvn package`
-continues to build and test the platform-neutral reactor.
+packaging is opt-in because it is Windows-specific; ordinary
+`.\mvnw.cmd package` continues to build and test the platform-neutral reactor.
 
 Add `windows-nightly` to produce `Frostguard Nightly` with a distinct application
 ID, upgrade UUID, install directory, shortcut, workspace channel, and update
