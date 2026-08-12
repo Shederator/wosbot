@@ -8,7 +8,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from windows_installer_version import require_newer_version, windows_installer_version  # noqa: E402
+from windows_installer_version import (  # noqa: E402
+    require_newer_version,
+    stable_candidate_windows_version,
+    windows_installer_version,
+)
 
 
 class WindowsInstallerVersionTest(unittest.TestCase):
@@ -47,6 +51,21 @@ class WindowsInstallerVersionTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             require_newer_version(
                 "nightly", "3.0.0-nightly.20260812.1", "3.1.0-nightly.20260811.1")
+
+    def test_accepts_numeric_stable_candidate_version_below_final_release(self):
+        self.assertEqual("2.99.1", stable_candidate_windows_version(
+            "3.0.0-rc.1", "2.99.1"))
+
+    def test_rejects_invalid_or_non_upgradable_stable_candidate_versions(self):
+        for version, windows_version in (
+                ("3.0.0", "2.99.1"),
+                ("3.0.0-01", "2.99.1"),
+                ("3.0.0-rc.1", "3.0.0"),
+                ("3.0.0-rc.1", "2.256.1"),
+                ("3.0.0-rc.1", "2.99")):
+            with self.subTest(version=version, windows_version=windows_version):
+                with self.assertRaises(ValueError):
+                    stable_candidate_windows_version(version, windows_version)
 
 
 if __name__ == "__main__":

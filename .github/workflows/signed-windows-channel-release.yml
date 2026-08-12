@@ -235,6 +235,13 @@ jobs:
                   '--expected-watcher-launcher-sha256',
                   '9c7452d890f39c7f4fdb2e5519993514c84f071deef222fe49784acfd459c209'
               )
+          } else {
+              $verificationArgs += @(
+                  '--expected-desktop-launcher-sha256',
+                  '06610c6684f6323edf915a713d6a29cbc488d49f044685b80eabcfb1f7ca0a53',
+                  '--expected-watcher-launcher-sha256',
+                  'ed6a92c9e42bf4b205c669771bef4cbcd9e4d8674678f89cf944f965922f714e'
+              )
           }
           python build-support/verification/verify_app_image.py @verificationArgs
           powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass `

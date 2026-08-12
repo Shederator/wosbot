@@ -12,6 +12,11 @@ NIGHTLY_VERSION = re.compile(
     r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
     r"-nightly\.(\d{8})\.(0|[1-9]\d*)$"
 )
+STABLE_CANDIDATE_VERSION = re.compile(
+    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+    r"-(?:0|[1-9]\d*|[A-Za-z-][0-9A-Za-z-]*)"
+    r"(?:\.(?:0|[1-9]\d*|[A-Za-z-][0-9A-Za-z-]*))*$"
+)
 
 
 def windows_installer_version(channel: str, version: str) -> str:
@@ -27,6 +32,21 @@ def require_newer_version(channel: str, version: str, previous_version: str) -> 
         raise ValueError(
             f"Windows installer version {'.'.join(map(str, current))} must be newer than "
             f"{'.'.join(map(str, previous))}")
+
+
+def stable_candidate_windows_version(version: str, windows_version: str) -> str:
+    candidate = STABLE_CANDIDATE_VERSION.fullmatch(version)
+    if candidate is None:
+        raise ValueError("Stable candidate version must be a semantic prerelease")
+    windows = STABLE_VERSION.fullmatch(windows_version)
+    if windows is None:
+        raise ValueError("Stable candidate Windows version must use X.Y.Z")
+    candidate_fields = tuple(int(candidate.group(index)) for index in range(1, 4))
+    windows_fields = tuple(int(value) for value in windows.groups())
+    _validate_windows_fields(windows_fields)
+    if windows_fields >= candidate_fields:
+        raise ValueError("Stable candidate Windows version must remain below the final Stable version")
+    return ".".join(str(value) for value in windows_fields)
 
 
 def _release_order(channel: str, version: str) -> tuple[int, ...]:
@@ -71,11 +91,20 @@ def main() -> int:
     parser.add_argument("--channel", required=True, choices=("stable", "nightly"))
     parser.add_argument("--version", required=True)
     parser.add_argument("--previous-version")
+    parser.add_argument("--candidate-windows-version")
     args = parser.parse_args()
     try:
-        if args.previous_version:
+        if args.candidate_windows_version:
+            if args.channel != "stable":
+                raise ValueError("Candidate Windows versions are available only for Stable")
+            if args.previous_version:
+                raise ValueError("Candidate and previous versions cannot be validated together")
+            print(stable_candidate_windows_version(args.version, args.candidate_windows_version))
+        elif args.previous_version:
             require_newer_version(args.channel, args.version, args.previous_version)
-        print(windows_installer_version(args.channel, args.version))
+            print(windows_installer_version(args.channel, args.version))
+        else:
+            print(windows_installer_version(args.channel, args.version))
     except ValueError as failure:
         parser.error(str(failure))
     return 0

@@ -52,6 +52,22 @@ immutable release intact and keep the previous rolling manifest active. Recover
 by verifying and promoting the manifest asset from that immutable release; do
 not rebuild or replace its installer.
 
+### Unpublished Stable release candidates
+
+Before promoting a new Stable major or minor version, manually run **Windows
+Installers** with a prerelease application version such as `3.0.0-rc.1` and a
+numeric Windows Installer version below the final release, such as `2.99.1`.
+The workflow validates that ordering, builds with release updates disabled,
+verifies the pinned Stable launcher hashes, smoke-tests the image, and uploads
+the MSI only as a short-lived Actions artifact. It does not create a GitHub
+Release or change `releases/latest`.
+
+Use the artifact to prove a real upgrade from the current Stable installation.
+The candidate's numeric MSI version must be newer than the installed Stable but
+lower than the final release, so the final `3.0.0` installer can still upgrade
+it. The application displays the prerelease version from its JAR independently
+of the numeric MSI version.
+
 ## Transitional ZIP promotion
 
 The legacy Stable ZIP workflow promotes an already successful `Nightly Windows Bundle` run from

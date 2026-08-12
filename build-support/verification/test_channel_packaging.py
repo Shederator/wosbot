@@ -72,7 +72,7 @@ class ChannelPackagingTest(unittest.TestCase):
             self.assertEqual(value, nightly[key])
         self.assertNotEqual(stable["frostguard.product.upgrade-uuid"],
                             nightly["frostguard.product.upgrade-uuid"])
-        self.assertEqual("${frostguard.windows.app-version}",
+        self.assertEqual("2.1.0",
                          stable["frostguard.windows.launcher-version"])
         self.assertEqual("26.8.12004",
                          nightly["frostguard.windows.launcher-version"])
@@ -170,11 +170,22 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertIn("Remove an abandoned draft release", workflow)
         self.assertIn('java-version: "21.0.12+8.0"', workflow)
         for launcher_hash in (
+            "06610c6684f6323edf915a713d6a29cbc488d49f044685b80eabcfb1f7ca0a53",
+            "ed6a92c9e42bf4b205c669771bef4cbcd9e4d8674678f89cf944f965922f714e",
             "5c728d3662d64c428d003874f6d62b798bbbe329f595b2b15a2ab5ab1fd1faa9",
             "9c7452d890f39c7f4fdb2e5519993514c84f071deef222fe49784acfd459c209",
         ):
             self.assertIn(launcher_hash, installers)
             self.assertIn(launcher_hash, workflow)
+        self.assertIn("stable_candidate_version", installers)
+        self.assertIn("stable_candidate_windows_version", installers)
+        self.assertIn("--candidate-windows-version", installers)
+        stable_upload = installers.index("Upload Stable installer")
+        packaging_reset = installers.index("Reset packaging output before Nightly build")
+        nightly_build = installers.index("Build Nightly application image and installer")
+        self.assertLess(stable_upload, packaging_reset)
+        self.assertLess(packaging_reset, nightly_build)
+        self.assertIn("-pl packaging/desktop clean", installers)
         self.assertIn('gh api --method DELETE `', workflow)
         self.assertIn('releases/$($release.id)', workflow)
         self.assertNotIn("--cleanup-tag --yes", workflow)

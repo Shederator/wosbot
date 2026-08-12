@@ -19,7 +19,9 @@
     <properties>
         <frostguard.release.channel>stable</frostguard.release.channel>
         <frostguard.windows.app-version>${project.version}</frostguard.windows.app-version>
-        <frostguard.windows.launcher-version>${frostguard.windows.app-version}</frostguard.windows.launcher-version>
+        <!-- Keep the unchanged bootstrap byte-identical while releases are
+             project-signed but do not yet have an Authenticode publisher. -->
+        <frostguard.windows.launcher-version>2.1.0</frostguard.windows.launcher-version>
         <frostguard.product.name>Frostguard</frostguard.product.name>
         <frostguard.product.identifier>dev.frostguard.desktop</frostguard.product.identifier>
         <frostguard.product.description>Frostguard automation desktop application</frostguard.product.description>

@@ -16,6 +16,17 @@ on:
       - ".github/workflows/windows-native-package.yml"
       - ".github/workflows/signed-windows-channel-release.yml"
   workflow_dispatch:
+    inputs:
+      stable_candidate_version:
+        description: "Unpublished Stable application SemVer (must be a prerelease)"
+        required: true
+        default: "3.0.0-rc.1"
+        type: string
+      stable_candidate_windows_version:
+        description: "Numeric MSI version below the final Stable version"
+        required: true
+        default: "2.99.1"
+        type: string
 
 permissions:
   contents: read
@@ -63,11 +74,35 @@ jobs:
           }
           $wixBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
+      - name: Validate optional Stable release candidate identity
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        env:
+          CANDIDATE_VERSION: ${{ inputs.stable_candidate_version }}
+          CANDIDATE_WINDOWS_VERSION: ${{ inputs.stable_candidate_windows_version }}
+        run: |
+          python build-support/release/windows_installer_version.py `
+              --channel stable --version $env:CANDIDATE_VERSION `
+              --candidate-windows-version $env:CANDIDATE_WINDOWS_VERSION
+          if ($LASTEXITCODE -ne 0) {
+              throw "Stable release candidate identity is invalid"
+          }
+
       - name: Build Stable application image and installer
         shell: pwsh
+        env:
+          CANDIDATE_VERSION: ${{ inputs.stable_candidate_version }}
+          CANDIDATE_WINDOWS_VERSION: ${{ inputs.stable_candidate_windows_version }}
         run: |
           $mavenArgs = $env:MAVEN_ARGS -split " "
-          & .\mvnw.cmd @mavenArgs "-Dfrostguard.pull-request-build=true" `
+          $candidateArgs = @()
+          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
+              $candidateArgs += @(
+                  "-Drevision=$($env:CANDIDATE_VERSION)",
+                  "-Dfrostguard.windows.app-version=$($env:CANDIDATE_WINDOWS_VERSION)"
+              )
+          }
+          & .\mvnw.cmd @mavenArgs @candidateArgs "-Dfrostguard.pull-request-build=true" `
               "-Pwindows-app-image,windows-installer" package
 
       - name: Test the application-image verifier
@@ -81,6 +116,8 @@ jobs:
         run: >-
           python build-support/verification/verify_app_image.py
           packaging/desktop/target/app-image/Frostguard
+          --expected-desktop-launcher-sha256 06610c6684f6323edf915a713d6a29cbc488d49f044685b80eabcfb1f7ca0a53
+          --expected-watcher-launcher-sha256 ed6a92c9e42bf4b205c669771bef4cbcd9e4d8674678f89cf944f965922f714e
 
       - name: Smoke test Stable launchers and workspace isolation
         shell: pwsh
@@ -103,6 +140,29 @@ jobs:
           }
           "path=$($installers[0].FullName)" | Out-File `
               -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload Stable application image
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostguard-stable-windows-app-image
+          path: packaging/desktop/target/app-image/Frostguard
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Stable installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostguard-stable-windows-installer
+          path: ${{ steps.stable-installer.outputs.path }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Reset packaging output before Nightly build
+        shell: pwsh
+        run: |
+          $mavenArgs = $env:MAVEN_ARGS -split " "
+          & .\mvnw.cmd @mavenArgs -pl packaging/desktop clean
 
       - name: Build Nightly application image and installer
         shell: pwsh
@@ -142,23 +202,6 @@ jobs:
           }
           "path=$($installers[0].FullName)" | Out-File `
               -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-      - name: Upload native application image
-        uses: actions/upload-artifact@v4
-        with:
-          name: frostguard-stable-windows-app-image
-          path: packaging/desktop/target/app-image/Frostguard
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload Windows installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: frostguard-stable-windows-installer
-          path: ${{ steps.stable-installer.outputs.path }}
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 14
 
       - name: Upload Nightly application image
         uses: actions/upload-artifact@v4
