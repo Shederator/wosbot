@@ -55,7 +55,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "21"
+          java-version: "21.0.12+8.0"
           cache: maven
 
       - name: Install WiX Toolset 3
@@ -225,8 +225,18 @@ jobs:
           PRODUCT_NAME: ${{ steps.identity.outputs.product_name }}
         run: |
           $image = "packaging/desktop/target/app-image/$($env:PRODUCT_NAME)"
-          python build-support/verification/verify_app_image.py $image `
-              --channel $env:CHANNEL --product-name $env:PRODUCT_NAME
+          $verificationArgs = @(
+              $image, '--channel', $env:CHANNEL, '--product-name', $env:PRODUCT_NAME
+          )
+          if ($env:CHANNEL -eq 'nightly') {
+              $verificationArgs += @(
+                  '--expected-desktop-launcher-sha256',
+                  '5c728d3662d64c428d003874f6d62b798bbbe329f595b2b15a2ab5ab1fd1faa9',
+                  '--expected-watcher-launcher-sha256',
+                  '9c7452d890f39c7f4fdb2e5519993514c84f071deef222fe49784acfd459c209'
+              )
+          }
+          python build-support/verification/verify_app_image.py @verificationArgs
           powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass `
               -File build-support/verification/smoke_test_app_image.ps1 `
               -ImagePath $image -Channel $env:CHANNEL -ProductName $env:PRODUCT_NAME

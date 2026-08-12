@@ -70,6 +70,17 @@ class VerifyAppImageTest(unittest.TestCase):
     def test_accepts_complete_image(self):
         self.assertEqual([], verify_app_image.inspect_image(self.image))
 
+    def test_rejects_changed_pinned_launcher_hash(self):
+        problems = verify_app_image.inspect_image(
+            self.image, expected_desktop_launcher_sha256="0" * 64)
+        self.assertTrue(any("Frostguard.exe SHA-256 changed" in item for item in problems))
+
+    def test_accepts_matching_pinned_launcher_hash(self):
+        launcher = self.image / "Frostguard.exe"
+        expected = __import__("hashlib").sha256(launcher.read_bytes()).hexdigest()
+        self.assertEqual([], verify_app_image.inspect_image(
+            self.image, expected_desktop_launcher_sha256=expected))
+
     def test_rejects_missing_bundled_runtime(self):
         (self.image / "runtime/bin/server/jvm.dll").unlink()
         self.assertTrue(any("jvm.dll" in item for item in verify_app_image.inspect_image(self.image)))

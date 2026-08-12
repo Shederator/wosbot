@@ -19,6 +19,7 @@
     <properties>
         <frostguard.release.channel>stable</frostguard.release.channel>
         <frostguard.windows.app-version>${project.version}</frostguard.windows.app-version>
+        <frostguard.windows.launcher-version>${frostguard.windows.app-version}</frostguard.windows.launcher-version>
         <frostguard.product.name>Frostguard</frostguard.product.name>
         <frostguard.product.identifier>dev.frostguard.desktop</frostguard.product.identifier>
         <frostguard.product.description>Frostguard automation desktop application</frostguard.product.description>
@@ -257,7 +258,7 @@
                                             <arg value="--name" />
                                             <arg value="${frostguard.product.name}" />
                                             <arg value="--app-version" />
-                                            <arg value="${frostguard.windows.app-version}" />
+                                            <arg value="${frostguard.windows.launcher-version}" />
                                             <arg value="--vendor" />
                                             <arg value="Frostguard" />
                                             <arg value="--description" />
@@ -373,6 +374,9 @@
             <id>windows-nightly</id>
             <properties>
                 <frostguard.release.channel>nightly</frostguard.release.channel>
+                <!-- Keep the unchanged bootstrap byte-identical while releases are
+                     project-signed but do not yet have an Authenticode publisher. -->
+                <frostguard.windows.launcher-version>26.8.12004</frostguard.windows.launcher-version>
                 <frostguard.product.name>Frostguard Nightly</frostguard.product.name>
                 <frostguard.product.identifier>dev.frostguard.desktop.nightly</frostguard.product.identifier>
                 <frostguard.product.description>Frostguard Nightly automation desktop application</frostguard.product.description>

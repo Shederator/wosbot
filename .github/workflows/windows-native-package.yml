@@ -47,7 +47,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "21"
+          java-version: "21.0.12+8.0"
           cache: maven
 
       # JDK 21 jpackage invokes the WiX 3 candle/light toolchain for an MSI.
@@ -117,6 +117,8 @@ jobs:
           "packaging/desktop/target/app-image/Frostguard Nightly"
           --channel nightly
           --product-name "Frostguard Nightly"
+          --expected-desktop-launcher-sha256 5c728d3662d64c428d003874f6d62b798bbbe329f595b2b15a2ab5ab1fd1faa9
+          --expected-watcher-launcher-sha256 9c7452d890f39c7f4fdb2e5519993514c84f071deef222fe49784acfd459c209
 
       - name: Smoke test Nightly launchers and workspace isolation
         shell: pwsh

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
+import hashlib
 import re
 import zipfile
 from pathlib import Path
@@ -47,7 +48,9 @@ def _read_properties(content: str) -> dict[str, str]:
 
 
 def inspect_image(
-        image: Path, channel: str = "stable", product_name: str = "Frostguard"
+        image: Path, channel: str = "stable", product_name: str = "Frostguard",
+        expected_desktop_launcher_sha256: str = "",
+        expected_watcher_launcher_sha256: str = "",
 ) -> list[str]:
     problems: list[str] = []
     if not image.is_dir():
@@ -69,6 +72,18 @@ def inspect_image(
     for required in required_files:
         if required not in files:
             problems.append(f"Application image is missing {required}")
+
+    for relative, expected_hash in (
+        (f"{product_name}.exe", expected_desktop_launcher_sha256),
+        (f"{watcher_name}.exe", expected_watcher_launcher_sha256),
+    ):
+        if not expected_hash or relative not in files:
+            continue
+        actual_hash = hashlib.sha256(files[relative].read_bytes()).hexdigest()
+        if actual_hash != expected_hash:
+            problems.append(
+                f"{relative} SHA-256 changed: expected {expected_hash}, got {actual_hash}"
+            )
 
     runtime_jars = [name for name in files if re.match(r"^app/lib/[^/]+\.jar$", name)]
     if len(runtime_jars) < MINIMUM_RUNTIME_JARS:
@@ -196,8 +211,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("image", type=Path)
     parser.add_argument("--channel", choices=("stable", "nightly"), default="stable")
     parser.add_argument("--product-name", default="Frostguard")
+    parser.add_argument("--expected-desktop-launcher-sha256", default="")
+    parser.add_argument("--expected-watcher-launcher-sha256", default="")
     args = parser.parse_args(argv)
-    problems = inspect_image(args.image, args.channel, args.product_name)
+    problems = inspect_image(
+        args.image,
+        args.channel,
+        args.product_name,
+        args.expected_desktop_launcher_sha256,
+        args.expected_watcher_launcher_sha256,
+    )
     if problems:
         for problem in problems:
             print(f"::error::{problem}")

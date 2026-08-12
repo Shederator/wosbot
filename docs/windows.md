@@ -44,6 +44,14 @@ and leaves the current installation untouched. A failed installer upgrade uses
 Windows Installer rollback, attempts to reopen the retained application, and
 shows an update failure instead of silently claiming success.
 
+Until release binaries have an Authenticode publisher, Java-only Nightly
+updates keep the native desktop and watcher bootstrap files byte-identical so
+an already accepted launcher does not lose Smart App Control reputation merely
+because the MSI product version increased. The MSI version still increases for
+every release, and Frostguard displays the version embedded in its application
+JAR. Changes to the bootstrap, icon, or packaged JDK require a new Windows
+reputation decision; Authenticode signing remains the durable solution.
+
 Recommended installs:
 
 ```powershell

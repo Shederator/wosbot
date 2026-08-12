@@ -41,6 +41,7 @@ class ChannelPackagingTest(unittest.TestCase):
 
         self.assertIn("name: Windows Installers", installers)
         self.assertIn("Build and smoke-test Stable and Nightly installers", installers)
+        self.assertIn('java-version: "21.0.12+8.0"', installers)
 
     def test_stable_and_nightly_use_distinct_durable_windows_identities(self):
         root = ET.parse(REPO_ROOT / "packaging/desktop/pom.xml").getroot()
@@ -71,6 +72,10 @@ class ChannelPackagingTest(unittest.TestCase):
             self.assertEqual(value, nightly[key])
         self.assertNotEqual(stable["frostguard.product.upgrade-uuid"],
                             nightly["frostguard.product.upgrade-uuid"])
+        self.assertEqual("${frostguard.windows.app-version}",
+                         stable["frostguard.windows.launcher-version"])
+        self.assertEqual("26.8.12004",
+                         nightly["frostguard.windows.launcher-version"])
 
         pom = (REPO_ROOT / "packaging/desktop/pom.xml").read_text(encoding="utf-8")
         for contract in (
@@ -93,6 +98,14 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertIn("msi", installer_arguments)
         self.assertNotIn("exe", installer_arguments)
         self.assertIn("--win-shortcut", installer_arguments)
+
+        app_image_arguments = [
+            argument.attrib["value"]
+            for argument in root.findall(
+                ".//m:profile[m:id='windows-app-image']//m:arg[@value]", NS)
+        ]
+        self.assertIn("${frostguard.windows.launcher-version}", app_image_arguments)
+        self.assertIn("${frostguard.windows.app-version}", installer_arguments)
 
     def test_installer_exposes_only_product_shortcuts_and_guards_running_apps(self):
         watcher = (REPO_ROOT / "packaging/desktop/src/main/windows/"
@@ -119,6 +132,8 @@ class ChannelPackagingTest(unittest.TestCase):
 
     def test_release_publishes_project_signed_manifest_after_installer_verification(self):
         workflow = (REPO_ROOT / ".github/workflows/signed-windows-channel-release.yml").read_text(
+            encoding="utf-8")
+        installers = (REPO_ROOT / ".github/workflows/windows-native-package.yml").read_text(
             encoding="utf-8")
         ordered_steps = (
             "Prepare immutable installer and verify optional Authenticode",
@@ -153,6 +168,13 @@ class ChannelPackagingTest(unittest.TestCase):
             workflow.count("Where-Object { $_.tag_name -ceq $env:TAG }"), 2)
         self.assertIn("gh release upload updates-nightly $env:MANIFEST", workflow)
         self.assertIn("Remove an abandoned draft release", workflow)
+        self.assertIn('java-version: "21.0.12+8.0"', workflow)
+        for launcher_hash in (
+            "5c728d3662d64c428d003874f6d62b798bbbe329f595b2b15a2ab5ab1fd1faa9",
+            "9c7452d890f39c7f4fdb2e5519993514c84f071deef222fe49784acfd459c209",
+        ):
+            self.assertIn(launcher_hash, installers)
+            self.assertIn(launcher_hash, workflow)
         self.assertIn('gh api --method DELETE `', workflow)
         self.assertIn('releases/$($release.id)', workflow)
         self.assertNotIn("--cleanup-tag --yes", workflow)
