@@ -50,7 +50,7 @@ jobs:
           java-version: "21"
           cache: maven
 
-      # JDK 21 jpackage invokes the WiX 3 candle/light toolchain for an EXE.
+      # JDK 21 jpackage invokes the WiX 3 candle/light toolchain for an MSI.
       # Pinning the Chocolatey package prevents an incompatible WiX major from
       # silently changing the installer build underneath this workflow.
       - name: Install WiX Toolset 3
@@ -94,7 +94,7 @@ jobs:
         shell: pwsh
         run: |
           $installers = @(Get-ChildItem -LiteralPath packaging/desktop/target/installers/stable `
-              -Filter "Frostguard-*.exe" -File)
+              -Filter "Frostguard-*.msi" -File)
           if ($installers.Count -ne 1) {
               throw "Expected exactly one versioned installer, found $($installers.Count)"
           }
@@ -131,7 +131,7 @@ jobs:
         shell: pwsh
         run: |
           $installers = @(Get-ChildItem -LiteralPath packaging/desktop/target/installers/nightly `
-              -Filter "Frostguard Nightly-*.exe" -File)
+              -Filter "Frostguard Nightly-*.msi" -File)
           if ($installers.Count -ne 1) {
               throw "Expected exactly one versioned Nightly installer, found $($installers.Count)"
           }

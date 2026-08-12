@@ -260,7 +260,7 @@ with `./mvnw javafx:run`; its versioned JAR is not a standalone distribution.
 - packaging inputs staged under `packaging/desktop/target/input`
 - Windows application images: `packaging/desktop/target/app-image/Frostguard`
   and `app-image/Frostguard Nightly`
-- Windows installers: versioned EXEs under
+- Windows installers: versioned MSI packages under
   `packaging/desktop/target/installers/<channel>`
 - ADB/Tesseract files staged from `tools/`
 - custom task examples staged from root `examples/custom-tasks/`
@@ -290,9 +290,11 @@ and automatic Nightly-to-Stable migration are not supported.
 The installed desktop exposes update controls only for eligible Stable or
 Nightly builds. A selected installer is downloaded to
 `<workspace>/cache/updates/<channel>/<version>`, verified, and passed to a
-hidden PowerShell waiter. The waiter requires a one-time authorization token
-and waits for the Frostguard PID to disappear before starting the same published
-installer in passive, no-restart mode. It pins `INSTALLDIR` to the running
+hidden PowerShell waiter. Windows releases publish the MSI package directly;
+the jpackage EXE bootstrap wrapper is not part of the update contract. The
+waiter requires a one-time authorization token and waits for the Frostguard PID
+to disappear before invoking `msiexec` for the same published MSI in passive,
+no-restart mode. It pins `INSTALLDIR` to the running
 launcher's parent so upgrades retain a user-selected installation directory.
 Frostguard authorizes the staged waiter, stops queues and workspace-owned
 services, closes SQLite and the workspace lock, and exits. A failed shutdown

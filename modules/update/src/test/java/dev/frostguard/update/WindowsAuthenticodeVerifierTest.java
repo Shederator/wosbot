@@ -15,7 +15,7 @@ class WindowsAuthenticodeVerifierTest {
 
     @Test
     void acceptsValidExpectedPublisher() throws Exception {
-        Path installer = Files.writeString(temp.resolve("installer.exe"), "test");
+        Path installer = Files.writeString(temp.resolve("installer.msi"), "test");
         WindowsAuthenticodeVerifier verifier = new WindowsAuthenticodeVerifier(
                 (command, environment, timeout) -> new CommandRunner.CommandResult(
                         0, "Valid\tCN=Frostguard Project, O=Frostguard"));
@@ -26,7 +26,7 @@ class WindowsAuthenticodeVerifierTest {
 
     @Test
     void acceptsProjectAuthenticatedInstallerWhenAuthenticodeIsNotRequired() throws Exception {
-        Path installer = Files.writeString(temp.resolve("project-signed-installer.exe"), "test");
+        Path installer = Files.writeString(temp.resolve("project-signed-installer.msi"), "test");
         WindowsAuthenticodeVerifier verifier = new WindowsAuthenticodeVerifier(
                 (command, environment, timeout) -> {
                     throw new AssertionError("PowerShell should not run without an Authenticode requirement");
@@ -37,7 +37,7 @@ class WindowsAuthenticodeVerifierTest {
 
     @Test
     void rejectsUnsignedInstaller() throws Exception {
-        Path installer = Files.writeString(temp.resolve("installer.exe"), "test");
+        Path installer = Files.writeString(temp.resolve("installer.msi"), "test");
         WindowsAuthenticodeVerifier verifier = new WindowsAuthenticodeVerifier(
                 (command, environment, timeout) -> new CommandRunner.CommandResult(0, "NotSigned\t"));
 
@@ -47,7 +47,7 @@ class WindowsAuthenticodeVerifierTest {
 
     @Test
     void rejectsUnexpectedPublisher() throws Exception {
-        Path installer = Files.writeString(temp.resolve("installer.exe"), "test");
+        Path installer = Files.writeString(temp.resolve("installer.msi"), "test");
         WindowsAuthenticodeVerifier verifier = new WindowsAuthenticodeVerifier(
                 (command, environment, timeout) -> new CommandRunner.CommandResult(0, "Valid\tCN=Someone Else"));
 
@@ -61,7 +61,7 @@ class WindowsAuthenticodeVerifierTest {
                 (command, environment, timeout) -> {
                     throw new AssertionError("PowerShell should not run");
                 });
-        assertThrows(UpdateException.class, () -> verifier.verify(temp.resolve("missing.exe"),
+        assertThrows(UpdateException.class, () -> verifier.verify(temp.resolve("missing.msi"),
                 new SignatureRequirement("authenticode", "Frostguard Project")));
     }
 }

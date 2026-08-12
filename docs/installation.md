@@ -20,7 +20,7 @@ unmerged code and continue to use the temporary ZIP format.
 
 ## Install a downloaded build
 
-1. Open the desired release and download its Windows x64 EXE installer.
+1. Open the desired release and download its Windows x64 MSI installer.
 2. Confirm that the download comes from the official `Shederator/wosbot`
    GitHub release. A Windows publisher identity is not currently expected.
 3. Choose whether to create a desktop shortcut and complete the per-user
@@ -170,7 +170,7 @@ SHA-256 to match. A Windows Authenticode signer is checked in addition when the
 build and manifest declare one. The current public ZIP feeds are not used by
 this updater; automatic installer updates stay disabled in ordinary local and
 PR builds. After confirmation, an in-app update closes Frostguard, applies the
-same published EXE with compact progress but without the first-install wizard,
+same published MSI with compact progress but without the first-install wizard,
 and reopens the same channel and workspace. Running a downloaded installer
 manually remains interactive.
 

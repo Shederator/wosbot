@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -37,6 +38,9 @@ public final class WindowsInstallerHandoff implements InstallerHandoff {
             throws UpdateException {
         if (!Files.isRegularFile(installer)) {
             throw new UpdateException("Installer handoff target does not exist: " + installer);
+        }
+        if (!installer.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".msi")) {
+            throw new UpdateException("Windows update handoff requires an MSI package");
         }
         if (parentPid <= 0) {
             throw new UpdateException("Installer handoff requires a valid Frostguard process ID");
@@ -157,11 +161,13 @@ public final class WindowsInstallerHandoff implements InstallerHandoff {
                     Remove-Item -LiteralPath $tokenPath -Force
 
                     $installArguments = @(
+                        '/i',
+                        ('"{0}"' -f $installerPath),
                         '/passive',
                         '/norestart',
                         ('INSTALLDIR="{0}"' -f $installDirectory)
                     )
-                    $installerProcess = Start-Process -FilePath $installerPath `
+                    $installerProcess = Start-Process -FilePath 'msiexec.exe' `
                         -ArgumentList $installArguments -Wait -PassThru
                     if (@(0, 3010) -notcontains $installerProcess.ExitCode) {
                         throw "Windows Installer exited with code $($installerProcess.ExitCode). " +

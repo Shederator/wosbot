@@ -90,6 +90,8 @@ class ChannelPackagingTest(unittest.TestCase):
             for argument in root.findall(
                 ".//m:profile[m:id='windows-installer']//m:arg[@value]", NS)
         ]
+        self.assertIn("msi", installer_arguments)
+        self.assertNotIn("exe", installer_arguments)
         self.assertIn("--win-shortcut", installer_arguments)
 
     def test_installer_exposes_only_product_shortcuts_and_guards_running_apps(self):
@@ -131,6 +133,8 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertIn("FROSTGUARD_WINDOWS_SIGNING_CERTIFICATE_BASE64", workflow)
         self.assertIn("Configure optional Authenticode certificate", workflow)
         self.assertIn("Get-AuthenticodeSignature", workflow)
+        self.assertIn('installer_name = "$assetPrefix-$($env:VERSION)-windows-x64.msi"', workflow)
+        self.assertIn("-Filter '*.msi' -File", workflow)
         self.assertIn("windows_installer_version.py", workflow)
         self.assertIn("gh release list --repo $env:GITHUB_REPOSITORY", workflow)
         self.assertIn("if ($releaseTags -contains $tag)", workflow)

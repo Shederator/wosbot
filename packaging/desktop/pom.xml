@@ -331,7 +331,7 @@
                                         <exec executable="${jpackage.executable}" failonerror="true">
                                             <arg value="--verbose" />
                                             <arg value="--type" />
-                                            <arg value="exe" />
+                                            <arg value="msi" />
                                             <arg value="--dest" />
                                             <arg path="${project.build.directory}/installers/${frostguard.release.channel}" />
                                             <arg value="--name" />

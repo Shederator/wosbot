@@ -18,7 +18,7 @@ class WindowsInstallerHandoffTest {
 
     @Test
     void startsHiddenWaiterWithInstallerAndParentIdentity() throws Exception {
-        Path installer = Files.writeString(temp.resolve("Frostguard-3.0.1.exe"), "test");
+        Path installer = Files.writeString(temp.resolve("Frostguard-3.0.1.msi"), "test");
         Path installDirectory = Files.createDirectory(temp.resolve("installed Frostguard"));
         Path launcher = Files.writeString(installDirectory.resolve("Frostguard.exe"), "test");
         Path workspace = Files.createDirectory(temp.resolve("workspace"));
@@ -35,6 +35,9 @@ class WindowsInstallerHandoffTest {
         assertTrue(command.get().contains("Hidden"));
         String script = command.get().getLast();
         assertTrue(script.contains("Get-Process -Id $targetPid"));
+        assertTrue(script.contains("Start-Process -FilePath 'msiexec.exe'"));
+        assertTrue(script.contains("'/i'"));
+        assertTrue(script.contains("('\"{0}\"' -f $installerPath)"));
         assertTrue(script.contains("'/passive'"));
         assertTrue(script.contains("'/norestart'"));
         assertTrue(script.contains("INSTALLDIR=\"{0}\""));
@@ -64,7 +67,7 @@ class WindowsInstallerHandoffTest {
         WindowsInstallerHandoff handoff = new WindowsInstallerHandoff((command, environment) -> {
             throw new AssertionError("Waiter should not start");
         });
-        Path installer = temp.resolve("missing.exe");
+        Path installer = temp.resolve("missing.msi");
         Path launcher = temp.resolve("missing-launcher.exe");
         assertThrows(UpdateException.class,
                 () -> handoff.stage(installer, 10L, launcher, temp));
@@ -72,13 +75,27 @@ class WindowsInstallerHandoffTest {
 
     @Test
     void reportsWaiterLaunchFailure() throws Exception {
-        Path installer = Files.writeString(temp.resolve("Frostguard-3.0.1.exe"), "test");
+        Path installer = Files.writeString(temp.resolve("Frostguard-3.0.1.msi"), "test");
         Path installDirectory = Files.createDirectory(temp.resolve("installed"));
         Path launcher = Files.writeString(installDirectory.resolve("Frostguard.exe"), "test");
         Path workspace = Files.createDirectory(temp.resolve("workspace"));
         WindowsInstallerHandoff handoff = new WindowsInstallerHandoff((command, environment) -> {
             throw new IOException("blocked");
         });
+        assertThrows(UpdateException.class,
+                () -> handoff.stage(installer, 10L, launcher, workspace));
+    }
+
+    @Test
+    void rejectsExeWrapperBeforeStartingWaiter() throws Exception {
+        Path installer = Files.writeString(temp.resolve("Frostguard-3.0.1.exe"), "test");
+        Path installDirectory = Files.createDirectory(temp.resolve("installed-exe"));
+        Path launcher = Files.writeString(installDirectory.resolve("Frostguard.exe"), "test");
+        Path workspace = Files.createDirectory(temp.resolve("workspace-exe"));
+        WindowsInstallerHandoff handoff = new WindowsInstallerHandoff((command, environment) -> {
+            throw new AssertionError("Waiter should not start for an EXE wrapper");
+        });
+
         assertThrows(UpdateException.class,
                 () -> handoff.stage(installer, 10L, launcher, workspace));
     }

@@ -42,6 +42,8 @@ def write_manifest(
             raise ValueError(f"{label} must use HTTPS")
     if not installer.is_file() or installer.stat().st_size <= 0:
         raise ValueError("installer must be a non-empty file")
+    if installer.suffix.lower() != ".msi":
+        raise ValueError("Windows installer must be an MSI package")
     if Path(urlparse(installer_url).path).name != installer.name:
         raise ValueError("installer URL must end with the exact installer file name")
     if version not in installer.name:

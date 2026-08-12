@@ -16,7 +16,7 @@ class ManifestCodecTest {
 
         assertEquals(1, manifest.schemaVersion());
         assertEquals("stable", manifest.channel());
-        assertEquals("Frostguard-3.0.1-windows-x64.exe",
+        assertEquals("Frostguard-3.0.1-windows-x64.msi",
                 manifest.artifacts().get("windows-x64").fileName());
     }
 
@@ -40,7 +40,13 @@ class ManifestCodecTest {
 
     @Test
     void rejectsMutableOrMismatchedArtifactName() {
-        String json = validManifest().replace("Frostguard-3.0.1-windows-x64.exe", "Frostguard-latest.exe");
+        String json = validManifest().replace("Frostguard-3.0.1-windows-x64.msi", "Frostguard-latest.msi");
+        assertThrows(UpdateException.class, () -> codec.read(json.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void rejectsWindowsExeWrapper() {
+        String json = validManifest().replace("windows-x64.msi", "windows-x64.exe");
         assertThrows(UpdateException.class, () -> codec.read(json.getBytes(StandardCharsets.UTF_8)));
     }
 
@@ -73,8 +79,8 @@ class ManifestCodecTest {
                     "windows-x64": {
                       "operatingSystem": "windows",
                       "architecture": "x64",
-                      "fileName": "Frostguard-3.0.1-windows-x64.exe",
-                      "url": "https://example.com/releases/3.0.1/Frostguard-3.0.1-windows-x64.exe",
+                      "fileName": "Frostguard-3.0.1-windows-x64.msi",
+                      "url": "https://example.com/releases/3.0.1/Frostguard-3.0.1-windows-x64.msi",
                       "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                       "size": 123,
                       "signature": {"type": "authenticode", "publisher": "CN=Frostguard Project, O=Frostguard"}

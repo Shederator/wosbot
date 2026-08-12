@@ -143,8 +143,8 @@ class UpdateDownloaderTest {
 
     private static UpdateCandidate candidate(byte[] bytes, String hash) {
         UpdateArtifact artifact = new UpdateArtifact("windows", "x64",
-                "Frostguard-3.0.1-windows-x64.exe",
-                "https://example.com/releases/3.0.1/Frostguard-3.0.1-windows-x64.exe",
+                "Frostguard-3.0.1-windows-x64.msi",
+                "https://example.com/releases/3.0.1/Frostguard-3.0.1-windows-x64.msi",
                 hash, bytes.length, new SignatureRequirement("authenticode", "CN=Frostguard Project, O=Frostguard"));
         return new UpdateCandidate(RuntimeChannel.STABLE, SemanticVersion.parse("3.0.1"),
                 java.time.Instant.parse("2026-08-10T04:00:00Z"), URI.create("https://example.com/releases/3.0.1"),

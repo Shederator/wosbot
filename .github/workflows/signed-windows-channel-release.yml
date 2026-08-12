@@ -152,7 +152,7 @@ jobs:
               product_name = $productName
               profile = $profile
               tag = $tag
-              installer_name = "$assetPrefix-$($env:VERSION)-windows-x64.exe"
+              installer_name = "$assetPrefix-$($env:VERSION)-windows-x64.msi"
               manifest_name = $manifestName
           }.GetEnumerator() | ForEach-Object {
               "$($_.Key)=$($_.Value)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
@@ -241,7 +241,7 @@ jobs:
           AUTHENTICODE_PUBLISHER: ${{ steps.certificate.outputs.publisher }}
         run: |
           $source = @(Get-ChildItem "packaging/desktop/target/installers/$($env:CHANNEL)" `
-              -Filter '*.exe' -File)
+              -Filter '*.msi' -File)
           if ($source.Count -ne 1) {
               throw "Expected exactly one unsigned installer, found $($source.Count)"
           }
@@ -304,7 +304,7 @@ jobs:
               throw "Uploaded installer could not be resolved"
           }
           $asset = $matchingAssets[0]
-          $downloaded = Join-Path $env:RUNNER_TEMP "uploaded-installer.exe"
+          $downloaded = Join-Path $env:RUNNER_TEMP "uploaded-installer.msi"
           gh api "repos/$($env:GITHUB_REPOSITORY)/releases/assets/$($asset.id)" `
               -H "Accept: application/octet-stream" > $downloaded
           if ($LASTEXITCODE -ne 0) {

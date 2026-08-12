@@ -142,6 +142,12 @@ uploaded to an immutable HTTPS URL, and smoke-tested. The public verification
 key is part of the application; the private signing key remains outside the
 repository.
 
+Windows release artifacts are direct MSI packages. Do not switch the feed back
+to jpackage's EXE bootstrap wrapper: installed Frostguard invokes Windows
+Installer directly, and existing schema-1 clients can use an MSI artifact
+without a manifest-format migration. Authenticode signing remains additive and
+can be applied to the final MSI later.
+
 ### Signed envelope 1
 
 ```json
@@ -173,8 +179,8 @@ after signature verification.
     "windows-x64": {
       "operatingSystem": "windows",
       "architecture": "x64",
-      "fileName": "Frostguard-3.0.1-windows-x64.exe",
-      "url": "https://example.invalid/releases/3.0.1/Frostguard-3.0.1-windows-x64.exe",
+      "fileName": "Frostguard-3.0.1-windows-x64.msi",
+      "url": "https://example.invalid/releases/3.0.1/Frostguard-3.0.1-windows-x64.msi",
       "sha256": "<64 lowercase hexadecimal characters>",
       "size": 123456789
     }

@@ -9,6 +9,7 @@ import java.net.URI;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.HexFormat;
+import java.util.Locale;
 import java.util.Map;
 
 public final class ManifestCodec {
@@ -75,6 +76,9 @@ public final class ManifestCodec {
         }
         HexFormat.of().parseHex(hash);
         if (platform.operatingSystem() == UpdatePlatform.OperatingSystem.WINDOWS) {
+            if (!fileName.toLowerCase(Locale.ROOT).endsWith(".msi")) {
+                throw new IllegalArgumentException("Windows update artifact must be an MSI package");
+            }
             SignatureRequirement signature = artifact.signature();
             if (signature != null && (!"authenticode".equalsIgnoreCase(signature.type())
                     || required(signature.publisher(), "Authenticode publisher").isBlank())) {

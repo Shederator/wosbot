@@ -17,7 +17,7 @@ class WriteUpdateManifestTest(unittest.TestCase):
     def test_writes_hash_size_identity_and_channel_after_installer_exists(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            installer = root / "Frostguard-Nightly-3.1.0-nightly.20260811.1-windows-x64.exe"
+            installer = root / "Frostguard-Nightly-3.1.0-nightly.20260811.1-windows-x64.msi"
             installer.write_bytes(b"signed-installer")
             output = root / "manifest.json"
 
@@ -43,7 +43,7 @@ class WriteUpdateManifestTest(unittest.TestCase):
     def test_omits_optional_authenticode_requirement(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            installer = root / "Frostguard-3.0.1-windows-x64.exe"
+            installer = root / "Frostguard-3.0.1-windows-x64.msi"
             installer.write_bytes(b"unsigned but project-authenticated")
 
             manifest = write_manifest(
@@ -62,7 +62,7 @@ class WriteUpdateManifestTest(unittest.TestCase):
     def test_rejects_mutable_or_cross_channel_inputs(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            installer = root / "Frostguard-latest.exe"
+            installer = root / "Frostguard-latest.msi"
             installer.write_bytes(b"installer")
             common = dict(
                 channel="stable",
@@ -70,7 +70,7 @@ class WriteUpdateManifestTest(unittest.TestCase):
                 minimum_updater_version="3.0.0",
                 published_at="2026-08-11T14:00:00Z",
                 release_notes_url="https://example.com/release",
-                installer_url="https://example.com/Frostguard-latest.exe",
+                installer_url="https://example.com/Frostguard-latest.msi",
                 installer=installer,
                 publisher="CN=Frostguard",
                 output=root / "manifest.json",
@@ -78,6 +78,24 @@ class WriteUpdateManifestTest(unittest.TestCase):
 
             with self.assertRaises(ValueError):
                 write_manifest(**common)
+
+    def test_rejects_exe_wrapper(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            installer = root / "Frostguard-3.0.1-windows-x64.exe"
+            installer.write_bytes(b"wrapper")
+
+            with self.assertRaisesRegex(ValueError, "MSI package"):
+                write_manifest(
+                    channel="stable",
+                    version="3.0.1",
+                    minimum_updater_version="3.0.0",
+                    published_at="2026-08-12T00:00:00Z",
+                    release_notes_url="https://example.com/releases/3.0.1",
+                    installer_url=f"https://example.com/releases/3.0.1/{installer.name}",
+                    installer=installer,
+                    output=root / "manifest.json",
+                )
 
 
 if __name__ == "__main__":

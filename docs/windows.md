@@ -14,7 +14,7 @@ building from source.
 - Java JDK 21 or newer.
 - Git and Git LFS.
 
-WiX Toolset 3.14.1 is required only when producing the native EXE installer.
+WiX Toolset 3.14.1 is required only when producing the native MSI installer.
 Running an installed native build does not require a separately installed JDK.
 
 ## Native application updates
@@ -79,7 +79,7 @@ python build-support/verification/verify_app_image.py packaging/desktop/target/a
 powershell -ExecutionPolicy Bypass -File build-support/verification/smoke_test_app_image.ps1 -ImagePath packaging/desktop/target/app-image/Frostguard
 ```
 
-To build both the application image and a versioned per-user EXE installer,
+To build both the application image and a versioned per-user MSI installer,
 install WiX Toolset 3.14.1, ensure `candle.exe` and `light.exe` are on `PATH`,
 then run:
 
