@@ -180,7 +180,12 @@ public class HeroMissionEventRoutine extends DelayedTask {
 
         // Select flag if needed
         if (useFlag) {
-            marchHelper.selectFlag(flagNumber);
+            if (!marchHelper.selectFlag(flagNumber)) {
+                logWarning("Configured formation #" + flagNumber + " is unavailable. Cancelling rally setup.");
+                pressBack();
+                reschedule(LocalDateTime.now().plusMinutes(5));
+                return false;
+            }
         }
 
         var deployment = deploymentHelper.readScreen(DeploymentHelper.MAX_RALLY_STAMINA_COST);

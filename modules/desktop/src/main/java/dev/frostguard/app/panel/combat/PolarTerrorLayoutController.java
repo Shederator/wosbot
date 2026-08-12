@@ -2,6 +2,7 @@ package dev.frostguard.app.panel.combat;
 
 import dev.frostguard.app.shared.AbstractProfileController;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
+import dev.frostguard.api.domain.FormationSlots;
 import dev.frostguard.api.configs.PolarTerrorMode;
 import dev.frostguard.app.panel.profile.ProfileAux;
 import javafx.fxml.FXML;
@@ -156,10 +157,7 @@ public class PolarTerrorLayoutController extends AbstractProfileController {
                 comboBoxPolarTerrorMarch5Flag, comboBoxPolarTerrorMarch6Flag
         };
         for (ComboBox<String> combo : marchFlagCombos) {
-            combo.getItems().add("No Flag");
-            for (int i = 1; i <= 8; i++) {
-                combo.getItems().add(String.valueOf(i));
-            }
+            combo.getItems().setAll(FormationSlots.labelsWithNone("No Flag"));
         }
         comboBoxBerserkCryptidMode.getItems().addAll("Limited (10)", "Limited (50)", "Unlimited");
         for (int i = 1; i <= 6; i++) {

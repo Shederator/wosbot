@@ -11,6 +11,9 @@ class AllianceChampionshipRoutineTest {
     void parsesConfiguredFlags() {
         assertEquals(1, AllianceChampionshipRoutine.parseFlagNumber("1"));
         assertEquals(8, AllianceChampionshipRoutine.parseFlagNumber(" 8 "));
+        assertEquals(9, AllianceChampionshipRoutine.parseFlagNumber("9"));
+        assertEquals(10, AllianceChampionshipRoutine.parseFlagNumber("10"));
+        assertEquals(12, AllianceChampionshipRoutine.parseFlagNumber("12"));
     }
 
     @Test
@@ -24,7 +27,7 @@ class AllianceChampionshipRoutineTest {
     @Test
     void rejectsInvalidFlags() {
         assertNull(AllianceChampionshipRoutine.parseFlagNumber("0"));
-        assertNull(AllianceChampionshipRoutine.parseFlagNumber("9"));
+        assertNull(AllianceChampionshipRoutine.parseFlagNumber("13"));
         assertNull(AllianceChampionshipRoutine.parseFlagNumber("Squad 2"));
     }
 }

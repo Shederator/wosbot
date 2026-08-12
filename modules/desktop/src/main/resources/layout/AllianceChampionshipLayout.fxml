@@ -66,7 +66,7 @@
                             styleClass="content-card" collapsible="true">
                     <VBox spacing="6" style="-fx-padding: 10;">
                         <Label styleClass="task-info-panel-bullet"
-                               text="Select Flag 1-8 for a saved formation, or No Flag for the custom troop mix." wrapText="true" />
+                               text="Select Formation 1-12, or No Flag for the custom troop mix." wrapText="true" />
                         <Label styleClass="task-info-panel-bullet"
                                text="• Select your preferred lane position (LEFT, CENTER, or RIGHT)." wrapText="true" />
                         <Label styleClass="task-info-panel-bullet"

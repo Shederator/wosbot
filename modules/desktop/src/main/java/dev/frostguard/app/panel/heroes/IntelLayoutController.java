@@ -1,6 +1,7 @@
 package dev.frostguard.app.panel.heroes;
 
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
+import dev.frostguard.api.domain.FormationSlots;
 import dev.frostguard.app.shared.AbstractProfileController;
 import javafx.beans.value.ChangeListener;
 import javafx.fxml.FXML;
@@ -11,8 +12,6 @@ import javafx.scene.layout.HBox;
 import java.util.List;
 
 public class IntelLayoutController extends AbstractProfileController {
-
-    private static final List<Integer> MARCH_FLAGS = List.of(1, 2, 3, 4, 5, 6, 7, 8);
 
     @FXML
     private CheckBox checkBoxBeast;
@@ -61,7 +60,7 @@ public class IntelLayoutController extends AbstractProfileController {
     }
 
     private void prepareFlagPicker() {
-        comboBoxBeastFlag.getItems().setAll(MARCH_FLAGS);
+        comboBoxBeastFlag.getItems().setAll(FormationSlots.numbers());
         comboBoxBeastFlag.disableProperty().bind(checkBoxUseFlag.selectedProperty().not());
         hboxFlagSelection.visibleProperty().bind(checkBoxUseFlag.selectedProperty());
         hboxFlagSelection.managedProperty().bind(hboxFlagSelection.visibleProperty());

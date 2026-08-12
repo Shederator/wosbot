@@ -2,6 +2,7 @@ package dev.frostguard.app.panel.combat;
 
 import dev.frostguard.api.configs.BearTrapParticipationTriggerEnum;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
+import dev.frostguard.api.domain.FormationSlots;
 import dev.frostguard.app.panel.profile.ProfileAux;
 import dev.frostguard.app.shared.AbstractProfileController;
 import dev.frostguard.app.shared.UtcDateTimeEditor;
@@ -150,8 +151,8 @@ public class BearTrapLayoutController extends AbstractProfileController {
                 return comboBoxTrapNumber.getValue();
             }
         });
-        comboBoxRallyFlag.getItems().setAll(1, 2, 3, 4, 5, 6, 7, 8);
-        checkComboBoxJoinFlag.getItems().setAll(1, 2, 3, 4, 5, 6, 7, 8);
+        comboBoxRallyFlag.getItems().setAll(FormationSlots.numbers());
+        checkComboBoxJoinFlag.getItems().setAll(FormationSlots.numbers());
     }
 
     private void configureParticipationTrigger() {

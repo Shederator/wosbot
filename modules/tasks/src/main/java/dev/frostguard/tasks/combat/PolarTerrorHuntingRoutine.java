@@ -377,7 +377,7 @@ private RallyLaunchResult launchSingleRallyFlow(int polarLevel, boolean useFlag,
         if (useFlag) {
             logInfo(routineLogPolarTerrorHuntingLine("Formation setup: selecting flag #" + flagNumber));
             if (!marchHelper.selectFlag(flagNumber)) {
-                String detail = "Configured flag #" + flagNumber + " is locked on this profile";
+                String detail = "Configured flag #" + flagNumber + " is unavailable or could not be verified";
                 logWarning(routineLogPolarTerrorHuntingLine("Formation setup: " + detail));
                 return fail(RallyLaunchOutcome.FLAG_NOT_AVAILABLE, detail);
             }

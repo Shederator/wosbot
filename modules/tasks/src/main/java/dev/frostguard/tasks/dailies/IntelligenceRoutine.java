@@ -1119,7 +1119,14 @@ private void handleBeast(ImageSearchResultData beast) {
 
 
 		if (useFlag) {
-			marchHelper.selectFlag(flagNumber);
+			if (!marchHelper.selectFlag(flagNumber)) {
+				logWarning(routineLogIntelligenceLine("Configured formation #" + flagNumber
+						+ " is unavailable. Cancelling beast deployment."));
+				pressBack();
+				reschedule(LocalDateTime.now().plusMinutes(5));
+				processingTask = false;
+				return;
+			}
 		}
 
 

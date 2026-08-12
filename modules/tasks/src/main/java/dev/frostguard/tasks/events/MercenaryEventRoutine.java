@@ -352,7 +352,12 @@ public class MercenaryEventRoutine extends DelayedTask {
 
         // Check if we should use a specific flag
         if (useFlag && !sameLevelAsLastTime) {
-            marchHelper.selectFlag(flagNumber);
+            if (!marchHelper.selectFlag(flagNumber)) {
+                logWarning("Configured formation #" + flagNumber + " is unavailable. Cancelling deployment.");
+                pressBack();
+                reschedule(LocalDateTime.now().plusMinutes(5));
+                return;
+            }
             sleepTask(300);
         }
 

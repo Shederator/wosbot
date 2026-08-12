@@ -1,6 +1,7 @@
 package dev.frostguard.app.panel.dailies;
 
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
+import dev.frostguard.api.domain.FormationSlots;
 import dev.frostguard.app.shared.AbstractProfileController;
 import dev.frostguard.app.shared.SettingValidators;
 import javafx.fxml.FXML;
@@ -35,8 +36,8 @@ public class EventsLayoutController extends AbstractProfileController {
     }
 
     private void fillFlagOptions() {
-        comboBoxMercenaryFlag.getItems().setAll(0, 1, 2, 3, 4, 5, 6, 7, 8);
-        comboBoxHeroMissionFlag.getItems().setAll(0, 1, 2, 3, 4, 5, 6, 7, 8);
+        comboBoxMercenaryFlag.getItems().setAll(FormationSlots.numbersWithNone(0));
+        comboBoxHeroMissionFlag.getItems().setAll(FormationSlots.numbersWithNone(0));
     }
 
     private void registerConfigurationFields() {

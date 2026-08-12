@@ -1,6 +1,7 @@
 package dev.frostguard.app.panel.alliance;
 
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
+import dev.frostguard.api.domain.FormationSlots;
 import dev.frostguard.app.shared.AbstractProfileController;
 import javafx.beans.binding.BooleanBinding;
 import javafx.beans.binding.Bindings;
@@ -14,7 +15,7 @@ import java.util.List;
 public class AllianceChampionshipLayoutController extends AbstractProfileController {
 
     private static final List<String> LANES = List.of("LEFT", "CENTER", "RIGHT");
-    private static final List<String> FLAGS = List.of("No Flag", "1", "2", "3", "4", "5", "6", "7", "8");
+    private static final List<String> FLAGS = FormationSlots.labelsWithNone("No Flag");
 
     @FXML
     private CheckBox checkBoxEnableChampionship, checkBoxOverrideCurrentDeploy;

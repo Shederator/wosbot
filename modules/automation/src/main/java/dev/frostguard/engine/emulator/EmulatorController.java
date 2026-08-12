@@ -117,6 +117,12 @@ public class EmulatorController {
         backend.swipe(idx, from, to);
     }
 
+    public void swipeScreen(String idx, PointData from, PointData to, int durationMs) {
+        requireBackend();
+        LOG.info("{} swipe duration={}ms dev {}", label(idx), durationMs, idx);
+        backend.swipe(idx, from, to, durationMs);
+    }
+
     public void pressBack(String idx) { requireBackend(); LOG.info("{} back dev {}", label(idx), idx); backend.pressBackButton(idx); }
     public void writeText(String idx, String t) { requireBackend(); LOG.info("{} text dev {}", label(idx), idx); backend.writeText(idx, t); }
     public void clearText(String idx, int n)    { requireBackend(); LOG.info("{} erase {} dev {}", label(idx), n, idx); backend.clearText(idx, n); }

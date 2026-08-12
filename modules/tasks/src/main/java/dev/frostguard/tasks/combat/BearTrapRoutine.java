@@ -4,12 +4,12 @@ import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.api.domain.FormationSlots;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.TesseractSettingsData;
 import dev.frostguard.engine.helper.BearTrapHelper;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
-import dev.frostguard.engine.nav.RallyFlagCoordinates;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.BearTrapParticipationSchedule;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -786,9 +786,12 @@ private void manageJoinRallies(int freeMarches) {
         sleepTask(300);
 
 
-        PointData flagPoint = RallyFlagCoordinates.pointForFlag(selectedFlag);
-        tapInside(flagPoint, flagPoint, 1, 0);
-        sleepTask(300);
+        if (!marchHelper.selectFlag(selectedFlag)) {
+            logWarning(routineLogBearTrapLine(
+                    "Configured join formation #" + selectedFlag + " is unavailable; cancelling this join"));
+            pressBack();
+            return;
+        }
 
 
         ImageSearchResultData deploy = templateSearchHelper.locatePattern(
@@ -901,7 +904,7 @@ private List<Integer> decodeJoinFlags() {
             for (String part : parts) {
                 try {
                     int flag = Integer.parseInt(part.trim());
-                    if (flag >= 1 && flag <= 8) {
+                    if (FormationSlots.supports(flag)) {
                         flags.add(flag);
                     }
                 } catch (NumberFormatException e) {
@@ -1055,9 +1058,13 @@ private long beginOwnRally() {
         sleepTask(300);
 
 
-        PointData flagPoint = RallyFlagCoordinates.pointForFlag(ownRallyFlag);
-        tapInside(flagPoint, flagPoint, 1, 200);
-        sleepTask(300);
+        if (!marchHelper.selectFlag(ownRallyFlag)) {
+            logWarning(routineLogBearTrapLine(
+                    "Configured rally formation #" + ownRallyFlag + " is unavailable; cancelling own rally"));
+            pressBack();
+            ownRallyActive.set(false);
+            return 0;
+        }
 
 
         long marchSeconds = scanMarchTime();

@@ -3,9 +3,11 @@ package dev.frostguard.engine.helper;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.AreaData;
+import dev.frostguard.api.domain.FormationSlots;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.MarchResourceType;
 import dev.frostguard.api.domain.MarchSlotState;
+import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.input.TapInteractionService;
@@ -31,11 +33,16 @@ import java.util.stream.Collectors;
 public class MarchHelper {
 
     private static final int SLOT_COUNT = 6;
-    private static final int MAX_FLAG_SLOTS = 8;
     // A padlock matches its own icon at 98-100%; an unlocked slot never exceeds ~37%. Half a slot of
     // tolerance absorbs the tile drift without ever reaching a neighbouring slot (~74px apart).
     private static final double LOCKED_FLAG_THRESHOLD = 85;
     private static final int FLAG_SLOT_TOLERANCE_PX = 35;
+    // The horizontal strip accepts dragging from a formation tile, not from its blue gaps. Slot 8
+    // is fully visible at x=582 in the initial view.
+    private static final PointData FORMATION_SCROLL_INITIAL_FROM = new PointData(582, 120);
+    private static final PointData FORMATION_SCROLL_INITIAL_TO = new PointData(182, 120);
+    private static final int FORMATION_SCROLL_DURATION_MS = 600;
+    private static final long FORMATION_SCROLL_SETTLE_MS = 800;
     // "Idle" measures ~145 white pixels, a countdown ~255-285, so the gap is wide. Orange "Unlock"
     // (~260) and red "Unavailable" (~565) never overlap white; stationed rows have no status line.
     private static final int COLOUR_PRESENT_MIN = 60;
@@ -196,19 +203,29 @@ public class MarchHelper {
         return text == null ? null : GameTimeUtils.parseDuration(text);
     }
 
-    // A locked slot wears a padlock, so it is recognised before it is tapped. The previous check read
-    // the unlock prompt with OCR after tapping and treated anything that was not the word "unlock" -
-    // garbage included - as a confirmation, which let locked flags through.
+    // A slot is inspected before it is tapped: padlock evidence rejects locked slots, while the
+    // measured white-flag signal distinguishes a saved formation from an empty visible tile.
     public boolean selectFlag(Integer flagNumber) {
         if (flagNumber == null) {
-            log.debug("No flag — skipping");
+            log.debug("No formation configured - skipping selection");
             return true;
         }
-        if (isFlagLocked(flagNumber)) {
-            log.warn("Flag #" + flagNumber + " shows a padlock — not selecting it");
+        if (!FormationSlots.supports(flagNumber)) {
+            log.warn("Formation #" + flagNumber + " is unsupported; supported range is "
+                    + FormationSlots.MIN + "-" + FormationSlots.MAX);
             return false;
         }
-        log.debug("Selecting flag #" + flagNumber);
+        FormationFrame frame = flagNumber <= 8 ? captureFormationFrame(flagNumber) : moveToRightFormationEnd();
+        if (frame == null) {
+            return false;
+        }
+        FormationSlotStateClassifier.State state = inspectFormationSlot(flagNumber, frame);
+        if (state != FormationSlotStateClassifier.State.SAVED) {
+            log.warn("Formation #" + flagNumber + " is " + state.name().toLowerCase().replace('_', ' ')
+                    + " - not selecting it");
+            return false;
+        }
+        log.debug("Selecting formation #" + flagNumber);
         // Flag slots are narrow fixed positions — keep the jitter tightly bounded.
         taps.tapNear(RallyFlagCoordinates.pointForFlag(flagNumber), TapJitterPolicy.DEFAULT_POINT_JITTER_RADIUS);
         interruptibleWait(300);
@@ -217,25 +234,64 @@ public class MarchHelper {
 
     // Locating every padlock across the strip and mapping each to its nearest slot is immune to the
     // few pixels of tile drift; a per-slot window would leave a 58px template barely any room to slide.
-    private boolean isFlagLocked(int flagNumber) {
+    private FormationFrame captureFormationFrame(int flagNumber) {
+        try {
+            RawImageData raw = emu.captureScreen(device);
+            return new FormationFrame(raw, TesseractOcrProvider.toBufferedImage(raw));
+        } catch (Exception ex) {
+            log.warn("Could not inspect formation #" + flagNumber + ": " + ex.getMessage());
+            return null;
+        }
+    }
+
+    private FormationFrame moveToRightFormationEnd() {
+        FormationFrame initial = captureFormationFrame(10);
+        if (initial == null) {
+            return null;
+        }
+        emu.swipeScreen(device, FORMATION_SCROLL_INITIAL_FROM, FORMATION_SCROLL_INITIAL_TO,
+                FORMATION_SCROLL_DURATION_MS);
+        interruptibleWait(FORMATION_SCROLL_SETTLE_MS);
+        FormationFrame right = captureFormationFrame(10);
+        if (right == null || !FormationBarFrameComparator.moved(
+                initial.image(), right.image(), CommonGameAreas.RALLY_FLAG_BAR)) {
+            log.warn("Formation bar did not move to the right-end view - not selecting a high slot");
+            return null;
+        }
+
+        return right;
+    }
+
+    private FormationSlotStateClassifier.State inspectFormationSlot(int flagNumber, FormationFrame frame) {
+
         int slotX = RallyFlagCoordinates.pointForFlag(flagNumber).getX();
-        List<ImageSearchResultData> padlocks = emu.locateAllPatterns(device,
+        List<ImageSearchResultData> padlocks = emu.locateAllPatterns(device, frame.raw(),
                 TemplatesEnum.RALLY_LOCKED_FLAG_SLOT,
                 CommonGameAreas.RALLY_FLAG_BAR.topLeft(),
                 CommonGameAreas.RALLY_FLAG_BAR.bottomRight(),
-                LOCKED_FLAG_THRESHOLD, MAX_FLAG_SLOTS);
+                LOCKED_FLAG_THRESHOLD, FormationSlots.MAX);
 
         // The multi-hit matcher logs nothing of its own, so record what it saw.
-        log.debug("Flag bar: " + padlocks.size() + " padlock(s) located while checking flag #" + flagNumber);
+        log.debug("Formation bar: " + padlocks.size() + " padlock(s) located while checking #" + flagNumber);
 
+        boolean padlocked = false;
         for (ImageSearchResultData padlock : padlocks) {
             if (Math.abs(padlock.getPoint().getX() - slotX) <= FLAG_SLOT_TOLERANCE_PX) {
-                log.info("Flag #" + flagNumber + " padlocked at " + padlock.getPoint()
+                log.info("Formation #" + flagNumber + " padlocked at " + padlock.getPoint()
                         + " score=" + padlock.getMatchScore());
-                return true;
+                padlocked = true;
+                break;
             }
         }
-        return false;
+        int whitePixels = PixelStats.count(frame.image(), RallyFlagCoordinates.areaForFlag(flagNumber),
+                GameColors::isLabelWhite);
+        FormationSlotStateClassifier.State state = FormationSlotStateClassifier.classify(padlocked, whitePixels);
+        log.debug("Formation bar: checking #" + flagNumber + " state=" + state
+                + " whitePixels=" + whitePixels + " padlocks=" + padlocks.size());
+        return state;
+    }
+
+    private record FormationFrame(RawImageData raw, BufferedImage image) {
     }
 
     public void openLeftMenuCitySection(boolean cityTab) {

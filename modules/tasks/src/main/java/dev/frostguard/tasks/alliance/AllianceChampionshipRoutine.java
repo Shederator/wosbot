@@ -5,6 +5,7 @@ import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.AreaData;
+import dev.frostguard.api.domain.FormationSlots;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.engine.helper.AllianceChampionshipHelper;
@@ -221,7 +222,7 @@ private boolean configureFormationFlow() {
         logInfo(routineLogAllianceChampionshipLine("Formation setup: selecting flag #" + flagNumber));
         if (!marchHelper.selectFlag(flagNumber)) {
             logWarning(routineLogAllianceChampionshipLine(
-                    "Formation setup: configured flag #" + flagNumber + " is locked on this profile"));
+                    "Formation setup: configured flag #" + flagNumber + " is unavailable or could not be verified"));
             return false;
         }
         return true;
@@ -448,12 +449,7 @@ static Integer parseFlagNumber(String value) {
         if (isNoFlagValue(value)) {
             return null;
         }
-        try {
-            int flag = Integer.parseInt(value.trim());
-            return flag >= 1 && flag <= 8 ? flag : null;
-        } catch (NumberFormatException ex) {
-            return null;
-        }
+        return FormationSlots.parse(value);
     }
 
 private static boolean isNoFlagValue(String value) {

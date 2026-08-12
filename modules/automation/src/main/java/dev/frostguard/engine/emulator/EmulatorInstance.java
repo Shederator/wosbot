@@ -300,11 +300,28 @@ public abstract class EmulatorInstance {
     }
 
     public void swipe(String idx, PointData from, PointData to) {
+        swipe(idx, from, to, null);
+    }
+
+    public void swipe(String idx, PointData from, PointData to, int durationMs) {
+        if (durationMs <= 0) {
+            throw new IllegalArgumentException("Swipe duration must be positive");
+        }
+        swipe(idx, from, to, Integer.valueOf(durationMs));
+    }
+
+    private void swipe(String idx, PointData from, PointData to, Integer durationMs) {
         withRetries(idx, dev -> {
-            try { dev.executeShellCommand("input swipe " + from.getX() + " " + from.getY() + " " + to.getX() + " " + to.getY(), new NullOutputReceiver()); }
+            try { dev.executeShellCommand(swipeCommand(from, to, durationMs), new NullOutputReceiver()); }
             catch (Exception e) { throw new RuntimeException(e); }
             return Boolean.TRUE;
         }, "swipe");
+    }
+
+    static String swipeCommand(PointData from, PointData to, Integer durationMs) {
+        String command = "input swipe " + from.getX() + " " + from.getY()
+                + " " + to.getX() + " " + to.getY();
+        return durationMs == null ? command : command + " " + durationMs;
     }
 
     public void pressBackButton(String idx) {

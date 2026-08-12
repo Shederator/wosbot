@@ -168,7 +168,13 @@ public ManualRallyJoinRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask)
                 if (useFlag) {
                     logInfo(routineLogManualRallyJoinLine("Flag configuration detected for march " + (deployedCount + 1) + ": #" + currentFlagNumber
                             + ". Selecting flag."));
-                    marchHelper.selectFlag(currentFlagNumber);
+                    if (!marchHelper.selectFlag(currentFlagNumber)) {
+                        logWarning(routineLogManualRallyJoinLine("Configured formation #" + currentFlagNumber
+                                + " is unavailable. Cancelling this join."));
+                        pressBack();
+                        reschedule(LocalDateTime.now().plusMinutes(5));
+                        return;
+                    }
                     sleepTask(300);
                 } else {
                     logInfo(routineLogManualRallyJoinLine("Zero flag configured for march " + (deployedCount + 1) + ". Scanning for Equalize button."));
