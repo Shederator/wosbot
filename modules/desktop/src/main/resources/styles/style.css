@@ -1761,3 +1761,17 @@
 .accent-button:hover {
     -fx-background-color: #37d47f;
 }
+.setting-field-error {
+    -fx-border-color: #ef4444;
+    -fx-border-width: 2px;
+}
+
+.setting-validation-message {
+    -fx-font-size: 11px;
+    -fx-text-fill: #ef4444;
+}
+
+.setting-field-warning {
+    -fx-border-color: -fg-yellow;
+    -fx-border-width: 2px;
+}

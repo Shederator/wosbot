@@ -1,0 +1,74 @@
+package dev.frostguard.app.shared;
+
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.format.DateTimeParseException;
+import java.time.format.ResolverStyle;
+import java.util.Locale;
+
+public final class SettingValidators {
+
+    private static final DateTimeFormatter TIME_FORMATTER = new DateTimeFormatterBuilder()
+            .parseStrict()
+            .appendPattern("HH:mm")
+            .toFormatter(Locale.ROOT)
+            .withResolverStyle(ResolverStyle.STRICT);
+
+    private SettingValidators() {
+    }
+
+    public static SettingValidator<Integer> positiveInteger(String label) {
+        return rangedInteger(label, 1, Integer.MAX_VALUE);
+    }
+
+    public static SettingValidator<Integer> nonNegativeInteger(String label) {
+        return rangedInteger(label, 0, Integer.MAX_VALUE);
+    }
+
+    public static SettingValidator<Integer> rangedInteger(String label, int minimum, int maximum) {
+        if (minimum > maximum) {
+            throw new IllegalArgumentException("Minimum must not exceed maximum");
+        }
+        return input -> {
+            String candidate = trimmed(input);
+            if (!candidate.matches("\\d+")) {
+                return ValidationResult.invalid(label + " must be a whole number.");
+            }
+            try {
+                int value = Integer.parseInt(candidate);
+                if (value < minimum || value > maximum) {
+                    return ValidationResult.invalid(rangeMessage(label, minimum, maximum));
+                }
+                return ValidationResult.valid(value);
+            } catch (NumberFormatException exception) {
+                return ValidationResult.invalid(rangeMessage(label, minimum, maximum));
+            }
+        };
+    }
+
+    public static SettingValidator<LocalTime> localTime(String label) {
+        return input -> {
+            String candidate = trimmed(input);
+            if (!candidate.matches("\\d{2}:\\d{2}")) {
+                return ValidationResult.invalid(label + " must use HH:mm.");
+            }
+            try {
+                return ValidationResult.valid(LocalTime.parse(candidate, TIME_FORMATTER));
+            } catch (DateTimeParseException exception) {
+                return ValidationResult.invalid(label + " must be between 00:00 and 23:59.");
+            }
+        };
+    }
+
+    private static String trimmed(String input) {
+        return input == null ? "" : input.trim();
+    }
+
+    private static String rangeMessage(String label, int minimum, int maximum) {
+        if (maximum == Integer.MAX_VALUE) {
+            return label + " must be at least " + minimum + ".";
+        }
+        return label + " must be between " + minimum + " and " + maximum + ".";
+    }
+}

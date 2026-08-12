@@ -4,7 +4,12 @@ import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
+import dev.frostguard.app.shared.SettingValidators;
+import dev.frostguard.app.shared.ValidatedTextFieldBinding;
 import dev.frostguard.engine.emulator.EmulatorType;
 import dev.frostguard.api.configs.GameVersionEnum;
 import dev.frostguard.api.configs.IdleBehaviorEnum;
@@ -20,6 +25,7 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.Label;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
@@ -35,6 +41,8 @@ import javafx.stage.FileChooser;
  * idle behaviour, auto-start scheduling, and analytics toggles.
  */
 public class EmuConfigLayoutController {
+
+	private static final Logger logger = LoggerFactory.getLogger(EmuConfigLayoutController.class);
 
 	/* ── FXML-injected table components ── */
 
@@ -62,6 +70,12 @@ public class EmuConfigLayoutController {
 	private TextField textfieldMaxIdleTime;
 
 	@FXML
+	private Label labelMaxConcurrentInstancesError;
+
+	@FXML
+	private Label labelMaxIdleTimeError;
+
+	@FXML
 	private ComboBox<GameVersionEnum> comboboxGameRegion;
 
 	@FXML
@@ -85,10 +99,16 @@ public class EmuConfigLayoutController {
 	private TextField textfieldAutoStartMinutes;
 
 	@FXML
+	private Label labelAutoStartMinutesError;
+
+	@FXML
 	private CheckBox checkboxProfileMaxActiveTimeEnabled;
 
 	@FXML
 	private TextField textfieldProfileMaxActiveTimeMinutes;
+
+	@FXML
+	private Label labelProfileMaxActiveTimeError;
 
 	@FXML
 	private CheckBox checkboxAnalyticsEnabled;
@@ -110,7 +130,7 @@ public class EmuConfigLayoutController {
 
 		populateEmulatorTable(globalConfig);
 		configureTableColumns();
-		restoreSettingsFromConfig(globalConfig);
+		configureValidatedInstanceSettings(globalConfig);
 		attachPersistenceListeners();
 		configureGameAndIdleDropdowns(globalConfig);
 		configureStopBehaviorDropdowns(globalConfig);
@@ -212,32 +232,20 @@ public class EmuConfigLayoutController {
 	 *  Settings restoration
 	 * ──────────────────────────────────────────────── */
 
-	private void restoreSettingsFromConfig(Map<String, String> cfg) {
-		textfieldMaxConcurrentInstances.setText(
-				cfg.getOrDefault(ConfigurationKeyEnum.MAX_RUNNING_EMULATORS_INT.name(),
-						ConfigurationKeyEnum.MAX_RUNNING_EMULATORS_INT.getDefaultValue()));
-
-		String maxIdleTime = normalizePositiveMinutes(
-				cfg.get(ConfigurationKeyEnum.MAX_IDLE_TIME_INT.name()),
-				ConfigurationKeyEnum.MAX_IDLE_TIME_INT.getDefaultValue());
-		textfieldMaxIdleTime.setText(maxIdleTime);
-
+	private void configureValidatedInstanceSettings(Map<String, String> cfg) {
 		boolean maxActiveTimeOn = Boolean.parseBoolean(
 				cfg.getOrDefault(ConfigurationKeyEnum.PROFILE_MAX_ACTIVE_TIME_ENABLED_BOOL.name(),
 						ConfigurationKeyEnum.PROFILE_MAX_ACTIVE_TIME_ENABLED_BOOL.getDefaultValue()));
 		checkboxProfileMaxActiveTimeEnabled.setSelected(maxActiveTimeOn);
 
-		textfieldProfileMaxActiveTimeMinutes.setText(
-				cfg.getOrDefault(ConfigurationKeyEnum.PROFILE_MAX_ACTIVE_TIME_MINUTES_INT.name(),
-						ConfigurationKeyEnum.PROFILE_MAX_ACTIVE_TIME_MINUTES_INT.getDefaultValue()));
 		textfieldProfileMaxActiveTimeMinutes.setDisable(!maxActiveTimeOn);
 
-		// Restrict input to digits only
-		textfieldProfileMaxActiveTimeMinutes.textProperty().addListener((obs, prev, next) -> {
-			if (!next.matches("\\d*")) {
-				textfieldProfileMaxActiveTimeMinutes.setText(next.replaceAll("[^\\d]", ""));
-			}
-		});
+		bindPositiveInteger(textfieldMaxConcurrentInstances, labelMaxConcurrentInstancesError,
+				ConfigurationKeyEnum.MAX_RUNNING_EMULATORS_INT, "Max concurrent instances", cfg, false);
+		bindPositiveInteger(textfieldMaxIdleTime, labelMaxIdleTimeError,
+				ConfigurationKeyEnum.MAX_IDLE_TIME_INT, "Max idle time", cfg, false);
+		bindPositiveInteger(textfieldProfileMaxActiveTimeMinutes, labelProfileMaxActiveTimeError,
+				ConfigurationKeyEnum.PROFILE_MAX_ACTIVE_TIME_MINUTES_INT, "Profile active time", cfg, false);
 	}
 
 	/* ────────────────────────────────────────────────
@@ -245,55 +253,38 @@ public class EmuConfigLayoutController {
 	 * ──────────────────────────────────────────────── */
 
 	private void attachPersistenceListeners() {
-		addFocusLostSaver(textfieldMaxConcurrentInstances,
-				ConfigurationKeyEnum.MAX_RUNNING_EMULATORS_INT);
-
-		textfieldMaxIdleTime.focusedProperty().addListener((obs, prev, hasFocus) -> {
-			if (hasFocus || textfieldMaxIdleTime.isDisabled()) {
-				return;
-			}
-			String rawValue = textfieldMaxIdleTime.getText();
-			String value = normalizePositiveMinutes(
-					rawValue,
-					ConfigurationKeyEnum.MAX_IDLE_TIME_INT.getDefaultValue());
-			textfieldMaxIdleTime.setText(value);
-			ScheduleService.obtain().persistEmulatorPath(
-					ConfigurationKeyEnum.MAX_IDLE_TIME_INT.name(), value);
-			if (!isPositiveMinutes(rawValue)) {
-				displayInvalidMaxIdleTimeWarning(rawValue, value);
-			}
-		});
-
 		checkboxProfileMaxActiveTimeEnabled.selectedProperty().addListener((obs, prev, active) -> {
 			textfieldProfileMaxActiveTimeMinutes.setDisable(!active);
 			ScheduleService.obtain().persistEmulatorPath(
 					ConfigurationKeyEnum.PROFILE_MAX_ACTIVE_TIME_ENABLED_BOOL.name(),
 					String.valueOf(active));
 		});
-
-		textfieldProfileMaxActiveTimeMinutes.focusedProperty().addListener((obs, prev, hasFocus) -> {
-			if (hasFocus) {
-				return;
-			}
-			String raw = textfieldProfileMaxActiveTimeMinutes.getText();
-			if (raw == null || raw.isEmpty() || Integer.parseInt(raw) <= 0) {
-				raw = ConfigurationKeyEnum.PROFILE_MAX_ACTIVE_TIME_MINUTES_INT.getDefaultValue();
-				textfieldProfileMaxActiveTimeMinutes.setText(raw);
-			}
-			ScheduleService.obtain().persistEmulatorPath(
-					ConfigurationKeyEnum.PROFILE_MAX_ACTIVE_TIME_MINUTES_INT.name(), raw);
-		});
 	}
 
-	private void addFocusLostSaver(TextField field, ConfigurationKeyEnum key) {
-		field.focusedProperty().addListener((obs, prev, hasFocus) -> {
-			if (!hasFocus) {
-				String content = field.getText();
-				if (content != null && !content.isEmpty()) {
-					ScheduleService.obtain().persistEmulatorPath(key.name(), content);
-				}
-			}
-		});
+	private ValidatedTextFieldBinding<Integer> bindPositiveInteger(
+			TextField field,
+			Label errorLabel,
+			ConfigurationKeyEnum key,
+			String label,
+			Map<String, String> cfg,
+			boolean rescheduleAutoStart) {
+		ValidatedTextFieldBinding<Integer> binding = new ValidatedTextFieldBinding<>(
+				field,
+				errorLabel,
+				SettingValidators.positiveInteger(label),
+				String::valueOf,
+				value -> {
+					ScheduleService.obtain().persistEmulatorPath(key.name(), String.valueOf(value));
+					if (rescheduleAutoStart) {
+						triggerAutoStartReschedule();
+					}
+				});
+		String fallback = key.getDefaultValue();
+		String persisted = cfg.getOrDefault(key.name(), fallback);
+		binding.loadPersisted(persisted, fallback, reason -> logger.warn(
+				"Invalid persisted setting; key={}, value={}, fallback={}, reason={}",
+				key, persisted, fallback, reason));
+		return binding;
 	}
 
 	/* ────────────────────────────────────────────────
@@ -340,23 +331,6 @@ public class EmuConfigLayoutController {
 		textfieldMaxIdleTime.setDisable(!behavior.requiresIdleTimeout());
 	}
 
-	static String normalizePositiveMinutes(String rawValue, String defaultValue) {
-		try {
-			int value = Integer.parseInt(rawValue == null ? "" : rawValue.trim());
-			return value > 0 ? String.valueOf(value) : defaultValue;
-		} catch (NumberFormatException ex) {
-			return defaultValue;
-		}
-	}
-
-	static boolean isPositiveMinutes(String rawValue) {
-		try {
-			return Integer.parseInt(rawValue == null ? "" : rawValue.trim()) > 0;
-		} catch (NumberFormatException ex) {
-			return false;
-		}
-	}
-
 	private void configureStopBehaviorDropdowns(Map<String, String> cfg) {
 		// Changed by pernerch | Date: 2026-07-04 | Why: persist independent stop policies for GUI and Telegram stop flows.
 		comboboxStopBehavior.setItems(FXCollections.observableArrayList(StopBehaviorEnum.values()));
@@ -401,8 +375,8 @@ public class EmuConfigLayoutController {
 				cfg.getOrDefault(ConfigurationKeyEnum.AUTO_START_ENABLED_BOOL.name(), "false"));
 		checkboxAutoStart.setSelected(enabled);
 
-		textfieldAutoStartMinutes.setText(
-				cfg.getOrDefault(ConfigurationKeyEnum.AUTO_START_DELAY_MINUTES_INT.name(), "5"));
+		bindPositiveInteger(textfieldAutoStartMinutes, labelAutoStartMinutesError,
+				ConfigurationKeyEnum.AUTO_START_DELAY_MINUTES_INT, "Auto-start delay", cfg, true);
 		textfieldAutoStartMinutes.disableProperty().bind(checkboxAutoStart.selectedProperty().not());
 
 		// Mode dropdown
@@ -418,20 +392,6 @@ public class EmuConfigLayoutController {
 		checkboxAutoStart.selectedProperty().addListener((obs, prev, now) -> {
 			ScheduleService.obtain().persistEmulatorPath(
 					ConfigurationKeyEnum.AUTO_START_ENABLED_BOOL.name(), String.valueOf(now));
-			triggerAutoStartReschedule();
-		});
-
-		textfieldAutoStartMinutes.focusedProperty().addListener((obs, prev, hasFocus) -> {
-			if (hasFocus) {
-				return;
-			}
-			String minutes = textfieldAutoStartMinutes.getText();
-			if (minutes.isEmpty()) {
-				minutes = "5";
-				textfieldAutoStartMinutes.setText(minutes);
-			}
-			ScheduleService.obtain().persistEmulatorPath(
-					ConfigurationKeyEnum.AUTO_START_DELAY_MINUTES_INT.name(), minutes);
 			triggerAutoStartReschedule();
 		});
 
@@ -518,14 +478,4 @@ public class EmuConfigLayoutController {
 		errorAlert.showAndWait();
 	}
 
-	private void displayInvalidMaxIdleTimeWarning(String rawValue, String fallbackValue) {
-		String enteredValue = rawValue == null || rawValue.isBlank() ? "an empty value" : "'" + rawValue + "'";
-		Alert warning = new Alert(Alert.AlertType.WARNING);
-		warning.setTitle("Invalid Max Idle Time");
-		warning.setHeaderText("Enter a positive whole number of minutes");
-		warning.setContentText(
-				enteredValue + " is not a valid maximum idle time. The value was reset to "
-				+ fallbackValue + " minutes. Select 'Keep Running' if no idle action should occur.");
-		warning.showAndWait();
-	}
 }
