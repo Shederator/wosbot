@@ -36,7 +36,7 @@
                style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #e6edf3;" />
         <Label fx:id="labelArtifactDetails" style="-fx-text-fill: #9da7b3;" />
         <Hyperlink fx:id="linkReleaseNotes" text="Release notes" onAction="#openReleaseNotes" />
-        <Button fx:id="buttonDownloadInstall" text="Download and install"
+        <Button fx:id="buttonDownloadInstall" text="Download and restart"
                 onAction="#handleDownloadInstall" />
     </VBox>
 

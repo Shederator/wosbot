@@ -38,8 +38,10 @@ public final class UpdateManager {
         });
     }
 
-    public InstallerHandoff.HandoffSession stageHandoff(PreparedUpdate update, long parentPid) throws UpdateException {
-        return exclusive(() -> handoff.stage(update.installer(), parentPid));
+    public InstallerHandoff.HandoffSession stageHandoff(
+            PreparedUpdate update, long parentPid, Path restartLauncher, Path workspaceRoot) throws UpdateException {
+        return exclusive(() -> handoff.stage(
+                update.installer(), parentPid, restartLauncher, workspaceRoot));
     }
 
     public boolean isOperationActive() {

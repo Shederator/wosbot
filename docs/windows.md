@@ -29,7 +29,10 @@ identity has a configured release manifest. The update flow:
    configured Authenticode signer;
 5. stops scheduling and workspace services, closes SQLite, and releases the
    workspace lock;
-6. exits before an external waiter launches the installer.
+6. exits before an external waiter applies the installer with compact Windows
+   progress and no setup decisions;
+7. preserves the current installation directory and restarts the same channel
+   and workspace after Windows Installer reports success.
 
 Development and PR-test packages cannot use automatic release updates. A
 release whose manifest is not validly signed by the embedded project key is
@@ -37,7 +40,9 @@ never handed off. Authenticode remains an optional additional check.
 
 Interrupted downloads remain `.part` files and resume when the server supports
 byte ranges. A failed size, hash, or signature check prevents installer handoff
-and leaves the current installation untouched.
+and leaves the current installation untouched. A failed installer upgrade uses
+Windows Installer rollback, attempts to reopen the retained application, and
+shows an update failure instead of silently claiming success.
 
 Recommended installs:
 

@@ -169,7 +169,10 @@ manifest, then requires the manifest identity, immutable download, size, and
 SHA-256 to match. A Windows Authenticode signer is checked in addition when the
 build and manifest declare one. The current public ZIP feeds are not used by
 this updater; automatic installer updates stay disabled in ordinary local and
-PR builds.
+PR builds. After confirmation, an in-app update closes Frostguard, applies the
+same published EXE with compact progress but without the first-install wizard,
+and reopens the same channel and workspace. Running a downloaded installer
+manually remains interactive.
 
 ### Run a source build
 

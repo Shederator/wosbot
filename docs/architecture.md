@@ -76,7 +76,7 @@ Do not put game task business logic in `modules/desktop`; do not put UI concepts
 - restart-safe downloads below the selected workspace cache;
 - byte-size and SHA-256 verification;
 - optional build-pinned Windows Authenticode verification and token-authorized
-  external handoff.
+  external handoff with passive installer execution and workspace-aware restart.
 
 The desktop module owns presentation and runtime shutdown. Update code does not
 depend on JavaFX, persistence, scheduling, or GitHub APIs. Development and
@@ -291,11 +291,18 @@ The installed desktop exposes update controls only for eligible Stable or
 Nightly builds. A selected installer is downloaded to
 `<workspace>/cache/updates/<channel>/<version>`, verified, and passed to a
 hidden PowerShell waiter. The waiter requires a one-time authorization token
-and waits for the Frostguard PID to disappear before starting the installer.
+and waits for the Frostguard PID to disappear before starting the same published
+installer in passive, no-restart mode. It pins `INSTALLDIR` to the running
+launcher's parent so upgrades retain a user-selected installation directory.
 Frostguard authorizes the staged waiter, stops queues and workspace-owned
 services, closes SQLite and the workspace lock, and exits. A failed shutdown
 cancels the authorization, and the waiter cannot start the installer while the
-Frostguard PID is alive. Frostguard never replaces its own running files.
+Frostguard PID is alive. After a successful Windows Installer exit, the waiter
+restarts the channel launcher with the same workspace environment. Installer
+failure relies on MSI rollback, relaunches the retained application when
+possible, and presents the failure instead of reporting success. Manually
+downloaded installers remain interactive. Frostguard never replaces its own
+running files.
 
 The release feed is a signed envelope whose Ed25519 signature covers the exact
 manifest bytes. The embedded project public key is the primary update trust

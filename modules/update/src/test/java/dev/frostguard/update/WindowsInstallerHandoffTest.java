@@ -19,6 +19,9 @@ class WindowsInstallerHandoffTest {
     @Test
     void startsHiddenWaiterWithInstallerAndParentIdentity() throws Exception {
         Path installer = Files.writeString(temp.resolve("Frostguard-3.0.1.exe"), "test");
+        Path installDirectory = Files.createDirectory(temp.resolve("installed Frostguard"));
+        Path launcher = Files.writeString(installDirectory.resolve("Frostguard.exe"), "test");
+        Path workspace = Files.createDirectory(temp.resolve("workspace"));
         AtomicReference<java.util.List<String>> command = new AtomicReference<>();
         AtomicReference<java.util.Map<String, String>> environment = new AtomicReference<>();
         WindowsInstallerHandoff handoff = new WindowsInstallerHandoff((actualCommand, actualEnvironment) -> {
@@ -26,13 +29,28 @@ class WindowsInstallerHandoffTest {
             environment.set(actualEnvironment);
         });
 
-        InstallerHandoff.HandoffSession session = handoff.stage(installer, 4242L);
+        InstallerHandoff.HandoffSession session = handoff.stage(
+                installer, 4242L, launcher, workspace);
 
         assertTrue(command.get().contains("Hidden"));
-        assertTrue(command.get().getLast().contains("Get-Process -Id $targetPid"));
+        String script = command.get().getLast();
+        assertTrue(script.contains("Get-Process -Id $targetPid"));
+        assertTrue(script.contains("'/passive'"));
+        assertTrue(script.contains("'/norestart'"));
+        assertTrue(script.contains("INSTALLDIR=\"{0}\""));
+        assertTrue(script.contains("-Wait -PassThru"));
+        assertTrue(script.contains("@(0, 3010)"));
+        assertTrue(script.contains("The Frostguard restart launcher was not found"));
+        assertTrue(script.contains("Start-Frostguard"));
         assertEquals("4242", environment.get().get(WindowsInstallerHandoff.PID_ENV));
         assertEquals(installer.toAbsolutePath().normalize().toString(),
                 environment.get().get(WindowsInstallerHandoff.INSTALLER_ENV));
+        assertEquals(launcher.toAbsolutePath().normalize().toString(),
+                environment.get().get(WindowsInstallerHandoff.RESTART_LAUNCHER_ENV));
+        assertEquals(installDirectory.toAbsolutePath().normalize().toString(),
+                environment.get().get(WindowsInstallerHandoff.INSTALL_DIR_ENV));
+        assertEquals(workspace.toAbsolutePath().normalize().toString(),
+                environment.get().get(WindowsInstallerHandoff.WORKSPACE_ENV));
         Path token = Path.of(environment.get().get(WindowsInstallerHandoff.TOKEN_PATH_ENV));
         assertTrue(command.get().getLast().contains("TOKEN_PATH"));
         session.authorize();
@@ -46,15 +64,22 @@ class WindowsInstallerHandoffTest {
         WindowsInstallerHandoff handoff = new WindowsInstallerHandoff((command, environment) -> {
             throw new AssertionError("Waiter should not start");
         });
-        assertThrows(UpdateException.class, () -> handoff.stage(temp.resolve("missing.exe"), 10L));
+        Path installer = temp.resolve("missing.exe");
+        Path launcher = temp.resolve("missing-launcher.exe");
+        assertThrows(UpdateException.class,
+                () -> handoff.stage(installer, 10L, launcher, temp));
     }
 
     @Test
     void reportsWaiterLaunchFailure() throws Exception {
         Path installer = Files.writeString(temp.resolve("Frostguard-3.0.1.exe"), "test");
+        Path installDirectory = Files.createDirectory(temp.resolve("installed"));
+        Path launcher = Files.writeString(installDirectory.resolve("Frostguard.exe"), "test");
+        Path workspace = Files.createDirectory(temp.resolve("workspace"));
         WindowsInstallerHandoff handoff = new WindowsInstallerHandoff((command, environment) -> {
             throw new IOException("blocked");
         });
-        assertThrows(UpdateException.class, () -> handoff.stage(installer, 10L));
+        assertThrows(UpdateException.class,
+                () -> handoff.stage(installer, 10L, launcher, workspace));
     }
 }

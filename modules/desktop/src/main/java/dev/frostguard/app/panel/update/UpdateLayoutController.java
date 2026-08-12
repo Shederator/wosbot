@@ -28,6 +28,8 @@ import javafx.scene.layout.VBox;
 
 import java.awt.Desktop;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
@@ -124,12 +126,13 @@ public final class UpdateLayoutController {
             return;
         }
         Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION);
-        confirmation.setTitle("Install Frostguard update");
-        confirmation.setHeaderText("Install Frostguard " + candidate.version() + "?");
+        confirmation.setTitle("Update Frostguard");
+        confirmation.setHeaderText("Download Frostguard " + candidate.version() + " and restart?");
         confirmation.setContentText("Channel: " + candidate.channel().directoryName() + "\n"
                 + "Download: " + formatSize(candidate.artifact().size()) + "\n\n"
                 + "Frostguard will verify the project-signed release, stop automation, close its workspace, "
-                + "exit, and then launch the installer. Windows may show an unknown-publisher warning.");
+                + "apply the update with a compact Windows progress window, and restart this workspace. "
+                + "Windows may show an unknown-publisher warning.");
         if (confirmation.showAndWait().filter(ButtonType.OK::equals).isEmpty()) {
             return;
         }
@@ -162,10 +165,11 @@ public final class UpdateLayoutController {
     }
 
     private void beginHandoff(PreparedUpdate prepared) {
-        labelStatus.setText("Installer verified. Stopping Frostguard safely...");
+        labelStatus.setText("Update verified. Restarting Frostguard to apply it...");
         InstallerHandoff.HandoffSession session = null;
         try {
-            session = manager.stageHandoff(prepared, ProcessHandle.current().pid());
+            session = manager.stageHandoff(prepared, ProcessHandle.current().pid(),
+                    currentNativeLauncher(), WorkspacePaths.current().root());
             UpdateExitCoordinator coordinator = new UpdateExitCoordinator(
                     ApplicationLifecycle::stopForUpdate,
                     ApplicationLifecycle::exitAfterUpdateHandoff,
@@ -177,6 +181,18 @@ public final class UpdateLayoutController {
             }
             showFailure(exception);
         }
+    }
+
+    static Path currentNativeLauncher() throws UpdateException {
+        String configured = System.getProperty("jpackage.app-path", "").trim();
+        if (configured.isEmpty()) {
+            throw new UpdateException("The installed Frostguard launcher could not be resolved");
+        }
+        Path launcher = Path.of(configured).toAbsolutePath().normalize();
+        if (!Files.isRegularFile(launcher)) {
+            throw new UpdateException("The installed Frostguard launcher does not exist: " + launcher);
+        }
+        return launcher;
     }
 
     private <T> void runAsync(Callable<T> operation, Consumer<T> success) {
