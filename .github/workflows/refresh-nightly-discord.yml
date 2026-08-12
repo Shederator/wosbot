@@ -19,7 +19,7 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "21.0.12+8.0"
+          java-version: "21"
           cache: maven
 
       - name: Test the Nightly notifier

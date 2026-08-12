@@ -226,6 +226,7 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertIn("  workflow_dispatch:", workflow)
         self.assertIn("  contents: read", workflow)
         self.assertNotIn("contents: write", workflow)
+        self.assertIn('java-version: "21"', workflow)
         self.assertIn('channel_tag="nightly"', workflow)
         self.assertIn("ProjectManifestSigner verify", workflow)
         self.assertIn('if [[ "$(jq -r \'.channel\' <<< "${payload}")" != "nightly" ]]',
