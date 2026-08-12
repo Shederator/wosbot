@@ -29,7 +29,7 @@
         <frostguard.watcher.name>FrostguardWatcher</frostguard.watcher.name>
         <frostguard.product.upgrade-uuid>fa0d66f6-1f7d-4da8-9701-88f7b4570797</frostguard.product.upgrade-uuid>
         <frostguard.channel.page.stable>https://github.com/Shederator/wosbot/releases/latest</frostguard.channel.page.stable>
-        <frostguard.channel.page.nightly>https://github.com/Shederator/wosbot/releases</frostguard.channel.page.nightly>
+        <frostguard.channel.page.nightly>https://github.com/Shederator/wosbot/releases/tag/nightly</frostguard.channel.page.nightly>
     </properties>
 
     <dependencies>

@@ -8,7 +8,7 @@ required emulator, and building the project from source on Windows.
 | Build | Use it when | Download |
 |:------|:------------|:---------|
 | Stable | You want a tested, versioned build that changes only with a release | [Latest Stable release](https://github.com/Shederator/wosbot/releases/latest) |
-| Nightly | You want the latest authenticated preview without replacing Stable | [Nightly releases](https://github.com/Shederator/wosbot/releases) |
+| Nightly | You want the latest authenticated preview without replacing Stable | [Latest Nightly](https://github.com/Shederator/wosbot/releases/tag/nightly) |
 | PR build | You want to test one or more open pull requests | Run `/build-pr` in Discord `#request-a-build` |
 
 Stable and Nightly use self-contained Windows installers and do not require a

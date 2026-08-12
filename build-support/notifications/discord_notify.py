@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-"""Post a Frostguard build notification to a Discord webhook.
+"""Create or update the maintained Frostguard Nightly Discord message.
 
-The nightly bundle is ~220 MB, far above Discord's per-message upload ceiling,
-and a GitHub Actions artifact link only works for signed-in users with access to
-the repository. The maintained Nightly message therefore links the public
-release asset from a compact user-facing embed and lists the PRs or direct
-commits added since the previous Nightly. CI-only metrics stay in Actions.
+The maintained message links the current immutable native installer and the
+permanent rolling Nightly channel. CI-only metrics stay in Actions.
 
 The webhook URL is read from the environment rather than argv, because anything
 passed on a command line shows up in the process list and in `set -x` traces.
@@ -151,9 +148,17 @@ def build_payload(args: argparse.Namespace) -> dict:
                 f"({args.download_url})**"
             )
             description_parts.append(
-                "Extract the complete archive and use the included Frostguard "
-                "launcher. Java 21 or newer is required."
+                "Run the self-contained per-user MSI installer; a separate Java "
+                "installation is not required. Windows may currently show an "
+                "Unknown publisher warning."
             )
+            links = []
+            if args.release_url:
+                links.append(f"[📋 Release notes]({args.release_url})")
+            if args.channel_url:
+                links.append(f"[🌙 Latest Nightly]({args.channel_url})")
+            if links:
+                description_parts.append(" • ".join(links))
             if args.changes:
                 fields.extend(change_fields(args.changes, args.repository))
         elif args.run_url:
@@ -170,7 +175,7 @@ def build_payload(args: argparse.Namespace) -> dict:
 
     embed = {
         "title": truncate(
-            f"🧪 Frostguard Nightly {version}"
+            f"🌙 Frostguard Nightly {version}"
             if args.status == "success"
             else f"Frostguard {version} — {headline.lower()}",
             EMBED_TITLE_LIMIT,
@@ -306,6 +311,8 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--jar-count", type=lenient_int, default=0)
     parser.add_argument("--test-count", type=lenient_int, default=0)
     parser.add_argument("--download-url", default="")
+    parser.add_argument("--release-url", default="")
+    parser.add_argument("--channel-url", default="")
     parser.add_argument("--run-url", default="")
     parser.add_argument("--run-number", default="")
     parser.add_argument("--repository", default="")

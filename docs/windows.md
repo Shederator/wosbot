@@ -3,10 +3,11 @@
 This document summarizes Windows-specific setup for Frostguard.
 
 The [latest Stable release](https://github.com/Shederator/wosbot/releases/latest)
-provides the tested Windows installer. Authenticated Nightly releases appear in
-the [release history](https://github.com/Shederator/wosbot/releases) as a
-separate product identity. Git, Git LFS, Maven, and a JDK are needed only when
-building from source.
+provides the tested Windows installer. The permanent
+[Latest Nightly](https://github.com/Shederator/wosbot/releases/tag/nightly)
+entry points to the current authenticated preview with a separate product
+identity. Git, Git LFS, Maven, and a JDK are needed only when building from
+source.
 
 ## Build Requirements
 

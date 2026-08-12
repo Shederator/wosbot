@@ -58,4 +58,18 @@ class ChannelSwitchServiceTest {
 
         assertThrows(IOException.class, () -> service.open(RuntimeChannel.NIGHTLY));
     }
+
+    @Test
+    void opensThePermanentNightlyPageByDefault() throws Exception {
+        AtomicReference<URI> opened = new AtomicReference<>();
+        ChannelSwitchService service = new ChannelSwitchService(property -> null, () -> null,
+                executable -> {
+                    throw new AssertionError("launcher must not run");
+                }, opened::set);
+
+        assertEquals(ChannelSwitchService.Result.OPENED_RELEASE_PAGE,
+                service.open(RuntimeChannel.NIGHTLY));
+        assertEquals(URI.create("https://github.com/Shederator/wosbot/releases/tag/nightly"),
+                opened.get());
+    }
 }

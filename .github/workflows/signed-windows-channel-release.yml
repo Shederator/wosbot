@@ -1,6 +1,8 @@
 name: Windows Channel Release
 
 on:
+  schedule:
+    - cron: "17 3 * * *"
   workflow_dispatch:
     inputs:
       channel:
@@ -23,12 +25,12 @@ on:
 permissions: {}
 
 concurrency:
-  group: windows-${{ inputs.channel }}-release
+  group: windows-${{ github.event_name == 'schedule' && 'nightly' || inputs.channel }}-release
   cancel-in-progress: false
 
 jobs:
   release:
-    name: Authenticate and publish ${{ inputs.channel }} Windows release
+    name: Authenticate and publish ${{ github.event_name == 'schedule' && 'nightly' || inputs.channel }} Windows release
     if: github.ref == 'refs/heads/main'
     runs-on: windows-latest
     timeout-minutes: 75
@@ -36,9 +38,9 @@ jobs:
       contents: write
     env:
       MAVEN_ARGS: "-B --no-transfer-progress -Dstyle.color=never"
-      CHANNEL: ${{ inputs.channel }}
-      VERSION: ${{ inputs.version }}
-      MINIMUM_UPDATER_VERSION: ${{ inputs.minimum_updater_version }}
+      REQUESTED_CHANNEL: ${{ inputs.channel }}
+      REQUESTED_VERSION: ${{ inputs.version }}
+      REQUESTED_MINIMUM_UPDATER_VERSION: ${{ inputs.minimum_updater_version }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
@@ -68,6 +70,104 @@ jobs:
           }
           $wixBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
+      - name: Resolve manual or scheduled release identity
+        shell: pwsh
+        run: |
+          $channel = $env:REQUESTED_CHANNEL
+          $version = $env:REQUESTED_VERSION
+          $minimumUpdaterVersion = $env:REQUESTED_MINIMUM_UPDATER_VERSION
+          if ($env:GITHUB_EVENT_NAME -eq 'schedule') {
+              $channel = 'nightly'
+              $version = ''
+              $minimumUpdaterVersion = '3.0.0-nightly.0'
+          }
+          if ($channel -notin @('stable', 'nightly')) {
+              throw "Release channel must be stable or nightly"
+          }
+
+          $manifestName = "frostguard-$channel-manifest.json"
+          $previousVersion = ''
+          $feedReleases = @()
+          if ($channel -eq 'nightly') {
+              foreach ($feedTag in @('nightly', 'updates-nightly')) {
+                  $feedJson = gh api `
+                      "repos/$($env:GITHUB_REPOSITORY)/releases/tags/$feedTag" 2>$null
+                  if ($LASTEXITCODE -eq 0) {
+                      $feedReleases += ,($feedJson | ConvertFrom-Json)
+                  }
+              }
+          } else {
+              $feedJson = gh api "repos/$($env:GITHUB_REPOSITORY)/releases/latest" 2>$null
+              if ($LASTEXITCODE -eq 0) {
+                  $feedReleases += ,($feedJson | ConvertFrom-Json)
+              }
+          }
+
+          foreach ($feedRelease in $feedReleases) {
+              $manifestAssets = @($feedRelease.assets |
+                  Where-Object { $_.name -ceq $manifestName })
+              if ($manifestAssets.Count -gt 1) {
+                  throw "Update feed contains duplicate $manifestName assets"
+              }
+              if ($manifestAssets.Count -eq 0) {
+                  continue
+              }
+              $previousManifest = Join-Path $env:RUNNER_TEMP "previous-$manifestName"
+              gh api "repos/$($env:GITHUB_REPOSITORY)/releases/assets/$($manifestAssets[0].id)" `
+                  -H "Accept: application/octet-stream" > $previousManifest
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Previous update manifest could not be downloaded"
+              }
+              $previousEnvelope = Get-Content -Raw -LiteralPath $previousManifest |
+                  ConvertFrom-Json
+              $projectKey = Get-Content -Raw `
+                  modules/update/src/main/resources/dev/frostguard/update/project-update-key.properties `
+                  | ConvertFrom-StringData
+              if ($previousEnvelope.envelopeVersion -ne 1 -or
+                  $previousEnvelope.algorithm -cne 'Ed25519' -or
+                  $previousEnvelope.keyId -cne $projectKey.keyId) {
+                  throw "Previous update feed is not a supported project-signed manifest"
+              }
+              $payloadBytes = [Convert]::FromBase64String($previousEnvelope.payload)
+              $previousVersion = ([Text.Encoding]::UTF8.GetString($payloadBytes) |
+                  ConvertFrom-Json).version
+              break
+          }
+
+          if ($env:GITHUB_EVENT_NAME -eq 'schedule') {
+              $versionArgs = @('--date', (Get-Date).ToUniversalTime().ToString('yyyyMMdd'))
+              if ([string]::IsNullOrWhiteSpace($previousVersion)) {
+                  $latestTag = gh api "repos/$($env:GITHUB_REPOSITORY)/releases/latest" `
+                      --jq '.tag_name'
+                  if ($LASTEXITCODE -ne 0 -or $latestTag -notmatch '^v(\d+\.\d+\.\d+)$') {
+                      throw "A scheduled Nightly needs an existing Stable base version"
+                  }
+                  $versionArgs += @('--base-version', $Matches[1])
+              } else {
+                  $versionArgs += @('--previous-version', $previousVersion)
+              }
+              $version = python build-support/release/next_nightly_version.py @versionArgs
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Could not derive the next scheduled Nightly version"
+              }
+              $version = $version.Trim()
+          }
+          if ([string]::IsNullOrWhiteSpace($version)) {
+              throw "A manual release requires a version"
+          }
+          if ([string]::IsNullOrWhiteSpace($minimumUpdaterVersion)) {
+              throw "A release requires a minimum updater version"
+          }
+          @{
+              CHANNEL = $channel
+              VERSION = $version
+              MINIMUM_UPDATER_VERSION = $minimumUpdaterVersion
+              PREVIOUS_VERSION = $previousVersion
+          }.GetEnumerator() | ForEach-Object {
+              "$($_.Key)=$($_.Value)" | Out-File -FilePath $env:GITHUB_ENV `
+                  -Encoding utf8 -Append
+          }
+
       - name: Validate immutable release identity
         id: identity
         shell: pwsh
@@ -87,53 +187,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
               throw "Could not list existing releases"
           }
-          $feedTag = if ($env:CHANNEL -eq 'nightly') {
-              if ($releaseTags -contains 'updates-nightly') {
-                  'updates-nightly'
-              }
-          } else {
-              $latestStable = @(gh release list --repo $env:GITHUB_REPOSITORY `
-                  --exclude-drafts --exclude-pre-releases --limit 1 `
-                  --json tagName --jq '.[].tagName')
-              if ($LASTEXITCODE -ne 0) {
-                  throw "Could not resolve the latest Stable release"
-              }
-              $latestStable | Select-Object -First 1
-          }
-          $previousVersion = $null
-          if (-not [string]::IsNullOrWhiteSpace($feedTag)) {
-              $feedReleaseJson = gh api `
-                  "repos/$($env:GITHUB_REPOSITORY)/releases/tags/$feedTag"
-              if ($LASTEXITCODE -ne 0) {
-                  throw "Previous update feed could not be resolved"
-              }
-              $feedRelease = $feedReleaseJson | ConvertFrom-Json
-              $manifestAssets = @($feedRelease.assets |
-                  Where-Object { $_.name -ceq $manifestName })
-              if ($manifestAssets.Count -gt 1) {
-                  throw "Previous update feed contains duplicate manifest assets"
-              }
-              if ($manifestAssets.Count -eq 1) {
-                  $previousManifest = Join-Path $env:RUNNER_TEMP "previous-$manifestName"
-                  gh api "repos/$($env:GITHUB_REPOSITORY)/releases/assets/$($manifestAssets[0].id)" `
-                      -H "Accept: application/octet-stream" > $previousManifest
-                  if ($LASTEXITCODE -ne 0) {
-                      throw "Previous update manifest could not be downloaded"
-                  }
-                  $previousEnvelope = Get-Content -Raw -LiteralPath $previousManifest | ConvertFrom-Json
-                  $projectKey = Get-Content -Raw `
-                      modules/update/src/main/resources/dev/frostguard/update/project-update-key.properties `
-                      | ConvertFrom-StringData
-                  if ($previousEnvelope.envelopeVersion -ne 1 -or
-                      $previousEnvelope.algorithm -cne 'Ed25519' -or
-                      $previousEnvelope.keyId -cne $projectKey.keyId) {
-                      throw "Previous update feed is not a supported project-signed manifest"
-                  }
-                  $payloadBytes = [Convert]::FromBase64String($previousEnvelope.payload)
-                  $previousVersion = ([Text.Encoding]::UTF8.GetString($payloadBytes) |
-                      ConvertFrom-Json).version
-              }
-          }
+          $previousVersion = $env:PREVIOUS_VERSION
           $versionArgs = @('--channel', $env:CHANNEL, '--version', $env:VERSION)
           if (-not [string]::IsNullOrWhiteSpace($previousVersion)) {
               $versionArgs += @('--previous-version', $previousVersion)
@@ -145,9 +199,11 @@ jobs:
           $windowsVersion = $windowsVersion.Trim()
           $productName = if ($env:CHANNEL -eq 'nightly') { 'Frostguard Nightly' } else { 'Frostguard' }
           $profile = if ($env:CHANNEL -eq 'nightly') { ',windows-nightly' } else { '' }
-          $tag = if ($env:CHANNEL -eq 'nightly') { "nightly-$($env:VERSION)" } else { "v$($env:VERSION)" }
+          $tag = "v$($env:VERSION)"
           $assetPrefix = if ($env:CHANNEL -eq 'nightly') { 'Frostguard-Nightly' } else { 'Frostguard' }
           @{
+              channel = $env:CHANNEL
+              version = $env:VERSION
               windows_version = $windowsVersion
               product_name = $productName
               profile = $profile
@@ -211,7 +267,7 @@ jobs:
           $mavenArgs = $env:MAVEN_ARGS -split " "
           $profiles = "windows-app-image,windows-installer$($env:EXTRA_PROFILE)"
           $stableManifest = "https://github.com/$($env:GITHUB_REPOSITORY)/releases/latest/download/frostguard-stable-manifest.json"
-          $nightlyManifest = "https://github.com/$($env:GITHUB_REPOSITORY)/releases/download/updates-nightly/frostguard-nightly-manifest.json"
+          $nightlyManifest = "https://github.com/$($env:GITHUB_REPOSITORY)/releases/download/nightly/frostguard-nightly-manifest.json"
           & .\mvnw.cmd @mavenArgs "-Drevision=$($env:VERSION)" `
               "-Dfrostguard.windows.app-version=$($env:WINDOWS_VERSION)" `
               "-Dfrostguard.update.authenticode-publisher=$($env:AUTHENTICODE_PUBLISHER)" `
@@ -295,7 +351,11 @@ jobs:
           INSTALLER: ${{ steps.installer.outputs.path }}
         run: |
           $title = if ($env:CHANNEL -eq 'nightly') {
-              "Frostguard Nightly $($env:VERSION)"
+              if ($env:VERSION -notmatch '^\d+\.\d+\.\d+-nightly\.(\d{4})(\d{2})(\d{2})\.(\d+)$') {
+                  throw "Nightly title requires X.Y.Z-nightly.YYYYMMDD.N"
+              }
+              "Frostguard $($env:VERSION.Split('-')[0]) Nightly - " +
+                  "$($Matches[1])-$($Matches[2])-$($Matches[3]) #$($Matches[4])"
           } else {
               "Frostguard $($env:VERSION)"
           }
@@ -401,20 +461,111 @@ jobs:
               if ($LASTEXITCODE -ne 0) {
                   throw "Could not list releases before Nightly feed promotion"
               }
-              if (-not ($releaseTags -contains 'updates-nightly')) {
-                  gh release create updates-nightly --repo $env:GITHUB_REPOSITORY `
-                      --target $env:GITHUB_SHA --title "Frostguard Nightly update feed" `
-                      --notes "The manifest asset is replaced only after an authenticated immutable Nightly release is verified." `
-                      --prerelease
+              $immutableUrl = "https://github.com/$($env:GITHUB_REPOSITORY)/releases/tag/$($env:TAG)"
+              $channelUrl = "https://github.com/$($env:GITHUB_REPOSITORY)/releases/tag/nightly"
+              $channelNotes = @"
+          Permanent Frostguard Nightly channel.
+
+          **Current build:** [$($env:VERSION)]($immutableUrl)
+
+          Download the Windows x64 MSI from that immutable release. This rolling
+          channel contains only the project-signed update manifest used to select
+          and verify the current installer.
+
+          Stable: https://github.com/$($env:GITHUB_REPOSITORY)/releases/latest
+          "@
+              if (-not ($releaseTags -contains 'nightly')) {
+                  gh release create nightly --repo $env:GITHUB_REPOSITORY `
+                      --target $env:GITHUB_SHA --title "Frostguard Nightly - Latest" `
+                      --notes $channelNotes --prerelease
                   if ($LASTEXITCODE -ne 0) {
-                      throw "Nightly update feed could not be created"
+                      throw "Permanent Nightly channel could not be created"
+                  }
+              } else {
+                  $rollingJson = gh api `
+                      "repos/$($env:GITHUB_REPOSITORY)/releases/tags/nightly"
+                  if ($LASTEXITCODE -ne 0) {
+                      throw "Permanent Nightly channel could not be resolved"
                   }
               }
-              gh release upload updates-nightly $env:MANIFEST --repo $env:GITHUB_REPOSITORY --clobber
-              if ($LASTEXITCODE -ne 0) {
-                  throw "Nightly update manifest could not be promoted"
+
+              # Builds through .8 use this old endpoint. Promote the new manifest
+              # there first so they can cross the one-release migration bridge.
+              if ($releaseTags -contains 'updates-nightly') {
+                  gh release edit updates-nightly --repo $env:GITHUB_REPOSITORY `
+                      --title "Frostguard Nightly - Compatibility Feed" `
+                      --notes "Temporary feed for Nightly builds through .8. New builds use the permanent nightly channel." `
+                      --prerelease
+                  if ($LASTEXITCODE -ne 0) {
+                      throw "Compatibility Nightly metadata could not be updated"
+                  }
+                  gh release upload updates-nightly $env:MANIFEST `
+                      --repo $env:GITHUB_REPOSITORY --clobber
+                  if ($LASTEXITCODE -ne 0) {
+                      throw "Compatibility Nightly manifest could not be promoted"
+                  }
               }
+              gh release upload nightly $env:MANIFEST --repo $env:GITHUB_REPOSITORY --clobber
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Permanent Nightly manifest could not be promoted"
+              }
+              $rollingJson = gh api `
+                  "repos/$($env:GITHUB_REPOSITORY)/releases/tags/nightly"
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Permanent Nightly channel could not be resolved after promotion"
+              }
+              $rolling = $rollingJson | ConvertFrom-Json
+              foreach ($asset in @($rolling.assets |
+                  Where-Object { $_.name -cne 'frostguard-nightly-manifest.json' })) {
+                  gh api --method DELETE `
+                      "repos/$($env:GITHUB_REPOSITORY)/releases/assets/$($asset.id)"
+                  if ($LASTEXITCODE -ne 0) {
+                      throw "Legacy Nightly asset $($asset.name) could not be retired"
+                  }
+              }
+              gh release edit nightly --repo $env:GITHUB_REPOSITORY `
+                  --title "Frostguard Nightly - Latest" --notes $channelNotes `
+                  --prerelease
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Permanent Nightly channel metadata could not be updated"
+              }
+              gh api --method PATCH `
+                  "repos/$($env:GITHUB_REPOSITORY)/git/refs/tags/nightly" `
+                  -f sha=$env:GITHUB_SHA -F force=true | Out-Null
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Permanent Nightly tag could not be moved to the current build"
+              }
+              "channel_url=$channelUrl" | Out-File -FilePath $env:GITHUB_OUTPUT `
+                  -Encoding utf8 -Append
+              "release_url=$immutableUrl" | Out-File -FilePath $env:GITHUB_OUTPUT `
+                  -Encoding utf8 -Append
           }
+
+      - name: Update the maintained Nightly Discord message
+        if: always() && env.CHANNEL == 'nightly'
+        continue-on-error: true
+        env:
+          DISCORD_NIGHTLY_WEBHOOK_URL: ${{ secrets.DISCORD_NIGHTLY_WEBHOOK_URL }}
+          DISCORD_DAILY_MESSAGE_ID: ${{ vars.DISCORD_DAILY_MESSAGE_ID }}
+          JOB_STATUS: ${{ job.status }}
+          INSTALLER_URL: ${{ steps.draft.outputs.download_url }}
+          RELEASE_URL: ${{ steps.publish.outputs.release_url }}
+          CHANNEL_URL: ${{ steps.publish.outputs.channel_url }}
+          TAG: ${{ steps.identity.outputs.tag }}
+        shell: pwsh
+        run: |
+          $notificationArgs = @(
+              '--status', $env:JOB_STATUS.ToLowerInvariant(),
+              '--version', $env:VERSION,
+              '--download-url', $env:INSTALLER_URL,
+              '--release-url', $env:RELEASE_URL,
+              '--channel-url', $env:CHANNEL_URL,
+              '--run-url', "$($env:GITHUB_SERVER_URL)/$($env:GITHUB_REPOSITORY)/actions/runs/$($env:GITHUB_RUN_ID)",
+              '--run-number', $env:GITHUB_RUN_NUMBER,
+              '--repository', $env:GITHUB_REPOSITORY,
+              '--message-id', $env:DISCORD_DAILY_MESSAGE_ID
+          )
+          python build-support/notifications/discord_notify.py @notificationArgs
 
       - name: Remove an abandoned draft release
         if: failure() && steps.draft.outcome != 'skipped'
@@ -440,7 +591,7 @@ jobs:
       - name: Upload authenticated release evidence
         uses: actions/upload-artifact@v4
         with:
-          name: frostguard-${{ inputs.channel }}-${{ inputs.version }}-authenticated-release
+          name: frostguard-${{ steps.identity.outputs.channel }}-${{ steps.identity.outputs.version }}-authenticated-release
           path: |
             ${{ steps.installer.outputs.path }}
             ${{ steps.manifest.outputs.path }}

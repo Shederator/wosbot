@@ -92,7 +92,7 @@ final class ChannelSwitchService {
         String configured = properties.apply(PAGE_PROPERTY + target.directoryName());
         if (configured == null || configured.isBlank()) {
             configured = target == RuntimeChannel.NIGHTLY
-                    ? "https://github.com/Shederator/wosbot/releases"
+                    ? "https://github.com/Shederator/wosbot/releases/tag/nightly"
                     : "https://github.com/Shederator/wosbot/releases/latest";
         }
         URI uri;

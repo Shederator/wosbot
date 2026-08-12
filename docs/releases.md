@@ -1,23 +1,29 @@
 # Releases
 
 Frostguard publishes project-authenticated installed releases for Stable and
-Nightly plus temporary ZIP builds for pull-request testing. A legacy rolling
-Nightly ZIP remains available while its maintained download channel is retired;
-it is not an automatic-update source.
+Nightly plus temporary ZIP builds for pull-request testing. Public channel links
+are permanent even though the versioned installers behind them change.
 
-| Type | Audience | Lifetime | Discord notification |
+| Type | Permanent entry | Versioned tag | Lifetime |
 |---|---|---|---|
-| Stable `vX.Y.Z` | Regular users | Permanent | Update the maintained Stable message |
-| Nightly `nightly-X.Y.Z-nightly.*` | Testers | Permanent prerelease | Release history; in-app Nightly feed |
-| Legacy daily `nightly` ZIP | Testers | Replaced daily | Maintained legacy download, no mass mention |
-| PR test `pr-test-*` | Requester/testers | Temporary | Reply only to the requester |
+| Stable | [`releases/latest`](https://github.com/Shederator/wosbot/releases/latest) | `vX.Y.Z` | Permanent |
+| Nightly | [`releases/tag/nightly`](https://github.com/Shederator/wosbot/releases/tag/nightly) | `vX.Y.Z-nightly.YYYYMMDD.N` | Current immutable prerelease plus rolling channel |
+| PR test | Discord `/build-pr` | `pr-test-*` | Temporary |
+
+Do not add a separate `stable` rolling release. GitHub's built-in `latest`
+redirect already resolves the newest non-prerelease Stable without duplicating
+it in the release list. The mutable `nightly` release is different: GitHub has
+no built-in latest-prerelease URL, so it provides both the permanent landing
+page and the stable signed-manifest URL required by installed Nightly clients.
 
 ## Authenticated installed releases
 
-Run **Windows Channel Release** manually from `main`. It requires a
-semantic version, the target `stable` or `nightly` identity, and the minimum
-supported updater version. Stable versions use `X.Y.Z`; Nightly versions use an
-immutable prerelease such as `3.1.0-nightly.20260811.1`.
+**Windows Channel Release** runs Nightly automatically once per day
+from `main`. It reads the previous signed feed and derives the next version,
+resetting the sequence to 1 on a new UTC date. A maintainer can also run it
+manually for Stable or an additional Nightly. Stable versions use `X.Y.Z`;
+Nightly versions use an immutable prerelease such as
+`3.1.0-nightly.20260811.1`.
 
 Windows Installer compares only three numeric version fields. Stable maps
 directly to `X.Y.Z`. Nightly derives an independent, monotonically increasing
@@ -42,16 +48,24 @@ Stable and Nightly use different application IDs, upgrade UUIDs, install
 directories, shortcuts, workspaces, and feeds. The workflow builds and smokes
 the selected identity, optionally Authenticode-signs the installer, uploads and
 re-downloads the immutable installer, derives its final size and SHA-256,
-project-signs the manifest, verifies it, and publishes it last. Stable exposes its manifest through
-the latest immutable release; Nightly points `updates-nightly` at an installer
-stored in an immutable `nightly-<version>` release.
+project-signs the manifest, verifies it, and publishes it last. Stable exposes
+its manifest through the latest immutable release. Nightly stores the installer
+in an immutable `v<version>` release and updates the manifest asset on the
+rolling `nightly` release only after that installer is public and verified.
 
 A failure before publication removes the abandoned draft release and tag so the
 same immutable version can be retried. If a Nightly release becomes public but
-promotion of the rolling `updates-nightly` manifest fails afterward, leave the
+promotion of the rolling `nightly` manifest fails afterward, leave the
 immutable release intact and keep the previous rolling manifest active. Recover
 by verifying and promoting the manifest asset from that immutable release; do
 not rebuild or replace its installer.
+
+Nightly builds through `3.0.0-nightly.20260812.8` embed the former
+`updates-nightly` endpoint. During migration the publisher mirrors each new
+manifest there before updating `nightly`, allowing those installations to cross
+the bridge once. New builds embed only `nightly`. Remove the compatibility
+release after the supported old-client window closes; never recreate it after
+that removal.
 
 ### Unpublished Stable release candidates
 
@@ -69,14 +83,16 @@ lower than the final release, so the final `3.0.0` installer can still upgrade
 it. The application displays the prerelease version from its JAR independently
 of the numeric MSI version.
 
-## Transitional ZIP promotion
+## Legacy 2.x ZIP promotion
 
-The legacy Stable ZIP workflow promotes an already successful `Nightly Windows Bundle` run from
-`main`; they do not rebuild a different tree. Run **Stable Windows Release**
-manually with:
+The manual-only **Legacy Windows Bundle Candidate** workflow can still produce
+an Actions artifact for an intentional 2.x maintenance release. It no longer
+publishes a Nightly, has no schedule, and does not update Discord. The legacy
+Stable ZIP workflow promotes one of those successful runs from `main`; it does
+not rebuild a different tree. Run **Stable Windows Release** manually with:
 
 - `version`: the `X.Y.Z` value declared in `pom.xml`;
-- `daily_run_id`: a successful scheduled or manually triggered daily run from
+- `daily_run_id`: a successful manually triggered legacy candidate run from
   `main` after the intended release commit.
 
 This workflow rejects Frostguard 3.x. Installed 3.x releases must use the
@@ -105,8 +121,8 @@ A tested, self-contained Windows build that changes only with a Stable release:
 https://github.com/Shederator/wosbot/releases/latest
 
 Nightly — authenticated previews
-Immutable Windows installer previews with their own app and settings:
-https://github.com/Shederator/wosbot/releases
+The current immutable preview with its own app and settings:
+https://github.com/Shederator/wosbot/releases/tag/nightly
 
 Download the Windows x64 MSI from the selected release. The installer includes
 Java. A Windows Unknown publisher or SmartScreen warning is currently expected.
@@ -118,7 +134,7 @@ filename contains its version. Store the webhook-owned card ID in
 promotion; it resolves and verifies the exact versioned MSI from Latest before
 updating the maintained card.
 
-### Legacy Nightly ZIP message
+### Maintained Nightly message
 
 ```text
 Latest Nightly — Frostguard <version>
@@ -128,20 +144,17 @@ changes.
 
 Download Frostguard <version> for Windows
 
-Changes since the previous Nightly
-- <linked PR title or direct commit subject>
+Run the self-contained per-user MSI installer. A separate Java installation is
+not required.
 
-Extract the complete archive and use the included Frostguard launcher.
-Java 21 or newer is required.
+Release notes · Latest Nightly
 ```
 
-This legacy ZIP URL is deliberately version-independent. Do not post a new
-Discord message for every daily build. Store the webhook-owned message ID in the repository
-variable `DISCORD_DAILY_MESSAGE_ID`; successful builds edit that message. Show
-at most five linked first-parent changes since the previous Nightly and collapse
-older entries into a count.
-Build failures remain visible in Actions and do not replace the last working
-public download.
+Do not post a new Discord message for every daily build. Store the webhook-owned
+message ID in the repository variable `DISCORD_DAILY_MESSAGE_ID`; successful
+native Nightly publications edit that message with the immutable MSI URL and
+permanent channel URL. Build failures link to Actions and do not replace the
+last working public download.
 
 ## Migration
 
@@ -149,7 +162,8 @@ public download.
 2. Publish the first real Stable release before presenting the Stable download.
 3. Store both maintained webhook message IDs as repository variables.
 4. Move `/build-pr` results to `#request-a-build`.
-5. Archive redundant legacy release channels after their links are replaced.
+5. Keep `updates-nightly` only for the old-client migration window, then remove
+   that compatibility release permanently.
 
 ## Native installer update contract
 

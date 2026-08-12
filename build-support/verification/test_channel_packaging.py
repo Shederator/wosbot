@@ -19,10 +19,12 @@ def properties(element: ET.Element) -> dict[str, str]:
 
 
 class ChannelPackagingTest(unittest.TestCase):
-    def test_pr_ci_and_nightly_publication_are_separate_workflows(self):
+    def test_pr_ci_native_nightly_and_legacy_bundle_are_separate_workflows(self):
         ci = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-        nightly = (REPO_ROOT / ".github/workflows/daily-windows-bundle.yml").read_text(
+        legacy = (REPO_ROOT / ".github/workflows/daily-windows-bundle.yml").read_text(
             encoding="utf-8")
+        nightly = (REPO_ROOT / ".github/workflows/"
+                   "signed-windows-channel-release.yml").read_text(encoding="utf-8")
         installers = (REPO_ROOT / ".github/workflows/windows-native-package.yml").read_text(
             encoding="utf-8")
 
@@ -32,12 +34,19 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertIn("Build and test Maven reactor", ci)
         self.assertNotIn("contents: write", ci)
 
-        self.assertIn("name: Nightly Windows Bundle", nightly)
+        self.assertIn("name: Legacy Windows Bundle Candidate", legacy)
+        self.assertIn("  workflow_dispatch:", legacy)
+        self.assertNotIn("  schedule:", legacy)
+        self.assertNotIn("contents: write", legacy)
+        self.assertNotIn("gh release create nightly", legacy)
+        self.assertNotIn("Update the Nightly Discord message", legacy)
+
+        self.assertIn("name: Windows Channel Release", nightly)
         self.assertIn("  schedule:", nightly)
         self.assertIn("  workflow_dispatch:", nightly)
         self.assertNotIn("  pull_request:", nightly)
         self.assertNotIn("\n  push:\n", nightly)
-        self.assertIn("  contents: write", nightly)
+        self.assertIn("      contents: write", nightly)
 
         self.assertIn("name: Windows Installers", installers)
         self.assertIn("Build and smoke-test Stable and Nightly installers", installers)
@@ -166,7 +175,13 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertNotIn("releases/tags/$($env:TAG)", workflow)
         self.assertGreaterEqual(
             workflow.count("Where-Object { $_.tag_name -ceq $env:TAG }"), 2)
-        self.assertIn("gh release upload updates-nightly $env:MANIFEST", workflow)
+        self.assertIn("gh release upload nightly $env:MANIFEST", workflow)
+        self.assertIn("releases/download/nightly/frostguard-nightly-manifest.json", workflow)
+        self.assertIn("@('nightly', 'updates-nightly')", workflow)
+        self.assertIn("if ($releaseTags -contains 'updates-nightly')", workflow)
+        self.assertIn('          $tag = "v$($env:VERSION)"', workflow)
+        self.assertIn("next_nightly_version.py", workflow)
+        self.assertIn("Update the maintained Nightly Discord message", workflow)
         self.assertIn("Remove an abandoned draft release", workflow)
         self.assertIn('java-version: "21.0.12+8.0"', workflow)
         for launcher_hash in (

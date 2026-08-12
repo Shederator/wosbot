@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       daily_run_id:
-        description: "Successful Nightly Windows Bundle run ID from main"
+        description: "Successful Legacy Windows Bundle Candidate run ID from main"
         required: true
         type: string
 
@@ -55,7 +55,7 @@ jobs:
             exit 1
           fi
           if [[ "${workflow}" != ".github/workflows/daily-windows-bundle.yml" ]]; then
-            echo "::error::Selected run does not belong to Nightly Windows Bundle."
+            echo "::error::Selected run does not belong to Legacy Windows Bundle Candidate."
             exit 1
           fi
           echo "sha=${sha}" >> "${GITHUB_OUTPUT}"

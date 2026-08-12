@@ -218,7 +218,7 @@ Stable and Nightly use separate, self-contained Windows applications. Git,
 Maven, and a separately installed Java runtime are not required.
 
 - **[Latest Stable release](https://github.com/Shederator/wosbot/releases/latest)**
-- **[Nightly releases](https://github.com/Shederator/wosbot/releases)**
+- **[Latest Nightly](https://github.com/Shederator/wosbot/releases/tag/nightly)**
 
 After choosing a build:
 

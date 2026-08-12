@@ -1,25 +1,16 @@
-name: Nightly Windows Bundle
+name: Legacy Windows Bundle Candidate
 
 on:
-  schedule:
-    - cron: "17 3 * * *"
   workflow_dispatch:
-    inputs:
-      recreate_discord_message:
-        description: "Post a new maintained Nightly below Stable and retire the old message"
-        required: false
-        default: false
-        type: boolean
 
-# `contents: write` is needed to publish the rolling `nightly` release that the
-# Discord message links to. An Actions artifact URL requires a signed-in GitHub
-# account with access to this repository, so it is useless as a "downloadable"
-# link for testers in a Discord channel.
+# Frostguard 3 uses the authenticated native channel workflow. This manual-only
+# build remains available solely as an input for an intentional legacy 2.x ZIP
+# promotion; it never publishes a rolling release or updates Discord.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: nightly-windows-bundle-${{ github.ref }}
+  group: legacy-windows-bundle-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -29,7 +20,7 @@ env:
 
 jobs:
   build-windows-bundle:
-    name: Build and publish nightly Windows bundle
+    name: Build legacy Windows bundle candidate
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -199,188 +190,3 @@ jobs:
           path: "**/target/surefire-reports/*.xml"
           if-no-files-found: ignore
           retention-days: 7
-
-      # A rolling prerelease gives the Discord message a stable, public,
-      # login-free download URL. This workflow only runs from the default
-      # branch on its schedule or through an explicit manual dispatch.
-      - name: Publish the rolling nightly release
-        id: release
-        if: success() && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ZIP_PATH: ${{ steps.bundle.outputs.path }}
-          VERSION: ${{ steps.version.outputs.version }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          # The asset is uploaded under a FIXED name, not the versioned one. The
-          # download URL contains the asset filename, so a versioned name would
-          # silently change the link on every version bump and break every
-          # message already posted to the channel.
-          asset="frostguard-windows-desktop-bundle.zip"
-          staged="$(dirname "${ZIP_PATH}")/${asset}"
-          cp "${ZIP_PATH}" "${staged}"
-
-          notes="$(printf '%s\n' \
-            "Automated Windows desktop bundle for Frostguard \`${VERSION}\`." \
-            "" \
-            "Built from \`${GITHUB_SHA}\` on $(date -u '+%Y-%m-%d %H:%M UTC')." \
-            "Verified: bundle structure, manifest classpath and launch smoke test." \
-            "" \
-            "**Install:** extract the complete ZIP, then double-click" \
-            "\`Start Frostguard.bat\`" \
-            "(Java 21+ required)." \
-            "" \
-            "This tag is replaced by every nightly build; it is not a stable release.")"
-
-          # Recreate the release from scratch each night. `gh release edit
-          # --target` does NOT move an existing tag, so editing in place would
-          # leave the `nightly` tag pinned to the first commit it was ever cut
-          # from while the notes claimed a newer SHA. --cleanup-tag removes the
-          # tag too, so the recreated one points at this build.
-          previous_sha=""
-          if gh release view nightly >/dev/null 2>&1; then
-            previous_sha="$(gh api \
-              "repos/${GITHUB_REPOSITORY}/releases/tags/nightly" \
-              --jq '.target_commitish')"
-          fi
-          changes="$(python3 build-support/release/nightly_changes.py \
-            --repository "${GITHUB_REPOSITORY}" \
-            --previous "${previous_sha}" \
-            --current "${GITHUB_SHA}")"
-
-          notes="${notes}
-
-          ## Changes since the previous Nightly
-
-          ${changes}"
-
-          if [[ -n "${previous_sha}" ]]; then
-            gh release delete nightly --yes --cleanup-tag
-          fi
-
-          # Creating the release with the asset in the same call means there is
-          # never a window where the tag exists but the download 404s.
-          gh release create nightly "${staged}" \
-            --title "Nightly build ${VERSION}" \
-            --notes "${notes}" \
-            --prerelease \
-            --target "${GITHUB_SHA}"
-
-          # Read the URL back from the API instead of predicting it. A predicted
-          # URL is exactly how a 404 gets posted to the channel: if the upload
-          # landed under a different name, or not at all, this fails here rather
-          # than in Discord.
-          # `browser_download_url` straight from the REST API is unambiguous,
-          # unlike gh's `url` JSON field which is the API URL for some versions.
-          url="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/nightly" \
-            --jq ".assets[] | select(.name == \"${asset}\") | .browser_download_url")"
-          if [[ -z "${url}" ]]; then
-            echo "::error::Asset ${asset} is not attached to the nightly release."
-            gh api "repos/${GITHUB_REPOSITORY}/releases/tags/nightly" \
-              --jq '.assets[].name'
-            exit 1
-          fi
-
-          # Prove the link actually serves the file before it is advertised.
-          # A release asset redirects to a signed CDN URL, so follow redirects.
-          # GitHub's release API can expose the asset before its CDN download
-          # route has propagated. Treat the initial 404 as retryable.
-          code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 120 \
-            --fail --retry 12 --retry-delay 5 --retry-all-errors \
-            -r 0-1023 "${url}" || true)"
-          if [[ "${code}" != "200" && "${code}" != "206" ]]; then
-            echo "::error::Download URL ${url} returned HTTP ${code}."
-            exit 1
-          fi
-
-          echo "download_url=${url}" >> "${GITHUB_OUTPUT}"
-          {
-            echo "changes<<FROSTGUARD_CHANGES"
-            printf '%s\n' "${changes}"
-            echo "FROSTGUARD_CHANGES"
-          } >> "${GITHUB_OUTPUT}"
-          echo "Published and verified ${asset} at ${url} (HTTP ${code})"
-
-      # Keep one maintained Nightly message instead of adding one post per run.
-      # Failures remain visible in Actions and never overwrite the last working
-      # public download.
-      - name: Update the Nightly Discord message
-        id: discord
-        if: success() && github.ref == 'refs/heads/main'
-        continue-on-error: true
-        env:
-          DISCORD_NIGHTLY_WEBHOOK_URL: ${{ secrets.DISCORD_NIGHTLY_WEBHOOK_URL }}
-          DISCORD_DAILY_MESSAGE_ID: ${{ vars.DISCORD_DAILY_MESSAGE_ID }}
-          # A commit message is attacker-controlled text. Interpolating it
-          # straight into the `run:` block would let `$(...)` or a backtick in a
-          # commit subject execute on the runner, with the webhook secret in
-          # scope. Passing it through the environment keeps it inert data.
-          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
-          JOB_STATUS: ${{ job.status }}
-          BUNDLE_NAME: ${{ steps.metrics.outputs.bundle_name }}
-          BUNDLE_BYTES: ${{ steps.metrics.outputs.bundle_bytes }}
-          JAR_COUNT: ${{ steps.metrics.outputs.jar_count }}
-          TEST_COUNT: ${{ steps.metrics.outputs.test_count }}
-          DOWNLOAD_URL: ${{ steps.release.outputs.download_url }}
-          NIGHTLY_CHANGES: ${{ steps.release.outputs.changes }}
-          VERSION: ${{ steps.version.outputs.version }}
-          RECREATE_DISCORD_MESSAGE: ${{ inputs.recreate_discord_message || false }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          # `head_commit` only exists on push events. The nightly is a
-          # `schedule` run, which is precisely the case that matters most, so
-          # read the subject out of the checkout when the payload has none.
-          COMMIT_MESSAGE="${COMMIT_MESSAGE:-}"
-          if [[ -z "${COMMIT_MESSAGE}" ]]; then
-            COMMIT_MESSAGE="$(git log -1 --pretty=%s || true)"
-          fi
-
-          discord_target=(--message-id "${DISCORD_DAILY_MESSAGE_ID}")
-          if [[ "${RECREATE_DISCORD_MESSAGE}" == "true" ]]; then
-            discord_target=(--message-id-output "${GITHUB_OUTPUT}")
-          fi
-
-          python3 build-support/notifications/discord_notify.py \
-            --status "${JOB_STATUS,,}" \
-            --version "${VERSION}" \
-            --bundle-name "${BUNDLE_NAME}" \
-            --bundle-bytes "${BUNDLE_BYTES:-0}" \
-            --jar-count "${JAR_COUNT:-0}" \
-            --test-count "${TEST_COUNT:-0}" \
-            --download-url "${DOWNLOAD_URL}" \
-            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
-            --run-number "${GITHUB_RUN_NUMBER}" \
-            --repository "${GITHUB_REPOSITORY}" \
-            --branch "${GITHUB_REF_NAME}" \
-            --trigger "${GITHUB_EVENT_NAME}" \
-            --commit "${GITHUB_SHA}" \
-            --commit-message "${COMMIT_MESSAGE}" \
-            --actor "${GITHUB_ACTOR}" \
-            --changes "${NIGHTLY_CHANGES}" \
-            "${discord_target[@]}"
-
-      - name: Delete the superseded Discord message
-        if: >-
-          success() &&
-          github.ref == 'refs/heads/main' &&
-          inputs.recreate_discord_message &&
-          steps.discord.outcome == 'success'
-        env:
-          DISCORD_NIGHTLY_WEBHOOK_URL: ${{ secrets.DISCORD_NIGHTLY_WEBHOOK_URL }}
-          OLD_MESSAGE_ID: ${{ vars.DISCORD_DAILY_MESSAGE_ID }}
-          NEW_MESSAGE_ID: ${{ steps.discord.outputs.message_id }}
-        run: |
-          set -euo pipefail
-          if [[ ! "${OLD_MESSAGE_ID}" =~ ^[0-9]+$ ||
-                ! "${NEW_MESSAGE_ID}" =~ ^[0-9]+$ ||
-                "${OLD_MESSAGE_ID}" == "${NEW_MESSAGE_ID}" ]]; then
-            echo "::error::Refusing to delete an invalid or current Discord message ID."
-            exit 1
-          fi
-          curl --fail --silent --show-error \
-            --request DELETE \
-            "${DISCORD_NIGHTLY_WEBHOOK_URL%/}/messages/${OLD_MESSAGE_ID}"

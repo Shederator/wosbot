@@ -30,14 +30,16 @@ WEBHOOK = "https://discord.com/api/webhooks/123456789/abcdefTOKEN-value_x"
 
 BASE_ARGS = [
     "--status", "success",
-    "--version", "2.1.0",
-    "--bundle-name", "frostguard-2.1.0-desktop-bundle.zip",
-    "--bundle-bytes", str(231 * 1024 * 1024),
-    "--jar-count", "76",
-    "--test-count", "412",
+    "--version", "3.0.0-nightly.20260812.9",
     "--download-url",
-    "https://github.com/Shederator/wosbot/releases/download/nightly/"
-    "frostguard-2.1.0-desktop-bundle.zip",
+    "https://github.com/Shederator/wosbot/releases/download/"
+    "v3.0.0-nightly.20260812.9/"
+    "Frostguard-Nightly-3.0.0-nightly.20260812.9-windows-x64.msi",
+    "--release-url",
+    "https://github.com/Shederator/wosbot/releases/tag/"
+    "v3.0.0-nightly.20260812.9",
+    "--channel-url",
+    "https://github.com/Shederator/wosbot/releases/tag/nightly",
     "--run-url", "https://github.com/Shederator/wosbot/actions/runs/1",
     "--run-number", "42",
     "--repository", "Shederator/wosbot",
@@ -59,12 +61,14 @@ class PayloadTest(unittest.TestCase):
     def test_success_payload_has_no_bare_url_content(self):
         result = payload()
         self.assertEqual("", result["content"])
-        self.assertIn("releases/download/nightly", result["embeds"][0]["description"])
+        description = result["embeds"][0]["description"]
+        self.assertIn("windows-x64.msi", description)
+        self.assertIn("releases/tag/nightly", description)
 
     def test_success_embed_is_amber_and_names_the_version(self):
         embed = payload()["embeds"][0]
         self.assertEqual(0xF1C40F, embed["color"])
-        self.assertIn("2.1.0", embed["title"])
+        self.assertIn("3.0.0-nightly.20260812.9", embed["title"])
         self.assertIn("Frostguard Nightly", embed["title"])
         self.assertEqual("Nightly #42 • updated automatically", embed["footer"]["text"])
 
@@ -113,6 +117,12 @@ class PayloadTest(unittest.TestCase):
         self.assertNotIn("Trigger", names)
         self.assertNotIn("Branch", names)
         self.assertNotIn("Commit", names)
+
+    def test_native_installer_guidance_does_not_mention_zip_or_external_java(self):
+        description = payload()["embeds"][0]["description"]
+        self.assertIn("self-contained per-user MSI", description)
+        self.assertNotIn("Extract", description)
+        self.assertNotIn("Java 21", description)
 
     def test_respects_every_discord_length_limit(self):
         long = "x" * 6000

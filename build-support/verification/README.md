@@ -2,10 +2,12 @@
 
 Pull requests and `main` are built and tested by
 [`ci.yml`](../../.github/workflows/ci.yml) with read-only repository access.
-The separate [`daily-windows-bundle.yml`](../../.github/workflows/daily-windows-bundle.yml)
-builds and publishes the rolling Nightly ZIP. No manual activation is needed;
-the first scheduled Nightly run happens at the next 03:17 UTC after the workflow
-lands on `main`.
+The authenticated
+[`signed-windows-channel-release.yml`](../../.github/workflows/signed-windows-channel-release.yml)
+publishes the native Nightly once per day. The old
+[`daily-windows-bundle.yml`](../../.github/workflows/daily-windows-bundle.yml)
+is manual-only and produces a private Actions artifact solely for an intentional
+legacy 2.x promotion.
 
 ## When it runs
 
@@ -13,10 +15,11 @@ lands on `main`.
 |---|---|
 | CI: `pull_request` | Builds and tests the proposed tree without release permissions |
 | CI: `push` to `main` | Rechecks the integrated tree |
-| Nightly: `schedule` (03:17 UTC daily) | Publishes the rolling Windows ZIP and updates its Discord message |
-| Nightly: `workflow_dispatch` | On-demand Nightly build; publication is limited to `main` |
+| Native channel: `schedule` (daily) | Publishes an authenticated immutable MSI, advances `nightly`, and updates Discord |
+| Native channel: `workflow_dispatch` | Publishes an explicit Stable or additional Nightly from `main` |
+| Legacy bundle: `workflow_dispatch` | Produces a 2.x ZIP candidate as an Actions artifact; never publishes it |
 
-## What the Nightly pipeline does
+## What the legacy ZIP verifier does
 
 1. Checks out the repository **with Git LFS**, then asserts that every LFS asset
    was really materialised. The check fails if `git lfs ls-files` returns nothing
@@ -45,45 +48,29 @@ lands on `main`.
    `Class-Path`, and boots the shaded Telegram watcher for real.
 8. Uploads the bundle (version-tagged, no re-compression) and the Surefire
    reports, and writes a job summary with size, JAR count and test count.
-9. Republishes the rolling **`nightly` prerelease** with the bundle attached, so
-   there is a public download URL that needs no GitHub login.
-10. Posts a **Discord notification** with that download link.
+9. Retains the verified ZIP only as a short-lived Actions artifact. It does not
+   own any public channel or Discord message.
 
 ## Discord notifications
 
-[`discord_notify.py`](discord_notify.py) posts one message per non-PR run to the
-webhook in the `DISCORD_NIGHTLY_WEBHOOK_URL` repository secret.
+[`discord_notify.py`](../notifications/discord_notify.py) updates the single
+maintained Nightly message after the native installer and signed channel feed
+have been published. It uses the webhook in the
+`DISCORD_NIGHTLY_WEBHOOK_URL` repository secret and the message ID in
+`DISCORD_DAILY_MESSAGE_ID`.
 
-### Why a release and not the Actions artifact
+### Permanent channel and immutable download
 
-An artifact download URL only resolves for a signed-in GitHub account with read
-access to the repository, so it is useless as a "downloadable link" in a Discord
-channel. The bundle is also ~220 MB, far above the 8 MiB a webhook may upload.
-The workflow therefore republishes the rolling `nightly` tag on every `main`
-build and links its asset at this permanent URL:
+An Actions artifact URL requires a signed-in GitHub account. The maintained card
+therefore links the current immutable MSI and this permanent channel page:
 
 ```
-https://github.com/Shederator/wosbot/releases/download/nightly/frostguard-windows-desktop-bundle.zip
+https://github.com/Shederator/wosbot/releases/tag/nightly
 ```
 
-Three details keep that link from going stale or 404ing:
-
-- **The asset name carries no version.** A download URL contains the asset
-  filename, so uploading `frostguard-2.1.0-desktop-bundle.zip` would change the
-  link at the next version bump and break every message already in the channel.
-  The versioned ZIP is copied to a fixed name before upload; the version is
-  still reported in the release title, notes and Discord card.
-- **The release is deleted and recreated** (`--cleanup-tag`) rather than edited.
-  `gh release edit --target` does not move an existing tag, so editing in place
-  would leave `nightly` pinned to the first commit it was ever cut from while
-  the notes advertised a newer SHA.
-- **The URL is read back from the API** (`browser_download_url`) and then
-  actually fetched, instead of being predicted from the filename. A predicted
-  URL is precisely how a dead link reaches the channel. If the asset is missing
-  or does not serve a 200/206, the step fails before anything is posted.
-
-The tag is marked *prerelease*, so it never displaces a real tagged release as
-"Latest".
+`nightly` carries only the project-signed manifest and a link to the current
+immutable `vX.Y.Z-nightly.YYYYMMDD.N` release. The MSI remains versioned and is
+never overwritten. GitHub's `releases/latest` remains reserved for Stable.
 
 ### Setting the secret
 
@@ -121,9 +108,12 @@ notification is not worth failing a good artifact over.
 Test the payload without posting anything:
 
 ```sh
-python3 build-support/notifications/test_discord_notify.py     # 21 self-tests, no network
-python3 build-support/notifications/discord_notify.py --status success --version 2.1.0 \
-  --download-url https://example.com/bundle.zip --dry-run
+python3 build-support/notifications/test_discord_notify.py
+python3 build-support/notifications/discord_notify.py --status success \
+  --version 3.0.0-nightly.20260812.9 \
+  --download-url https://example.com/Frostguard-Nightly.msi \
+  --release-url https://example.com/releases/example \
+  --channel-url https://example.com/releases/nightly --dry-run
 ```
 
 ## Why two verification layers
@@ -167,12 +157,11 @@ substitution really took effect in both directions.
 
 ## Stable Windows releases
 
-[`stable-windows-release.yml`](../.github/workflows/stable-windows-release.yml)
-promotes a successful Nightly Windows Bundle run from `main` instead of rebuilding
-a potentially different tree. A maintainer supplies the `X.Y.Z` version and
-daily run ID. The workflow validates the source run and Maven version, pins its
-commit, downloads and re-verifies its bundle, creates an immutable `vX.Y.Z`
-release and checks the public URL before announcing it.
+[`stable-windows-release.yml`](../../.github/workflows/stable-windows-release.yml)
+is retained only for 2.x ZIP maintenance. It promotes a successful manual
+Legacy Windows Bundle Candidate run from `main` instead of rebuilding a
+potentially different tree. Frostguard 3 Stable releases use the authenticated
+Windows Channel Release workflow.
 
 [`stable_release_notify.py`](stable_release_notify.py) updates one maintained
 Stable message without mentioning users. Its payload contains fixed release
