@@ -117,9 +117,10 @@ mvnw.cmd package
 ```
 
 The build writes module artifacts below their respective `target` directories
-and the transitional desktop bundle ZIP below `packaging/desktop/target`. End
-users should extract the ZIP and launch `Start Frostguard.bat`; individual
-module JARs are not standalone distributions.
+and a transitional desktop bundle ZIP below `packaging/desktop/target`. That ZIP
+is used for temporary PR testing and is not the installed Stable/Nightly product.
+End users should use the published MSI installer; individual module JARs are not
+standalone distributions.
 
 ### Build the native Windows package
 

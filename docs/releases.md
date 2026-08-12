@@ -1,14 +1,15 @@
 # Releases
 
-Frostguard publishes authenticated installed releases for Stable and Nightly plus
-temporary ZIP builds for pull-request testing. The existing daily and Stable
-ZIP workflows remain transitional until #155 separates validation from public
-Nightly publication.
+Frostguard publishes project-authenticated installed releases for Stable and
+Nightly plus temporary ZIP builds for pull-request testing. A legacy rolling
+Nightly ZIP remains available while its maintained download channel is retired;
+it is not an automatic-update source.
 
 | Type | Audience | Lifetime | Discord notification |
 |---|---|---|---|
 | Stable `vX.Y.Z` | Regular users | Permanent | Update the maintained Stable message |
-| Daily `nightly` | Testers | Replaced daily | Update the daily download, no mass mention |
+| Nightly `nightly-X.Y.Z-nightly.*` | Testers | Permanent prerelease | Release history; in-app Nightly feed |
+| Legacy daily `nightly` ZIP | Testers | Replaced daily | Maintained legacy download, no mass mention |
 | PR test `pr-test-*` | Requester/testers | Temporary | Reply only to the requester |
 
 ## Authenticated installed releases
@@ -99,25 +100,25 @@ in place; GitHub Releases remains the permanent release history.
 ```text
 📥 Frostguard Downloads
 
-Stable — versioned
-A tested build that changes only when a new Stable is published:
-https://github.com/Shederator/wosbot/releases/latest/download/frostguard-windows-desktop-bundle.zip
+Stable — versioned installer
+A tested, self-contained Windows build that changes only with a Stable release:
+https://github.com/Shederator/wosbot/releases/latest
 
-Nightly — testing
-The newest automated development build. It may contain unfinished changes:
-https://github.com/Shederator/wosbot/releases/download/nightly/frostguard-windows-desktop-bundle.zip
+Nightly — authenticated previews
+Immutable Windows installer previews with their own app and settings:
+https://github.com/Shederator/wosbot/releases
 
-Extract the complete archive and use the included Frostguard launcher.
-Java 21 or newer is required.
+Download the Windows x64 MSI from the selected release. The installer includes
+Java. A Windows Unknown publisher or SmartScreen warning is currently expected.
 ```
 
-The Stable URL is deliberately a direct, version-independent asset URL. GitHub
-redirects it to the asset on the latest non-prerelease release. Store the
-webhook-owned card ID in `DISCORD_STABLE_MESSAGE_ID`. A Stable promotion updates
-the card automatically; `Refresh Stable Discord Message` repairs it manually
-from GitHub's Latest release when necessary.
+The Stable guide links to GitHub's Latest release because the immutable MSI
+filename contains its version. Store the webhook-owned card ID in
+`DISCORD_STABLE_MESSAGE_ID`. Run `Refresh Stable Discord Message` after a Stable
+promotion; it resolves and verifies the exact versioned MSI from Latest before
+updating the maintained card.
 
-### Nightly message
+### Legacy Nightly ZIP message
 
 ```text
 Latest Nightly — Frostguard <version>
@@ -134,8 +135,8 @@ Extract the complete archive and use the included Frostguard launcher.
 Java 21 or newer is required.
 ```
 
-The URL is deliberately version-independent. Do not post a new Discord message
-for every daily build. Store the webhook-owned message ID in the repository
+This legacy ZIP URL is deliberately version-independent. Do not post a new
+Discord message for every daily build. Store the webhook-owned message ID in the repository
 variable `DISCORD_DAILY_MESSAGE_ID`; successful builds edit that message. Show
 at most five linked first-parent changes since the previous Nightly and collapse
 older entries into a count.

@@ -193,6 +193,16 @@ class ChannelPackagingTest(unittest.TestCase):
             encoding="utf-8")
         self.assertIn("Frostguard 3.x must use Windows Channel Release", legacy_stable)
 
+    def test_stable_discord_refresh_resolves_the_versioned_msi(self):
+        workflow = (REPO_ROOT / ".github/workflows/refresh-stable-discord.yml").read_text(
+            encoding="utf-8")
+
+        self.assertIn('asset="Frostguard-${version}-windows-x64.msi"', workflow)
+        self.assertIn(".browser_download_url", workflow)
+        self.assertIn("does not contain exactly one ${asset}", workflow)
+        self.assertIn("Stable installer URL returned HTTP", workflow)
+        self.assertNotIn("frostguard-windows-desktop-bundle.zip", workflow)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

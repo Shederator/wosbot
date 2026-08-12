@@ -30,8 +30,21 @@ jobs:
           tag="$(jq -r '.tag_name' <<< "${release}")"
           version="${tag#v}"
           release_url="$(jq -r '.html_url' <<< "${release}")"
-          asset="frostguard-windows-desktop-bundle.zip"
-          download_url="https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/${asset}"
+          asset="Frostguard-${version}-windows-x64.msi"
+          download_url="$(jq -r --arg asset "${asset}" \
+            '[.assets[] | select(.name == $asset) | .browser_download_url] | if length == 1 then .[0] else empty end' \
+            <<< "${release}")"
+          if [[ -z "${download_url}" ]]; then
+            echo "::error::Latest Stable does not contain exactly one ${asset}."
+            exit 1
+          fi
+          code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 120 \
+            --fail --retry 12 --retry-delay 5 --retry-all-errors \
+            -r 0-1023 "${download_url}" || true)"
+          if [[ "${code}" != "200" && "${code}" != "206" ]]; then
+            echo "::error::Stable installer URL returned HTTP ${code}."
+            exit 1
+          fi
           archive_url="https://github.com/${GITHUB_REPOSITORY}/releases"
 
           python3 build-support/notifications/stable_release_notify.py \

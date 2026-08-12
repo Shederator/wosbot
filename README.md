@@ -222,7 +222,7 @@ Maven, and a separately installed Java runtime are not required.
 
 After choosing a build:
 
-1. Download the Windows x64 EXE for the desired channel.
+1. Download the Windows x64 MSI for the desired channel.
 2. Confirm the download is from the official `Shederator/wosbot` release and
    run the installer. A Windows **Unknown publisher** warning is currently
    expected.
@@ -234,16 +234,16 @@ After choosing a build:
 > side. The first Nightly start can copy a one-time Stable snapshot; changes are
 > not synchronized afterward.
 
-See the **[complete installation guide](docs/installation.md)** for Java,
-emulator and game settings.
+See the **[complete installation guide](docs/installation.md)** for emulator,
+game, and source-development settings.
 
 ### 🧪 Test pull requests
 
 Request a temporary build of one or more open pull requests with `/build-pr` in
 the Discord `#request-a-build` channel.
 
-PR builds use the same Windows bundle format as Stable and Nightly, but contain
-unmerged code and expire automatically.
+PR builds remain temporary ZIP bundles rather than installed release-channel
+products. They contain unmerged code and expire automatically.
 
 ### 🛠️ Build from source
 

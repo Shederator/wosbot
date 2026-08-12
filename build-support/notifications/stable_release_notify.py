@@ -19,9 +19,9 @@ def build_payload(args: argparse.Namespace) -> dict:
         "A tested, versioned build that changes only when a new Stable is published.\n\n"
         f"**[⬇️ Download Frostguard {args.version} for Windows]"
         f"({args.download_url})**\n\n"
-        "Extract the complete archive and use the included Frostguard launcher. "
-        "Java 21 or newer is "
-        f"required.\n\n[📋 Release notes]({args.release_url})"
+        "Run the self-contained per-user MSI installer; a separate Java "
+        "installation is not required. Windows may currently show an Unknown "
+        f"publisher warning.\n\n[📋 Release notes]({args.release_url})"
         f" • [🗂️ Previous stable releases]({args.archive_url})"
     )
     return {
