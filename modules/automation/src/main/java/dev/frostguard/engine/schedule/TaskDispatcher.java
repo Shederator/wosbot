@@ -1,5 +1,6 @@
 package dev.frostguard.engine.schedule;
 
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -18,6 +19,7 @@ import org.slf4j.LoggerFactory;
 public class TaskDispatcher implements PreemptionListener, StaminaChangeListener {
 
     private static final Logger log = LoggerFactory.getLogger(TaskDispatcher.class);
+    private static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(10);
 
     private final Map<Long, TaskQueue> managedQueues = new ConcurrentHashMap<>();
     private final Map<Long, Boolean> pauseFlags = new ConcurrentHashMap<>();
@@ -86,6 +88,14 @@ public class TaskDispatcher implements PreemptionListener, StaminaChangeListener
     // ── start all queues ────────────────────────────────────────────
 
     public void startAll() {
+        List<String> liveProfiles = managedQueues.values().stream()
+                .filter(TaskQueue::hasLiveExecutor)
+                .map(queue -> queue.getProfile().getName())
+                .toList();
+        if (!liveProfiles.isEmpty()) {
+            throw new IllegalStateException("Cannot start queues while previous workers are alive: "
+                    + String.join(", ", liveProfiles));
+        }
         GlobalMonitorService monitor = GlobalMonitorService.getInstance();
         monitor.registerListener(this);
         StaminaService.getServices().addStaminaChangeListener(this);
@@ -129,9 +139,11 @@ public class TaskDispatcher implements PreemptionListener, StaminaChangeListener
 
     // ── stop all queues ─────────────────────────────────────────────
 
-    public void stopAll() {
+    public StopAllResult stopAll() {
         LoggingService.obtain().emit(TpMessageSeverityEnum.INFO, "TaskDispatcher", "-", "Stopping all queues");
         log.info("Stopping all queues");
+
+        List<Map.Entry<Long, TaskQueue>> queues = new ArrayList<>(managedQueues.entrySet());
 
         // mark all tasks as not scheduled
         for (Map.Entry<Long, TaskQueue> entry : managedQueues.entrySet()) {
@@ -147,12 +159,50 @@ public class TaskDispatcher implements PreemptionListener, StaminaChangeListener
         StaminaService.getServices().removeStaminaChangeListener(this);
         GlobalMonitorService.getInstance().shutdown();
 
-        managedQueues.values().forEach(TaskQueue::stop);
+        queues.forEach(entry -> entry.getValue().requestStop());
 
-        try { Thread.sleep(500); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+        long deadline = System.nanoTime() + SHUTDOWN_TIMEOUT.toNanos();
+        List<TaskQueue.StopResult> results = new ArrayList<>();
+        for (Map.Entry<Long, TaskQueue> entry : queues) {
+            long remainingNanos = Math.max(0L, deadline - System.nanoTime());
+            TaskQueue.StopResult result = entry.getValue().awaitStop(Duration.ofNanos(remainingNanos));
+            results.add(result);
+            if (result.terminated()) {
+                managedQueues.remove(entry.getKey(), entry.getValue());
+                pauseFlags.remove(entry.getKey());
+            }
+        }
 
-        managedQueues.clear();
-        pauseFlags.clear();
+        StopAllResult outcome = new StopAllResult(List.copyOf(results));
+        if (outcome.complete()) {
+            log.info("All {} queue worker(s) terminated", results.size());
+        } else {
+            log.error("Queue shutdown incomplete; retaining {} live queue(s): {}",
+                    outcome.failures().size(), outcome.failureSummary());
+        }
+        return outcome;
+    }
+
+    public boolean hasManagedQueues() {
+        return !managedQueues.isEmpty();
+    }
+
+    public record StopAllResult(List<TaskQueue.StopResult> queues) {
+        public boolean complete() {
+            return queues.stream().allMatch(TaskQueue.StopResult::terminated);
+        }
+
+        public List<TaskQueue.StopResult> failures() {
+            return queues.stream().filter(result -> !result.terminated()).toList();
+        }
+
+        public String failureSummary() {
+            return failures().stream()
+                    .map(result -> result.profileName() + "/" + result.activeTask()
+                            + "=" + result.status() + " after " + result.elapsedMillis() + "ms")
+                    .reduce((left, right) -> left + ", " + right)
+                    .orElse("none");
+        }
     }
 
     // ── bulk pause / resume ─────────────────────────────────────────

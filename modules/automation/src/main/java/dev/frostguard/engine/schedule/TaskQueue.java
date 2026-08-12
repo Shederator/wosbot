@@ -69,13 +69,27 @@ public class TaskQueue {
     protected final EmulatorController deviceBridge = EmulatorController.getInstance();
 
     final TaskQueueStatusData statusModel = new TaskQueueStatusData();
-    private Thread              executor;
+    private final TaskQueueExecutor executor = new TaskQueueExecutor();
     private AccountDescriptor   profile;
     private volatile ExecutionContext   runningContext;
     private volatile LocalDateTime      sessionOrigin;
     // Changed by pernerch | Date: 2026-07-04 | Why: ensure first startup cycle runs Initialize regardless of idle heuristics.
     private volatile boolean    forceInitialInitialize = true;
     private volatile boolean    shuttingDown = false;
+    private volatile boolean    stoppedCleanly = false;
+
+    public enum StopStatus {
+        TERMINATED,
+        TIMED_OUT,
+        CALLER_INTERRUPTED
+    }
+
+    public record StopResult(Long profileId, String profileName, String activeTask,
+            StopStatus status, long elapsedMillis) {
+        public boolean terminated() {
+            return status == StopStatus.TERMINATED;
+        }
+    }
 
     public TaskQueue(AccountDescriptor profile) { this.profile = profile; }
 
@@ -285,31 +299,70 @@ public class TaskQueue {
 
     public void start() {
         if (statusModel.isRunning()) return;
+        if (executor.isAlive()) {
+            throw new IllegalStateException("Cannot start queue while its previous worker is still alive: "
+                    + profile.getName());
+        }
         // Changed by pernerch | Date: 2026-07-04 | Why: reset startup Initialize gate on each queue start.
         forceInitialInitialize = true;
+        shuttingDown = false;
+        stoppedCleanly = false;
         statusModel.setRunning(true);
-        executor = Thread.ofVirtual().unstarted(this::mainLoop);
-        executor.setName("TaskQueue-" + profile.getName());
-        executor.start();
+        executor.start(this::mainLoop, "TaskQueue-" + profile.getName());
     }
 
-    public void stop() {
+    public void requestStop() {
         shuttingDown = true;
         statusModel.setRunning(false);
         sessionOrigin = null;
-        if (executor != null) {
-            executor.interrupt();
-            try { 
-                // Give the task 2 seconds to finish gracefully
-                executor.join(2000); 
-            } catch (InterruptedException ie) { 
-                Thread.currentThread().interrupt(); 
-            }
+        ExecutionContext context = runningContext;
+        if (context != null) {
+            context.cancel();
         }
+        executor.interrupt();
+    }
+
+    public StopResult awaitStop(Duration timeout) {
+        String activeTask = activeTaskName();
+        TaskQueueExecutor.AwaitResult result = executor.awaitTermination(timeout);
+        StopResult stopResult = new StopResult(profile.getId(), profile.getName(), activeTask,
+                StopStatus.valueOf(result.termination().name()), result.elapsedMillis());
+        if (stopResult.terminated()) {
+            completeStop();
+        } else {
+            String reason = result.termination() == TaskQueueExecutor.Termination.TIMED_OUT
+                    ? "shutdown deadline exceeded"
+                    : "shutdown waiter interrupted";
+            broadcastStatus("STOPPING - " + reason);
+            emitError("Queue still active after stop request: task=" + activeTask
+                    + ", reason=" + reason + ", waitedMs=" + result.elapsedMillis());
+        }
+        return stopResult;
+    }
+
+    public StopResult stop() {
+        requestStop();
+        return awaitStop(Duration.ofSeconds(10));
+    }
+
+    public boolean hasLiveExecutor() {
+        return executor.isAlive();
+    }
+
+    private synchronized void completeStop() {
+        if (stoppedCleanly) {
+            return;
+        }
+        stoppedCleanly = true;
         statusModel.reset();
         taskBacklog.clear();
         broadcastStatus("NOT RUNNING");
-        emitInfo("TaskQueue stopped");
+        emitInfo("TaskQueue stopped after worker termination");
+    }
+
+    private String activeTaskName() {
+        ExecutionContext context = runningContext;
+        return context == null ? "none" : context.getTask().getTaskName();
     }
 
     public void pause()  { statusModel.userPause(); broadcastStatus("PAUSE REQUESTED"); emitInfo("Queue paused"); }
@@ -442,7 +495,12 @@ public class TaskQueue {
         long t0 = System.currentTimeMillis();
         boolean ok;
         ExecutionContext ctx = new ExecutionContext(task);
-        synchronized (this) { runningContext = ctx; }
+        synchronized (this) {
+            runningContext = ctx;
+            if (shuttingDown) {
+                ctx.cancel();
+            }
+        }
         try {
             emitInfoTask(task, "Executing: " + task.getTaskName());
             broadcastStatus("Executing " + task.getTaskName());

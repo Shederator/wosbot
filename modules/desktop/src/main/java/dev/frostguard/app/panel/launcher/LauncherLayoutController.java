@@ -1116,11 +1116,24 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
                     buttonPauseResume.setDisable(true);
                 });
                 isStartup = false;
-                actionController.stopBot();
+                try {
+                    actionController.stopBot();
+                } catch (ScheduleService.IncompleteTaskShutdownException exception) {
+                    Platform.runLater(() -> showIncompleteStopWarning(exception.getMessage()));
+                }
             }
         });
         startStopThread.setName("Start-Stop-Thread");
         startStopThread.start();
+    }
+
+    private void showIncompleteStopWarning(String detail) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle("Bot stop incomplete");
+        alert.setHeaderText("One or more tasks are still stopping");
+        alert.setContentText(detail + "\n\nThe queues remain tracked and Frostguard will not start replacements. "
+                + "Try Stop again after the blocking operation returns.");
+        alert.showAndWait();
     }
 
     public void forceStartBot() { /* bind */

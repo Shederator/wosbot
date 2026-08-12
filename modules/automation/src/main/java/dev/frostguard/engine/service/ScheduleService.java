@@ -77,7 +77,14 @@ public class ScheduleService {
 		}
 	}
 
-	public void launchEngine() {
+	public synchronized void launchEngine() {
+		if (dispatcher.hasManagedQueues()) {
+			log(TpMessageSeverityEnum.ERROR, "ScheduleService", "-",
+					"Engine launch blocked because a previous queue shutdown is incomplete");
+			notifyBotState(true, false);
+			notifyQueueState(null, false);
+			return;
+		}
 		if (!initializeBridge()) {
 			notifyBotState(false, false);
 			return;
@@ -129,8 +136,16 @@ public class ScheduleService {
 		haltEngine(resolveStopBehavior(ConfigurationKeyEnum.STOP_BEHAVIOR_TELEGRAM_STRING));
 	}
 
-	public void haltEngine(StopBehaviorEnum stopBehavior) {
-		dispatcher.stopAll();
+	public synchronized void haltEngine(StopBehaviorEnum stopBehavior) {
+		TaskDispatcher.StopAllResult result = dispatcher.stopAll();
+		if (!result.complete()) {
+			String detail = result.failureSummary();
+			log(TpMessageSeverityEnum.ERROR, "ScheduleService", "-",
+					"Bot stop incomplete; still-running queues remain tracked: " + detail);
+			notifyBotState(true, false);
+			notifyQueueState(null, false);
+			throw new IncompleteTaskShutdownException(detail);
+		}
 		if (stopBehavior == StopBehaviorEnum.CLOSE_EMULATOR) {
 			closeEnabledEmulators();
 		}
@@ -140,6 +155,12 @@ public class ScheduleService {
 		}
 		notifyBotState(false, false);
 		notifyQueueState(null, false);
+	}
+
+	public static final class IncompleteTaskShutdownException extends IllegalStateException {
+		public IncompleteTaskShutdownException(String detail) {
+			super("Task queues did not terminate: " + detail);
+		}
 	}
 
 	private StopBehaviorEnum resolveStopBehavior(ConfigurationKeyEnum key) {

@@ -21,6 +21,11 @@ public class ExecutionContext {
         cancellationToken.trigger(rule);
     }
 
+    /** Permanently cancels the bound task because its queue is shutting down. */
+    public void cancel() {
+        cancellationToken.cancel();
+    }
+
     // Returns the task bound to this context.
     public DelayedTask getTask() {
         return boundTask;

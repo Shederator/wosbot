@@ -82,6 +82,7 @@ public class TemplateSearchHelper {
                                               boolean mono, boolean multiScale) {
         ImageSearchResultData last = null;
         for (int a = 1; a <= cfg.getMaxAttempts(); a++) {
+            preemptionHook.run();
             last = multiScale ? doSearchMultiScale(tpl, cfg) : mono ? doSearchGrey(tpl, cfg) : doSearch(tpl, cfg);
             if (last != null && last.isFound()) {
                 dbg(tpl.name() + (multiScale ? " (multi-scale)" : "") + " found @ attempt " + a);
@@ -97,6 +98,7 @@ public class TemplateSearchHelper {
                                                          boolean mono) {
         List<ImageSearchResultData> last = null;
         for (int a = 1; a <= cfg.getMaxAttempts(); a++) {
+            preemptionHook.run();
             last = mono ? doMultiGrey(tpl, cfg) : doMulti(tpl, cfg);
             if (last != null && !last.isEmpty()) {
                 dbg(tpl.name() + ": " + last.size() + " matches");
@@ -148,6 +150,8 @@ public class TemplateSearchHelper {
         catch (InterruptedException e) {
             warn("Sleep interrupted");
             Thread.currentThread().interrupt();
+            preemptionHook.run();
+            throw new java.util.concurrent.CancellationException("Template search interrupted");
         }
     }
 

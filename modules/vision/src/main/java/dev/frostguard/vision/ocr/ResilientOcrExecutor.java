@@ -6,6 +6,7 @@ import dev.frostguard.api.domain.TesseractSettingsData;
 
 import java.io.IOException;
 import java.util.Objects;
+import java.util.concurrent.CancellationException;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import net.sourceforge.tess4j.TesseractException;
@@ -78,9 +79,11 @@ public class ResilientOcrExecutor<R> {
                                 Function<String, R> transformer) {
 
         for (int trial = 0; trial < maxAttempts; trial++) {
+            checkCancellation();
             log.debug("OCR trial {} / {}", trial + 1, maxAttempts);
             try {
                 String raw = textExtractor.extractText(config, upperLeft, lowerRight);
+                checkCancellation();
                 if (raw != null) {
                     if (acceptor.test(raw)) {
                         log.info("=== OCR Completed === Text: '{}', Match: true, Position: ({},{}) to ({},{})",
@@ -95,6 +98,8 @@ public class ResilientOcrExecutor<R> {
                                 lowerRight.getX(), lowerRight.getY());
                     }
                 }
+            } catch (CancellationException exception) {
+                throw exception;
             } catch (IOException | TesseractException | RuntimeException ex) {
                 log.warn("OCR trial {} failed: {}", trial + 1, ex.getMessage());
             }
@@ -104,11 +109,17 @@ public class ResilientOcrExecutor<R> {
                     Thread.sleep(pauseMillis);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
-                    return null;
+                    throw new CancellationException("OCR retry interrupted");
                 }
             }
         }
         return null;
+    }
+
+    private static void checkCancellation() {
+        if (Thread.currentThread().isInterrupted()) {
+            throw new CancellationException("OCR cancelled");
+        }
     }
 
     /**

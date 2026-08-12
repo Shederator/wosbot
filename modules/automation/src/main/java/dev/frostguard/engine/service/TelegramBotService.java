@@ -182,8 +182,12 @@ public class TelegramBotService implements BotStateListener {
             } else {
                 Thread.ofVirtual().start(() -> {
                     // Changed by pernerch | Date: 2026-07-04 | Why: use Telegram-specific stop policy instead of generic stop path.
-                    ScheduleService.obtain().haltEngineFromTelegram();
-                    sendMessage(chatId, "⏹️ Bot stopped.");
+                    try {
+                        ScheduleService.obtain().haltEngineFromTelegram();
+                        sendMessage(chatId, "⏹️ Bot stopped.");
+                    } catch (ScheduleService.IncompleteTaskShutdownException exception) {
+                        sendMessage(chatId, "⚠️ Bot stop is incomplete. A task is still stopping; no replacement queue will start.");
+                    }
                 });
             }
         } else if (text.startsWith("/status") || text.contains("status")) {
@@ -1160,8 +1164,10 @@ public class TelegramBotService implements BotStateListener {
 
             try {
                 ScheduleService.obtain().haltEngine();
-            } catch (Exception ex) {
-                logger.warn("Reboot: stopBot soft handled: {}", ex.getMessage());
+            } catch (ScheduleService.IncompleteTaskShutdownException exception) {
+                logger.error("Reboot cancelled because task shutdown is incomplete: {}", exception.getMessage());
+                sendMessage(chatId, "⚠️ Restart cancelled because a task is still stopping.");
+                return;
             }
             Thread.sleep(1500);
 

@@ -147,8 +147,10 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
 
     @Override
     public void run() {
+        checkPreemption();
         staminaDeferral = null;
         refreshProfileFromDb();
+        checkPreemption();
         boolean switchedProfileOnEmulator = markAndDetectProfileSwitchFlow();
         if (switchedProfileOnEmulator) {
             // Changed by pernerch | Date: 2026-07-02 | Why: publish active-profile changes
