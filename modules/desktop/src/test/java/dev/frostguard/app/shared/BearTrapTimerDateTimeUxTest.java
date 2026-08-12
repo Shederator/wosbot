@@ -9,6 +9,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,10 +31,12 @@ import dev.frostguard.app.panel.combat.BearTrapLayoutController;
 import dev.frostguard.app.panel.profile.ConfigAux;
 import dev.frostguard.app.panel.profile.ProfileAux;
 import javafx.application.Platform;
+import javafx.event.ActionEvent;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.TextField;
 
 class BearTrapTimerDateTimeUxTest {
 
@@ -130,6 +133,8 @@ class BearTrapTimerDateTimeUxTest {
 
             editor.setDraft(LocalDate.of(2026, 7, 28), "99", "30");
             assertFalse(editor.getValidationMessage().isEmpty());
+            assertTrue(editor.datePicker().getEditor().getStyleClass().contains("setting-field-error"));
+            assertFalse(editor.datePicker().getEditor().getAccessibleHelp().isBlank());
             editor.commitSelection();
             assertEquals(1, commits.size(), "invalid input must not be persisted");
 
@@ -142,6 +147,65 @@ class BearTrapTimerDateTimeUxTest {
             assertTrue(cleared.get());
             assertFalse(editor.hasCommittedDateTime());
             assertNull(editor.getDateTime());
+            return null;
+        });
+    }
+
+    @Test
+    void sharedTimeBindingPreservesInvalidDraftAndSuppressesPersistence() throws Exception {
+        runOnFxThread(() -> {
+            TextField field = new TextField();
+            Label error = new Label();
+            List<LocalTime> commits = new ArrayList<>();
+            new ValidatedTextFieldBinding<>(
+                    field,
+                    error,
+                    SettingValidators.localTime("Activation time"),
+                    value -> String.format("%02d:%02d", value.getHour(), value.getMinute()),
+                    commits::add,
+                    text -> text != null && text.matches("\\d{4}")
+                            ? text.substring(0, 2) + ":" + text.substring(2)
+                            : text);
+
+            field.setText("99:00");
+            field.fireEvent(new ActionEvent());
+
+            assertEquals("99:00", field.getText());
+            assertTrue(error.isVisible());
+            assertTrue(commits.isEmpty());
+
+            field.setText("0930");
+            field.fireEvent(new ActionEvent());
+
+            assertEquals("09:30", field.getText());
+            assertEquals(List.of(LocalTime.of(9, 30)), commits);
+            assertFalse(error.isVisible());
+            return null;
+        });
+    }
+
+    @Test
+    void profileIntegerFieldKeepsInvalidUserInput() throws Exception {
+        runOnFxThread(() -> {
+            TestProfileController controller = new TestProfileController();
+            TextField field = new TextField();
+            List<Change> changes = new ArrayList<>();
+            controller.register(field, ConfigurationKeyEnum.BEAR_TRAP_NUMBER_INT);
+            controller.attachProfileListener((key, value) -> changes.add(new Change(key, value)));
+            controller.startListening();
+
+            field.setText("invalid");
+            field.fireEvent(new ActionEvent());
+
+            assertEquals("invalid", field.getText());
+            assertTrue(field.getStyleClass().contains("setting-field-error"));
+            assertTrue(changes.isEmpty());
+
+            field.setText("2");
+            field.fireEvent(new ActionEvent());
+
+            assertFalse(field.getStyleClass().contains("setting-field-error"));
+            assertEquals(List.of(new Change(ConfigurationKeyEnum.BEAR_TRAP_NUMBER_INT, 2)), changes);
             return null;
         });
     }
@@ -478,6 +542,16 @@ class BearTrapTimerDateTimeUxTest {
     }
 
     private record Change(ConfigurationKeyEnum key, Object value) {
+    }
+
+    private static final class TestProfileController extends AbstractProfileController {
+        private void register(TextField field, ConfigurationKeyEnum key) {
+            registerTextField(field, key);
+        }
+
+        private void startListening() {
+            initializeChangeEvents();
+        }
     }
 
     private record LoadedBearView(

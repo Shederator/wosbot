@@ -3,6 +3,7 @@ package dev.frostguard.app.panel.city;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.app.panel.profile.ProfileAux;
 import dev.frostguard.app.shared.AbstractProfileController;
+import dev.frostguard.app.shared.SettingValidators;
 import javafx.beans.binding.Bindings;
 import javafx.fxml.FXML;
 import javafx.scene.Node;
@@ -13,11 +14,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 
 import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeFormatterBuilder;
-import java.time.format.ResolverStyle;
 import java.util.List;
-import java.util.Locale;
 
 public class CityEventsExtraLayoutController extends AbstractProfileController {
 
@@ -75,7 +72,6 @@ public class CityEventsExtraLayoutController extends AbstractProfileController {
     @FXML
     private void initialize() {
         cityRoutineToggles().forEach(toggle -> checkBoxMappings.put(toggle.control(), toggle.configKey()));
-        arenaTextFields().forEach(field -> textFieldMappings.put(field.control(), field.configKey()));
         comboBoxArenaExtraAttempts.getItems().setAll(EXTRA_ATTEMPT_OPTIONS);
         comboBoxArenaAlliancePolicy.getItems().setAll(ALLIANCE_POLICY_OPTIONS);
         comboBoxArenaServerPolicy.getItems().setAll(SERVER_POLICY_OPTIONS);
@@ -100,12 +96,6 @@ public class CityEventsExtraLayoutController extends AbstractProfileController {
             new ToggleBinding(checkBoxArena, ConfigurationKeyEnum.ARENA_TASK_BOOL),
             new ToggleBinding(checkBoxArenaAttackQuickDeploy, ConfigurationKeyEnum.ARENA_TASK_ATTACK_QUICK_DEPLOY_BOOL),
             new ToggleBinding(checkBoxArenaRefreshWithGems, ConfigurationKeyEnum.ARENA_TASK_REFRESH_WITH_GEMS_BOOL)
-        );
-    }
-
-    private List<TextBinding> arenaTextFields() {
-        return List.of(
-            new TextBinding(textFieldArenaActivationHour, ConfigurationKeyEnum.ARENA_TASK_ACTIVATION_TIME_STRING)
         );
     }
 
@@ -154,9 +144,6 @@ public class CityEventsExtraLayoutController extends AbstractProfileController {
     private record ToggleBinding(CheckBox control, ConfigurationKeyEnum configKey) {
     }
 
-    private record TextBinding(TextField control, ConfigurationKeyEnum configKey) {
-    }
-
     private final class ArenaSection {
         private void install() {
             List.of(checkBoxArenaAttackQuickDeploy, checkBoxArenaRefreshWithGems,
@@ -178,65 +165,14 @@ public class CityEventsExtraLayoutController extends AbstractProfileController {
     }
 
     private final class ArenaTimeField {
-        private final DateTimeFormatter parser = new DateTimeFormatterBuilder()
-            .parseStrict()
-            .appendPattern("HH:mm")
-            .toFormatter(Locale.ROOT)
-            .withResolverStyle(ResolverStyle.STRICT);
-
         private void install() {
             textFieldArenaActivationHour.setPromptText("HH:mm");
             textFieldArenaActivationHour.setTooltip(new Tooltip("Arena runs before 23:56 UTC; example: 19:30"));
-            textFieldArenaActivationHour.setTextFormatter(getTimeTextFormatter());
-            textFieldArenaActivationHour.textProperty().addListener((obs, oldText, newText) -> validate(newText));
-            textFieldArenaActivationHour.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
-                if (!isFocused) {
-                    normalize();
-                }
-            });
-            textFieldArenaActivationHour.setOnAction(event -> normalize());
-        }
-
-        private void normalize() {
-            String digits = textFieldArenaActivationHour.getText() == null
-                ? ""
-                : textFieldArenaActivationHour.getText().replaceAll("\\D", "");
-
-            switch (digits.length()) {
-                case 2 -> textFieldArenaActivationHour.setText(digits + ":00");
-                case 4 -> textFieldArenaActivationHour.setText(digits.substring(0, 2) + ":" + digits.substring(2));
-                default -> {
-                }
-            }
-        }
-
-        private void validate(String timeText) {
-            clearWarning();
-            if (timeText == null || timeText.isBlank()) {
-                return;
-            }
-            if (!timeText.matches("\\d{2}:\\d{2}")) {
-                showWarning("Use HH:mm, for example 19:30.");
-                return;
-            }
-            try {
-                LocalTime time = LocalTime.parse(timeText, parser);
-                if (time.isAfter(LocalTime.of(23, 55))) {
-                    showWarning("Arena time must be 23:55 UTC or earlier.");
-                }
-            } catch (java.time.DateTimeException ex) {
-                showWarning("Hour must be 00-23 and minute must be 00-59.");
-            }
-        }
-
-        private void clearWarning() {
-            labelDateTimeError.setText("");
-            textFieldArenaActivationHour.setStyle("");
-        }
-
-        private void showWarning(String message) {
-            labelDateTimeError.setText(message);
-            textFieldArenaActivationHour.setStyle("-fx-border-color: #ef4444; -fx-border-width: 2px;");
+            registerTimeTextField(
+                textFieldArenaActivationHour,
+                labelDateTimeError,
+                ConfigurationKeyEnum.ARENA_TASK_ACTIVATION_TIME_STRING,
+                SettingValidators.localTimeNoLaterThan("Arena activation time", LocalTime.of(23, 55)));
         }
     }
 }

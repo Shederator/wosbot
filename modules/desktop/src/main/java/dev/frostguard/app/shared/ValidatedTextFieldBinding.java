@@ -3,6 +3,7 @@ package dev.frostguard.app.shared;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
@@ -14,6 +15,7 @@ public final class ValidatedTextFieldBinding<T> {
     private final Function<T, String> formatter;
     private final Consumer<T> commitHandler;
     private final FieldValidationPresenter presenter;
+    private final UnaryOperator<String> draftNormalizer;
     private boolean errorVisible;
 
     public ValidatedTextFieldBinding(
@@ -22,11 +24,22 @@ public final class ValidatedTextFieldBinding<T> {
             SettingValidator<T> validator,
             Function<T, String> formatter,
             Consumer<T> commitHandler) {
+        this(field, messageLabel, validator, formatter, commitHandler, UnaryOperator.identity());
+    }
+
+    public ValidatedTextFieldBinding(
+            TextField field,
+            Label messageLabel,
+            SettingValidator<T> validator,
+            Function<T, String> formatter,
+            Consumer<T> commitHandler,
+            UnaryOperator<String> draftNormalizer) {
         this.field = Objects.requireNonNull(field);
         this.validator = Objects.requireNonNull(validator);
         this.formatter = Objects.requireNonNull(formatter);
         this.commitHandler = Objects.requireNonNull(commitHandler);
-        presenter = new FieldValidationPresenter(field, Objects.requireNonNull(messageLabel));
+        this.draftNormalizer = Objects.requireNonNull(draftNormalizer);
+        presenter = new FieldValidationPresenter(field, messageLabel);
         field.focusedProperty().addListener((obs, wasFocused, focused) -> {
             if (!focused && !field.isDisabled()) {
                 commit();
@@ -41,7 +54,9 @@ public final class ValidatedTextFieldBinding<T> {
     }
 
     public boolean commit() {
-        ValidationResult<T> result = validator.validate(field.getText());
+        String normalized = draftNormalizer.apply(field.getText());
+        field.setText(normalized);
+        ValidationResult<T> result = validator.validate(normalized);
         present(result);
         if (!result.isValid()) {
             return false;

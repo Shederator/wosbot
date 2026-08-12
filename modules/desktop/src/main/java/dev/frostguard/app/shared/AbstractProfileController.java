@@ -1,8 +1,8 @@
 package dev.frostguard.app.shared;
 
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -12,6 +12,8 @@ import java.util.stream.Collectors;
 
 import org.controlsfx.control.CheckComboBox;
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.PrioritizableItemData;
@@ -22,6 +24,7 @@ import dev.frostguard.app.panel.profile.IProfileObserverInjectable;
 import dev.frostguard.app.panel.profile.ProfileAux;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.Label;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextFormatter;
@@ -29,7 +32,9 @@ import javafx.scene.control.ToggleGroup;
 
 public abstract class AbstractProfileController implements IProfileLoadListener, IProfileObserverInjectable {
 
+	private static final Logger logger = LoggerFactory.getLogger(AbstractProfileController.class);
 	private static final DateTimeFormatter PROFILE_DATE_TIME = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
+	private static final DateTimeFormatter PROFILE_TIME = DateTimeFormatter.ofPattern("HH:mm");
 	private static final int MAX_CONFIG_INT = 99_999_999;
 
 	protected final Map<CheckBox, ConfigurationKeyEnum> checkBoxMappings = new HashMap<>();
@@ -41,6 +46,8 @@ public abstract class AbstractProfileController implements IProfileLoadListener,
 	protected final Map<PriorityListView, Class<? extends Enum<?>>> priorityListEnumClasses = new HashMap<>();
 	protected IProfileChangeObserver profileObserver;
 	protected boolean isLoadingProfile = false;
+	private final Map<TextField, FieldValidationPresenter> fieldValidationPresenters = new HashMap<>();
+	private final Map<TextField, ValidatedTextFieldBinding<?>> validatedTextFieldBindings = new HashMap<>();
 
 	@Override
 	public void attachProfileListener(IProfileChangeObserver observer) {
@@ -53,6 +60,24 @@ public abstract class AbstractProfileController implements IProfileLoadListener,
 
 	protected void registerTextField(TextField textField, ConfigurationKeyEnum configKey) {
 		textFieldMappings.put(textField, configKey);
+	}
+
+	protected void registerTimeTextField(
+			TextField textField,
+			Label messageLabel,
+			ConfigurationKeyEnum configKey,
+			SettingValidator<LocalTime> validator) {
+		textField.setPromptText("HH:mm");
+		textField.setTextFormatter(getTimeTextFormatter());
+		ValidatedTextFieldBinding<LocalTime> binding = new ValidatedTextFieldBinding<>(
+				textField,
+				messageLabel,
+				validator,
+				PROFILE_TIME::format,
+				value -> publishWhenReady(configKey, PROFILE_TIME.format(value)),
+				AbstractProfileController::normalizeTimeDraft);
+		textFieldMappings.put(textField, configKey);
+		validatedTextFieldBindings.put(textField, binding);
 	}
 
 	protected void registerRadioButton(RadioButton radioButton, ConfigurationKeyEnum configKey) {
@@ -80,7 +105,7 @@ public abstract class AbstractProfileController implements IProfileLoadListener,
 				.filter(entry -> entry.getKey() != null)
 				.forEach(entry -> setupCheckBoxListener(entry.getKey(), entry.getValue()));
 		textFieldMappings.entrySet().stream()
-				.filter(entry -> entry.getKey() != null)
+				.filter(entry -> entry.getKey() != null && !validatedTextFieldBindings.containsKey(entry.getKey()))
 				.forEach(entry -> setupTextFieldUpdateOnFocusOrEnter(entry.getKey(), entry.getValue()));
 		radioButtonMappings.entrySet().stream()
 				.filter(entry -> entry.getKey() != null)
@@ -214,11 +239,14 @@ public abstract class AbstractProfileController implements IProfileLoadListener,
 	}
 
 	private void commitIntegerField(TextField textField, ConfigurationKeyEnum configKey, String candidate) {
-		if (isValidPositiveInteger(candidate)) {
-			publishWhenReady(configKey, Integer.valueOf(candidate));
+		ValidationResult<Integer> result = SettingValidators.rangedInteger(
+				readable(textField.getPromptText(), configKey), 0, MAX_CONFIG_INT).validate(candidate);
+		if (result.isValid()) {
+			presenter(textField).clear();
+			publishWhenReady(configKey, result.value());
 			return;
 		}
-		textField.setText(configKey.getDefaultValue());
+		presenter(textField).showError(result.message());
 	}
 
 	private void commitDateTimeField(TextField textField, ConfigurationKeyEnum configKey, String candidate) {
@@ -227,24 +255,18 @@ public abstract class AbstractProfileController implements IProfileLoadListener,
 			return;
 		}
 
-		try {
-			LocalDateTime.parse(candidate, PROFILE_DATE_TIME);
+		ValidationResult<LocalDateTime> result = SettingValidators.localDateTime(
+				readable(textField.getPromptText(), configKey), PROFILE_DATE_TIME).validate(candidate);
+		if (result.isValid()) {
+			presenter(textField).clear();
 			publishWhenReady(configKey, candidate);
-		} catch (DateTimeParseException e) {
-			textField.setText(configKey.getDefaultValue());
+		} else {
+			presenter(textField).showError(result.message());
 		}
 	}
 
-	private boolean isValidPositiveInteger(String value) {
-		if (value == null || value.isBlank()) {
-			return false;
-		}
-		try {
-			int number = Integer.parseInt(value);
-			return number >= 0 && number <= MAX_CONFIG_INT;
-		} catch (NumberFormatException e) {
-			return false;
-		}
+	private FieldValidationPresenter presenter(TextField textField) {
+		return fieldValidationPresenters.computeIfAbsent(textField, FieldValidationPresenter::new);
 	}
 
 	@Override
@@ -276,6 +298,15 @@ public abstract class AbstractProfileController implements IProfileLoadListener,
 
 	private void loadTextField(ProfileAux profile, TextField textField, ConfigurationKeyEnum key) {
 		Object value = profile.getConfiguration(key);
+		ValidatedTextFieldBinding<?> binding = validatedTextFieldBindings.get(textField);
+		if (binding != null) {
+			String persisted = value == null ? null : value.toString();
+			binding.loadPersisted(persisted, key.getDefaultValue(), reason -> logger.warn(
+					"Invalid persisted profile setting; key={}, value={}, fallback={}, reason={}",
+					key, persisted, key.getDefaultValue(), reason));
+			return;
+		}
+		presenter(textField).clear();
 		if (value instanceof LocalDateTime dateTime) {
 			textField.setText(dateTime.format(PROFILE_DATE_TIME));
 		} else if (value != null) {
@@ -473,5 +504,14 @@ public abstract class AbstractProfileController implements IProfileLoadListener,
 			return digits;
 		}
 		return digits.substring(0, 2) + ":" + digits.substring(2);
+	}
+
+	private static String normalizeTimeDraft(String text) {
+		String digits = text == null ? "" : text.replaceAll("\\D", "");
+		return switch (digits.length()) {
+			case 2 -> digits + ":00";
+			case 4 -> digits.substring(0, 2) + ":" + digits.substring(2);
+			default -> text == null ? "" : text;
+		};
 	}
 }

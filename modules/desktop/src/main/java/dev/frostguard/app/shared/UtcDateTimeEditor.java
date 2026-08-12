@@ -34,6 +34,9 @@ public final class UtcDateTimeEditor extends VBox {
     private final Label nextActivationPreview = new Label("Next activation: —");
     private final Label localPreview = new Label("Local time: —");
     private final Label validationMessage = new Label();
+    private final FieldValidationPresenter datePresenter = new FieldValidationPresenter(datePicker.getEditor());
+    private final FieldValidationPresenter hourPresenter = new FieldValidationPresenter(hourSpinner.getEditor());
+    private final FieldValidationPresenter minutePresenter = new FieldValidationPresenter(minuteSpinner.getEditor());
     private final BooleanProperty timerEnabled = new SimpleBooleanProperty(false);
     private final ZoneId localZone;
     private final Clock clock;
@@ -91,7 +94,7 @@ public final class UtcDateTimeEditor extends VBox {
         nextActivationPreview.setWrapText(true);
         localPreview.getStyleClass().add("task-card-description");
         localPreview.setWrapText(true);
-        validationMessage.setStyle("-fx-font-size: 11px; -fx-text-fill: #ff4444;");
+        validationMessage.getStyleClass().add("setting-validation-message");
         validationMessage.setWrapText(true);
         validationMessage.setManaged(false);
         validationMessage.setVisible(false);
@@ -240,6 +243,7 @@ public final class UtcDateTimeEditor extends VBox {
         validationMessage.setText(error);
         validationMessage.setVisible(!error.isEmpty());
         validationMessage.setManaged(!error.isEmpty());
+        updateInputErrorState(error);
         applyButton.setDisable(!selection.isValid() || selection.value().equals(committedValue));
         clearButton.setDisable(committedValue == null);
     }
@@ -257,6 +261,18 @@ public final class UtcDateTimeEditor extends VBox {
             case INCOMPLETE -> INCOMPLETE_MESSAGE;
             case INVALID -> INVALID_MESSAGE;
         };
+    }
+
+    private void updateInputErrorState(String error) {
+        if (error.isEmpty()) {
+            datePresenter.clear();
+            hourPresenter.clear();
+            minutePresenter.clear();
+        } else {
+            datePresenter.showError(error);
+            hourPresenter.showError(error);
+            minutePresenter.showError(error);
+        }
     }
 
     private static void setSpinnerValue(Spinner<Integer> spinner, int value) {

@@ -1,5 +1,6 @@
 package dev.frostguard.app.shared;
 
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
@@ -57,6 +58,29 @@ public final class SettingValidators {
                 return ValidationResult.valid(LocalTime.parse(candidate, TIME_FORMATTER));
             } catch (DateTimeParseException exception) {
                 return ValidationResult.invalid(label + " must be between 00:00 and 23:59.");
+            }
+        };
+    }
+
+    public static SettingValidator<LocalTime> localTimeNoLaterThan(String label, LocalTime latest) {
+        SettingValidator<LocalTime> base = localTime(label);
+        return input -> {
+            ValidationResult<LocalTime> result = base.validate(input);
+            if (result.isValid() && result.value().isAfter(latest)) {
+                return ValidationResult.invalid(label + " must be no later than "
+                        + latest.format(TIME_FORMATTER) + ".");
+            }
+            return result;
+        };
+    }
+
+    public static SettingValidator<LocalDateTime> localDateTime(String label, DateTimeFormatter formatter) {
+        return input -> {
+            String candidate = trimmed(input);
+            try {
+                return ValidationResult.valid(LocalDateTime.parse(candidate, formatter));
+            } catch (DateTimeParseException exception) {
+                return ValidationResult.invalid(label + " has an invalid date or time.");
             }
         };
     }

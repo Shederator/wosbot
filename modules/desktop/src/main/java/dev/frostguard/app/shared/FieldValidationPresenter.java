@@ -18,27 +18,41 @@ public final class FieldValidationPresenter {
         this.messageLabel = messageLabel;
         originalTooltip = field.getTooltip();
         originalAccessibleHelp = field.getAccessibleHelp();
-        messageLabel.getStyleClass().add("setting-validation-message");
+        if (messageLabel != null) {
+            messageLabel.getStyleClass().add("setting-validation-message");
+        }
         clear();
+    }
+
+    public FieldValidationPresenter(TextField field) {
+        this(field, null);
     }
 
     public void showError(String message) {
         if (!field.getStyleClass().contains(ERROR_CLASS)) {
             field.getStyleClass().add(ERROR_CLASS);
         }
-        field.setTooltip(new Tooltip(message));
+        if (!field.tooltipProperty().isBound()) {
+            field.setTooltip(new Tooltip(message));
+        }
         field.setAccessibleHelp(message);
-        messageLabel.setText(message);
-        messageLabel.setManaged(true);
-        messageLabel.setVisible(true);
+        if (messageLabel != null) {
+            messageLabel.setText(message);
+            messageLabel.setManaged(true);
+            messageLabel.setVisible(true);
+        }
     }
 
     public void clear() {
         field.getStyleClass().remove(ERROR_CLASS);
-        field.setTooltip(originalTooltip);
+        if (!field.tooltipProperty().isBound()) {
+            field.setTooltip(originalTooltip);
+        }
         field.setAccessibleHelp(originalAccessibleHelp);
-        messageLabel.setText("");
-        messageLabel.setManaged(false);
-        messageLabel.setVisible(false);
+        if (messageLabel != null) {
+            messageLabel.setText("");
+            messageLabel.setManaged(false);
+            messageLabel.setVisible(false);
+        }
     }
 }
