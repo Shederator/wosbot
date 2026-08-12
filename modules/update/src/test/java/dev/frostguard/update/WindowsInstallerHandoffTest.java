@@ -4,13 +4,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Base64;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class WindowsInstallerHandoffTest {
     @TempDir
@@ -33,7 +37,8 @@ class WindowsInstallerHandoffTest {
                 installer, 4242L, launcher, workspace);
 
         assertTrue(command.get().contains("Hidden"));
-        String script = command.get().getLast();
+        assertTrue(command.get().contains("-EncodedCommand"));
+        String script = decodeScript(command.get());
         assertTrue(script.contains("Get-Process -Id $targetPid"));
         assertTrue(script.contains("Start-Process -FilePath 'msiexec.exe'"));
         assertTrue(script.contains("'/i'"));
@@ -55,11 +60,29 @@ class WindowsInstallerHandoffTest {
         assertEquals(workspace.toAbsolutePath().normalize().toString(),
                 environment.get().get(WindowsInstallerHandoff.WORKSPACE_ENV));
         Path token = Path.of(environment.get().get(WindowsInstallerHandoff.TOKEN_PATH_ENV));
-        assertTrue(command.get().getLast().contains("TOKEN_PATH"));
+        assertTrue(script.contains("TOKEN_PATH"));
         session.authorize();
         assertEquals(environment.get().get(WindowsInstallerHandoff.TOKEN_VALUE_ENV), Files.readString(token));
         session.cancel();
         assertTrue(Files.notExists(token));
+    }
+
+    @Test
+    void preservesQuotedMultilineScriptThroughWindowsProcessCreation() throws Exception {
+        assumeTrue(System.getProperty("os.name", "").toLowerCase().contains("win"));
+        String script = """
+                $value = "quoted value"
+                [Console]::Out.Write($value)
+                """;
+
+        Process process = new ProcessBuilder(WindowsInstallerHandoff.createPowerShellCommand(script))
+                .redirectErrorStream(true)
+                .start();
+
+        assertTrue(process.waitFor(10, TimeUnit.SECONDS));
+        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        assertEquals(0, process.exitValue());
+        assertEquals("quoted value", output);
     }
 
     @Test
@@ -98,5 +121,12 @@ class WindowsInstallerHandoffTest {
 
         assertThrows(UpdateException.class,
                 () -> handoff.stage(installer, 10L, launcher, workspace));
+    }
+
+    private static String decodeScript(java.util.List<String> command) {
+        int encodedCommand = command.indexOf("-EncodedCommand");
+        assertTrue(encodedCommand >= 0);
+        byte[] scriptBytes = Base64.getDecoder().decode(command.get(encodedCommand + 1));
+        return new String(scriptBytes, StandardCharsets.UTF_16LE);
     }
 }

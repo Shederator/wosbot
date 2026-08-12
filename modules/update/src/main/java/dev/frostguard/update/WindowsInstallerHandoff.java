@@ -1,9 +1,11 @@
 package dev.frostguard.update;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -56,9 +58,7 @@ public final class WindowsInstallerHandoff implements InstallerHandoff {
         if (installDirectory == null) {
             throw new UpdateException("Frostguard restart launcher has no installation directory");
         }
-        List<String> command = List.of(
-                "powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden",
-                "-ExecutionPolicy", "Bypass", "-Command", HANDOFF_SCRIPT);
+        List<String> command = createPowerShellCommand(HANDOFF_SCRIPT);
         String tokenValue = UUID.randomUUID().toString();
         Path tokenPath = installer.resolveSibling(installer.getFileName() + ".handoff-ready");
         try {
@@ -194,6 +194,14 @@ public final class WindowsInstallerHandoff implements InstallerHandoff {
                 TOKEN_PATH_ENV,
                 TOKEN_VALUE_ENV,
                 INSTALL_DIR_ENV);
+    }
+
+    static List<String> createPowerShellCommand(String script) {
+        String encodedScript = Base64.getEncoder().encodeToString(
+                script.getBytes(StandardCharsets.UTF_16LE));
+        return List.of(
+                "powershell.exe", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden",
+                "-ExecutionPolicy", "Bypass", "-EncodedCommand", encodedScript);
     }
 
     @FunctionalInterface
