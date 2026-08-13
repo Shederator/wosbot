@@ -30,7 +30,8 @@ private static final int MAIL_TAB_COUNT_VALUE = 3;
 
 private static final int ERROR_RETRY_MINUTES_VALUE = 10;
 
-private static final int DEFAULT_OFFSET_MINUTES_VALUE = 60;
+private static final int DEFAULT_OFFSET_MINUTES_VALUE = Integer.parseInt(
+        ConfigurationKeyEnum.MAIL_REWARDS_OFFSET_INT.getDefaultValue());
 
 private static final PointData MAIL_MENU_SEARCH_TOP_LEFT_VALUE = new PointData(600, 1000);
 

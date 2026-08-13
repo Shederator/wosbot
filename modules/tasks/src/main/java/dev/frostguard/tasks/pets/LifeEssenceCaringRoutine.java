@@ -31,7 +31,8 @@ public class LifeEssenceCaringRoutine extends DelayedTask {
 	private static final int MAX_CARING_BUTTON_SEARCHES = 3;
 
 	// Default configuration values
-	private static final int DEFAULT_RETRY_OFFSET_MINUTES = 60;
+	private static final int DEFAULT_RETRY_OFFSET_MINUTES = Integer.parseInt(
+			ConfigurationKeyEnum.ALLIANCE_LIFE_ESSENCE_OFFSET_INT.getDefaultValue());
 
 	// Configuration (loaded fresh each execution)
 	private int retryOffsetMinutes;

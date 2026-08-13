@@ -52,7 +52,8 @@ private static final int DONATION_TAP_COUNT_VALUE = 25;
 
 private static final int MIN_OFFSET_MINUTES_FLOOR = 10;
 
-private static final int DEFAULT_OFFSET_MINUTES_VALUE = 60;
+private static final int DEFAULT_OFFSET_MINUTES_VALUE = Integer.parseInt(
+			ConfigurationKeyEnum.ALLIANCE_TECH_OFFSET_INT.getDefaultValue());
 
 private static final int ERROR_RETRY_MINUTES_VALUE = 10;
 

@@ -42,7 +42,8 @@ public class LifeEssenceRoutine extends DelayedTask {
 	private static final int MAX_CLAIM_RESULTS = 5;
 
 	// Default configuration values
-	private static final int DEFAULT_OFFSET_MINUTES = 60;
+	private static final int DEFAULT_OFFSET_MINUTES = Integer.parseInt(
+			ConfigurationKeyEnum.LIFE_ESSENCE_OFFSET_INT.getDefaultValue());
 	private static final int BACKOFF_MULTIPLIER = 5;
 	private static final int MAX_BACKOFF_MINUTES = 30;
 
