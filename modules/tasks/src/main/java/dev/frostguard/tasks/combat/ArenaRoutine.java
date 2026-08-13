@@ -77,9 +77,10 @@ public class ArenaRoutine extends DelayedTask {
 
     private static final int POWER_TEXT_RELATIVE_X = 180;
     private static final int POWER_TEXT_WIDTH = 130;
-    private static final int POWER_TEXT_HEIGHT = 22;
-    private static final int POWER_TEXT_SERVER_LAYOUT_Y_OFFSET = -35;
+    private static final int POWER_TEXT_SERVER_LAYOUT_Y_OFFSET = -32;
+    private static final int POWER_TEXT_SERVER_LAYOUT_HEIGHT = 30;
     private static final int POWER_TEXT_COMPACT_LAYOUT_Y_OFFSET = 0;
+    private static final int POWER_TEXT_COMPACT_LAYOUT_HEIGHT = 22;
     private static final Color ARENA_POWER_GREEN_TEXT = new Color(105, 230, 50);
 
     private static final int OPPONENT_SCORE_STAR_X = 296;
@@ -126,7 +127,7 @@ public class ArenaRoutine extends DelayedTask {
     private static final Pattern BRACKETLESS_ALLIANCE_TAG_PATTERN = Pattern.compile("^[\\[\\|Il1t]([A-Z0-9]{2,4})(?=[a-z\\]|Il1~\\-])");
     private static final Pattern BRACKETLESS_TRAILING_BRACKET_PATTERN = Pattern.compile("^[\\[\\|Il1t]?([A-Z0-9]{2,4})[^\\]]*]");
     private static final Pattern SERVER_PATTERN = Pattern.compile("(\\d{3,5})");
-    private static final Pattern POWER_VALUE_PATTERN = Pattern.compile("([0-9]+(?:[.,][0-9]+)?)([KMBkmb]?)");
+    private static final Pattern POWER_VALUE_PATTERN = Pattern.compile("([0-9]+[.,][0-9]+)([KMBkmb])");
     private static final int OCR_RETRY_DELAY_MS = 250;
 
     // ========== Configuration ==========
@@ -448,7 +449,7 @@ public class ArenaRoutine extends DelayedTask {
                     }
                     if (outcome == ChallengeOutcome.DEFEAT) {
                         logInfo(String.format(
-                                "Opponent %d was defeated by our attack. Refreshing list before using another attempt.",
+                                "Our attack lost to opponent %d. Refreshing list before using another attempt.",
                                 opponent.number()));
                         if (tryRefreshOpponentList()) {
                             logInfo("List refreshed after defeat. Rescanning opponents.");
@@ -507,8 +508,7 @@ public class ArenaRoutine extends DelayedTask {
                 .filter(candidate -> !attemptedOpponentSlots.contains(candidate.number()))
                 .sorted(alliancePolicy.comparator(profileAllianceTag)
                         .thenComparing(serverPolicy.comparator(profileServer))
-                        .thenComparing(OpponentCandidate::hasPowerValue, Comparator.reverseOrder())
-                        .thenComparingDouble(OpponentCandidate::powerSortValue)
+                        .thenComparing(candidate -> candidate.power().value(), ArenaRoutine::comparePowerValues)
                         .thenComparingInt(OpponentCandidate::number))
                 .toList();
 
@@ -633,9 +633,11 @@ public class ArenaRoutine extends DelayedTask {
                 opponentY,
                 opponentNumber,
                 layout.powerYOffset(),
+                layout.powerHeight(),
                 layout.label);
         if (primary.relation() != PowerRelation.UNKNOWN) {
-            return enrichPowerWithOcr(opponentY, opponentNumber, layout.powerYOffset(), layout.label, primary);
+            return enrichPowerWithOcr(
+                    opponentY, opponentNumber, layout.powerYOffset(), layout.powerHeight(), layout.label, primary);
         }
 
         OpponentLayout fallbackLayout = layout == OpponentLayout.COMPACT
@@ -645,22 +647,24 @@ public class ArenaRoutine extends DelayedTask {
                 opponentY,
                 opponentNumber,
                 fallbackLayout.powerYOffset(),
+                fallbackLayout.powerHeight(),
                 fallbackLayout.label + " fallback");
         if (fallback.relation() != PowerRelation.UNKNOWN) {
-            return enrichPowerWithOcr(opponentY, opponentNumber, fallbackLayout.powerYOffset(), fallbackLayout.label + " fallback", fallback);
+            return enrichPowerWithOcr(
+                    opponentY, opponentNumber, fallbackLayout.powerYOffset(), fallbackLayout.powerHeight(),
+                    fallbackLayout.label + " fallback", fallback);
         }
         return fallback;
     }
 
-    private PowerRead readPowerRelationAt(int opponentY, int opponentNumber, int yOffset, String label) {
+    private PowerRead readPowerRelationAt(int opponentY, int opponentNumber, int yOffset, int height, String label) {
         int powerY = opponentY + yOffset;
         logDebug(String.format("Analyzing opponent %d power (%s, y=%d)",
                 opponentNumber, label, powerY));
 
-        PointData topLeft = new PointData(POWER_TEXT_RELATIVE_X, powerY);
-        PointData bottomRight = new PointData(
-                POWER_TEXT_RELATIVE_X + POWER_TEXT_WIDTH,
-                powerY + POWER_TEXT_HEIGHT);
+        AreaData powerArea = powerTextArea(opponentY, yOffset, height);
+        PointData topLeft = powerArea.topLeft();
+        PointData bottomRight = powerArea.bottomRight();
 
         BufferedImage image = captureFrameForPixelScan("arena power read");
         if (image == null) {
@@ -690,23 +694,16 @@ public class ArenaRoutine extends DelayedTask {
         return PowerRead.withoutValue(PowerRelation.UNKNOWN);
     }
 
-    private PowerRead enrichPowerWithOcr(int opponentY, int opponentNumber, int yOffset, String label, PowerRead colorRead) {
+    private PowerRead enrichPowerWithOcr(int opponentY, int opponentNumber, int yOffset, int height,
+                                         String label, PowerRead colorRead) {
         if (colorRead.relation() != PowerRelation.WEAKER) {
             return colorRead;
         }
-        int powerY = opponentY + yOffset;
-        PointData topLeft = new PointData(POWER_TEXT_RELATIVE_X, powerY);
-        PointData bottomRight = new PointData(
-                POWER_TEXT_RELATIVE_X + POWER_TEXT_WIDTH,
-                powerY + POWER_TEXT_HEIGHT);
+        AreaData powerArea = powerTextArea(opponentY, yOffset, height);
+        PointData topLeft = powerArea.topLeft();
+        PointData bottomRight = powerArea.bottomRight();
 
-        TesseractSettingsData powerSettings = TesseractSettingsData.assembler()
-                .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
-                .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
-                .stripBackground(true)
-                .setTextColor(ARENA_POWER_GREEN_TEXT)
-                .charWhitelist("0123456789.,KMBkmb")
-                .build();
+        TesseractSettingsData powerSettings = powerOcrSettings();
 
         String text = stringHelper.attemptRecognition(
                 topLeft,
@@ -727,21 +724,42 @@ public class ArenaRoutine extends DelayedTask {
         return new PowerRead(colorRead.relation(), powerValue, text);
     }
 
-    private Double parsePowerValue(String text) {
+    static TesseractSettingsData powerOcrSettings() {
+        return TesseractSettingsData.assembler()
+                .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
+                .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
+                .stripBackground(true)
+                .setTextColor(ARENA_POWER_GREEN_TEXT)
+                .charWhitelist("0123456789.,KMBkmb")
+                .build();
+    }
+
+    static AreaData serverPowerTextArea(int opponentY) {
+        return powerTextArea(opponentY, POWER_TEXT_SERVER_LAYOUT_Y_OFFSET, POWER_TEXT_SERVER_LAYOUT_HEIGHT);
+    }
+
+    private static AreaData powerTextArea(int opponentY, int yOffset, int height) {
+        int powerY = opponentY + yOffset;
+        return AreaData.of(
+                POWER_TEXT_RELATIVE_X,
+                powerY,
+                POWER_TEXT_RELATIVE_X + POWER_TEXT_WIDTH,
+                powerY + height);
+    }
+
+    static Double parsePowerValue(String text) {
         if (text == null || text.isBlank()) {
             return null;
         }
         String normalized = text.trim().replace(" ", "");
         Matcher matcher = POWER_VALUE_PATTERN.matcher(normalized);
-        if (!matcher.find()) {
+        if (!matcher.matches()) {
             return null;
         }
 
         String number = matcher.group(1);
         String unit = matcher.group(2).toUpperCase(Locale.ROOT);
-        if (unit.isEmpty()) {
-            number = number.replace(",", "").replace(".", "");
-        } else if (number.contains(",") && !number.contains(".")) {
+        if (number.contains(",") && !number.contains(".")) {
             number = number.replace(",", ".");
         } else {
             number = number.replace(",", "");
@@ -753,11 +771,21 @@ public class ArenaRoutine extends DelayedTask {
                 case "K" -> value * 1_000D;
                 case "M" -> value * 1_000_000D;
                 case "B" -> value * 1_000_000_000D;
-                default -> value;
+                default -> throw new IllegalStateException("Unsupported arena power unit: " + unit);
             };
         } catch (NumberFormatException ex) {
             return null;
         }
+    }
+
+    static int comparePowerValues(Double left, Double right) {
+        if (left == null) {
+            return right == null ? 0 : 1;
+        }
+        if (right == null) {
+            return -1;
+        }
+        return Double.compare(left, right);
     }
 
     private AllianceRead readAllianceTag(int opponentY, int opponentNumber) {
@@ -1391,22 +1419,28 @@ public class ArenaRoutine extends DelayedTask {
     }
 
     private enum OpponentLayout {
-        SERVER_ROW("server", POWER_TEXT_SERVER_LAYOUT_Y_OFFSET, true),
-        COMPACT("compact", POWER_TEXT_COMPACT_LAYOUT_Y_OFFSET, false),
-        UNKNOWN("unknown", POWER_TEXT_SERVER_LAYOUT_Y_OFFSET, true);
+        SERVER_ROW("server", POWER_TEXT_SERVER_LAYOUT_Y_OFFSET, POWER_TEXT_SERVER_LAYOUT_HEIGHT, true),
+        COMPACT("compact", POWER_TEXT_COMPACT_LAYOUT_Y_OFFSET, POWER_TEXT_COMPACT_LAYOUT_HEIGHT, false),
+        UNKNOWN("unknown", POWER_TEXT_SERVER_LAYOUT_Y_OFFSET, POWER_TEXT_SERVER_LAYOUT_HEIGHT, true);
 
         private final String label;
         private final int powerYOffset;
+        private final int powerHeight;
         private final boolean serverVisible;
 
-        OpponentLayout(String label, int powerYOffset, boolean serverVisible) {
+        OpponentLayout(String label, int powerYOffset, int powerHeight, boolean serverVisible) {
             this.label = label;
             this.powerYOffset = powerYOffset;
+            this.powerHeight = powerHeight;
             this.serverVisible = serverVisible;
         }
 
         private int powerYOffset() {
             return powerYOffset;
+        }
+
+        private int powerHeight() {
+            return powerHeight;
         }
 
         private boolean serverVisible() {
@@ -1599,14 +1633,6 @@ public class ArenaRoutine extends DelayedTask {
                 return 1;
             }
             return 0;
-        }
-
-        private boolean hasPowerValue() {
-            return power.value != null;
-        }
-
-        private double powerSortValue() {
-            return power.value != null ? power.value : Double.MAX_VALUE;
         }
 
         private String selectionSummary() {
