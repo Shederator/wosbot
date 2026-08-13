@@ -9,123 +9,147 @@
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Separator?>
+<?import javafx.scene.control.TabPane?>
+<?import javafx.scene.control.Tab?>
 <?import javafx.scene.layout.ColumnConstraints?>
 <?import javafx.scene.layout.RowConstraints?>
 
-<!-- Event automation configuration interface -->
-<VBox xmlns:fx="http://javafx.com/fxml/1" xmlns="http://javafx.com/javafx/17.0.12" 
+<!-- matt/2026-08-13: split into one tab per event, same pattern as the outer hub tabs. -->
+<VBox xmlns:fx="http://javafx.com/fxml/1" xmlns="http://javafx.com/javafx/17.0.12"
       VBox.vgrow="ALWAYS" HBox.hgrow="ALWAYS" maxWidth="Infinity" maxHeight="Infinity">
-    <ScrollPane VBox.vgrow="ALWAYS" vbarPolicy="AS_NEEDED" hbarPolicy="NEVER" 
-                fitToWidth="true" styleClass="task-page-scroll">
-        <VBox maxWidth="Infinity" maxHeight="Infinity" styleClass="task-page-root">
+    <TabPane VBox.vgrow="ALWAYS" maxWidth="Infinity" maxHeight="Infinity" tabClosingPolicy="UNAVAILABLE">
 
-            <!-- Myriad Bazaar Configuration -->
-            <VBox styleClass="content-card">
-                <HBox styleClass="header-green" maxWidth="Infinity" alignment="CENTER_LEFT">
-                    <CheckBox text="Myriad Bazaar" style="-fx-font-weight: bold;" 
-                              mnemonicParsing="false" fx:id="checkBoxMyriadBazaar" />
-                </HBox>
-                <VBox styleClass="task-section-inner">
-                    <Label wrapText="true" styleClass="task-card-description" 
-                           text="Automatically collect daily free rewards from Myriad Bazaar" />
-                    <Separator style="-fx-opacity: 0.25;" />
-                    <Label wrapText="true" style="-fx-font-style: italic;" 
-                           styleClass="task-card-description" 
-                           text="No additional configuration required" />
+        <Tab text="Myriad Bazaar" closable="false">
+            <ScrollPane vbarPolicy="AS_NEEDED" hbarPolicy="NEVER" fitToWidth="true" styleClass="task-page-scroll">
+                <VBox maxWidth="Infinity" maxHeight="Infinity" styleClass="task-page-root">
+                    <VBox styleClass="content-card">
+                        <HBox styleClass="header-yellow" maxWidth="Infinity" alignment="CENTER_LEFT">
+                            <CheckBox text="Myriad Bazaar" style="-fx-font-weight: bold;"
+                                      mnemonicParsing="false" fx:id="checkBoxMyriadBazaar" />
+                        </HBox>
+                        <VBox styleClass="task-section-inner">
+                            <Label wrapText="true" styleClass="task-card-description"
+                                   text="Automatically collect daily free rewards from Myriad Bazaar" />
+                            <Separator style="-fx-opacity: 0.25;" />
+                            <Label wrapText="true" style="-fx-font-style: italic;"
+                                   styleClass="task-card-description"
+                                   text="No additional configuration required" />
+                        </VBox>
+                    </VBox>
                 </VBox>
-            </VBox>
+            </ScrollPane>
+        </Tab>
 
-            <!-- Journey of Light Configuration -->
-            <VBox styleClass="content-card">
-                <HBox styleClass="header-yellow" maxWidth="Infinity" alignment="CENTER_LEFT">
-                    <CheckBox text="Journey of Light" style="-fx-font-weight: bold;" 
-                              mnemonicParsing="false" fx:id="checkBoxJourneyofLight" />
-                </HBox>
-                <VBox styleClass="task-section-inner">
-                    <Label wrapText="true" styleClass="task-card-description" 
-                           text="Automatically participate in Journey of Light event" />
-                    <Separator style="-fx-opacity: 0.25;" />
-                    <Label wrapText="true" style="-fx-font-style: italic;" 
-                           styleClass="task-card-description" 
-                           text="No additional configuration required" />
+        <Tab text="Journey of Light" closable="false">
+            <ScrollPane vbarPolicy="AS_NEEDED" hbarPolicy="NEVER" fitToWidth="true" styleClass="task-page-scroll">
+                <VBox maxWidth="Infinity" maxHeight="Infinity" styleClass="task-page-root">
+                    <VBox styleClass="content-card">
+                        <HBox styleClass="header-yellow" maxWidth="Infinity" alignment="CENTER_LEFT">
+                            <CheckBox text="Journey of Light" style="-fx-font-weight: bold;"
+                                      mnemonicParsing="false" fx:id="checkBoxJourneyofLight" />
+                        </HBox>
+                        <VBox styleClass="task-section-inner">
+                            <Label wrapText="true" styleClass="task-card-description"
+                                   text="Automatically participate in Journey of Light event" />
+                            <Separator style="-fx-opacity: 0.25;" />
+                            <Label wrapText="true" style="-fx-font-style: italic;"
+                                   styleClass="task-card-description"
+                                   text="No additional configuration required" />
+                        </VBox>
+                    </VBox>
                 </VBox>
-            </VBox>
+            </ScrollPane>
+        </Tab>
 
-            <!-- Mercenary Event Configuration -->
-            <VBox styleClass="content-card">
-                <HBox styleClass="header-purple" maxWidth="Infinity" alignment="CENTER_LEFT">
-                    <CheckBox text="Mercenary Event" style="-fx-font-weight: bold;" 
-                              mnemonicParsing="false" fx:id="checkBoxMercenaryEvent" />
-                </HBox>
-                <VBox styleClass="task-section-inner">
-                    <Label wrapText="true" styleClass="task-card-description" 
-                           text="Automatically hunt mercenaries" />
-                    <Separator style="-fx-opacity: 0.25;" />
-                    <HBox spacing="10" alignment="CENTER_LEFT" fx:id="hboxMercenaryFlagSelection">
-                        <Label text="Flag Selection" minWidth="100.0" styleClass="task-field-label" />
-                        <ComboBox prefWidth="120.0" fx:id="comboBoxMercenaryFlag" />
-                    </HBox>
+        <Tab text="Mercenary Event" closable="false">
+            <ScrollPane vbarPolicy="AS_NEEDED" hbarPolicy="NEVER" fitToWidth="true" styleClass="task-page-scroll">
+                <VBox maxWidth="Infinity" maxHeight="Infinity" styleClass="task-page-root">
+                    <VBox styleClass="content-card">
+                        <HBox styleClass="header-yellow" maxWidth="Infinity" alignment="CENTER_LEFT">
+                            <CheckBox text="Mercenary Event" style="-fx-font-weight: bold;"
+                                      mnemonicParsing="false" fx:id="checkBoxMercenaryEvent" />
+                        </HBox>
+                        <VBox styleClass="task-section-inner">
+                            <Label wrapText="true" styleClass="task-card-description"
+                                   text="Automatically hunt mercenaries" />
+                            <Separator style="-fx-opacity: 0.25;" />
+                            <HBox spacing="10" alignment="CENTER_LEFT" fx:id="hboxMercenaryFlagSelection">
+                                <Label text="Flag Selection" minWidth="100.0" styleClass="task-field-label" />
+                                <ComboBox prefWidth="120.0" fx:id="comboBoxMercenaryFlag" />
+                            </HBox>
+                        </VBox>
+                    </VBox>
                 </VBox>
-            </VBox>
+            </ScrollPane>
+        </Tab>
 
-            <!-- Hero's Mission Configuration -->
-            <VBox styleClass="content-card">
-                <HBox styleClass="header-red" maxWidth="Infinity" alignment="CENTER_LEFT">
-                    <CheckBox text="Hero's Mission Event" style="-fx-font-weight: bold;" 
-                              mnemonicParsing="false" fx:id="checkBoxHeroMission" />
-                </HBox>
-                <VBox styleClass="task-section-inner">
-                    <Label wrapText="true" styleClass="task-card-description" 
-                           text="Call rallies on reapers to get season hero shards" />
-                    <Separator style="-fx-opacity: 0.25;" />
-                    <HBox spacing="10" alignment="CENTER_LEFT">
-                        <Label text="Flag Selection" minWidth="100.0" styleClass="task-field-label" />
-                        <ComboBox prefWidth="120.0" fx:id="comboBoxHeroMissionFlag" />
-                    </HBox>
+        <Tab text="Hero's Mission" closable="false">
+            <ScrollPane vbarPolicy="AS_NEEDED" hbarPolicy="NEVER" fitToWidth="true" styleClass="task-page-scroll">
+                <VBox maxWidth="Infinity" maxHeight="Infinity" styleClass="task-page-root">
+                    <VBox styleClass="content-card">
+                        <HBox styleClass="header-yellow" maxWidth="Infinity" alignment="CENTER_LEFT">
+                            <CheckBox text="Hero's Mission Event" style="-fx-font-weight: bold;"
+                                      mnemonicParsing="false" fx:id="checkBoxHeroMission" />
+                        </HBox>
+                        <VBox styleClass="task-section-inner">
+                            <Label wrapText="true" styleClass="task-card-description"
+                                   text="Call rallies on reapers to get season hero shards" />
+                            <Separator style="-fx-opacity: 0.25;" />
+                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                <Label text="Flag Selection" minWidth="100.0" styleClass="task-field-label" />
+                                <ComboBox prefWidth="120.0" fx:id="comboBoxHeroMissionFlag" />
+                            </HBox>
+                        </VBox>
+                    </VBox>
                 </VBox>
-            </VBox>
+            </ScrollPane>
+        </Tab>
 
-            <!-- Tundra Truck Event Configuration -->
-            <VBox styleClass="content-card">
-                <HBox styleClass="header-blue" maxWidth="Infinity" alignment="CENTER_LEFT">
-                    <CheckBox text="Tundra Truck Event" style="-fx-font-weight: bold;" 
-                              mnemonicParsing="false" fx:id="checkBoxTundraEvent" />
-                </HBox>
-                <VBox styleClass="task-section-inner">
-                    <Label wrapText="true" styleClass="task-card-description" 
-                           text="Automates truck refreshes and selections • Set activation time to run at specific hour" />
-                    <Separator style="-fx-opacity: 0.25;" />
-                    <GridPane vgap="10" hgap="15">
-                        <columnConstraints>
-                            <ColumnConstraints percentWidth="50" />
-                            <ColumnConstraints percentWidth="50" />
-                        </columnConstraints>
-                        <rowConstraints>
-                            <RowConstraints />
-                            <RowConstraints />
-                        </rowConstraints>
-                        <CheckBox text="Use gems for refresh" mnemonicParsing="false" 
-                                  fx:id="checkBoxTundraUseGems" 
-                                  GridPane.rowIndex="0" GridPane.columnIndex="0" />
-                        <CheckBox text="Go only for SSR trucks" mnemonicParsing="false" 
-                                  fx:id="checkBoxTundraSSR" 
-                                  GridPane.rowIndex="0" GridPane.columnIndex="1" />
-                        <CheckBox text="Use activation time" mnemonicParsing="false" 
-                                  fx:id="checkBoxTundraEventActivationHour" 
-                                  GridPane.rowIndex="1" GridPane.columnIndex="0" />
-                    </GridPane>
-                    <HBox spacing="10" alignment="CENTER_LEFT">
-                        <Label text="Activation time (UTC)" minWidth="140.0" 
-                               styleClass="task-field-label" />
-                        <TextField promptText="HH:mm" prefWidth="80.0" 
-                                   fx:id="textfieldTundraActivationHour" />
-                    </HBox>
-                    <Label text="" wrapText="true" 
-                           style="-fx-font-size: 11px; -fx-text-fill: #ff4444;" 
-                           fx:id="labelDateTimeError" />
+        <Tab text="Tundra Truck" closable="false">
+            <ScrollPane vbarPolicy="AS_NEEDED" hbarPolicy="NEVER" fitToWidth="true" styleClass="task-page-scroll">
+                <VBox maxWidth="Infinity" maxHeight="Infinity" styleClass="task-page-root">
+                    <VBox styleClass="content-card">
+                        <HBox styleClass="header-yellow" maxWidth="Infinity" alignment="CENTER_LEFT">
+                            <CheckBox text="Tundra Truck Event" style="-fx-font-weight: bold;"
+                                      mnemonicParsing="false" fx:id="checkBoxTundraEvent" />
+                        </HBox>
+                        <VBox styleClass="task-section-inner">
+                            <Label wrapText="true" styleClass="task-card-description"
+                                   text="Automates truck refreshes and selections • Set activation time to run at specific hour" />
+                            <Separator style="-fx-opacity: 0.25;" />
+                            <GridPane vgap="10" hgap="15">
+                                <columnConstraints>
+                                    <ColumnConstraints percentWidth="50" />
+                                    <ColumnConstraints percentWidth="50" />
+                                </columnConstraints>
+                                <rowConstraints>
+                                    <RowConstraints />
+                                    <RowConstraints />
+                                </rowConstraints>
+                                <CheckBox text="Use gems for refresh" mnemonicParsing="false"
+                                          fx:id="checkBoxTundraUseGems"
+                                          GridPane.rowIndex="0" GridPane.columnIndex="0" />
+                                <CheckBox text="Go only for SSR trucks" mnemonicParsing="false"
+                                          fx:id="checkBoxTundraSSR"
+                                          GridPane.rowIndex="0" GridPane.columnIndex="1" />
+                                <CheckBox text="Use activation time" mnemonicParsing="false"
+                                          fx:id="checkBoxTundraEventActivationHour"
+                                          GridPane.rowIndex="1" GridPane.columnIndex="0" />
+                            </GridPane>
+                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                <Label text="Activation time (UTC)" minWidth="140.0"
+                                       styleClass="task-field-label" />
+                                <TextField promptText="HH:mm" prefWidth="80.0"
+                                           fx:id="textfieldTundraActivationHour" />
+                            </HBox>
+                            <Label text=""
+                                   style="-fx-font-size: 11px; -fx-text-fill: #ff4444;"
+                                   fx:id="labelDateTimeError" />
+                        </VBox>
+                    </VBox>
                 </VBox>
-            </VBox>
+            </ScrollPane>
+        </Tab>
 
-        </VBox>
-    </ScrollPane>
+    </TabPane>
 </VBox>

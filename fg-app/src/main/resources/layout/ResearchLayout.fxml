@@ -16,7 +16,7 @@
         <VBox spacing="14" styleClass="task-page-root" maxWidth="Infinity">
 
             <VBox styleClass="content-card">
-                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-green">
+                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                     <Label text="Enable Research" />
                 </HBox>
                 <VBox spacing="10" styleClass="task-section-inner">

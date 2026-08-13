@@ -119,6 +119,10 @@ public enum ConfigurationKeyEnum {
      *  and skips the normal daily-clear logic, so the free formation-setup can be triggered without
      *  spending a daily battle attempt. Default false everywhere. */
     LABYRINTH_FORMATION_TEST_BOOL       ("false",   Boolean.class,  ConfigCategory.DAILIES),
+    /** matt/2026-08-13: "kick Labyrinth off at noon every day" -- the daily run used to always
+     *  reschedule to the game's own 00:00 UTC reset (dailyResetTime()), which lands at an unintuitive
+     *  local-time hour depending on DST. Picked, HH:mm local time, defaults to noon. */
+    LABYRINTH_DAILY_START_TIME_STRING   ("12:00",   String.class,   ConfigCategory.DAILIES),
     /** Labyrinth generation the account is playing (matt is Gen 1). Informational + future tuning. */
     LABYRINTH_GENERATION_STRING         ("Gen 1",   String.class,   ConfigCategory.DAILIES),
     /** Land-of-Heroes per-squad troop ratios (Infantry/Lancer/Marksman), driven from the Labyrinth tab. */
@@ -128,6 +132,23 @@ public enum ConfigurationKeyEnum {
     LABYRINTH_SQUAD2_INFANTRY_INT       ("50",      Integer.class,  ConfigCategory.DAILIES),
     LABYRINTH_SQUAD2_LANCER_INT         ("0",       Integer.class,  ConfigCategory.DAILIES),
     LABYRINTH_SQUAD2_MARKSMAN_INT       ("50",      Integer.class,  ConfigCategory.DAILIES),
+    // matt/2026-08-13: "we're up to like three now" -- extended the same per-squad troop-ratio
+    // formation-setup to Cave of Monsters and Charm Mine (Labyrinth zones 2 & 3). Each zone's own
+    // in-game rule ("Only the stats of Pets/Chief Charms take effect here") means troop stats don't
+    // score the fight directly, but composition still affects tanking/positioning -- matt's explicit
+    // call to build the ratio controls for these anyway. Same defaults as Land of Heroes.
+    LABYRINTH_CAVE_SQUAD1_INFANTRY_INT  ("60",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CAVE_SQUAD1_LANCER_INT    ("40",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CAVE_SQUAD1_MARKSMAN_INT  ("0",       Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CAVE_SQUAD2_INFANTRY_INT  ("50",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CAVE_SQUAD2_LANCER_INT    ("0",       Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CAVE_SQUAD2_MARKSMAN_INT  ("50",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CHARM_SQUAD1_INFANTRY_INT ("60",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CHARM_SQUAD1_LANCER_INT   ("40",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CHARM_SQUAD1_MARKSMAN_INT ("0",       Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CHARM_SQUAD2_INFANTRY_INT ("50",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CHARM_SQUAD2_LANCER_INT   ("0",       Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CHARM_SQUAD2_MARKSMAN_INT ("50",      Integer.class,  ConfigCategory.DAILIES),
     DAILY_MISSION_AUTO_SCHEDULE_BOOL    ("false",   Boolean.class,  ConfigCategory.DAILIES),
     DAILY_MISSION_BOOL                  ("false",   Boolean.class,  ConfigCategory.DAILIES),
     DAILY_MISSION_OFFSET_INT            ("60",      Integer.class,  ConfigCategory.DAILIES),

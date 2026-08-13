@@ -16,7 +16,7 @@
 
             <!-- Bank -->
             <VBox styleClass="content-card">
-                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-green">
+                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                     <Label text="Bank" />
                 </HBox>
                 <VBox spacing="10" styleClass="task-section-inner">
@@ -36,7 +36,7 @@
 
             <!-- Random Events -->
             <VBox styleClass="content-card">
-                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-blue">
+                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                     <Label text="Random Events" />
                 </HBox>
                 <VBox spacing="10" styleClass="task-section-inner">

@@ -49,7 +49,7 @@
                 <HBox alignment="TOP_LEFT" spacing="14">
 
                     <VBox styleClass="content-card" HBox.hgrow="ALWAYS">
-                        <HBox maxWidth="Infinity" styleClass="header-blue">
+                        <HBox maxWidth="Infinity" styleClass="header-yellow">
                             <Label text="Preparation" />
                         </HBox>
                         <VBox spacing="10" styleClass="task-section-inner">
@@ -61,7 +61,7 @@
                     </VBox>
 
                     <VBox styleClass="content-card" HBox.hgrow="ALWAYS">
-                        <HBox maxWidth="Infinity" styleClass="header-red">
+                        <HBox maxWidth="Infinity" styleClass="header-yellow">
                             <Label text="Trap Target" />
                         </HBox>
                         <VBox spacing="10" styleClass="task-section-inner">

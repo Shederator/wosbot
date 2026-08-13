@@ -17,7 +17,7 @@
 
             <!-- Expert Management Card -->
             <VBox styleClass="content-card">
-                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-teal">
+                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                     <Label text="Expert Automation" />
                 </HBox>
                 <VBox spacing="12" styleClass="task-section-inner">
@@ -51,7 +51,7 @@
             
             <!-- Expert Skill Training (conditionally visible) -->
             <VBox fx:id="expertSkillTrainingVBox" styleClass="content-card">
-                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-purple">
+                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                     <Label text="Expert Skill Training Priorities" />
                 </HBox>
                 <VBox spacing="10" styleClass="task-section-inner">

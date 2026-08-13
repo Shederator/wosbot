@@ -13,7 +13,7 @@
         <VBox spacing="14" styleClass="task-page-root" maxWidth="Infinity">
 
             <VBox maxWidth="Infinity" styleClass="content-card">
-                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-red">
+                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                     <Label style="-fx-font-weight: bold; -fx-text-fill: -fg-bg-app; -fx-font-size: 13px;"
                            text="Rally" />
                 </HBox>

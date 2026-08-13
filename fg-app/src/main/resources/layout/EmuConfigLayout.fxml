@@ -95,7 +95,7 @@
 
               <!-- Game Settings (full width, single line) -->
               <VBox styleClass="content-card" VBox.vgrow="NEVER">
-                  <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-teal">
+                  <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                        <children><Label text="Game Settings" /></children>
                    </HBox>
                   <HBox alignment="CENTER_LEFT" spacing="10" styleClass="content-card-inner">
@@ -112,7 +112,7 @@
       <HBox spacing="16" VBox.vgrow="NEVER">
           <children>
               <VBox styleClass="content-card" HBox.hgrow="ALWAYS">
-                  <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-teal">
+                  <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                        <children><Label text="Analytics" /></children>
                    </HBox>
                   <VBox spacing="10" styleClass="content-card-inner">

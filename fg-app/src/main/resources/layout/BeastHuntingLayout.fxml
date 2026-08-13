@@ -14,7 +14,7 @@
             <VBox spacing="14" styleClass="task-page-root" maxWidth="Infinity">
 
                 <VBox styleClass="content-card">
-                    <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-red">
+                    <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                         <CheckBox fx:id="checkBoxEnableBeastHunting" mnemonicParsing="false"
                                   style="-fx-font-weight: bold;" text="Enable Beast Hunting" />
                     </HBox>

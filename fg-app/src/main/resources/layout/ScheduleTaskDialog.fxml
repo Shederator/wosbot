@@ -22,7 +22,7 @@
 
             <!-- Dialog header -->
             <HBox fx:id="headerBox" alignment="CENTER_LEFT" maxWidth="Infinity"
-                  spacing="10" styleClass="header-blue">
+                  spacing="10" styleClass="header-yellow">
                 <Label fx:id="lblTaskName" maxWidth="Infinity" text="Schedule Task"
                        HBox.hgrow="ALWAYS" />
                 <Region HBox.hgrow="ALWAYS" />

@@ -15,7 +15,7 @@
 
                 <!-- Pet Activation -->
                 <VBox styleClass="content-card">
-                    <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-orange">
+                    <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                         <Label text="Pet Automation" />
                     </HBox>
                     <VBox spacing="10" styleClass="task-section-inner">
@@ -34,7 +34,7 @@
 
                 <!-- Pet Skill Selection — FlowPane instead of GridPane -->
                 <VBox styleClass="content-card">
-                    <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-blue">
+                    <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                         <Label text="Skill Configuration" />
                     </HBox>
                     <VBox spacing="10" styleClass="task-section-inner">

@@ -13,7 +13,7 @@
                     <children>
                         <VBox styleClass="content-card">
                             <children>
-                                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-orange">
+                                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                                     <children>
                                         <Label text="Alliance Workbench" />
                                     </children>

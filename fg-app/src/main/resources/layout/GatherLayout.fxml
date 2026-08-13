@@ -13,7 +13,7 @@
                     <children>
                         <VBox styleClass="content-card">
                             <children>
-                                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-green">
+                                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                                     <children>
                                         <CheckBox fx:id="checkBoxGatherResources" mnemonicParsing="false" text="Activate Gathering" />
                                     </children>

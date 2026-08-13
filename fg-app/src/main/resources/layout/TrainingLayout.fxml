@@ -14,7 +14,7 @@
 
             <!-- Training Enable Card -->
             <VBox styleClass="content-card">
-                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-green">
+                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                     <Label text="Enable Training" />
                     <Region HBox.hgrow="ALWAYS" />
                     <Label styleClass="label-muted"
@@ -32,7 +32,7 @@
 
             <!-- Troop Type Selection — FlowPane instead of GridPane -->
             <VBox styleClass="content-card">
-                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-blue">
+                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                     <Label text="Troop Selection" />
                 </HBox>
                 <VBox spacing="10" styleClass="task-section-inner">
@@ -60,7 +60,7 @@
                  toggle above, since healing injured troops is a separate concern from
                  training new ones. -->
             <VBox styleClass="content-card">
-                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-green">
+                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                     <Label text="Heal Injured Troops" />
                 </HBox>
                 <VBox spacing="10" styleClass="task-section-inner">

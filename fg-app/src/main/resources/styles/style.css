@@ -177,6 +177,15 @@
     -fx-background-color: rgba(255, 255, 255, 0.08);
 }
 
+/* matt/2026-08-13: Events hub's internal vertical side-nav (many sub-screens, no room to
+   overflow horizontally as tabs) -- reuses .nav-button styling for each entry. */
+.events-side-nav {
+    -fx-padding: 10 8 10 8;
+    -fx-background-color: #1a1d24;
+    -fx-border-color: #2a2e38;
+    -fx-border-width: 0 1 0 0;
+}
+
 /* Active Nav State — Solid Yellow, Dark Text */
 .nav-button.active {
     -fx-background-color: -fg-yellow;

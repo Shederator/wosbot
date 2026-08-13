@@ -15,7 +15,7 @@
 
                 <!-- Enable toggle -->
                 <VBox styleClass="content-card">
-                    <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-green">
+                    <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                         <CheckBox fx:id="checkBoxAllianceMobilization" mnemonicParsing="false"
                                   style="-fx-font-weight: bold;" text="Enable Alliance Mobilization" />
                     </HBox>
@@ -28,7 +28,7 @@
 
                 <!-- Mission types using FlowPane instead of GridPane 4-col -->
                 <VBox styleClass="content-card">
-                    <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-blue">
+                    <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                         <Label text="Mission Types" />
                     </HBox>
                     <VBox spacing="10" styleClass="task-section-inner">
@@ -76,7 +76,7 @@
 
                 <!-- Rally settings -->
                 <VBox styleClass="content-card">
-                    <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-red">
+                    <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                         <Label text="Configuration" />
                     </HBox>
                     <VBox spacing="10" styleClass="task-section-inner">

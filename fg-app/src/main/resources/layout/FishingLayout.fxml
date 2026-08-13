@@ -31,7 +31,7 @@
                         <VBox styleClass="content-card">
                             <children>
                                 <HBox alignment="CENTER_LEFT" maxWidth="Infinity"
-                                      styleClass="header-teal">
+                                      styleClass="header-yellow">
                                     <children>
                                         <Label text="Fishing Minigame Control" />
                                     </children>
@@ -55,7 +55,7 @@
                         <VBox styleClass="content-card">
                             <children>
                                 <HBox alignment="CENTER_LEFT" maxWidth="Infinity"
-                                      styleClass="header-blue">
+                                      styleClass="header-yellow">
                                     <children>
                                         <Label text="Test Hook Loop" />
                                     </children>

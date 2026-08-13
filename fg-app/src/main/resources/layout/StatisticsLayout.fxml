@@ -27,7 +27,7 @@
 
                 <!-- ================= WHAT THE BOT DID FOR YOU ================= -->
                 <VBox styleClass="content-card" spacing="12">
-                    <HBox maxWidth="Infinity" styleClass="header-blue">
+                    <HBox maxWidth="Infinity" styleClass="header-yellow">
                         <Label text="What the bot did for you" />
                     </HBox>
 
@@ -95,7 +95,7 @@
 
                         <!-- Activity Counters -->
                         <VBox styleClass="content-card">
-                            <HBox maxWidth="Infinity" styleClass="header-blue">
+                            <HBox maxWidth="Infinity" styleClass="header-yellow">
                                 <Label text="Activity Counters" />
                             </HBox>
                             <VBox styleClass="task-section-inner">

@@ -17,7 +17,7 @@
 
                 <!-- Main Championship Configuration -->
                 <VBox styleClass="content-card">
-                    <HBox maxWidth="Infinity" styleClass="header-purple">
+                    <HBox maxWidth="Infinity" styleClass="header-yellow">
                         <CheckBox fx:id="checkBoxEnableChampionship" mnemonicParsing="false"
                                   style="-fx-font-size: 15px; -fx-font-weight: bold;"
                                   text="Enable Alliance Championship" />

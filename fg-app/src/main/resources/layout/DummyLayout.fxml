@@ -18,7 +18,7 @@
                         <VBox styleClass="content-card">
                             <children>
                                 <HBox alignment="CENTER_LEFT" maxWidth="Infinity"
-                                      styleClass="header-blue">
+                                      styleClass="header-yellow">
                                     <children>
                                         <CheckBox fx:id="checkBoxEnableDummyTask" mnemonicParsing="false"
                                                   style="-fx-font-weight: bold;" text="Enable Dummy Task" />

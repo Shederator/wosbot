@@ -66,6 +66,17 @@ public class DailyLabyrinthRoutine extends DelayedTask {
      *  "Opens in …"; an OPEN zone shows just name + a bare countdown. matt's rule: "Opens in" ⇒ skip. */
     private static final PointData LOH_ZONE_LABEL_TL = new PointData(358, 302);
     private static final PointData LOH_ZONE_LABEL_BR = new PointData(562, 372);
+
+    // matt/2026-08-13: same formation-setup extended to Cave of Monsters and Charm Mine ("we're up
+    // to like three now"). Calibrated live via ADB from the Labyrinth zone map (same map screen as
+    // Land of Heroes, different scroll position). Banner = tap point on the zone's structure
+    // graphic; label = OCR box over its name+timer banner, same "Opens in" open/locked rule.
+    private static final PointData CAVE_ZONE_BANNER = new PointData(195, 340);
+    private static final PointData CAVE_ZONE_LABEL_TL = new PointData(80, 465);
+    private static final PointData CAVE_ZONE_LABEL_BR = new PointData(330, 525);
+    private static final PointData CHARM_ZONE_BANNER = new PointData(505, 550);
+    private static final PointData CHARM_ZONE_LABEL_TL = new PointData(390, 595);
+    private static final PointData CHARM_ZONE_LABEL_BR = new PointData(640, 655);
     /** White label text over the map/banner. */
     private static final TesseractSettingsData ZONE_LABEL_SETTINGS =
             TesseractSettingsData.assembler()
@@ -83,8 +94,11 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     private static final PointData LOH_EDIT_FORMATION_SQUAD1_BTN = new PointData(360, 357);
 
     // -- Troop-detail screen (post Edit Formation) --
-    /** "Balance" button on the troop-detail screen that opens the troop-ratio popup. */
-    private static final PointData LOH_BALANCE_BTN = new PointData(330, 1195);
+    /** "Balance" button on the troop-detail screen that opens the troop-ratio popup. matt/2026-08-13:
+     *  re-calibrated 1195->1183 live via ADB on Cave of Monsters -- 1195 landed on the Backpack nav
+     *  icon underneath (a stray Alliance Vote popup had been interfering with earlier attempts and
+     *  masked this; confirmed twice clean at 1183 with no popups in the way). */
+    private static final PointData LOH_BALANCE_BTN = new PointData(330, 1183);
     /** LIVE-TUNE: "Edit Formation" button that SAVES the formation (final step before STOP). */
     private static final PointData LOH_EDIT_FORMATION_BTN = new PointData(575, 1285);
 
@@ -220,13 +234,17 @@ public class DailyLabyrinthRoutine extends DelayedTask {
             Boolean formationTestOn =
                     profile.getConfig(ConfigurationKeyEnum.LABYRINTH_FORMATION_TEST_BOOL, Boolean.class);
             if (Boolean.TRUE.equals(formationTestOn)) {
-                logInfo("LABYRINTH_FORMATION_TEST_BOOL is ON — running Land-of-Heroes formation setup only.");
+                logInfo("LABYRINTH_FORMATION_TEST_BOOL is ON — running formation setup only (no battle).");
                 if (!navigateToLabyrinthMenu()) {
                     rescheduleOneHourLater("Failed to navigate to the Labyrinth menu (formation test)");
                     return;
                 }
-                setupLandOfHeroesFormation();
-                reschedule(GameTimeUtils.dailyResetTime());
+                // matt/2026-08-13: "we're up to like three now" -- runs Land of Heroes, THEN Cave of
+                // Monsters, THEN Charm Mine, each independently gated by its own open/locked check.
+                for (ZoneFormation zone : ZONE_FORMATIONS) {
+                    setupZoneFormation(zone);
+                }
+                reschedule(nextLabyrinthStartTime());
                 return;
             }
 
@@ -239,7 +257,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
             // Step 2: Execute challenges based on current day
             executeLabyrinthChallenges();
 
-            reschedule(GameTimeUtils.dailyResetTime());
+            reschedule(nextLabyrinthStartTime());
 
         } catch (Exception e) {
             logError("An error occurred during the Labyrinth task: " + e.getMessage());
@@ -411,6 +429,13 @@ public class DailyLabyrinthRoutine extends DelayedTask {
             sleepTask(100);
         }
 
+        // matt/2026-08-13: for Cave of Monsters / Charm Mine, drive the configured ratio NOW --
+        // right before Deploy, since it doesn't persist between visits like Land of Heroes does.
+        ZoneFormation singleSquadZone = DUNGEON_SINGLE_SQUAD_ZONES.get(dungeonNumber);
+        if (singleSquadZone != null) {
+            setRatioBeforeDeploy(singleSquadZone, dungeonNumber);
+        }
+
         // Deploy troops
         ImageSearchResultData deployResult = templateSearchHelper.locatePattern(
                 TemplatesEnum.LABYRINTH_DEPLOY,
@@ -434,52 +459,107 @@ public class DailyLabyrinthRoutine extends DelayedTask {
         return false;
     }
 
-    // =================== LAND-OF-HEROES FORMATION SETUP ===================
+    // =================== ZONE FORMATION SETUP ===================
 
     /**
-     * matt/2026-08-10 — TEST harness (free, no battle). From the Labyrinth menu this opens the
-     * Land-of-Heroes stage screen and sets up the deploy formation to a configurable troop ratio,
-     * then SAVES it and STOPS — it never taps Deploy/battle (battling burns a daily attempt while
-     * formation-setup is free).
+     * matt/2026-08-13: describes one Labyrinth zone's formation-setup inputs — the map-screen banner
+     * tap point + label OCR box (for the open/locked check), and the config keys that drive its
+     * troop ratios. {@link #setupZoneFormation} is generic over this.
      *
-     * <p>Flow: select Land of Heroes → Challenge → Quick Deploy → Balance → OCR-drive each troop
-     * row's % to {@link #LOH_TARGET_RATIO} via the +/- nudges → tick "use as default" → Confirm →
-     * Edit Formation (saves) → STOP.</p>
-     *
-     * <p>All coordinates are LIVE-TUNE best-estimates (see constants block); the orchestrator will
-     * calibrate them via ADB.</p>
+     * <p>
+     * <b>matt/2026-08-13, caught live via ADB (Cave of Monsters):</b> the original design assumed
+     * every zone shares Land of Heroes' two-squad structure (Challenge -> Squad Config -> Quick
+     * Deploy -> per-squad Edit Formation -> Balance). Watching Cave of Monsters live end-to-end
+     * proved that wrong: tapping Challenge on Cave of Monsters lands DIRECTLY on a single combined
+     * troop-detail screen (Infantry/Lancer/Marksman, ONE Balance button) -- there is no Squad Config
+     * screen, no Quick Deploy, no second squad at all. {@code singleSquad} distinguishes the two
+     * shapes; only {@code squad1Keys} is used when true (squad2Keys stays populated but unused, so
+     * the existing UI fields keep working without another rework).
      */
-    private void setupLandOfHeroesFormation() {
-        logInfo("LoH formation: starting Land-of-Heroes formation setup (setup only, no battle).");
+    private record ZoneFormation(String zoneName, PointData banner, PointData labelTl, PointData labelBr,
+                                  boolean singleSquad,
+                                  ConfigurationKeyEnum[] squad1Keys, ConfigurationKeyEnum[] squad2Keys) {}
+
+    private static final ZoneFormation[] ZONE_FORMATIONS = {
+        new ZoneFormation("Land of Heroes", LOH_ZONE_BANNER, LOH_ZONE_LABEL_TL, LOH_ZONE_LABEL_BR, false,
+                new ConfigurationKeyEnum[] { ConfigurationKeyEnum.LABYRINTH_SQUAD1_INFANTRY_INT,
+                        ConfigurationKeyEnum.LABYRINTH_SQUAD1_LANCER_INT, ConfigurationKeyEnum.LABYRINTH_SQUAD1_MARKSMAN_INT },
+                new ConfigurationKeyEnum[] { ConfigurationKeyEnum.LABYRINTH_SQUAD2_INFANTRY_INT,
+                        ConfigurationKeyEnum.LABYRINTH_SQUAD2_LANCER_INT, ConfigurationKeyEnum.LABYRINTH_SQUAD2_MARKSMAN_INT }),
+        new ZoneFormation("Cave of Monsters", CAVE_ZONE_BANNER, CAVE_ZONE_LABEL_TL, CAVE_ZONE_LABEL_BR, true,
+                new ConfigurationKeyEnum[] { ConfigurationKeyEnum.LABYRINTH_CAVE_SQUAD1_INFANTRY_INT,
+                        ConfigurationKeyEnum.LABYRINTH_CAVE_SQUAD1_LANCER_INT, ConfigurationKeyEnum.LABYRINTH_CAVE_SQUAD1_MARKSMAN_INT },
+                new ConfigurationKeyEnum[] { ConfigurationKeyEnum.LABYRINTH_CAVE_SQUAD2_INFANTRY_INT,
+                        ConfigurationKeyEnum.LABYRINTH_CAVE_SQUAD2_LANCER_INT, ConfigurationKeyEnum.LABYRINTH_CAVE_SQUAD2_MARKSMAN_INT }),
+        new ZoneFormation("Charm Mine", CHARM_ZONE_BANNER, CHARM_ZONE_LABEL_TL, CHARM_ZONE_LABEL_BR, true,
+                new ConfigurationKeyEnum[] { ConfigurationKeyEnum.LABYRINTH_CHARM_SQUAD1_INFANTRY_INT,
+                        ConfigurationKeyEnum.LABYRINTH_CHARM_SQUAD1_LANCER_INT, ConfigurationKeyEnum.LABYRINTH_CHARM_SQUAD1_MARKSMAN_INT },
+                new ConfigurationKeyEnum[] { ConfigurationKeyEnum.LABYRINTH_CHARM_SQUAD2_INFANTRY_INT,
+                        ConfigurationKeyEnum.LABYRINTH_CHARM_SQUAD2_LANCER_INT, ConfigurationKeyEnum.LABYRINTH_CHARM_SQUAD2_MARKSMAN_INT }),
+    };
+
+    /**
+     * matt/2026-08-13: Cave of Monsters (dungeon 2) / Charm Mine (dungeon 3) proven live to have NO
+     * standalone saved formation -- re-entering always resets to 33/33/33 no matter what the
+     * Formation Test flow does. The only way their configured ratio ever actually applies is if it's
+     * set fresh right before the REAL Deploy, every single attempt (see {@link #setRatioBeforeDeploy}).
+     * Land of Heroes (dungeon 1) is excluded here -- it has its own genuine save mechanism via the
+     * Formation Test flow.
+     */
+    private static final java.util.Map<Integer, ZoneFormation> DUNGEON_SINGLE_SQUAD_ZONES = java.util.Map.of(
+            2, ZONE_FORMATIONS[1],  // Cave of Monsters
+            3, ZONE_FORMATIONS[2]   // Charm Mine
+    );
+
+    /**
+     * matt/2026-08-10 (Land of Heroes), extended 2026-08-13 to Cave of Monsters + Charm Mine —
+     * TEST harness (free, no battle). From the Labyrinth menu this opens the given zone's stage
+     * screen and sets up the deploy formation to its configured troop ratio, then SAVES it and
+     * STOPS — it never taps Deploy/battle (battling burns a daily attempt while formation-setup is
+     * free).
+     *
+     * <p>Branches on {@link ZoneFormation#singleSquad()}: Land of Heroes runs the original
+     * Challenge -> Squad Config -> Quick Deploy -> per-squad Edit Formation -> Balance flow.
+     * Cave of Monsters / Charm Mine (proven live) skip straight from Challenge to a single combined
+     * troop-detail screen with ONE Balance button -- no Squad Config, no Quick Deploy, one ratio.
+     */
+    private void setupZoneFormation(ZoneFormation zone) {
+        String tag = zone.zoneName() + " formation";
+        logInfo(tag + ": starting formation setup (setup only, no battle).");
 
         saveLabyrinthFrame("map", 0); // one-shot: capture the Labyrinth map to calibrate zone-label OCR
 
-        // Enter Land of Heroes by reading its map label (matt's rule): a LOCKED zone's line reads
+        // Enter the zone by reading its map label (matt's rule): a LOCKED zone's line reads
         // "Opens in …"; an OPEN zone shows just name + countdown. Only tap the banner if it's open.
-        String zoneLabel = readStringValue(LOH_ZONE_LABEL_TL, LOH_ZONE_LABEL_BR, ZONE_LABEL_SETTINGS);
-        logInfo("LoH formation: Land of Heroes label OCR = '" + zoneLabel + "'.");
+        String zoneLabel = readStringValue(zone.labelTl(), zone.labelBr(), ZONE_LABEL_SETTINGS);
+        logInfo(tag + ": label OCR = '" + zoneLabel + "'.");
         if (zoneLabel != null && zoneLabel.toLowerCase().contains("open")) {
-            logWarning("LoH formation: Land of Heroes reads LOCKED ('Opens in') — not open yet, aborting.");
+            logWarning(tag + ": reads LOCKED ('Opens in') — not open yet, skipping.");
             return;
         }
-        logInfo("LoH formation: Land of Heroes looks open — tapping its banner to enter.");
+        logInfo(tag + ": looks open — tapping its banner to enter.");
         // Step 1: banner -> stage screen (poll for the "Challenge" button).
-        if (!navStep(LOH_ZONE_BANNER, STAGE_ANCHOR_TL, STAGE_ANCHOR_BR, STAGE_ANCHOR_TEXT, "banner->stage")) {
-            logWarning("LoH formation: never reached the Land of Heroes stage screen; aborting.");
+        if (!navStep(zone.banner(), STAGE_ANCHOR_TL, STAGE_ANCHOR_BR, STAGE_ANCHOR_TEXT, tag + " banner->stage")) {
+            logWarning(tag + ": never reached the stage screen; aborting.");
             return;
         }
         saveLabyrinthFrame("stage", 0);
 
+        if (zone.singleSquad()) {
+            setupSingleSquadZone(zone, tag);
+            return;
+        }
+
         // Step 2: Challenge -> Squad Config (poll for the "Squad Config" title).
-        if (!navStep(LOH_CHALLENGE_BTN, SQUAD_ANCHOR_TL, SQUAD_ANCHOR_BR, SQUAD_ANCHOR_TEXT, "Challenge->SquadConfig")) {
-            logWarning("LoH formation: never reached Squad Config; aborting.");
+        if (!navStep(LOH_CHALLENGE_BTN, SQUAD_ANCHOR_TL, SQUAD_ANCHOR_BR, SQUAD_ANCHOR_TEXT, tag + " Challenge->SquadConfig")) {
+            logWarning(tag + ": never reached Squad Config; aborting.");
             return;
         }
         saveLabyrinthFrame("squad", 0);
 
         // Step 3: Quick Deploy fills heroes + troops for BOTH squads IN PLACE (stays on Squad Config,
         // so there is no screen change to verify — a short settle is enough).
-        logInfo("LoH formation: tapping Quick Deploy (fills squads in place).");
+        logInfo(tag + ": tapping Quick Deploy (fills squads in place).");
         tapPoint(LOH_QUICK_DEPLOY_BTN);
         sleepTask(LABYRINTH_LOAD_DELAY);
         saveLabyrinthFrame("squad_filled", 0);
@@ -487,37 +567,64 @@ public class DailyLabyrinthRoutine extends DelayedTask {
         // Step 4: configure each squad's ratio in turn. After a squad's "Save and Exit" the game drops
         // back to the STAGE screen, so for squads after the first we re-tap Challenge to reach Squad
         // Config again. Quick Deploy above already filled every squad, so we don't repeat it.
-        int[][] squadRatios = readSquadRatiosFromConfig();
+        int[][] squadRatios = readSquadRatiosFromConfig(zone);
         for (int i = 0; i < squadRatios.length; i++) {
             if (i > 0) {
-                logInfo("LoH formation: re-entering Squad Config for squad " + (i + 1) + ".");
+                logInfo(tag + ": re-entering Squad Config for squad " + (i + 1) + ".");
                 if (!navStep(LOH_CHALLENGE_BTN, SQUAD_ANCHOR_TL, SQUAD_ANCHOR_BR, SQUAD_ANCHOR_TEXT,
-                        "Challenge->SquadConfig(sq" + (i + 1) + ")")) {
-                    logWarning("LoH formation: could not re-enter Squad Config for squad " + (i + 1)
+                        tag + " Challenge->SquadConfig(sq" + (i + 1) + ")")) {
+                    logWarning(tag + ": could not re-enter Squad Config for squad " + (i + 1)
                             + "; aborting remaining squads.");
                     return;
                 }
             }
-            if (!configureSquadRatio(i + 1, LOH_SQUAD_EDIT_BTNS[i], squadRatios[i])) {
-                logWarning("LoH formation: squad " + (i + 1) + " setup failed; aborting remaining squads.");
+            if (!configureSquadRatio(tag, i + 1, LOH_SQUAD_EDIT_BTNS[i], squadRatios[i])) {
+                logWarning(tag + ": squad " + (i + 1) + " setup failed; aborting remaining squads.");
                 return;
             }
         }
 
-        logInfo("LoH formation: all squads configured. STOPPING before Deploy (no battle attempt spent).");
+        logInfo(tag + ": all squads configured. STOPPING before Deploy (no battle attempt spent).");
     }
 
-    /** Reads the per-squad {Inf,Lan,Mrk} ratios from config (set on the Labyrinth tab in the UI),
-     *  falling back to {@link #LOH_DEFAULT_SQUAD_RATIOS} for any value that's missing/out of range. */
-    private int[][] readSquadRatiosFromConfig() {
+    /**
+     * matt/2026-08-13: Cave of Monsters / Charm Mine's actual flow, proven live via ADB. Challenge
+     * lands DIRECTLY on the combined troop-detail screen (Infantry/Lancer/Marksman, ONE Balance
+     * button) -- no Squad Config, no Quick Deploy, no second squad. Only squad1Keys is used.
+     */
+    private void setupSingleSquadZone(ZoneFormation zone, String tag) {
+        // Challenge -> troop-detail screen directly. The screen's own title is the zone's name
+        // (e.g. "Cave of Monsters"), so that's the anchor text -- generic across any single-squad zone.
+        if (!navStep(LOH_CHALLENGE_BTN, TROOP_ANCHOR_TL, TROOP_ANCHOR_BR, zone.zoneName().toLowerCase(),
+                tag + " Challenge->troop")) {
+            logWarning(tag + ": never reached the troop-detail screen; aborting.");
+            return;
+        }
+        saveLabyrinthFrame("troop", 0);
+
+        int[] ratio = readSingleRatioFromConfig(zone);
+        if (!driveBalanceAndSave(tag, "single", zone.zoneName().toLowerCase(), ratio)) {
+            logWarning(tag + ": ratio setup failed.");
+            return;
+        }
+        logInfo(tag + ": configured. STOPPING before Deploy (no battle attempt spent).");
+    }
+
+    /** Reads the per-squad {Inf,Lan,Mrk} ratios from the zone's config keys, falling back to
+     *  {@link #LOH_DEFAULT_SQUAD_RATIOS} for any value that's missing/out of range. */
+    private int[][] readSquadRatiosFromConfig(ZoneFormation zone) {
         int[][] d = LOH_DEFAULT_SQUAD_RATIOS;
         return new int[][] {
-            { cfgInt(ConfigurationKeyEnum.LABYRINTH_SQUAD1_INFANTRY_INT, d[0][0]),
-              cfgInt(ConfigurationKeyEnum.LABYRINTH_SQUAD1_LANCER_INT,   d[0][1]),
-              cfgInt(ConfigurationKeyEnum.LABYRINTH_SQUAD1_MARKSMAN_INT, d[0][2]) },
-            { cfgInt(ConfigurationKeyEnum.LABYRINTH_SQUAD2_INFANTRY_INT, d[1][0]),
-              cfgInt(ConfigurationKeyEnum.LABYRINTH_SQUAD2_LANCER_INT,   d[1][1]),
-              cfgInt(ConfigurationKeyEnum.LABYRINTH_SQUAD2_MARKSMAN_INT, d[1][2]) },
+            { cfgInt(zone.squad1Keys()[0], d[0][0]), cfgInt(zone.squad1Keys()[1], d[0][1]), cfgInt(zone.squad1Keys()[2], d[0][2]) },
+            { cfgInt(zone.squad2Keys()[0], d[1][0]), cfgInt(zone.squad2Keys()[1], d[1][1]), cfgInt(zone.squad2Keys()[2], d[1][2]) },
+        };
+    }
+
+    /** Reads a single-squad zone's {Inf,Lan,Mrk} ratio from its squad1Keys (squad2Keys unused). */
+    private int[] readSingleRatioFromConfig(ZoneFormation zone) {
+        int[] d = LOH_DEFAULT_SQUAD_RATIOS[0];
+        return new int[] {
+            cfgInt(zone.squad1Keys()[0], d[0]), cfgInt(zone.squad1Keys()[1], d[1]), cfgInt(zone.squad1Keys()[2], d[2])
         };
     }
 
@@ -542,26 +649,90 @@ public class DailyLabyrinthRoutine extends DelayedTask {
      * Save-and-Exit dialog is what actually persists it (Confirm on the popup alone does not —
      * verified live 2026-08-10).</p>
      */
-    private boolean configureSquadRatio(int squadNumber, PointData editFormationBtn, int[] ratio) {
-        logInfo("LoH formation: configuring Squad " + squadNumber + " -> "
+    private boolean configureSquadRatio(String tag, int squadNumber, PointData editFormationBtn, int[] ratio) {
+        logInfo(tag + ": configuring Squad " + squadNumber + " -> "
                 + ratio[0] + "/" + ratio[1] + "/" + ratio[2] + " (Inf/Lan/Mrk).");
 
         // Edit Formation -> troop-detail (poll for the "Troop Ratio" label).
         if (!navStep(editFormationBtn, TROOP_ANCHOR_TL, TROOP_ANCHOR_BR, TROOP_ANCHOR_TEXT,
-                "EditFormation->troop(sq" + squadNumber + ")")) {
-            logWarning("LoH formation: squad " + squadNumber + " — never reached troop-detail.");
+                tag + " EditFormation->troop(sq" + squadNumber + ")")) {
+            logWarning(tag + ": squad " + squadNumber + " — never reached troop-detail.");
             return false;
         }
         saveLabyrinthFrame("troop", squadNumber);
 
+        return driveBalanceAndSave(tag, "sq" + squadNumber, TROOP_ANCHOR_TEXT, ratio);
+    }
+
+    /**
+     * matt/2026-08-13: extracted from {@code configureSquadRatio} so both the two-squad (Land of
+     * Heroes) and single-squad (Cave of Monsters / Charm Mine) flows share one implementation.
+     * Assumes we're ALREADY on the troop-detail screen (Balance button visible) -- drives
+     * Balance → the three sliders → Confirm → back → Save and Exit.
+     *
+     * <p>The sliders are driven in ASCENDING-target order so the rows that need to go DOWN move
+     * before the rows that need to go UP — otherwise a raise can stall against the 100% cap (the
+     * game refuses to push a row up while the total is already 100%).</p>
+     *
+     * <p>"Use as default" is deliberately left unticked so each squad/zone keeps its own ratio, and
+     * the Save-and-Exit dialog is what actually persists it (Confirm on the popup alone does not —
+     * verified live 2026-08-10).</p>
+     *
+     * @param label a short tag for logging (e.g. "sq1", "sq2", "single")
+     * @param troopAnchorText the expected text on the troop-detail screen's title (e.g. "heroes" for
+     *                        Land of Heroes, or the zone's own lowercased name for single-squad zones)
+     *                        -- used to confirm Confirm returned us there, not a fixed "heroes" string
+     */
+    /**
+     * matt/2026-08-13: the REAL fix for Cave of Monsters / Charm Mine -- since neither zone persists
+     * a formation between visits, the only place setting a ratio actually matters is right here,
+     * immediately before the real Deploy tap in {@code attemptNormalChallenge}. Best-effort: any
+     * failure just logs a warning and lets Deploy proceed with whatever ratio is already showing
+     * (never blocks a real battle attempt over a formation-setup hiccup).
+     */
+    private void setRatioBeforeDeploy(ZoneFormation zone, int dungeonNumber) {
+        String tag = zone.zoneName() + " pre-deploy ratio";
+        int[] ratio = readSingleRatioFromConfig(zone);
+        logInfo(tag + ": setting " + ratio[0] + "/" + ratio[1] + "/" + ratio[2] + " (Inf/Lan/Mrk) "
+                + "before dungeon " + dungeonNumber + " deploy.");
+
+        if (!navStep(LOH_BALANCE_BTN, BALANCE_ANCHOR_TL, BALANCE_ANCHOR_BR, BALANCE_ANCHOR_TEXT,
+                tag + " Balance->popup")) {
+            logWarning(tag + ": never reached the Balance popup; deploying with whatever ratio is already set.");
+            return;
+        }
+
+        floorRowToZero("Infantry", LOH_INFANTRY_ROW_Y);
+        floorRowToZero("Lancer",   LOH_LANCER_ROW_Y);
+        floorRowToZero("Marksman", LOH_MARKSMAN_ROW_Y);
+        fillRowToTarget("Infantry", LOH_INFANTRY_ROW_Y, LOH_INF_PCT_TL, LOH_INF_PCT_BR, ratio[0]);
+        fillRowToTarget("Lancer",   LOH_LANCER_ROW_Y,   LOH_LAN_PCT_TL, LOH_LAN_PCT_BR, ratio[1]);
+        fillRowToTarget("Marksman", LOH_MARKSMAN_ROW_Y, LOH_MRK_PCT_TL, LOH_MRK_PCT_BR, ratio[2]);
+
+        Integer vi = readPercent(LOH_INF_PCT_TL, LOH_INF_PCT_BR);
+        Integer vl = readPercent(LOH_LAN_PCT_TL, LOH_LAN_PCT_BR);
+        Integer vm = readPercent(LOH_MRK_PCT_TL, LOH_MRK_PCT_BR);
+        logInfo(tag + ": post-set readback = " + vi + "/" + vl + "/" + vm
+                + " (target " + ratio[0] + "/" + ratio[1] + "/" + ratio[2] + ").");
+
+        // Confirm -> back to the troop-detail/pre-deploy screen. No "Save and Exit" step here --
+        // we're deploying immediately after, not exiting, so there's nothing further to persist.
+        if (!navStep(LOH_CONFIRM_BTN, TROOP_ANCHOR_TL, TROOP_ANCHOR_BR, zone.zoneName().toLowerCase(),
+                tag + " Confirm->troop")) {
+            logWarning(tag + ": Confirm didn't visibly return to the pre-deploy screen "
+                    + "(continuing to Deploy anyway).");
+        }
+    }
+
+    private boolean driveBalanceAndSave(String tag, String label, String troopAnchorText, int[] ratio) {
         // Balance -> ratio popup (poll for the "Balance" popup title). This is the critical gate:
         // the OCR slider-driver only works once we are genuinely on the popup.
         if (!navStep(LOH_BALANCE_BTN, BALANCE_ANCHOR_TL, BALANCE_ANCHOR_BR, BALANCE_ANCHOR_TEXT,
-                "Balance->popup(sq" + squadNumber + ")")) {
-            logWarning("LoH formation: squad " + squadNumber + " — never reached the Balance popup.");
+                tag + " Balance->popup(" + label + ")")) {
+            logWarning(tag + ": " + label + " — never reached the Balance popup.");
             return false;
         }
-        saveLabyrinthFrame("balance_popup", squadNumber);
+        saveLabyrinthFrame("balance_popup", 0);
 
         // matt's approach: ZERO all three rows first, THEN fill each to target top-to-bottom. Zeroing
         // everything up front means the running total is 0 when we start adding, so a fill can never be
@@ -579,28 +750,28 @@ public class DailyLabyrinthRoutine extends DelayedTask {
         Integer vi = readPercent(LOH_INF_PCT_TL, LOH_INF_PCT_BR);
         Integer vl = readPercent(LOH_LAN_PCT_TL, LOH_LAN_PCT_BR);
         Integer vm = readPercent(LOH_MRK_PCT_TL, LOH_MRK_PCT_BR);
-        logInfo("LoH formation: Squad " + squadNumber + " post-set readback = "
+        logInfo(tag + ": " + label + " post-set readback = "
                 + vi + "/" + vl + "/" + vm + " (target " + ratio[0] + "/" + ratio[1] + "/" + ratio[2] + ").");
-        saveLabyrinthFrame("balance_set", squadNumber);
+        saveLabyrinthFrame("balance_set", 0);
 
         // Confirm the popup (per-squad; no "use as default"). Popup closes -> back on troop-detail.
-        if (!navStep(LOH_CONFIRM_BTN, TROOP_ANCHOR_TL, TROOP_ANCHOR_BR, TROOP_ANCHOR_TEXT,
-                "Confirm->troop(sq" + squadNumber + ")")) {
-            logWarning("LoH formation: squad " + squadNumber + " — Confirm didn't return to troop-detail "
+        if (!navStep(LOH_CONFIRM_BTN, TROOP_ANCHOR_TL, TROOP_ANCHOR_BR, troopAnchorText,
+                tag + " Confirm->troop(" + label + ")")) {
+            logWarning(tag + ": " + label + " — Confirm didn't return to troop-detail "
                     + "(continuing to the save step anyway).");
         }
 
         // Exit the troop-detail -> "save the formation first?" dialog (poll for the "Save and Exit"
         // button) -> tap it to persist. Confirm on the popup alone does NOT save.
         if (!navStep(LOH_FORMATION_BACK_ARROW, SAVE_ANCHOR_TL, SAVE_ANCHOR_BR, SAVE_ANCHOR_TEXT,
-                "back->saveDialog(sq" + squadNumber + ")")) {
-            logWarning("LoH formation: squad " + squadNumber + " — save dialog never appeared; "
+                tag + " back->saveDialog(" + label + ")")) {
+            logWarning(tag + ": " + label + " — save dialog never appeared; "
                     + "ratio may not have persisted.");
             return false;
         }
         tapPoint(LOH_SAVE_AND_EXIT_BTN);
         sleepTask(MENU_NAVIGATION_DELAY);
-        logInfo("LoH formation: Squad " + squadNumber + " ratio saved.");
+        logInfo(tag + ": " + label + " ratio saved.");
         return true;
     }
 
@@ -787,6 +958,16 @@ public class DailyLabyrinthRoutine extends DelayedTask {
         LocalDateTime nextExecution = LocalDateTime.now().plusHours(1);
         logWarning(reason + ". Rescheduling task for one hour later.");
         this.reschedule(nextExecution);
+    }
+
+    /**
+     * matt/2026-08-13: "kick Labyrinth off at noon every day" -- reads the picked local start time
+     * (LABYRINTH_DAILY_START_TIME_STRING, HH:mm, defaults to noon) instead of always following the
+     * game's own 00:00 UTC reset boundary.
+     */
+    private LocalDateTime nextLabyrinthStartTime() {
+        String startTime = profile.getConfig(ConfigurationKeyEnum.LABYRINTH_DAILY_START_TIME_STRING, String.class);
+        return GameTimeUtils.nextLocalTime(startTime);
     }
 
 }

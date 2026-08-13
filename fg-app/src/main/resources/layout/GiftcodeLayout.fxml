@@ -8,7 +8,7 @@
     <ScrollPane fitToWidth="true" hbarPolicy="NEVER" styleClass="task-page-scroll" vbarPolicy="AS_NEEDED" VBox.vgrow="ALWAYS">
         <VBox styleClass="task-page-root" maxWidth="Infinity" spacing="14">
             <VBox styleClass="content-card">
-                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-red">
+                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                     <Label text="Gift Codes" />
                 </HBox>
                 <VBox styleClass="task-section-inner" spacing="10">
@@ -30,7 +30,7 @@
             </VBox>
 
             <VBox styleClass="content-card">
-                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-red">
+                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                     <Label text="Recipients &amp; Claims" />
                 </HBox>
                 <VBox styleClass="task-section-inner" spacing="10">

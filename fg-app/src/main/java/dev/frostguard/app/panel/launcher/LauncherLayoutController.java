@@ -750,31 +750,71 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         );
         //@formatter:on
 
-        // matt, 2026-08-10: event-type screens are consolidated into ONE "Events" sidebar item that
-        // opens a tabbed page (a tab per event + a Labyrinth tab), instead of many separate entries.
-        // Everything else he doesn't use day-to-day stays in the "More" collapsible group.
+        // matt, 2026-08-10: event-type screens are consolidated into ONE "Events" sidebar item.
+        //
+        // matt, 2026-08-13: extended the pattern to the rest of the sidebar. FIRST attempt crammed
+        // 10 items into a horizontal TabPane -- overflowed into a dropdown with the leftmost tab
+        // clipped. Splitting them into separate hubs ("Special Events" etc) was matt's rejected
+        // SECOND attempt -- he wants everything back together under Events, just organized better.
+        // REAL fix: 10 short horizontal tabs will never fit this sidebar width no matter how they're
+        // trimmed (two of the labels alone -- "Alliance Championship" / "Alliance Mobilization" --
+        // are ~170px each). So the Events hub is no longer a TabPane at all -- it's a vertical side
+        // list (installSideNavHub), the same pattern Windows Settings / VS Code settings use for many
+        // categories: a named list on the left, the selected screen on the right. Fits any number of
+        // entries with zero overflow or clipping, ever. Every OTHER hub (City/Alliance/Economy/
+        // Troops/Account, 3-8 items each) stays a normal TabPane since those genuinely fit.
         java.util.List<String> eventOrder = java.util.List.of(
-                "Events", "Alliance Championship", "Alliance Mobilization", "Bear Trap", "Fishing Tournament");
+                "Events", "Alliance Championship", "Alliance Mobilization", "Bear Trap", "Fishing Tournament", "Labyrinth");
+        java.util.List<String> cityOrder = java.util.List.of(
+                "City Upgrades", "City Events", "Extra City Events", "Research");
+        java.util.List<String> allianceOrder = java.util.List.of(
+                "Alliance", "Alliance Championship", "Alliance Mobilization", "Alliance Shop");
+        java.util.List<String> economyOrder = java.util.List.of(
+                "Shop", "Deals", "Get Giftcodes");
+        java.util.List<String> troopsOrder = java.util.List.of(
+                "Training", "Gather", "Intel", "Rally", "Beast Hunting", "Chief Order", "Pets");
+        java.util.List<String> accountOrder = java.util.List.of(
+                "Character", "Skip Tutorial", "Experts");
         java.util.Set<String> tucked = java.util.Set.of(
-                "Dummy Task", "Shop", "Alliance Shop", "Beast Hunting",
-                "Experts", "Debugging", "Task Builder", "Skip Tutorial", "Character");
+                "Dummy Task", "Debugging", "Task Builder");
 
+        // Alliance Championship + Alliance Mobilization are shared between Events and Alliance --
+        // both hubs get their own tab/entry for them (loaded once, same root reused in both places).
         java.util.LinkedHashMap<String, Parent> eventRoots = new java.util.LinkedHashMap<>();
+        java.util.LinkedHashMap<String, Parent> cityRoots = new java.util.LinkedHashMap<>();
+        java.util.LinkedHashMap<String, Parent> allianceRoots = new java.util.LinkedHashMap<>();
+        java.util.LinkedHashMap<String, Parent> economyRoots = new java.util.LinkedHashMap<>();
+        java.util.LinkedHashMap<String, Parent> troopsRoots = new java.util.LinkedHashMap<>();
+        java.util.LinkedHashMap<String, Parent> accountRoots = new java.util.LinkedHashMap<>();
         java.util.List<Button> tuckedButtons = new java.util.ArrayList<>();
 
         for (ModuleDefinition module : modules) {
             consoleLogLayoutController.appendMessage(
                     new LogMessageData(TpMessageSeverityEnum.INFO, "Loading module: " + module.buttonTitle(), "-", "-"));
 
+            String title = module.buttonTitle();
             Object controller = module.createController(profileManagerLayoutController);
-            moduleControllers.put(module.buttonTitle(), controller);
+            moduleControllers.put(title, controller);
 
-            if (eventOrder.contains(module.buttonTitle())) {
-                // Event screens become tabs in the Events hub — load the root, no standalone button.
-                eventRoots.put(module.buttonTitle(), loadNode(module.fxmlName(), controller));
+            if (eventOrder.contains(title)) {
+                Parent root = loadNode(module.fxmlName(), controller);
+                eventRoots.put(title, root);
+                if (allianceOrder.contains(title)) {
+                    allianceRoots.put(title, root);
+                }
+            } else if (cityOrder.contains(title)) {
+                cityRoots.put(title, loadNode(module.fxmlName(), controller));
+            } else if (allianceOrder.contains(title)) {
+                allianceRoots.put(title, loadNode(module.fxmlName(), controller));
+            } else if (economyOrder.contains(title)) {
+                economyRoots.put(title, loadNode(module.fxmlName(), controller));
+            } else if (troopsOrder.contains(title)) {
+                troopsRoots.put(title, loadNode(module.fxmlName(), controller));
+            } else if (accountOrder.contains(title)) {
+                accountRoots.put(title, loadNode(module.fxmlName(), controller));
             } else {
-                Button moduleButton = addButton(module.fxmlName(), module.buttonTitle(), module.icon(), controller);
-                if (tucked.contains(module.buttonTitle())) {
+                Button moduleButton = addButton(module.fxmlName(), title, module.icon(), controller);
+                if (tucked.contains(title)) {
                     tuckedButtons.add(moduleButton);
                 }
             }
@@ -789,46 +829,156 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         labyrinthController.attachProfileListener(profileManagerLayoutController);
         moduleControllers.put("Labyrinth", labyrinthController);
         profileManagerLayoutController.addProfileLoadListener(labyrinthController);
-        Parent labyrinthRoot = loadNode("LabyrinthLayout", labyrinthController);
+        eventRoots.put("Labyrinth", loadNode("LabyrinthLayout", labyrinthController));
 
-        installEventsHub(eventOrder, eventRoots, labyrinthRoot);
-        installCollapsibleSection("More", tuckedButtons, false);
+        installEventsHub(eventOrder, eventRoots);
+        installTabbedHub("City", MaterialDesignC.CITY_VARIANT_OUTLINE, cityOrder, cityRoots);
+        installTabbedHub("Alliance", MaterialDesignA.ACCOUNT_GROUP_OUTLINE, allianceOrder, allianceRoots);
+        installTabbedHub("Economy", MaterialDesignS.STORE_OUTLINE, economyOrder, economyRoots);
+        installTabbedHub("Troops", MaterialDesignS.SWORD_CROSS, troopsOrder, troopsRoots);
+        installTabbedHub("Account", MaterialDesignA.ACCOUNT_OUTLINE, accountOrder, accountRoots);
+        installCollapsibleSection("More (Dev Tools)", tuckedButtons, false);
 
         profileManagerLayoutController.addProfileLoadListener(this);
     }
 
     /**
-     * Builds a single "Events" sidebar button that opens a tabbed page: one tab per event screen (in
-     * {@code order}), plus a Labyrinth tab. Each tab hosts the screen's already-loaded root, so all
-     * their settings work exactly as before — they're just consolidated onto one page.
+     * matt/2026-08-13: "apply this style to all BG" — every hub (City/Alliance/Economy/Troops/
+     * Account) uses the same side-nav pattern as Events now, not a TabPane. Builds one sidebar
+     * button that opens a named list on the left + the selected screen on the right, one entry per
+     * screen in {@code order} that actually loaded a root.
      */
-    private void installEventsHub(java.util.List<String> order,
-                                  java.util.Map<String, Parent> eventRoots,
-                                  Parent labyrinthRoot) {
-        javafx.scene.control.TabPane pane = new javafx.scene.control.TabPane();
-        pane.setTabClosingPolicy(javafx.scene.control.TabPane.TabClosingPolicy.UNAVAILABLE);
-        pane.setMaxWidth(Double.MAX_VALUE);
-        pane.setMaxHeight(Double.MAX_VALUE);
-
+    private void installTabbedHub(String hubName, Ikon icon, java.util.List<String> order,
+                                   java.util.Map<String, Parent> roots) {
+        java.util.LinkedHashMap<String, Parent> entries = new java.util.LinkedHashMap<>();
         for (String title : order) {
-            Parent root = eventRoots.get(title);
+            Parent root = roots.get(title);
             if (root != null) {
-                javafx.scene.control.Tab tab = new javafx.scene.control.Tab(title, root);
-                tab.setClosable(false);
-                pane.getTabs().add(tab);
+                entries.put(title, root);
             }
         }
-        if (labyrinthRoot != null) {
-            javafx.scene.control.Tab lab = new javafx.scene.control.Tab("Labyrinth", labyrinthRoot);
-            lab.setClosable(false);
-            pane.getTabs().add(lab);
-        }
-        if (pane.getTabs().isEmpty()) {
+        Parent sideNav = buildSideNav(entries);
+        if (sideNav == null) {
             return;
         }
+        Button hubButton = createAndConfigureButton(hubName, icon, sideNav);
+        buttonsContainer.getChildren().add(hubButton);
+    }
 
-        Button eventsButton = createAndConfigureButton("Events", MaterialDesignC.CALENDAR_STAR, pane);
+    /**
+     * matt/2026-08-13: "Events" got up to 10 sub-screens (the inner EventsLayout's own 5 -- Myriad
+     * Bazaar / Journey of Light / Mercenary Event / Hero's Mission / Tundra Truck -- plus Alliance
+     * Championship, Alliance Mobilization, Bear Trap, Fishing Tournament, Labyrinth) and matt wants
+     * them ALL under one Events button. A horizontal TabPane can't fit 10 items at this sidebar width
+     * without overflowing into a dropdown (tried it -- "ugly"), and splitting them into more hubs
+     * wasn't what he wanted either ("move them back to events"). So Events is a vertical side-nav
+     * instead of a TabPane: a named list on the left, the selected screen on the right -- the same
+     * pattern Windows Settings / VS Code use for many categories. Fits any number of entries, no
+     * overflow, ever. If a loaded root turns out to itself contain a TabPane (the inner EventsLayout
+     * split), its tabs get flattened into peer entries in this list instead of nesting one deeper.
+     */
+    private void installEventsHub(java.util.List<String> order, java.util.Map<String, Parent> eventRoots) {
+        java.util.LinkedHashMap<String, Parent> flatEntries = new java.util.LinkedHashMap<>();
+        for (String title : order) {
+            Parent root = eventRoots.get(title);
+            if (root == null) {
+                continue;
+            }
+            javafx.scene.control.TabPane nested = findNestedTabPane(root);
+            if (nested != null) {
+                for (javafx.scene.control.Tab innerTab : new java.util.ArrayList<>(nested.getTabs())) {
+                    flatEntries.put(innerTab.getText(), (Parent) innerTab.getContent());
+                }
+            } else {
+                flatEntries.put(title, root);
+            }
+        }
+        Parent sideNav = buildSideNav(flatEntries);
+        if (sideNav == null) {
+            return;
+        }
+        Button eventsButton = createAndConfigureButton("Events", MaterialDesignC.CALENDAR_STAR, sideNav);
         buttonsContainer.getChildren().add(eventsButton);
+    }
+
+    /**
+     * matt/2026-08-13: shared side-nav builder — a named list on the left (reused `.nav-button` /
+     * `.nav-button.active` styling), the selected screen swapped into a StackPane on the right. The
+     * one navigation pattern for every grouped/hub screen in Bearguard now ("apply this style to all
+     * BG"), not just Events. Returns null if {@code entries} is empty (caller skips installing).
+     */
+    private Parent buildSideNav(java.util.LinkedHashMap<String, Parent> entries) {
+        if (entries.isEmpty()) {
+            return null;
+        }
+
+        BorderPane sideNav = new BorderPane();
+        sideNav.setMaxWidth(Double.MAX_VALUE);
+        sideNav.setMaxHeight(Double.MAX_VALUE);
+
+        VBox navList = new VBox(4);
+        navList.setPrefWidth(160);
+        navList.setMinWidth(160);
+        navList.getStyleClass().add("events-side-nav");
+        ScrollPane navScroll = new ScrollPane(navList);
+        navScroll.setFitToWidth(true);
+        navScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        navScroll.getStyleClass().add("task-page-scroll");
+
+        StackPane content = new StackPane();
+        content.setMaxWidth(Double.MAX_VALUE);
+        content.setMaxHeight(Double.MAX_VALUE);
+
+        java.util.List<Button> navButtons = new java.util.ArrayList<>();
+        boolean[] first = { true };
+        for (java.util.Map.Entry<String, Parent> entry : entries.entrySet()) {
+            Button navButton = new Button(entry.getKey());
+            navButton.setMaxWidth(Double.MAX_VALUE);
+            navButton.getStyleClass().add("nav-button");
+            navButton.setOnAction(e -> {
+                content.getChildren().setAll(entry.getValue());
+                navButtons.forEach(b -> b.getStyleClass().remove("active"));
+                navButton.getStyleClass().add("active");
+            });
+            navButtons.add(navButton);
+            navList.getChildren().add(navButton);
+            if (first[0]) {
+                content.getChildren().setAll(entry.getValue());
+                navButton.getStyleClass().add("active");
+                first[0] = false;
+            }
+        }
+
+        sideNav.setLeft(navScroll);
+        sideNav.setCenter(content);
+        return sideNav;
+    }
+
+    /**
+     * Depth-first search for a TabPane anywhere under {@code root} (including root itself).
+     * Only descends into {@link javafx.scene.layout.Pane} subtypes (VBox, HBox, ...) since
+     * {@code Parent.getChildrenUnmodifiable()} is protected and not visible from here — every
+     * layout container FXML actually uses in this codebase is a Pane subtype, so this covers it.
+     */
+    private javafx.scene.control.TabPane findNestedTabPane(Parent root) {
+        if (root instanceof javafx.scene.control.TabPane) {
+            return (javafx.scene.control.TabPane) root;
+        }
+        if (!(root instanceof javafx.scene.layout.Pane)) {
+            return null;
+        }
+        for (javafx.scene.Node child : ((javafx.scene.layout.Pane) root).getChildren()) {
+            if (child instanceof javafx.scene.control.TabPane) {
+                return (javafx.scene.control.TabPane) child;
+            }
+            if (child instanceof Parent) {
+                javafx.scene.control.TabPane found = findNestedTabPane((Parent) child);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
     }
 
     /**

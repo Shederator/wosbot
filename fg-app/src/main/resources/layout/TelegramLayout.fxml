@@ -18,7 +18,7 @@
                         <VBox styleClass="content-card">
                             <children>
                                 <HBox alignment="CENTER_LEFT" maxWidth="Infinity"
-                                      styleClass="header-blue">
+                                      styleClass="header-yellow">
                                     <children>
                                         <CheckBox fx:id="checkBoxEnabled"
                                                   style="-fx-font-weight: bold; -fx-text-fill: white;"
@@ -112,7 +112,7 @@
                         <VBox styleClass="content-card">
                             <children>
                                 <HBox alignment="CENTER_LEFT" maxWidth="Infinity"
-                                      styleClass="header-green">
+                                      styleClass="header-yellow">
                                     <children>
                                         <Label text="Commands Reference" />
                                     </children>

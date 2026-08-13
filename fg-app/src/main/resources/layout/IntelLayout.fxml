@@ -15,7 +15,7 @@
 
                 <!-- Main enable card -->
                 <VBox styleClass="content-card">
-                    <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-teal">
+                    <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                         <CheckBox fx:id="checkBoxIntel" mnemonicParsing="false"
                                   style="-fx-font-weight: bold;" text="Enable Intel Runs" />
                     </HBox>
@@ -30,7 +30,7 @@
                 <HBox alignment="TOP_LEFT" spacing="14">
 
                     <VBox styleClass="content-card" HBox.hgrow="ALWAYS">
-                        <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-blue">
+                        <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                             <Label text="Intel Categories" />
                         </HBox>
                         <VBox spacing="10" styleClass="task-section-inner">
@@ -48,7 +48,7 @@
                     </VBox>
 
                     <VBox styleClass="content-card" HBox.hgrow="ALWAYS">
-                        <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-green">
+                        <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
                             <Label text="Processing" />
                         </HBox>
                         <VBox spacing="10" styleClass="task-section-inner">
