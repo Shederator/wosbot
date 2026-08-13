@@ -1,4 +1,4 @@
-name: Stable Windows Release
+name: Legacy 2.x — Publish Stable ZIP
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       daily_run_id:
-        description: "Successful Legacy Windows Bundle Candidate run ID from main"
+        description: "Successful Legacy 2.x — Build ZIP Candidate run ID from main"
         required: true
         type: string
 
@@ -55,7 +55,7 @@ jobs:
             exit 1
           fi
           if [[ "${workflow}" != ".github/workflows/daily-windows-bundle.yml" ]]; then
-            echo "::error::Selected run does not belong to Legacy Windows Bundle Candidate."
+            echo "::error::Selected run does not belong to Legacy 2.x — Build ZIP Candidate."
             exit 1
           fi
           echo "sha=${sha}" >> "${GITHUB_OUTPUT}"
@@ -84,7 +84,7 @@ jobs:
             exit 1
           fi
           if (( ${VERSION%%.*} >= 3 )); then
-            echo "::error::Frostguard 3.x must use Windows Channel Release; the legacy ZIP workflow cannot publish an installed Stable identity."
+            echo "::error::Frostguard 3.x must use Release — Windows Stable or Nightly; the legacy ZIP workflow cannot publish an installed Stable identity."
             exit 1
           fi
           project_version="$(./mvnw -B --no-transfer-progress -q help:evaluate -Dexpression=project.version -DforceStdout)"

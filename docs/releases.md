@@ -16,9 +16,35 @@ it in the release list. The mutable `nightly` release is different: GitHub has
 no built-in latest-prerelease URL, so it provides both the permanent landing
 page and the stable signed-manifest URL required by installed Nightly clients.
 
+## GitHub Actions quick reference
+
+Workflow names use purpose prefixes so related entries stay together in the
+alphabetical Actions sidebar. GitHub schedules always use UTC; the Central
+European local time shown below shifts when daylight-saving time changes.
+
+| Workflow | Runs | Purpose and side effects |
+|---|---|---|
+| **CI — Java Build and Tests** | Automatically for every pull request and every push to `main` | Builds and tests the complete reactor on Linux. It publishes only short-lived test-report artifacts, never a release. |
+| **CI — Windows Installers** | Automatically for pull requests that touch packaging-related paths | Builds and smoke-tests the Stable and Nightly MSI packages. It uploads short-lived Actions artifacts, never a GitHub Release. |
+| **CI — Windows Installers** | Manually with prerelease application and numeric MSI versions | Produces an unpublished Stable release candidate for upgrade testing. It does not change `releases/latest`. |
+| **PR Build — Create Test Release** | Manually in Actions or dispatched through Discord `/build-pr` | Combines selected open pull requests and publishes a temporary `pr-test-*` prerelease. A Discord-originated request receives the result in Discord. |
+| **PR Build — Clean Up Test Releases** | Daily at 04:43 UTC (06:43 CEST / 05:43 CET), or manually | Deletes expired `pr-test-*` releases and their tags, including builds whose selected pull requests are all closed. It never touches Nightly or permanent releases. |
+| **Release — Windows Stable or Nightly** | Daily at 03:17 UTC (05:17 CEST / 04:17 CET) | Builds and publishes the next authenticated Nightly from `main`, promotes its signed feed, and updates the maintained Nightly Discord message. |
+| **Release — Windows Stable or Nightly** | Manually from `main` with channel, version, and minimum updater version | Publishes a current 3.x Stable or an additional Nightly. This is the only current Windows release workflow. |
+| **Legacy 2.x — Build ZIP Candidate** | Manually | Builds a legacy 2.x ZIP as an Actions artifact. It does not publish a release or update Discord. |
+| **Legacy 2.x — Publish Stable ZIP** | Manually with a version and successful candidate run ID | Verifies and publishes one selected legacy 2.x candidate as Stable, then updates the maintained Stable Discord message. It rejects Frostguard 3.x. |
+| **Discord — Deploy /build-pr Worker** | Manually | Tests and deploys the Cloudflare Worker that receives Discord interactions. |
+| **Discord — Sync /build-pr Command** | Manually | Registers the guild-scoped `/build-pr` command and removes duplicate global commands. |
+| **Discord — Refresh Nightly Message** | Manually | Re-resolves the current signed Nightly release and refreshes its maintained Discord message without building or publishing a release. |
+| **Discord — Refresh Stable Message** | Manually | Re-resolves GitHub's latest Stable release and refreshes its maintained Discord message without building or publishing a release. |
+
+Manual release, legacy publication, cleanup, deployment, synchronization, and
+repair workflows can modify GitHub Releases or external services. Inspect their
+inputs and the relevant section below before selecting **Run workflow**.
+
 ## Authenticated installed releases
 
-**Windows Channel Release** runs Nightly automatically once per day
+**Release — Windows Stable or Nightly** runs Nightly automatically once per day
 from `main`. It reads the previous signed feed and derives the next version,
 resetting the sequence to 1 on a new UTC date. A maintainer can also run it
 manually for Stable or an additional Nightly. Stable versions use `X.Y.Z`;
@@ -66,9 +92,10 @@ recreated.
 
 ### Unpublished Stable release candidates
 
-Before promoting a new Stable major or minor version, manually run **Windows
-Installers** with a prerelease application version such as `3.0.0-rc.1` and a
-numeric Windows Installer version below the final release, such as `2.99.1`.
+Before promoting a new Stable major or minor version, manually run **CI —
+Windows Installers** with a prerelease application version such as
+`3.0.0-rc.1` and a numeric Windows Installer version below the final release,
+such as `2.99.1`.
 The workflow validates that ordering, builds with release updates disabled,
 verifies the pinned Stable launcher hashes, smoke-tests the image, and uploads
 the MSI only as a short-lived Actions artifact. It does not create a GitHub
@@ -82,11 +109,12 @@ of the numeric MSI version.
 
 ## Legacy 2.x ZIP promotion
 
-The manual-only **Legacy Windows Bundle Candidate** workflow can still produce
+The manual-only **Legacy 2.x — Build ZIP Candidate** workflow can still produce
 an Actions artifact for an intentional 2.x maintenance release. It no longer
 publishes a Nightly, has no schedule, and does not update Discord. The legacy
 Stable ZIP workflow promotes one of those successful runs from `main`; it does
-not rebuild a different tree. Run **Stable Windows Release** manually with:
+not rebuild a different tree. Run **Legacy 2.x — Publish Stable ZIP** manually
+with:
 
 - `version`: the `X.Y.Z` value declared in `pom.xml`;
 - `daily_run_id`: a successful manually triggered legacy candidate run from
@@ -127,9 +155,9 @@ Java. A Windows Unknown publisher or SmartScreen warning is currently expected.
 
 The Stable guide links to GitHub's Latest release because the immutable MSI
 filename contains its version. Store the webhook-owned card ID in
-`DISCORD_STABLE_MESSAGE_ID`. Run `Refresh Stable Discord Message` after a Stable
-promotion; it resolves and verifies the exact versioned MSI from Latest before
-updating the maintained card.
+`DISCORD_STABLE_MESSAGE_ID`. Run **Discord — Refresh Stable Message** after a
+Stable promotion; it resolves and verifies the exact versioned MSI from Latest
+before updating the maintained card.
 
 ### Maintained Nightly message
 
@@ -151,7 +179,7 @@ Do not post a new Discord message for every daily build. Store the webhook-owned
 message ID in the repository variable `DISCORD_DAILY_MESSAGE_ID`; successful
 native Nightly publications edit that message with the immutable MSI URL and
 permanent channel URL. Build failures link to Actions and do not replace the
-last working public download. Run **Refresh Nightly Discord Message** to repair
+last working public download. Run **Discord — Refresh Nightly Message** to repair
 the card from the current project-signed feed without building another MSI.
 
 ## Migration

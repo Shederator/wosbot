@@ -13,7 +13,7 @@
 # `nightly` release and real releases are untouched: only tags with the
 # pr-test- prefix are ever considered.
 
-name: PR Test Release Cleanup
+name: PR Build — Clean Up Test Releases
 
 on:
   schedule:

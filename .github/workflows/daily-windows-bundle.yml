@@ -1,4 +1,4 @@
-name: Legacy Windows Bundle Candidate
+name: Legacy 2.x — Build ZIP Candidate
 
 on:
   workflow_dispatch:

@@ -27,7 +27,7 @@
 # Nothing in this workflow pushes to main or to any PR branch: all merging
 # happens on a detached HEAD inside the runner's disposable checkout.
 
-name: PR Test Build
+name: PR Build — Create Test Release
 
 on:
   workflow_dispatch:

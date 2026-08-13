@@ -1,4 +1,4 @@
-name: Refresh Nightly Discord Message
+name: Discord — Refresh Nightly Message
 
 on:
   workflow_dispatch:

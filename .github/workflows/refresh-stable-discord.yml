@@ -1,4 +1,4 @@
-name: Refresh Stable Discord Message
+name: Discord — Refresh Stable Message
 
 on:
   workflow_dispatch:

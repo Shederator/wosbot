@@ -28,27 +28,27 @@ class ChannelPackagingTest(unittest.TestCase):
         installers = (REPO_ROOT / ".github/workflows/windows-native-package.yml").read_text(
             encoding="utf-8")
 
-        self.assertIn("name: CI", ci)
+        self.assertIn("name: CI — Java Build and Tests", ci)
         self.assertIn("  pull_request:", ci)
         self.assertIn("  contents: read", ci)
         self.assertIn("Build and test Maven reactor", ci)
         self.assertNotIn("contents: write", ci)
 
-        self.assertIn("name: Legacy Windows Bundle Candidate", legacy)
+        self.assertIn("name: Legacy 2.x — Build ZIP Candidate", legacy)
         self.assertIn("  workflow_dispatch:", legacy)
         self.assertNotIn("  schedule:", legacy)
         self.assertNotIn("contents: write", legacy)
         self.assertNotIn("gh release create nightly", legacy)
         self.assertNotIn("Update the Nightly Discord message", legacy)
 
-        self.assertIn("name: Windows Channel Release", nightly)
+        self.assertIn("name: Release — Windows Stable or Nightly", nightly)
         self.assertIn("  schedule:", nightly)
         self.assertIn("  workflow_dispatch:", nightly)
         self.assertNotIn("  pull_request:", nightly)
         self.assertNotIn("\n  push:\n", nightly)
         self.assertIn("      contents: write", nightly)
 
-        self.assertIn("name: Windows Installers", installers)
+        self.assertIn("name: CI — Windows Installers", installers)
         self.assertIn("Build and smoke-test Stable and Nightly installers", installers)
         self.assertIn('java-version: "21.0.12+8.0"', installers)
 
@@ -204,7 +204,9 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertNotIn("--cleanup-tag --yes", workflow)
         legacy_stable = (REPO_ROOT / ".github/workflows/stable-windows-release.yml").read_text(
             encoding="utf-8")
-        self.assertIn("Frostguard 3.x must use Windows Channel Release", legacy_stable)
+        self.assertIn(
+            "Frostguard 3.x must use Release — Windows Stable or Nightly",
+            legacy_stable)
 
     def test_stable_discord_refresh_resolves_the_versioned_msi(self):
         workflow = (REPO_ROOT / ".github/workflows/refresh-stable-discord.yml").read_text(
@@ -220,7 +222,7 @@ class ChannelPackagingTest(unittest.TestCase):
         workflow = (REPO_ROOT / ".github/workflows/refresh-nightly-discord.yml").read_text(
             encoding="utf-8")
 
-        self.assertIn("name: Refresh Nightly Discord Message", workflow)
+        self.assertIn("name: Discord — Refresh Nightly Message", workflow)
         self.assertIn("  workflow_dispatch:", workflow)
         self.assertIn("  contents: read", workflow)
         self.assertNotIn("contents: write", workflow)

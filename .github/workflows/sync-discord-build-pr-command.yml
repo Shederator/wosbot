@@ -1,4 +1,4 @@
-name: Sync Discord Commands
+name: Discord — Sync /build-pr Command
 
 on:
   workflow_dispatch:

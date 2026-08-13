@@ -1,4 +1,4 @@
-name: Deploy Discord Build PR Worker
+name: Discord — Deploy /build-pr Worker
 
 on:
   workflow_dispatch:
