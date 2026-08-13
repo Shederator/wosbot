@@ -89,6 +89,17 @@ public class ArenaRoutine extends DelayedTask {
     private static final int OPPONENT_SCORE_STAR_COMPACT_LAYOUT_Y_OFFSET = -4;
     private static final int MIN_STAR_YELLOW_PIXELS = 20;
 
+    // matt, 2026-08-08: the star icon position/threshold above was already
+    // calibrated (used for layout detection), but nobody ever OCR'd the
+    // NUMBER next to it — the routine could tell an opponent was beatable but
+    // had no idea how many Arena points they were worth. This region picks
+    // up the digits immediately to the right of the star icon, on the same
+    // row (same Y-offsets as the icon above). Best-effort placement pending
+    // live confirmation on the Testing profile dry run.
+    private static final int STAR_TEXT_RELATIVE_X = OPPONENT_SCORE_STAR_X + OPPONENT_SCORE_STAR_WIDTH + 2;
+    private static final int STAR_TEXT_WIDTH = 90;
+    private static final int STAR_TEXT_HEIGHT = 30;
+
     private static final PointData QUICK_DEPLOY_BUTTON = new PointData(180, 1200);
     private static final PointData BATTLE_START_BUTTON = new PointData(530, 1200);
     private static final PointData BATTLE_PAUSE_BUTTON = new PointData(60, 962);
@@ -133,6 +144,7 @@ public class ArenaRoutine extends DelayedTask {
     private ServerPolicy serverPolicy;
     private String profileAllianceTag;
     private String profileServer;
+    private boolean dryRun;
 
     // ========== Execution State ==========
     private int attempts;
@@ -140,7 +152,6 @@ public class ArenaRoutine extends DelayedTask {
     private int freeRefreshCount;
     private int gemRefreshCount;
     private boolean extraAttemptsPurchased;
-    private boolean noDailyChallengesDetected;
     private final Set<Integer> attemptedOpponentSlots = new HashSet<>();
 
     public ArenaRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
@@ -174,6 +185,14 @@ public class ArenaRoutine extends DelayedTask {
         this.profileAllianceTag = normalizeAllianceTag(profile.getCharacterAllianceCode());
         this.profileServer = normalizeServer(profile.getCharacterServer());
 
+        Boolean configuredDryRun = profile.getConfig(
+                ConfigurationKeyEnum.ARENA_TASK_DRY_RUN_BOOL, Boolean.class);
+        this.dryRun = configuredDryRun != null && configuredDryRun;
+        if (dryRun) {
+            logWarning("Arena DRY RUN mode active — will select an opponent, open the challenge screen, "
+                    + "and stop WITHOUT battling. Testing only.");
+        }
+
         if (profileAllianceTag == null && alliancePolicy != AlliancePolicy.ANY) {
             logWarning("Arena alliance policy requires profile Alliance, but it is not set. Using Any alliance.");
             alliancePolicy = AlliancePolicy.ANY;
@@ -197,7 +216,6 @@ public class ArenaRoutine extends DelayedTask {
         this.freeRefreshCount = 0;
         this.gemRefreshCount = 0;
         this.extraAttemptsPurchased = false;
-        this.noDailyChallengesDetected = false;
         this.attemptedOpponentSlots.clear();
         logDebug("Execution state reset");
     }
@@ -439,8 +457,18 @@ public class ArenaRoutine extends DelayedTask {
                 OpponentCandidate opponent = findEligibleOpponent();
                 if (opponent != null) {
                     ChallengeOutcome outcome = challengeOpponent(opponent);
+                    if (outcome == ChallengeOutcome.DRY_RUN_STOPPED) {
+                        logInfo("Dry run complete — stopping here for manual verification. No further attempts will be made.");
+                        return;
+                    }
                     if (outcome == ChallengeOutcome.NO_ATTEMPTS) {
                         break;
+                    }
+                    if (outcome == ChallengeOutcome.SKIPPED_DISABLED) {
+                        logInfo(String.format(
+                                "Opponent %d unattackable — trying another eligible opponent without spending an attempt.",
+                                opponent.number()));
+                        continue;
                     }
                     if (outcome == ChallengeOutcome.DEFEAT) {
                         logInfo(String.format(
@@ -489,11 +517,7 @@ public class ArenaRoutine extends DelayedTask {
                     attemptsBought, attempts));
         }
 
-        if (noDailyChallengesDetected && extraAttempts <= 0) {
-            logInfo("No daily arena challenges are available and extra attempts are disabled.");
-        } else {
-            logInfo("Arena run finished after using available eligible attempts.");
-        }
+        logInfo("Arena run finished after using available eligible attempts.");
     }
 
     private OpponentCandidate findEligibleOpponent() {
@@ -503,6 +527,13 @@ public class ArenaRoutine extends DelayedTask {
                 .filter(candidate -> !attemptedOpponentSlots.contains(candidate.number()))
                 .sorted(alliancePolicy.comparator(profileAllianceTag)
                         .thenComparing(serverPolicy.comparator(profileServer))
+                        // Highest-star safe opponent wins — maximizes the Arena
+                        // point payout bucket without sacrificing win-safety
+                        // (every candidate here already passed the WEAKER-power
+                        // gate). Falls back to weakest-power ordering only when
+                        // stars couldn't be OCR'd for anyone.
+                        .thenComparing(OpponentCandidate::hasStarValue, Comparator.reverseOrder())
+                        .thenComparingInt(OpponentCandidate::starSortValue)
                         .thenComparing(OpponentCandidate::hasPowerValue, Comparator.reverseOrder())
                         .thenComparingDouble(OpponentCandidate::powerSortValue)
                         .thenComparingInt(OpponentCandidate::number))
@@ -539,6 +570,7 @@ public class ArenaRoutine extends DelayedTask {
             PowerRead power = readPower(opponentY, opponentNumber, layout);
             AllianceRead alliance = AllianceRead.notChecked();
             ServerRead server = ServerRead.notChecked();
+            StarRead stars = StarRead.notChecked();
             if (power.relation() == PowerRelation.WEAKER) {
                 if (alliancePolicy != AlliancePolicy.ANY && profileAllianceTag != null) {
                     alliance = readAllianceTag(opponentY, opponentNumber);
@@ -546,11 +578,15 @@ public class ArenaRoutine extends DelayedTask {
                 if (serverPolicy != ServerPolicy.ANY && profileServer != null) {
                     server = readServer(opponentY, opponentNumber, layout);
                 }
+                // matt, 2026-08-08: only worth OCR'ing stars for opponents we'd
+                // actually be willing to attack — this is what "safe but
+                // maximize points" targeting sorts on instead of raw power.
+                stars = readStars(opponentY, opponentNumber, layout);
             }
-            OpponentCandidate candidate = classifyOpponent(opponentNumber, opponentY, power, alliance, server);
+            OpponentCandidate candidate = classifyOpponent(opponentNumber, opponentY, power, alliance, server, stars);
             opponents.add(candidate);
-            logInfo(String.format("Opponent %d scan: layout=%s power=%s alliance=%s server=%s decision=%s",
-                    opponentNumber, layout.label, power.logValue(), alliance.logValue(), server.logValue(), candidate.decision()));
+            logInfo(String.format("Opponent %d scan: layout=%s power=%s stars=%s alliance=%s server=%s decision=%s",
+                    opponentNumber, layout.label, power.logValue(), stars.logValue(), alliance.logValue(), server.logValue(), candidate.decision()));
             sleepTask(150);
         }
 
@@ -558,30 +594,30 @@ public class ArenaRoutine extends DelayedTask {
     }
 
     private OpponentCandidate classifyOpponent(int number, int opponentY, PowerRead power,
-                                               AllianceRead alliance, ServerRead server) {
+                                               AllianceRead alliance, ServerRead server, StarRead stars) {
         if (power.relation() != PowerRelation.WEAKER) {
-            return OpponentCandidate.skipped(number, opponentY, power, alliance, server, power.relation().skipReason);
+            return OpponentCandidate.skipped(number, opponentY, power, alliance, server, stars, power.relation().skipReason);
         }
 
         if (alliancePolicy == AlliancePolicy.NEVER_PROFILE_ALLIANCE && profileAllianceTag != null) {
             if (alliance.status == AllianceStatus.UNREADABLE) {
-                return OpponentCandidate.skipped(number, opponentY, power, alliance, server, "alliance unreadable");
+                return OpponentCandidate.skipped(number, opponentY, power, alliance, server, stars, "alliance unreadable");
             }
             if (profileAllianceTag.equals(alliance.tag)) {
-                return OpponentCandidate.skipped(number, opponentY, power, alliance, server, "profile alliance");
+                return OpponentCandidate.skipped(number, opponentY, power, alliance, server, stars, "profile alliance");
             }
         }
 
         if (serverPolicy == ServerPolicy.NEVER_PROFILE_SERVER && profileServer != null) {
             if (server.status != ServerStatus.READ) {
-                return OpponentCandidate.skipped(number, opponentY, power, alliance, server, "server not visible/readable");
+                return OpponentCandidate.skipped(number, opponentY, power, alliance, server, stars, "server not visible/readable");
             }
             if (profileServer.equals(server.value)) {
-                return OpponentCandidate.skipped(number, opponentY, power, alliance, server, "profile server");
+                return OpponentCandidate.skipped(number, opponentY, power, alliance, server, stars, "profile server");
             }
         }
 
-        return OpponentCandidate.eligible(number, opponentY, power, alliance, server);
+        return OpponentCandidate.eligible(number, opponentY, power, alliance, server, stars);
     }
 
     private OpponentLayout detectOpponentLayout(int opponentY, int opponentNumber) {
@@ -751,6 +787,68 @@ public class ArenaRoutine extends DelayedTask {
                 case "B" -> value * 1_000_000_000D;
                 default -> value;
             };
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private StarRead readStars(int opponentY, int opponentNumber, OpponentLayout layout) {
+        int yOffset = layout.powerYOffset() == POWER_TEXT_SERVER_LAYOUT_Y_OFFSET
+                ? OPPONENT_SCORE_STAR_SERVER_LAYOUT_Y_OFFSET
+                : OPPONENT_SCORE_STAR_COMPACT_LAYOUT_Y_OFFSET;
+        int starY = opponentY + yOffset;
+        PointData topLeft = new PointData(STAR_TEXT_RELATIVE_X, starY);
+        PointData bottomRight = new PointData(
+                STAR_TEXT_RELATIVE_X + STAR_TEXT_WIDTH,
+                starY + STAR_TEXT_HEIGHT);
+
+        TesseractSettingsData starSettings = TesseractSettingsData.assembler()
+                .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
+                .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
+                .stripBackground(true)
+                .charWhitelist("0123456789,")
+                .build();
+
+        String text = stringHelper.attemptRecognition(
+                topLeft,
+                bottomRight,
+                3,
+                150L,
+                starSettings,
+                value -> parseStarValue(value) != null,
+                value -> value);
+        Integer starValue = parseStarValue(text);
+
+        if (starValue == null) {
+            logDebug(String.format("Opponent %d star OCR (%s) did not produce a value. Retrying once.",
+                    opponentNumber, layout.label));
+            sleepTask(OCR_RETRY_DELAY_MS);
+            String retryText = readStringValue(topLeft, bottomRight, starSettings);
+            starValue = parseStarValue(retryText);
+            if (starValue == null) {
+                logWarning(String.format("Opponent %d star OCR failed after retry: '%s'", opponentNumber, retryText));
+                return StarRead.unreadable();
+            }
+            logDebug(String.format("Opponent %d star OCR retry succeeded: '%s' -> %d",
+                    opponentNumber, retryText, starValue));
+            return new StarRead(starValue, retryText);
+        }
+
+        logDebug(String.format("Opponent %d star OCR (%s): '%s' -> %d",
+                opponentNumber, layout.label, text, starValue));
+        return new StarRead(starValue, text);
+    }
+
+    private Integer parseStarValue(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        String digitsOnly = text.trim().replace(",", "").replaceAll("[^0-9]", "");
+        if (digitsOnly.isBlank()) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(digitsOnly);
         } catch (NumberFormatException ex) {
             return null;
         }
@@ -979,17 +1077,36 @@ public class ArenaRoutine extends DelayedTask {
         logInfo(String.format("Challenging opponent %d (%s)", opponent.number(), opponent.selectionSummary()));
 
         if (!isChallengeButtonEnabled(opponent)) {
+            // matt, 2026-08-08: a disabled button on THIS opponent does not
+            // necessarily mean the whole daily challenge pool is exhausted —
+            // it could just be a per-target state (already faced this round,
+            // a cooldown, etc.) while other opponents in the list remain
+            // fully attackable. Previously this unconditionally zeroed
+            // `attempts` and stopped the entire run on the very first
+            // disabled button it hit, discarding real remaining attempts.
+            // Now it only excludes this one opponent and lets the normal
+            // findEligibleOpponent()/refresh loop keep going — if it turns
+            // out every opponent really is disabled (true exhaustion), that
+            // loop already discovers this correctly on its own once no
+            // untried eligible opponent is left.
             logInfo(String.format(
-                    "Opponent %d challenge button is disabled. No free attempts available; checking extra attempts.",
+                    "Opponent %d challenge button is disabled. Excluding this opponent and trying another.",
                     opponent.number()));
-            attempts = 0;
-            noDailyChallengesDetected = true;
-            return ChallengeOutcome.NO_ATTEMPTS;
+            attemptedOpponentSlots.add(opponent.number());
+            return ChallengeOutcome.SKIPPED_DISABLED;
         }
 
         attemptedOpponentSlots.add(opponent.number());
         tapPoint(new PointData(OPPONENT_CHALLENGE_BUTTON_X, opponent.opponentY()));
         sleepTask(2000);
+
+        if (dryRun) {
+            logWarning(String.format(
+                    "DRY RUN — opponent %d selected (%s). Challenge screen opened; stopping WITHOUT battling. "
+                            + "No attempt was spent.",
+                    opponent.number(), opponent.selectionSummary()));
+            return ChallengeOutcome.DRY_RUN_STOPPED;
+        }
 
         executeBattleSequence();
         attempts--;
@@ -1376,7 +1493,9 @@ public class ArenaRoutine extends DelayedTask {
     private enum ChallengeOutcome {
         VICTORY,
         DEFEAT,
-        NO_ATTEMPTS
+        NO_ATTEMPTS,
+        SKIPPED_DISABLED,
+        DRY_RUN_STOPPED
     }
 
     private enum OpponentLayout {
@@ -1413,6 +1532,24 @@ public class ArenaRoutine extends DelayedTask {
                 return relation.label;
             }
             return String.format(Locale.ROOT, "%s(%.0f)", relation.label, value);
+        }
+    }
+
+    private record StarRead(Integer value, String rawText) {
+        private static StarRead notChecked() {
+            return new StarRead(null, null);
+        }
+
+        private static StarRead unreadable() {
+            return new StarRead(null, null);
+        }
+
+        private boolean hasValue() {
+            return value != null;
+        }
+
+        private String logValue() {
+            return value == null ? "unread" : String.valueOf(value);
         }
     }
 
@@ -1559,15 +1696,29 @@ public class ArenaRoutine extends DelayedTask {
     }
 
     private record OpponentCandidate(int number, int opponentY, PowerRead power, AllianceRead alliance,
-                                     ServerRead server, boolean eligible, String decision) {
+                                     ServerRead server, StarRead stars, boolean eligible, String decision) {
         private static OpponentCandidate eligible(int number, int opponentY, PowerRead power,
-                                                  AllianceRead alliance, ServerRead server) {
-            return new OpponentCandidate(number, opponentY, power, alliance, server, true, "eligible");
+                                                  AllianceRead alliance, ServerRead server, StarRead stars) {
+            return new OpponentCandidate(number, opponentY, power, alliance, server, stars, true, "eligible");
         }
 
         private static OpponentCandidate skipped(int number, int opponentY, PowerRead power,
-                                                 AllianceRead alliance, ServerRead server, String reason) {
-            return new OpponentCandidate(number, opponentY, power, alliance, server, false, "skip:" + reason);
+                                                 AllianceRead alliance, ServerRead server, StarRead stars, String reason) {
+            return new OpponentCandidate(number, opponentY, power, alliance, server, stars, false, "skip:" + reason);
+        }
+
+        // matt, 2026-08-08: "match the highest-star SAFE (weaker-power) opponent
+        // instead of just the weakest one" — the +9/+10/+11/+12 Arena point
+        // payout is keyed off relative Arena points (stars), not power, so
+        // among opponents we're already willing to fight, more stars is
+        // strictly at least as good, never worse.
+        private boolean hasStarValue() {
+            return stars.hasValue();
+        }
+
+        private int starSortValue() {
+            // Higher stars should sort FIRST — negate for ascending Comparator use.
+            return stars.hasValue() ? -stars.value() : 0;
         }
 
         private boolean matchesServer(String profileServer) {
@@ -1599,8 +1750,8 @@ public class ArenaRoutine extends DelayedTask {
         }
 
         private String selectionSummary() {
-            return String.format("power=%s alliance=%s server=%s",
-                    power.logValue(), alliance.logValue(), server.logValue());
+            return String.format("power=%s stars=%s alliance=%s server=%s",
+                    power.logValue(), stars.logValue(), alliance.logValue(), server.logValue());
         }
     }
 }

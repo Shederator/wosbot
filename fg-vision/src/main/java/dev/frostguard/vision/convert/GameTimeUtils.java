@@ -194,6 +194,11 @@ private static final DateTimeFormatter FULL_TIME =
 
         try {
             DayTimeSplit split = splitDayQualifier(normalised);
+            // matt, 2026-08-08 / 2026-08-12: single-digit hour ("2:41:07") and OCR's dropped
+            // middle colon ("0050:19" for "00:50:19") both handled by the one shared
+            // normalizer -- see normalizeOcrColonSlip() for why this used to live here only
+            // and silently never applied to the isAcceptedFormat() gate.
+            split = new DayTimeSplit(split.dayCount, normalizeOcrColonSlip(split.timePart));
 
             Duration parsed;
 
@@ -382,7 +387,7 @@ private static final DateTimeFormatter STRICT_HMS =
             return false;
         }
         try {
-            String core = stripDayQualifier(input.trim());
+            String core = normalizeOcrColonSlip(stripDayQualifier(input.trim()));
             return checkFullColon(core)
                     || checkHoursMinutesColon(core)
                     || checkMinutesSecondsColon(core)
@@ -402,6 +407,37 @@ private static final DateTimeFormatter STRICT_HMS =
     private static String stripDayQualifier(String raw) {
         Matcher m = DAY_QUALIFIER.matcher(raw);
         return m.matches() ? m.group(2).trim() : raw;
+    }
+
+    // matt/2026-08-12: OCR on the Storehouse fallback timer read "00:50:19" as "0050:19" --
+    // the middle colon (between hours and minutes) dropped, leaving 4 digits then a colon
+    // then 2 digits. isAcceptedFormat() had no checker for that specific malformed shape
+    // (TWO_PART_COLON only matches ONE colon splitting the whole string in two), so a read
+    // that was otherwise correct was rejected outright and fell back to a blind 5-minute
+    // guess instead of trusting the real ~48-minute wait. isAcceptedFormat() previously
+    // didn't share ANY normalization with parseDuration() either -- a fix added to one
+    // silently didn't apply to the other, which is how this drifted apart in the first
+    // place. Both now route through this one shared normalizer.
+    private static final Pattern DROPPED_MIDDLE_COLON = Pattern.compile("(\\d{2})(\\d{2}):(\\d{2})");
+
+    // matt, 2026-08-08 (originally parseDuration-only -- see note above on why that split
+    // let this same gap reopen for isAcceptedFormat): the game prints short countdowns
+    // without a leading zero ("2:41:07"), but the two-digit-hour checkers below don't
+    // match a single digit. Tested live 2026-08-12: "2:41:07" failed isAcceptedFormat
+    // even after parseDuration had supposedly handled it -- because the gate that decides
+    // whether parseDuration ever gets called never had this fix applied to it.
+    private static final Pattern SINGLE_DIGIT_HOUR = Pattern.compile("(\\d):(\\d{2}):(\\d{2})");
+
+    private static String normalizeOcrColonSlip(String segment) {
+        Matcher dropped = DROPPED_MIDDLE_COLON.matcher(segment);
+        if (dropped.matches()) {
+            return dropped.group(1) + ":" + dropped.group(2) + ":" + dropped.group(3);
+        }
+        Matcher singleHour = SINGLE_DIGIT_HOUR.matcher(segment);
+        if (singleHour.matches()) {
+            return "0" + singleHour.group(1) + ":" + singleHour.group(2) + ":" + singleHour.group(3);
+        }
+        return segment;
     }
 
     // ------------------------------------------------------------------

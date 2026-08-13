@@ -1,0 +1,59 @@
+[
+  {
+    "date": "2026-08-12 (manual, pre-automation)",
+    "zones": {
+      "land_of_heroes": {
+        "status": "done_prior_session",
+        "note": "Cleared 8-1 -> 8-9. 8-10 is a confirmed hero-progression wall (not comp-fixable). matt called it done for now on 2026-08-10."
+      },
+      "cave_of_monsters": {
+        "zone": "cave_of_monsters",
+        "stages_cleared_this_rotation": "2-10 through 3-5",
+        "stopped_reason": "power_wall",
+        "wall_stage": "3-6 / 3-7",
+        "note": "Lost twice at 3-6 even after Equalize (33/33/33) matched the enemy's exact even comp -- confirmed pet-power wall, not comp-fixable. Auto-chained loss at 3-7 also unscoted -- same pattern."
+      },
+      "charm_mine": {
+        "zone": "charm_mine",
+        "stages_cleared_this_rotation": "1-1 through 4-9 (matt drove 3-10->4-9 manually)",
+        "stopped_reason": "power_wall",
+        "wall_stage": "4-10",
+        "note": "Lost twice at 4-10 vs 'Dungeon Architect' -- second loss was after the script read the real enemy comp (53/26/20) and set the exact computed counter (26/20/53) via the deterministic slider driver. Confirmed Chief Charm power wall, not comp-fixable."
+      }
+    }
+  },
+  {
+    "date": "2026-08-12 12:23:23",
+    "zones": {
+      "cave_of_monsters": {
+        "status": "dry_run_skip"
+      },
+      "charm_mine": {
+        "status": "dry_run_skip"
+      },
+      "research_center": {
+        "status": "skipped_needs_human_scout"
+      },
+      "gear_forge": {
+        "status": "skipped_needs_human_scout"
+      }
+    }
+  },
+  {
+    "date": "2026-08-12 12:26:35",
+    "zones": {
+      "cave_of_monsters": {
+        "status": "dry_run_skip"
+      },
+      "charm_mine": {
+        "status": "dry_run_skip"
+      },
+      "research_center": {
+        "status": "skipped_needs_human_scout"
+      },
+      "gear_forge": {
+        "status": "skipped_needs_human_scout"
+      }
+    }
+  }
+]

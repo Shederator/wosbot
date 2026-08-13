@@ -14,6 +14,19 @@
                       maxWidth="Infinity">
                     <children>
 
+                        <!-- matt/2026-08-12: unfinished, doesn't work, flagged so it's obvious
+                             at a glance instead of finding out by watching it fail. -->
+                        <VBox styleClass="content-card" style="-fx-background-color: #5a1a1a;">
+                            <children>
+                                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" style="-fx-background-color: #8b2020; -fx-padding: 8 12;">
+                                    <children>
+                                        <Label text="⚠ UNFINISHED — DOES NOT WORK"
+                                               style="-fx-text-fill: white; -fx-font-weight: bold;" />
+                                    </children>
+                                </HBox>
+                            </children>
+                        </VBox>
+
                         <!-- Fishing Minigame Card -->
                         <VBox styleClass="content-card">
                             <children>

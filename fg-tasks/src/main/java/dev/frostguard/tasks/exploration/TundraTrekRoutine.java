@@ -16,6 +16,12 @@ import dev.frostguard.engine.nav.SearchConfigConstants;
 
 public class TundraTrekRoutine extends DelayedTask {
 
+    /**
+     * Backoff applied when the Trek Supplies entry is absent from the city menu entirely,
+     * which on a server/generation without the feature is permanent rather than transient.
+     */
+    private static final int ABSENT_FEATURE_BACKOFF_HOURS = 6;
+
     public TundraTrekRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDailyTask) {
         super(profile, tpDailyTask);
     }
@@ -60,8 +66,18 @@ public class TundraTrekRoutine extends DelayedTask {
                 reschedule(LocalDateTime.now().plusHours(1));
             }
         } else {
-            logError("Failed to navigate to Tundra Trek Supplies after multiple attempts. Rescheduling for 1 hour.");
-            reschedule(LocalDateTime.now().plusHours(1)); // Reschedule for later
+            // matt, 2026-08-08: five swipes through the whole city menu without finding the entry
+            // does not mean navigation glitched — it means Trek Supplies is not on this account's
+            // menu at all. matt plays a Gen 1 server where not every feature exists, and retrying
+            // hourly for something that is not there is pure noise: it opened the left menu, took
+            // five swipes and gave up, 24 times a day, forever. Logged at INFO because a missing
+            // feature is not an error, and backed off hard. If the feature does appear later, the
+            // long retry still finds it within a day, and any real start rescan picks it up
+            // immediately.
+            logInfo("Tundra Trek Supplies is not present in the city menu — likely unavailable on "
+                    + "this server/generation. Backing off for " + ABSENT_FEATURE_BACKOFF_HOURS
+                    + "h instead of retrying hourly.");
+            reschedule(LocalDateTime.now().plusHours(ABSENT_FEATURE_BACKOFF_HOURS));
         }
     }
 

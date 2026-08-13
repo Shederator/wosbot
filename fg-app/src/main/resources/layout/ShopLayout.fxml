@@ -30,24 +30,7 @@
                 </VBox>
             </VBox>
 
-            <!-- Bank -->
-            <VBox styleClass="content-card">
-                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-green">
-                    <Label text="Enable Bank" />
-                </HBox>
-                <VBox spacing="10" styleClass="task-section-inner">
-                    <Label styleClass="task-card-description"
-                           text="Configure automatic bank transactions" wrapText="true" />
-                    <Separator style="-fx-opacity: 0.25;" />
-                    <CheckBox fx:id="checkBoxBank" mnemonicParsing="false" text="Enable Bank" />
-                    <Separator style="-fx-opacity: 0.25;" />
-                    <HBox spacing="10" alignment="CENTER_LEFT">
-                        <Label styleClass="task-field-label" text="Period:" />
-                        <ComboBox fx:id="comboBoxBankDelay" prefWidth="150.0"
-                                  promptText="Select period" />
-                    </HBox>
-                </VBox>
-            </VBox>
+            <!-- matt/2026-08-12: Bank moved to the dedicated Deals panel. -->
 
             <!-- Mystery Shop -->
             <TitledPane text="Mystery Shop" expanded="true" collapsible="false"
@@ -63,6 +46,38 @@
                               text="Buy 50% discounted hero gear (250 badges)" />
                 </VBox>
             </TitledPane>
+
+            <!-- matt/2026-08-13: top-right cart-icon Shop panel, built out tab by tab. -->
+
+            <!-- Custom Armament Chest -->
+            <VBox styleClass="content-card">
+                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
+                    <Label text="Custom Armament Chest" />
+                </HBox>
+                <VBox spacing="10" styleClass="task-section-inner">
+                    <Label styleClass="task-card-description"
+                           text="Rotating, periodic event (may not appear for weeks) -- claims only the free 'Claimable' chest badge, never the paid chest packs. Checked once a day."
+                           wrapText="true" />
+                    <Separator style="-fx-opacity: 0.25;" />
+                    <CheckBox fx:id="checkBoxCustomArmamentChest" mnemonicParsing="false"
+                              text="Claim free chest badge" />
+                </VBox>
+            </VBox>
+
+            <!-- Daily Deals -->
+            <VBox styleClass="content-card">
+                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
+                    <Label text="Daily Deals" />
+                </HBox>
+                <VBox spacing="10" styleClass="task-section-inner">
+                    <Label styleClass="task-card-description"
+                           text="A genuinely free chest badge once a day -- everything else on this tab is a paid pack. Checked once a day."
+                           wrapText="true" />
+                    <Separator style="-fx-opacity: 0.25;" />
+                    <CheckBox fx:id="checkBoxDailyDealsFreeChest" mnemonicParsing="false"
+                              text="Claim free chest badge" />
+                </VBox>
+            </VBox>
 
         </VBox>
     </ScrollPane>

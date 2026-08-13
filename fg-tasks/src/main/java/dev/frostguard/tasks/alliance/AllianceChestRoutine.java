@@ -9,6 +9,7 @@ import dev.frostguard.api.domain.PointData;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import java.time.LocalDateTime;
 
@@ -38,9 +39,18 @@ public AllianceChestRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDailyTa
 		}
 
 
-		gatherLootChests();
-		gatherAllianceGifts();
-		gatherHonorChest();
+		int allianceGiftsCollected = 0;
+		allianceGiftsCollected += gatherLootChests();
+		allianceGiftsCollected += gatherAllianceGifts();
+		allianceGiftsCollected += gatherHonorChest();
+
+		// matt, 2026-08-10: count what was actually collected this pass, not a per-run +1. The
+		// per-row individual-gift loop reports a true claimed count; the loot claim and (config-
+		// gated) honor claim are single blind taps with no on-screen success signal, so each is
+		// counted as 1 when its claim action is performed.
+		if (allianceGiftsCollected > 0) {
+			StatisticsService.obtain().addToCounter(profile, "Alliance Gifts Collected", allianceGiftsCollected);
+		}
 
 
 		restoreHomeScreen();
@@ -67,7 +77,7 @@ private boolean openUpAllianceChestScreen() {
 		return true;
 	}
 
-private void gatherIndividualGifts() {
+private int gatherIndividualGifts() {
 		int giftsClaimed = 0;
 		int consecutiveFailures = 0;
 		int maxConsecutiveFailures = 3;
@@ -103,6 +113,8 @@ private void gatherIndividualGifts() {
 		} else {
 			logInfo(routineLogAllianceChestLine("Zero individual gifts to claim."));
 		}
+
+		return giftsClaimed;
 	}
 
 private void dismissPopupIfPresent() {
@@ -124,7 +136,7 @@ private boolean reachAllianceScreen() {
 		return allianceVerification.isFound();
 	}
 
-private void gatherAllianceGifts() {
+private int gatherAllianceGifts() {
 		logInfo(routineLogAllianceChestLine("Entering alliance gifts section."));
 		tapRandomPoint(new PointData(410, 375), new PointData(626, 420));
 		sleepTask(TAB_CHANGE_WAIT_TIME_MS);
@@ -134,18 +146,23 @@ private void gatherAllianceGifts() {
 				TemplatesEnum.ALLIANCE_CHEST_CLAIM_ALL_BUTTON,
 				SearchConfigConstants.DEFAULT_SINGLE);
 
+		int giftsCollected;
 		if (claimAllButton.isFound()) {
+			// 'Claim All' is only present when at least one gift is claimable, so its presence
+			// proves ≥1 real claim. Count the batch as 1 (the per-gift breakdown isn't exposed here).
 			logInfo(routineLogAllianceChestLine("'Claim All' button detected. Collecting all gifts."));
 			tapPoint(claimAllButton.getPoint());
 			sleepTask(CLAIM_WAIT_TIME_MS);
 
 
 			dismissPopupIfPresent();
+			giftsCollected = 1;
 		} else {
 			logInfo(routineLogAllianceChestLine("Zero 'Claim All' button for gifts. Inspecting for individual gifts."));
-			gatherIndividualGifts();
+			giftsCollected = gatherIndividualGifts();
 		}
 		sleepTask(SHORT_WAIT_TIME_MS);
+		return giftsCollected;
 	}
 
 private void restoreHomeScreen() {
@@ -158,7 +175,7 @@ private void restoreHomeScreen() {
 
 	}
 
-private void gatherLootChests() {
+private int gatherLootChests() {
 		logInfo(routineLogAllianceChestLine("Collecting loot chests."));
 		tapRandomPoint(new PointData(56, 375), new PointData(320, 420));
 		sleepTask(TAB_CHANGE_WAIT_TIME_MS);
@@ -170,9 +187,12 @@ private void gatherLootChests() {
 
 		dismissPopupIfPresent();
 		sleepTask(SHORT_WAIT_TIME_MS);
+
+		// Blind claim tap (no on-screen success signal available here) — count as one loot claim.
+		return 1;
 	}
 
-private void gatherHonorChest() {
+private int gatherHonorChest() {
 		boolean honorChestEnabled = profile.getConfig(ConfigurationKeyEnum.ALLIANCE_HONOR_CHEST_BOOL, Boolean.class);
 
 		if (honorChestEnabled) {
@@ -182,8 +202,11 @@ private void gatherHonorChest() {
 
 
 			dismissPopupIfPresent();
+			// Blind claim tap gated only by config — count as one honor claim when enabled.
+			return 1;
 		} else {
 			logInfo(routineLogAllianceChestLine("Honor chest collection is disabled. Skipping."));
+			return 0;
 		}
 	}
 

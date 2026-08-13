@@ -102,7 +102,9 @@ public final class TesseractOcrProvider {
         log.debug("Engine config: {} ms", System.currentTimeMillis() - step);
 
         step = System.currentTimeMillis();
-        String recognised = executeRecognition(engine, prepared);
+        String recognised = cfg.preserveLineBreaks()
+                ? executeRecognitionMultiline(engine, prepared)
+                : executeRecognition(engine, prepared);
         log.debug("Engine execution: {} ms", System.currentTimeMillis() - step);
 
         if (cfg.isDebug()) {
@@ -179,21 +181,46 @@ public final class TesseractOcrProvider {
         return t;
     }
 
-    /** Builds an engine whose behaviour is controlled by {@code cfg}. */
+    /**
+     * Builds an engine whose behaviour is controlled by {@code cfg}.
+     *
+     * <p>matt, 2026-08-06: language used to be hardcoded to "eng" here
+     * regardless of what any caller configured - fine for HUD numbers, but
+     * silently corrupted anything non-Latin-script (chat is genuinely
+     * multilingual). Now honours {@link TesseractSettingsData#language()},
+     * falling back to "eng" so every pre-existing caller is unaffected.
+     */
     private static Tesseract configureTesseract(TesseractSettingsData cfg) {
         Tesseract t = new Tesseract();
         t.setDatapath(locateTessdata());
-        t.setLanguage("eng");
+        t.setLanguage(cfg.language() != null ? cfg.language() : "eng");
         if (cfg.hasPageSegMode())   t.setPageSegMode(cfg.getPageSegMode());
         if (cfg.hasOcrEngineMode()) t.setOcrEngineMode(cfg.getOcrEngineMode());
         if (cfg.hasAllowedChars())  t.setVariable("tessedit_char_whitelist", cfg.getAllowedChars());
         return t;
     }
 
-    /** Runs the engine and strips whitespace / line breaks. */
+    /**
+     * Runs the engine and strips whitespace, flattening to one line.
+     * Used for every single-value read (HUD numbers, labels) where a flat
+     * string is exactly what's wanted.
+     */
     private static String executeRecognition(Tesseract engine, BufferedImage img)
             throws TesseractException {
         return engine.doOCR(img).replace("\n", "").replace("\r", "").trim();
+    }
+
+    /**
+     * Same as {@link #executeRecognition}, but keeps line breaks intact.
+     *
+     * <p>matt, 2026-08-06: multi-message reads (chat) NEED the line
+     * structure Tesseract already produces - the flattening above was
+     * silently destroying it, which is a real reason chat capture was
+     * coming back as one giant run-on blob instead of one line per message.
+     */
+    private static String executeRecognitionMultiline(Tesseract engine, BufferedImage img)
+            throws TesseractException {
+        return engine.doOCR(img).replace("\r", "").trim();
     }
 
     // =====================================================================

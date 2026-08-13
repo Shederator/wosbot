@@ -14,15 +14,19 @@ import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.TesseractSettingsData;
 import dev.frostguard.api.domain.TesseractSettingsData.PageAnalysis;
+import dev.frostguard.api.domain.JobMetrics;
+import dev.frostguard.api.domain.ProfilesData;
 import dev.frostguard.engine.schedule.CustomTaskConfigurable;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.service.CustomTaskService;
+import dev.frostguard.engine.service.StatisticsService;
 
 /**
  * Bearguard telemetry: samples the top HUD on a schedule and appends the result
@@ -39,6 +43,7 @@ import dev.frostguard.engine.service.CustomTaskService;
  */
 public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable {
 
+    // matt/2026-08-09: hourly, so "last night" (23:00→08:00) and every window has fine-grained data.
     private static final Duration DEFAULT_INTERVAL = Duration.ofHours(1);
     private static final DateTimeFormatter UTC_INPUT_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
@@ -159,23 +164,75 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
             return;
         }
 
+        // All four resources for the Statistics tab's "resources earned over time"
+        // reports. The top HUD only ever shows one resource, so meat/wood/iron come
+        // from the values ResourceStockpileRoutine last scanned (stored in config) —
+        // no extra navigation, and they change slowly enough that the last scan is
+        // fine for a graph. Coal stays the live HUD read (same resource, fresher).
+        Long meat = readStockpile(ConfigurationKeyEnum.RESOURCE_STOCKPILE_MEAT_LONG);
+        Long wood = readStockpile(ConfigurationKeyEnum.RESOURCE_STOCKPILE_WOOD_LONG);
+        Long iron = readStockpile(ConfigurationKeyEnum.RESOURCE_STOCKPILE_IRON_LONG);
+        if (coal == null) {
+            coal = readStockpile(ConfigurationKeyEnum.RESOURCE_STOCKPILE_COAL_LONG);
+        }
+
+        // Steel + the five speedup buckets, all sourced from the config keys the
+        // Resource & Speedup Summary reader (ResourceStockpileRoutine) last cached.
+        // Speedups are stored/logged in MINUTES; the Statistics tab formats them back to durations.
+        Long steel = readStockpile(ConfigurationKeyEnum.RESOURCE_STOCKPILE_STEEL_LONG);
+        Long spGeneral = readStockpile(ConfigurationKeyEnum.SPEEDUP_GENERAL_MIN_LONG);
+        Long spTraining = readStockpile(ConfigurationKeyEnum.SPEEDUP_TRAINING_MIN_LONG);
+        Long spConstruction = readStockpile(ConfigurationKeyEnum.SPEEDUP_CONSTRUCTION_MIN_LONG);
+        Long spResearch = readStockpile(ConfigurationKeyEnum.SPEEDUP_RESEARCH_MIN_LONG);
+        Long spHealing = readStockpile(ConfigurationKeyEnum.SPEEDUP_HEALING_MIN_LONG);
+
         Map<String, Object> sample = new LinkedHashMap<>();
         sample.put("capturedAt", LocalDateTime.now(ZoneOffset.UTC).toString() + "Z");
         sample.put("profile", profile.getName());
         sample.put("power", power);
-        sample.put("coal", coal);
         sample.put("gems", gems);
+        sample.put("meat", meat);
+        sample.put("wood", wood);
+        sample.put("coal", coal);
+        sample.put("iron", iron);
+        sample.put("steel", steel);
+        sample.put("sp_general", spGeneral);
+        sample.put("sp_training", spTraining);
+        sample.put("sp_construction", spConstruction);
+        sample.put("sp_research", spResearch);
+        sample.put("sp_healing", spHealing);
+
+        // Activity snapshot: the running task-run counts and action counters, flattened as
+        // "run.<Task>" / "ctr.<Counter>" number fields. The Statistics tab diffs these between two
+        // snapshots to show "what the bot DID" over a window (27 intel runs, 6 pet adventures, ...).
+        appendActivitySnapshot(sample);
 
         String json = toJson(sample);
         writeSample(json);
 
-        logInfo("bg_telemetry | power=" + power + " coal=" + coal + " gems=" + gems);
+        logInfo("bg_telemetry | power=" + power + " gems=" + gems
+                + " meat=" + meat + " wood=" + wood + " coal=" + coal + " iron=" + iron
+                + " steel=" + steel + " sp(gen/tr/con/res/heal)=" + spGeneral + "/" + spTraining
+                + "/" + spConstruction + "/" + spResearch + "/" + spHealing);
         scheduleNext();
     }
 
+    /**
+     * matt, 2026-08-09: the "Last night" report needs clean bookends, so always take an inventory
+     * snapshot exactly at 23:00 (bedtime) and 08:00 (wake) local, on top of the normal interval.
+     * Next run is the soonest of those two anchors or now+interval.
+     */
     private void scheduleNext() {
         setRecurring(true);
-        reschedule(LocalDateTime.now().plus(interval));
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        java.time.LocalDateTime next = now.plus(interval);
+        for (java.time.LocalTime anchor : new java.time.LocalTime[]{
+                java.time.LocalTime.of(23, 0), java.time.LocalTime.of(8, 0)}) {
+            java.time.LocalDateTime a = now.with(anchor);
+            if (!a.isAfter(now)) a = a.plusDays(1);
+            if (a.isBefore(next)) next = a;
+        }
+        reschedule(next);
     }
 
     /**
@@ -194,6 +251,20 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
             logWarning("bg_telemetry | Unparseable " + label + " reading: '" + raw.trim() + "'");
         }
         return parsed;
+    }
+
+    /**
+     * Reads a resource stockpile value that ResourceStockpileRoutine stored in config.
+     * Returns null (not 0) when it has never been scanned, so a graph shows a gap rather
+     * than a misleading zero.
+     */
+    private Long readStockpile(ConfigurationKeyEnum key) {
+        try {
+            Long value = profile.getConfig(key, Long.class);
+            return (value == null || value <= 0L) ? null : value;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**
@@ -231,6 +302,32 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
             return (long) (Double.parseDouble(s) * multiplier);
         } catch (NumberFormatException e) {
             return null;
+        }
+    }
+
+    /**
+     * Adds the current activity totals (per-task run counts and action counters) to the sample as
+     * flat number fields. Reads them straight from {@link StatisticsService} — no JSON parsing —
+     * so the Statistics tab can diff two snapshots into "what the bot did" for a window.
+     */
+    private void appendActivitySnapshot(Map<String, Object> sample) {
+        try {
+            ProfilesData stats = StatisticsService.obtain().loadMetrics(profile);
+            if (stats == null) return;
+            if (stats.getTaskStatistics() != null) {
+                for (Map.Entry<String, JobMetrics> e : stats.getTaskStatistics().entrySet()) {
+                    if (e.getValue() != null) {
+                        sample.put("run." + e.getKey(), e.getValue().getNumberOfRuns());
+                    }
+                }
+            }
+            if (stats.getCustomCounters() != null) {
+                for (Map.Entry<String, Integer> e : stats.getCustomCounters().entrySet()) {
+                    sample.put("ctr." + e.getKey(), e.getValue());
+                }
+            }
+        } catch (Exception e) {
+            logWarning("bg_telemetry | Could not snapshot activity stats: " + e.getMessage());
         }
     }
 

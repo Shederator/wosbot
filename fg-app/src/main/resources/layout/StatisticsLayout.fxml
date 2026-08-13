@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <?import javafx.scene.control.*?>
+<?import javafx.scene.chart.*?>
 <?import javafx.scene.layout.*?>
 
-<!-- Statistics — BorderPane with TabPane splitting table and counters -->
+<!-- Statistics — top: what the bot EARNED over time (telemetry); below: task run detail -->
 <BorderPane maxHeight="Infinity" maxWidth="Infinity"
             HBox.hgrow="ALWAYS" VBox.vgrow="ALWAYS"
             xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1">
@@ -19,50 +20,95 @@
         </HBox>
     </top>
 
-    <!-- Main content -->
+    <!-- Main content (scrolls — the earnings section + charts + detail can run long) -->
     <center>
-        <VBox spacing="10" style="-fx-padding: 0 16 16 16;">
+        <ScrollPane fitToWidth="true" style="-fx-background-color: transparent;">
+            <VBox spacing="12" style="-fx-padding: 0 16 16 16;">
 
-            <!-- Summary Cards -->
-            <HBox fx:id="hboxSummaryCards" spacing="15" alignment="CENTER" />
+                <!-- ================= WHAT THE BOT DID FOR YOU ================= -->
+                <VBox styleClass="content-card" spacing="12">
+                    <HBox maxWidth="Infinity" styleClass="header-blue">
+                        <Label text="What the bot did for you" />
+                    </HBox>
 
-            <Separator style="-fx-opacity: 0.25;" />
+                    <!-- Timeframe segmented control — drives both sections below -->
+                    <HBox spacing="8" alignment="CENTER_LEFT" style="-fx-padding: 4 4 0 4;">
+                        <Button fx:id="btnReportNight" mnemonicParsing="false"
+                                onAction="#handleReportNight" styleClass="seg-btn" text="Last night" />
+                        <Button fx:id="btnReport24h" mnemonicParsing="false"
+                                onAction="#handleReport24h" styleClass="seg-btn" text="Last 24 hours" />
+                        <Button fx:id="btnReport7d" mnemonicParsing="false"
+                                onAction="#handleReport7d" styleClass="seg-btn" text="Last 7 days" />
+                        <Button fx:id="btnReportTotal" mnemonicParsing="false"
+                                onAction="#handleReportTotal" styleClass="seg-btn" text="All time" />
+                    </HBox>
 
-            <!-- Task Statistics Table -->
-            <VBox styleClass="content-card" VBox.vgrow="ALWAYS">
-                <VBox style="-fx-padding: 0;" VBox.vgrow="ALWAYS">
-                    <TableView fx:id="tableTasks" minHeight="300.0" prefHeight="450.0"
-                               VBox.vgrow="ALWAYS">
-                        <columnResizePolicy>
-                            <TableView fx:constant="CONSTRAINED_RESIZE_POLICY" />
-                        </columnResizePolicy>
-                        <columns>
-                            <TableColumn fx:id="colTaskName" prefWidth="200.0" text="Task Name" />
-                            <TableColumn fx:id="colRuns" prefWidth="80.0" text="Runs" />
-                            <TableColumn fx:id="colAvgTime" prefWidth="120.0" text="Avg Time (s)" />
-                            <TableColumn fx:id="colTotalTime" prefWidth="120.0" text="Total Time (s)" />
-                            <TableColumn fx:id="colAvgOcr" prefWidth="100.0" text="Avg OCR Fail" />
-                            <TableColumn fx:id="colAvgImg" prefWidth="100.0" text="Avg Img Fail" />
-                            <TableColumn fx:id="colLastRun" prefWidth="150.0" text="Last Run" />
-                        </columns>
-                    </TableView>
+                    <!-- Prominent heading of the currently-selected window -->
+                    <Label fx:id="lblWindow" text="" style="-fx-font-size: 17px; -fx-font-weight: bold; -fx-text-fill: #e6edf3; -fx-padding: 2 0 0 4;" />
+
+                    <!-- RESOURCES & POWER (top) -->
+                    <Label text="RESOURCES &amp; POWER GAINED" styleClass="stat-title" style="-fx-padding: 6 0 0 4;" />
+                    <FlowPane fx:id="flowEarnings" hgap="8" vgap="8" style="-fx-padding: 0 4 4 4;" />
+
+                    <Separator style="-fx-opacity: 0.2; -fx-padding: 4 0 4 0;" />
+
+                    <!-- ACCOMPLISHED (below) -->
+                    <Label text="ACCOMPLISHED" styleClass="stat-title" style="-fx-padding: 2 0 0 4;" />
+                    <FlowPane fx:id="flowActivity" hgap="8" vgap="8" style="-fx-padding: 0 4 4 4;" />
+
+                    <Label fx:id="lblEarningsEmpty" styleClass="label-muted" wrapText="true"
+                           text="Not enough telemetry yet — the bot samples every couple hours while it runs, so a full 'last night' fills in after a night of running."
+                           visible="false" managed="false" />
                 </VBox>
+
+                <!-- ================= TASK RUN DETAIL (secondary) ================= -->
+                <TitledPane text="Task run detail" expanded="false" styleClass="stat-titled-pane">
+                    <VBox spacing="10">
+
+                        <!-- Summary Cards -->
+                        <HBox fx:id="hboxSummaryCards" spacing="15" alignment="CENTER" />
+
+                        <Separator style="-fx-opacity: 0.25;" />
+
+                        <!-- Task Statistics Table -->
+                        <VBox styleClass="content-card" VBox.vgrow="ALWAYS">
+                            <VBox style="-fx-padding: 0;" VBox.vgrow="ALWAYS">
+                                <TableView fx:id="tableTasks" minHeight="240.0" prefHeight="360.0"
+                                           VBox.vgrow="ALWAYS">
+                                    <columnResizePolicy>
+                                        <TableView fx:constant="CONSTRAINED_RESIZE_POLICY" />
+                                    </columnResizePolicy>
+                                    <columns>
+                                        <TableColumn fx:id="colTaskName" prefWidth="200.0" text="Task Name" />
+                                        <TableColumn fx:id="colRuns" prefWidth="80.0" text="Runs" />
+                                        <TableColumn fx:id="colAvgTime" prefWidth="120.0" text="Avg Time (s)" />
+                                        <TableColumn fx:id="colTotalTime" prefWidth="120.0" text="Total Time (s)" />
+                                        <TableColumn fx:id="colAvgOcr" prefWidth="100.0" text="Avg OCR Fail" />
+                                        <TableColumn fx:id="colAvgImg" prefWidth="100.0" text="Avg Img Fail" />
+                                        <TableColumn fx:id="colLastRun" prefWidth="150.0" text="Last Run" />
+                                    </columns>
+                                </TableView>
+                            </VBox>
+                        </VBox>
+
+                        <Separator style="-fx-opacity: 0.25;" />
+
+                        <!-- Activity Counters -->
+                        <VBox styleClass="content-card">
+                            <HBox maxWidth="Infinity" styleClass="header-blue">
+                                <Label text="Activity Counters" />
+                            </HBox>
+                            <VBox styleClass="task-section-inner">
+                                <VBox fx:id="vboxCounterSections" spacing="10" />
+                                <Label fx:id="lblNoData" styleClass="label-muted"
+                                       text="No statistics recorded yet..." visible="false" managed="false" />
+                            </VBox>
+                        </VBox>
+
+                    </VBox>
+                </TitledPane>
+
             </VBox>
-
-            <Separator style="-fx-opacity: 0.25;" />
-
-            <!-- Activity Counters -->
-            <VBox styleClass="content-card">
-                <HBox maxWidth="Infinity" styleClass="header-blue">
-                    <Label text="Activity Counters" />
-                </HBox>
-                <VBox styleClass="task-section-inner">
-                    <VBox fx:id="vboxCounterSections" spacing="10" />
-                    <Label fx:id="lblNoData" styleClass="label-muted"
-                           text="No statistics recorded yet..." visible="false" managed="false" />
-                </VBox>
-            </VBox>
-
-        </VBox>
+        </ScrollPane>
     </center>
 </BorderPane>

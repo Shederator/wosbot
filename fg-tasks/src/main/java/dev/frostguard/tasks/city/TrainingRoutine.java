@@ -143,6 +143,21 @@ protected void loadConfiguration() {
         this.trainInfantry = profile.getConfig(TRAIN_INFANTRY_BOOL, Boolean.class);
         this.trainLancer = profile.getConfig(TRAIN_LANCER_BOOL, Boolean.class);
         this.trainMarksman = profile.getConfig(TRAIN_MARKSMAN_BOOL, Boolean.class);
+
+        // matt/2026-08-12: this routine used to run once and juggle all 3 enabled troop
+        // types together, rescheduling itself to the single earliest completion across
+        // all of them -- fragile if one camp's OCR/timing drifted from the others. Now
+        // TpDailyTaskEnum has 3 independent entries (TRAINING_INFANTRY/LANCER/MARKSMAN),
+        // each its own task with its own schedule; whichever one triggered this instance
+        // restricts it to exactly that camp, regardless of the other two checkboxes.
+        switch (tpTask) {
+            case TRAINING_INFANTRY -> { trainInfantry = true; trainLancer = false; trainMarksman = false; }
+            case TRAINING_LANCER -> { trainInfantry = false; trainLancer = true; trainMarksman = false; }
+            case TRAINING_MARKSMAN -> { trainInfantry = false; trainLancer = false; trainMarksman = true; }
+            default -> { /* TRAINING_TROOPS (legacy, never auto-scheduled): keep the raw
+                            per-type config combination as read above, unchanged. */ }
+        }
+
         this.prioritizePromotion = profile.getConfig(TRAIN_PRIORITIZE_PROMOTION_BOOL, Boolean.class);
         this.ministryAppointmentEnabled = profile.getConfig(TRAIN_MINISTRY_APPOINTMENT_BOOL, Boolean.class);
 

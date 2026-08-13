@@ -16,7 +16,7 @@ public class CityEventsLayoutController extends AbstractProfileController {
 	@FXML
 	private CheckBox checkBoxCrystalLabFC, checkBoxDailyDiscountedRFC, checkBoxExplorationChest, checkBoxMailRewards,
 			checkBoxLifeEssence, checkBoxWeeklyScroll, checkBoxDailyMission, checkBoxAutoScheduleDailyMission,
-			checkBoxWarAcademyShards, checkBoxDoExploration;
+			checkBoxWarAcademyShards, checkBoxDoExploration, checkBoxMonument;
 
 	@FXML
 	private TextField textfieldExplorationOffset, textfieldMailOffset, textfieldLifeEssenceOffset,
@@ -45,7 +45,8 @@ public class CityEventsLayoutController extends AbstractProfileController {
 			new CitySwitch(checkBoxLifeEssence, ConfigurationKeyEnum.LIFE_ESSENCE_BOOL),
 			new CitySwitch(checkBoxWeeklyScroll, ConfigurationKeyEnum.LIFE_ESSENCE_BUY_WEEKLY_SCROLL_BOOL),
 			new CitySwitch(checkBoxDailyMission, ConfigurationKeyEnum.DAILY_MISSION_BOOL),
-			new CitySwitch(checkBoxAutoScheduleDailyMission, ConfigurationKeyEnum.DAILY_MISSION_AUTO_SCHEDULE_BOOL)
+			new CitySwitch(checkBoxAutoScheduleDailyMission, ConfigurationKeyEnum.DAILY_MISSION_AUTO_SCHEDULE_BOOL),
+			new CitySwitch(checkBoxMonument, ConfigurationKeyEnum.MONUMENT_ENABLED_BOOL)
 		);
 	}
 

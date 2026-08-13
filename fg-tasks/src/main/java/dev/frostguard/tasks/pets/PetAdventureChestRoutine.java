@@ -12,9 +12,11 @@ import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.nav.SearchConfigConstants;
+import dev.frostguard.engine.service.StatisticsService;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Task that manages Pet Adventure chests in the Beast Cage.
@@ -76,6 +78,21 @@ public class PetAdventureChestRoutine extends DelayedTask {
 	 * Taps on empty screen space to dismiss overlays.
 	 */
 	private static final PointData CHEST_CLAIM_POINT = new PointData(370, 800);
+
+	/**
+	 * matt/2026-08-12: the game added a "Select Pet" roster screen between tapping
+	 * Select and the Start/Insufficient-attempts confirmation -- this routine predates
+	 * that change and previously fell through to "unknown state" here every time
+	 * (a single 500ms-then-DEFAULT_SINGLE check never gave the new screen time to
+	 * render). Live-captured coordinates for the up-to-3 pet portrait slots shown on
+	 * that screen; one is pre-selected by default but we tap a random slot explicitly
+	 * per matt's ask ("assign a random pet").
+	 */
+	private static final PointData[] PET_LIST_SLOTS = new PointData[] {
+			new PointData(110, 655),
+			new PointData(265, 655),
+			new PointData(420, 655),
+	};
 
 	// ========================================================================
 	// RETRY CONSTANTS
@@ -156,7 +173,11 @@ public class PetAdventureChestRoutine extends DelayedTask {
 			return;
 		}
 
-		claimCompletedChests();
+		int petChestsClaimed = claimCompletedChests();
+		if (petChestsClaimed > 0) {
+			StatisticsService.obtain().addToCounter(profile, "Pet Adventure Chests", petChestsClaimed);
+		}
+
 		startAvailableChests();
 	}
 
@@ -180,13 +201,27 @@ public class PetAdventureChestRoutine extends DelayedTask {
 	 * @return true if navigation succeeded, false if any step failed
 	 */
 	private boolean navigateToPetAdventures() {
-		// Search for Pets button with retries
-		ImageSearchResultData petsResult = templateSearchHelper.locatePattern(
-				TemplatesEnum.GAME_HOME_PETS,
-				SearchConfigConstants.SINGLE_WITH_RETRIES);
+		// matt/2026-08-09: mirror PetSkills.openPetsMenu — a rally / "Assault Squad Invites" popup
+		// often covers the bottom-right Pets button, and SINGLE_WITH_RETRIES can't clear it. A back
+		// press dismisses the modal (and returns world→city), so retry properly instead of shoving
+		// ready-NOW chests 15 min out (and risking lost daily attempts) on a single blocked frame.
+		ImageSearchResultData petsResult = null;
+		for (int attempt = 1; attempt <= 3; attempt++) {
+			petsResult = templateSearchHelper.locatePattern(
+					TemplatesEnum.GAME_HOME_PETS,
+					SearchConfigConstants.DEFAULT_SINGLE);
+			if (petsResult.isFound()) {
+				break;
+			}
+			logWarning("Pets button not found (attempt " + attempt + "/3). Clearing any blocking popup and retrying.");
+			if (attempt < 3) {
+				pressBack();
+				sleepTask(1200);
+			}
+		}
 
-		if (!petsResult.isFound()) {
-			logWarning("Pets button not found on home screen");
+		if (petsResult == null || !petsResult.isFound()) {
+			logWarning("Pets button not found on home screen after retries");
 			return false;
 		}
 
@@ -243,9 +278,10 @@ public class PetAdventureChestRoutine extends DelayedTask {
 	 * <li>Return to adventure map</li>
 	 * </ol>
 	 */
-	private void claimCompletedChests() {
+	private int claimCompletedChests() {
 		logDebug("Searching for completed chests to claim");
 
+		int chestsClaimed = 0;
 		for (int i = 0; i < 2; i++) {
 			logDebug("Searching for completed chests. Attempt " + (i + 1) + ".");
 			List<ImageSearchResultData> completedChests = templateSearchHelper.locateAllPatterns(
@@ -261,8 +297,11 @@ public class PetAdventureChestRoutine extends DelayedTask {
 
 			for (ImageSearchResultData chest : completedChests) {
 				claimSingleChest(chest);
+				chestsClaimed++;
 			}
 		}
+
+		return chestsClaimed;
 	}
 
 	/**
@@ -395,10 +434,10 @@ public class PetAdventureChestRoutine extends DelayedTask {
 		tapRandomPoint(chestResult.getPoint(), chestResult.getPoint());
 		sleepTask(500); // Wait for detail screen
 
-		// Tap Select button
+		// Tap Select ("Select Pet") button
 		ImageSearchResultData selectButton = templateSearchHelper.locatePattern(
 				TemplatesEnum.PETS_CHEST_SELECT,
-				SearchConfigConstants.DEFAULT_SINGLE);
+				SearchConfigConstants.SINGLE_WITH_RETRIES);
 
 		if (!selectButton.isFound()) {
 			logWarning("Select button not found for " + chestTemplate);
@@ -406,12 +445,34 @@ public class PetAdventureChestRoutine extends DelayedTask {
 		}
 
 		tapPoint(selectButton.getPoint());
-		sleepTask(500); // Wait for confirmation screen
+		sleepTask(900); // Wait for the Pet List screen to render (matt/2026-08-12: was
+						 // 500ms, too short for the newer intermediate pet-roster screen)
 
-		// Check for Start button (attempts available)
+		// matt/2026-08-12: "Select Pet" now opens a Pet List roster screen instead of
+		// going straight to Start/Insufficient. Confirm we're actually on it (with
+		// retries -- this is exactly the screen that was silently timing out before),
+		// then explicitly tap a random pet slot rather than trusting the default
+		// pre-selection.
+		ImageSearchResultData petListHeader = templateSearchHelper.locatePattern(
+				TemplatesEnum.PETS_PET_LIST_HEADER,
+				SearchConfigConstants.SINGLE_WITH_RETRIES);
+
+		if (petListHeader.isFound()) {
+			PointData randomPetSlot = PET_LIST_SLOTS[ThreadLocalRandom.current().nextInt(PET_LIST_SLOTS.length)];
+			logDebug("Pet List screen confirmed. Assigning a random pet.");
+			tapPoint(randomPetSlot);
+			sleepTask(400); // Let the selection register before checking Start
+		} else {
+			logDebug("No Pet List screen detected for " + chestTemplate +
+					" (older chest type without pet assignment, or already past it) -- continuing.");
+		}
+
+		// Check for Start button (attempts available). Retries added for the same
+		// reason as above -- a single DEFAULT_SINGLE check was racing the Pet List
+		// screen's render and silently losing.
 		ImageSearchResultData startButton = templateSearchHelper.locatePattern(
 				TemplatesEnum.PETS_CHEST_START,
-				SearchConfigConstants.DEFAULT_SINGLE);
+				SearchConfigConstants.SINGLE_WITH_RETRIES);
 
 		if (startButton.isFound()) {
 			// Start the adventure
@@ -431,7 +492,7 @@ public class PetAdventureChestRoutine extends DelayedTask {
 		// Check for No Attempts message
 		ImageSearchResultData noAttemptsMessage = templateSearchHelper.locatePattern(
 				TemplatesEnum.PETS_CHEST_ATTEMPT,
-				SearchConfigConstants.DEFAULT_SINGLE);
+				SearchConfigConstants.SINGLE_WITH_RETRIES);
 
 		if (noAttemptsMessage.isFound()) {
 			logInfo("No more adventure attempts available. Rescheduling for next game reset");

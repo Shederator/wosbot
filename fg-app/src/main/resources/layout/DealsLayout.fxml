@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<!-- Deals — matt/2026-08-12: dedicated home for the Deals-menu automations (Bank,
+     Hero Rally, Monthly Card, ...), built out one deal type at a time. Bank moved
+     here from Shop; Hero Rally and Monthly Card are next. -->
+<StackPane maxHeight="Infinity" maxWidth="Infinity"
+           HBox.hgrow="ALWAYS" VBox.vgrow="ALWAYS"
+           xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1">
+
+    <ScrollPane fitToWidth="true" hbarPolicy="NEVER" vbarPolicy="AS_NEEDED"
+                styleClass="task-page-scroll">
+        <VBox spacing="14" styleClass="task-page-root" maxWidth="Infinity">
+
+            <!-- Bank -->
+            <VBox styleClass="content-card">
+                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-green">
+                    <Label text="Bank" />
+                </HBox>
+                <VBox spacing="10" styleClass="task-section-inner">
+                    <Label styleClass="task-card-description"
+                           text="Deposits into the Deals -&gt; Bank tab, withdraws when a deposit matures, and immediately redeposits -- the 1-day tier compounds daily at 5%."
+                           wrapText="true" />
+                    <Separator style="-fx-opacity: 0.25;" />
+                    <CheckBox fx:id="checkBoxBank" mnemonicParsing="false" text="Enable Bank" />
+                    <Separator style="-fx-opacity: 0.25;" />
+                    <HBox spacing="10" alignment="CENTER_LEFT">
+                        <Label styleClass="task-field-label" text="Period:" />
+                        <ComboBox fx:id="comboBoxBankDelay" prefWidth="150.0"
+                                  promptText="Select period" />
+                    </HBox>
+                </VBox>
+            </VBox>
+
+            <!-- Random Events -->
+            <VBox styleClass="content-card">
+                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-blue">
+                    <Label text="Random Events" />
+                </HBox>
+                <VBox spacing="10" styleClass="task-section-inner">
+                    <Label styleClass="task-card-description"
+                           text="Rotating limited-time Events-tab events. Progress toward each is earned through normal play elsewhere -- this only checks for a ready Claim and hits it. Checked twice a day."
+                           wrapText="true" />
+                    <Separator style="-fx-opacity: 0.25;" />
+                    <CheckBox fx:id="checkBoxEventHallOfChiefs" mnemonicParsing="false"
+                              text="Hall of Chiefs" />
+                    <CheckBox fx:id="checkBoxEventDefeatBeasts" mnemonicParsing="false"
+                              text="Defeat Nearby Beasts" />
+                    <CheckBox fx:id="checkBoxEventHeroRally" mnemonicParsing="false"
+                              text="Hero Rally (Claim All)" />
+                    <CheckBox fx:id="checkBoxEventLuckyChipSupply" mnemonicParsing="false"
+                              text="Lucky Chip Supply (free daily pack only)" />
+                </VBox>
+            </VBox>
+
+        </VBox>
+    </ScrollPane>
+</StackPane>

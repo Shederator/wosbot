@@ -27,6 +27,9 @@ public class TrainingLayoutController extends AbstractProfileController {
 	@FXML
 	private CheckBox checkBoxTrainMarksman;
 
+	@FXML
+	private CheckBox checkBoxHealInjured;
+
 	private List<CheckBox> childCheckboxes;
 
 	@FXML
@@ -43,7 +46,10 @@ public class TrainingLayoutController extends AbstractProfileController {
 				new CheckBoxBinding(checkBoxTrainLancers, ConfigurationKeyEnum.TRAIN_LANCER_BOOL),
 				new CheckBoxBinding(checkBoxTrainMarksman, ConfigurationKeyEnum.TRAIN_MARKSMAN_BOOL),
 				new CheckBoxBinding(checkBoxTrainPrioritizePromotion, ConfigurationKeyEnum.TRAIN_PRIORITIZE_PROMOTION_BOOL),
-				new CheckBoxBinding(checkBoxAppointMinister, ConfigurationKeyEnum.TRAIN_MINISTRY_APPOINTMENT_BOOL))
+				new CheckBoxBinding(checkBoxAppointMinister, ConfigurationKeyEnum.TRAIN_MINISTRY_APPOINTMENT_BOOL),
+				// Deliberately NOT part of wireMasterToggle()'s childCheckboxes -- this is
+				// independent of the Training master switch above.
+				new CheckBoxBinding(checkBoxHealInjured, ConfigurationKeyEnum.HEAL_INJURED_ENABLED_BOOL))
 				.forEach(binding -> registerCheckBox(binding.control(), binding.configKey()));
 	}
 

@@ -13,11 +13,23 @@ import java.util.Map;
 public class DefaultTaskPriorityProvider implements TaskPriorityProvider {
 
     // Lookup table for built-in task priorities (descending urgency)
-    private static final Map<TpDailyTaskEnum, Integer> BUILTIN_SCORES = Map.of(
-            TpDailyTaskEnum.INITIALIZE,     1000,
-            TpDailyTaskEnum.SKIP_TUTORIAL,   950,
-            TpDailyTaskEnum.BEAR_TRAP,       900,
-            TpDailyTaskEnum.ARENA,           800
+    private static final Map<TpDailyTaskEnum, Integer> BUILTIN_SCORES = Map.ofEntries(
+            Map.entry(TpDailyTaskEnum.INITIALIZE,     1000),
+            // matt, 2026-08-08: the timer sweep sits directly below Initialize and above every
+            // activity, so the bot has read what is actually due before it does anything at all.
+            Map.entry(TpDailyTaskEnum.TIMER_SWEEP,     980),
+            Map.entry(TpDailyTaskEnum.SKIP_TUTORIAL,   950),
+            Map.entry(TpDailyTaskEnum.BEAR_TRAP,       900),
+            Map.entry(TpDailyTaskEnum.ARENA,           800),
+            // Troop-slot economy ordering: when several troop-consuming tasks are runnable at once,
+            // break ties consistently. Bear Trap (900, above) has a hard deadline and always wins;
+            // then Cryptid hosting, Intel, Polar Terror, and finally Gather, which yields its slots
+            // to any of them via the TroopSlotPolicy claim ledger.
+            Map.entry(TpDailyTaskEnum.EVENT_CRYPTID_HOST, 700),
+            Map.entry(TpDailyTaskEnum.INTEL,             600),
+            Map.entry(TpDailyTaskEnum.BEAST_HUNTING,     550),
+            Map.entry(TpDailyTaskEnum.EVENT_POLAR_TERROR, 500),
+            Map.entry(TpDailyTaskEnum.GATHER_RESOURCES,  100)
     );
 
     @Override

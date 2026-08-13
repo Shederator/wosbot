@@ -1053,6 +1053,26 @@ public class ProfileManagerLayoutController implements IProfileChangeObserver {
 		return profiles;
 	}
 
+	// matt: the main launcher's profile picker only changed which profile's
+	// settings were being VIEWED - it never touched the `enabled` flag that
+	// actually decides which profile's queue Start Bot launches, which lived
+	// in a separate, easy-to-miss toggle in this table. Selecting a profile
+	// up top now makes it the sole enabled one, same as it visibly does.
+	public void setOnlyEnabledProfile(ProfileAux target) {
+		if (target == null || profileManagerActionController == null || profiles == null) {
+			return;
+		}
+		List<ProfileAux> toDisable = profiles.stream()
+				.filter(p -> !Objects.equals(p.getId(), target.getId()) && p.isEnabled())
+				.toList();
+		if (!toDisable.isEmpty()) {
+			profileManagerActionController.setProfilesEnabled(toDisable, false);
+		}
+		if (!target.isEnabled()) {
+			profileManagerActionController.setProfilesEnabled(List.of(target), true);
+		}
+	}
+
 	public void setLoadedProfileId(Long profileId) {
 		this.loadedProfileId = profileId;
 	}

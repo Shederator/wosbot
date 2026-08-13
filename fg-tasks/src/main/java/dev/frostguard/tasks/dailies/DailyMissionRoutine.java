@@ -25,6 +25,28 @@ private static final int POPUP_DISMISS_TAP_COUNT_VALUE = 3;
 
 private static final int MAX_INDIVIDUAL_CLAIMS = 20;
 
+	/**
+	 * How many times a claim may reappear at the same coordinates before it is judged stuck.
+	 * Set well above a normal re-flow run, which matt reports is only a few in a row.
+	 */
+	private static final int MAX_SAME_POSITION_CLAIMS = 8;
+
+	/**
+	 * The Growth tab, bottom-left of the Missions dialog, beside the Daily tab.
+	 *
+	 * <p>matt, 2026-08-08: Growth missions were never claimed because this routine only ever
+	 * knew about the Daily tab — there was no reference to Growth anywhere in it. The two tabs
+	 * sit side by side at the bottom of the same dialog, and Growth carries its own red badge
+	 * when something is claimable. Derived from a 760x1339 capture (Growth centred at x=256,
+	 * Daily at x=503) scaled to the emulator's 720x1280; that scaling puts Daily at x=476,
+	 * which matches the coordinate this routine already resolves for it, so the mapping checks
+	 * out on a known-good point.</p>
+	 */
+	private static final PointData GROWTH_TAB_VALUE = new PointData(242, 1135);
+
+	/** Time for the Growth list to animate in before its claim buttons match reliably. */
+	private static final int GROWTH_TAB_SETTLE_MS = 1800;
+
 private static final int CLAIM_PROGRESS_TOLERANCE_PIXELS = 20;
 
 private static final PointData DAILY_MISSIONS_BUTTON_VALUE = new PointData(50, 1050);
@@ -61,10 +83,17 @@ public DailyMissionRoutine(AccountDescriptor profile, TpDailyTaskEnum dailyMissi
 		hydrateTaskConfiguration();
 		reachDailyMissions();
 		boolean dailyScreenReached = switchToDailyMissionsTabFlow();
-		boolean claimFlowCompleted = dailyScreenReached && redeemAllRewards();
-		if (claimFlowCompleted) {
-			StatisticsService.obtain().addToCounter(profile, "Daily Missions Claimed", 1);
+		int dailyMissionsClaimed = dailyScreenReached ? redeemAllRewards() : 0;
+		if (dailyMissionsClaimed > 0) {
+			StatisticsService.obtain().addToCounter(profile, "Daily Missions Claimed", dailyMissionsClaimed);
 		}
+
+		// matt, 2026-08-08: Growth missions live behind the second tab of this same dialog and
+		// were being left on the table entirely. Claimed after Daily so the existing flow is
+		// untouched, and independently of claimFlowCompleted — a Daily pass that found nothing
+		// says nothing about whether Growth has rewards waiting.
+		redeemGrowthMissionRewardsFlow();
+
 		dismissInterface();
 
 		configureRecurringBehaviorFlow();
@@ -119,10 +148,26 @@ private boolean switchToDailyMissionsTabFlow() {
 		return true;
 	}
 
-private ImageSearchResultData seekForIndividualClaimButton() {
-		ImageSearchResultData claimButton = templateSearchHelper.locatePattern(
+	/**
+	 * Finds the topmost enabled Claim button on screen.
+	 *
+	 * <p>matt, 2026-08-08: <em>"click the top claim button until no claim button exists"</em>. The
+	 * previous behaviour took whatever single match the template search happened to return, which
+	 * is not necessarily the highest one — and since claiming a row makes the list re-flow upward,
+	 * working from the top down is the only order that stays predictable. Picking the smallest y
+	 * also removes any reliance on match ordering.</p>
+	 */
+	private ImageSearchResultData seekForIndividualClaimButton() {
+		java.util.List<ImageSearchResultData> matches = templateSearchHelper.locateAllPatterns(
 				TemplatesEnum.DAILY_MISSION_CLAIM_BUTTON,
 				SearchConfigConstants.DEFAULT_SINGLE);
+
+		ImageSearchResultData claimButton = (matches == null ? java.util.List.<ImageSearchResultData>of() : matches)
+				.stream()
+				.filter(java.util.Objects::nonNull)
+				.filter(ImageSearchResultData::isFound)
+				.min(java.util.Comparator.comparingInt(r -> r.getPoint().getY()))
+				.orElse(ImageSearchResultData.miss());
 
 		if (!claimButton.isFound()) {
 			return claimButton;
@@ -155,16 +200,46 @@ private LocalDateTime queueFinalCheckBeforeReset(LocalDateTime gameReset) {
 		return finalCheck;
 	}
 
-private boolean redeemRewardsIndividually() {
+	/**
+	 * Switches to the Growth tab and claims anything waiting there.
+	 *
+	 * <p>Growth has no "Claim All" control — only per-row green Claim buttons — so this reuses
+	 * the individual claim loop, which re-scans after every tap and therefore copes with the
+	 * list re-flowing under it.</p>
+	 */
+	private void redeemGrowthMissionRewardsFlow() {
+		logInfo(routineLogDailyMissionLine("Switching to Growth missions tab at " + GROWTH_TAB_VALUE));
+		tapPoint(GROWTH_TAB_VALUE);
+
+		// matt, 2026-08-08: the Growth list animates in, and 800ms was not enough for it to
+		// settle. Observed live: a pre-check found a claim button and the very next search,
+		// 180ms later, did not — so the routine announced "Claimable Growth mission(s) detected"
+		// and then immediately claimed nothing. The pre-check is gone entirely rather than
+		// retried: searching twice for the same button is what created the race, and
+		// redeemRewardsIndividually already reports "Claimed 0 rewards" when there is nothing,
+		// so nothing is lost by letting it do the only search.
+		sleepTask(GROWTH_TAB_SETTLE_MS);
+
+		int growthMissionsClaimed = redeemRewardsIndividually();
+
+		if (growthMissionsClaimed > 0) {
+			StatisticsService.obtain().addToCounter(profile, "Growth Missions Claimed", growthMissionsClaimed);
+		} else {
+			logInfo(routineLogDailyMissionLine("No Growth missions to claim this pass."));
+		}
+	}
+
+private int redeemRewardsIndividually() {
 		logWarning(routineLogDailyMissionLine("'Claim All' button not detected. Collecting missions individually"));
 
 		int claimedCount = 0;
+		int consecutiveSamePositionClaims = 0;
 
 		while (claimedCount < MAX_INDIVIDUAL_CLAIMS) {
 			ImageSearchResultData claimResult = seekForIndividualClaimButton();
 			if (!claimResult.isFound()) {
 				logInfo(routineLogDailyMissionLine("Individual collecting complete. Claimed " + claimedCount + " rewards"));
-				return true;
+				return claimedCount;
 			}
 
 			claimedCount++;
@@ -175,21 +250,32 @@ private boolean redeemRewardsIndividually() {
 			dismissRewardPopupsFlow();
 			sleepTask(500);
 
+			// matt, 2026-08-08: a Claim button reappearing in the SAME spot is the normal case,
+			// not a stuck UI. The mission list re-flows upward as rows are claimed, so the next
+			// claimable row slides into the position just vacated — matt confirmed this happens
+			// several times in a row. The old code treated the second same-position hit as "no
+			// visual progress" and aborted the entire pass, abandoning every remaining reward.
+			// Tolerate a run of them, with MAX_INDIVIDUAL_CLAIMS still bounding the loop, and
+			// only bail once the same spot repeats far more often than a re-flow could explain.
 			ImageSearchResultData nextClaim = seekForIndividualClaimButton();
 			if (nextClaim.isFound() && sameClaimTarget(claimPoint, nextClaim.getPoint())) {
-				sleepTask(500);
-				nextClaim = seekForIndividualClaimButton();
-				if (nextClaim.isFound() && sameClaimTarget(claimPoint, nextClaim.getPoint())) {
-					logWarning(routineLogDailyMissionLine("Claim button remained at " + claimPoint
-							+ " after tapping. Stopping because no visual progress was detected"));
-					return false;
+				consecutiveSamePositionClaims++;
+				if (consecutiveSamePositionClaims >= MAX_SAME_POSITION_CLAIMS) {
+					logWarning(routineLogDailyMissionLine("Claim button stayed at " + claimPoint
+							+ " for " + consecutiveSamePositionClaims
+							+ " consecutive taps. Treating it as stuck and stopping"));
+					return claimedCount;
 				}
+				logDebug(routineLogDailyMissionLine("Another claim appeared at " + claimPoint
+						+ " (run of " + consecutiveSamePositionClaims + ") — list re-flowed, continuing"));
+			} else {
+				consecutiveSamePositionClaims = 0;
 			}
 		}
 
 		logWarning(routineLogDailyMissionLine("Stopped individual claims at safety limit "
 				+ MAX_INDIVIDUAL_CLAIMS));
-		return false;
+		return claimedCount;
 	}
 
 private void hydrateTaskConfiguration() {
@@ -257,14 +343,16 @@ private LocalDateTime queueAtOffsetTime(LocalDateTime proposedTime, LocalDateTim
 		return proposedTime;
 	}
 
-private boolean redeemAllRewards() {
+private int redeemAllRewards() {
 		logInfo(routineLogDailyMissionLine("Scanning for claim buttons"));
 
 		ImageSearchResultData claimAllResult = seekForClaimAllButton();
 
 		if (claimAllResult.isFound()) {
+			// The 'Claim All' button is only present when at least one reward is claimable — the
+			// game hides it once everything is claimed — so its presence proves ≥1 real claim.
 			redeemAllRewardsAtOnce(claimAllResult);
-			return true;
+			return 1;
 		} else {
 			return redeemRewardsIndividually();
 		}

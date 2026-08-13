@@ -13,6 +13,7 @@ import dev.frostguard.data.entity.DailyTask;
 import dev.frostguard.data.repository.DailyTaskRepository;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.engine.schedule.TroopSlotPolicy;
 import dev.frostguard.engine.helper.DeploymentHelper;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.nav.SearchConfigConstants;
@@ -183,6 +184,11 @@ public class BeastSlayRoutine extends DelayedTask {
 				LocalDateTime marchReturn = LocalDateTime.now().plusSeconds(returnSeconds);
 				updateReschedule(marchReturn);
 
+				// matt/2026-08-09 (troop-slot economy): a beast attack is genuinely out holding a slot.
+				// Publish demand (sized to attacks dispatched this pass) so Gather leaves those slots be
+				// until the marches return; the claim self-expires at the latest return time.
+				TroopSlotPolicy.claim(profile, TpDailyTaskEnum.BEAST_HUNTING, attacksDone, marchReturn);
+
 				logInfo("Beast attacked. March returns in ~" + returnSeconds
 						+ "s. Cost: " + staminaCost + ", remaining stamina: " + currentStamina
 						+ ", attacks done: " + attacksDone);
@@ -259,6 +265,11 @@ public class BeastSlayRoutine extends DelayedTask {
 	}
 
 	private void finalizeReschedule() {
+		// matt/2026-08-09 (troop-slot economy): this pass is done dispatching — release the slot demand
+		// (release also pulls Gather forward). The marches already out are self-tracked via their return
+		// time and occupy real slots Gather already sees as busy, so gathering can safely resume now.
+		TroopSlotPolicy.release(profile, TpDailyTaskEnum.BEAST_HUNTING);
+
 		if (earliestReschedule != null) {
 			logInfo("Beast Hunting finished. Rescheduling to " + earliestReschedule + " (earliest march return).");
 			reschedule(earliestReschedule);

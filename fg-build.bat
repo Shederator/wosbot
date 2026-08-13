@@ -1,5 +1,10 @@
 @echo off
-set "PATH=C:\apache-maven-3.9.12\bin;%PATH%"
+REM matt, 2026-08-09: paths corrected after the toolchain moved out of OneDrive. Maven and the
+REM bundled Temurin JDK both live under C:\Frostguard-tools now; the old C:\apache-maven-3.9.12
+REM path never existed on this machine, so `call mvn` below failed with "not recognized". JAVA_HOME
+REM is set explicitly too, because there is no system-wide Java install for mvn to fall back on.
+set "JAVA_HOME=C:\Frostguard-tools\jdk-21.0.12+8"
+set "PATH=C:\Frostguard-tools\apache-maven-3.9.9\bin;%JAVA_HOME%\bin;%PATH%"
 echo ==========================================
 echo      Frostguard Quick Recompile Script
 echo ==========================================

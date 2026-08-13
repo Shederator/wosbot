@@ -4,6 +4,8 @@ import atlantafx.base.theme.PrimerDark;
 import dev.frostguard.app.panel.launcher.ILauncherConstants;
 import dev.frostguard.app.panel.launcher.LauncherLayoutController;
 import dev.frostguard.app.panel.misc.GiftCodeAutomationService;
+import dev.frostguard.engine.service.BotRunStateFileWriter;
+import dev.frostguard.engine.service.ScheduleService;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
@@ -53,9 +55,37 @@ public class FXApp extends Application {
         configureStage(stage, scene);
         stage.show();
         GiftCodeAutomationService.getInstance().start();
+        ScheduleService.obtain().addEngineObserver(new BotRunStateFileWriter());
         restoreWindowBounds(stage);
         maybeAutoStart(controller);
+        maybeResumeQueue();
         stage.setOnCloseRequest(event -> shutdownFromUi(stage));
+    }
+
+    /**
+     * matt, 2026-08-07: the general auto-start countdown (maybeAutoStart, gated
+     * on AUTO_START_ENABLED_BOOL) is permanently off — he never wants the queue
+     * starting without him clicking Start himself. But run-full-capture.js's 2h
+     * sync still needs to resume a queue it already confirmed WAS running
+     * before it briefly stopped Bearguard for the scrape — that's restoring
+     * state, not a fresh unsolicited start. --resume-queue is a dedicated,
+     * separate trigger for exactly that one caller; it bypasses
+     * AUTO_START_ENABLED_BOOL entirely and is never set by a normal manual
+     * launch (Start Bearguard.bat carries no arguments).
+     */
+    private void maybeResumeQueue() {
+        if (!getParameters().getRaw().contains("--resume-queue")) {
+            return;
+        }
+        // matt, 2026-08-08: resume WITHOUT the startup rescan. run-full-capture.js bounces
+        // Bearguard every 2 hours for the scrape, and a rescan on each of those relaunches meant
+        // every task re-ran every 2 hours regardless of its real timer — Pet Skills opening the
+        // menu with 13 hours left on every skill, Alliance Tech re-checking a contribution that
+        // needs hours to refill, and so on. Measured at a 40% duty cycle. A rescan is the right
+        // behaviour when matt actually starts the bot and wants everything re-read; it is wrong
+        // for a caller that is merely restoring state it interrupted seconds ago.
+        logger.info("--resume-queue flag present — resuming automation queue (no startup rescan).");
+        Thread.ofVirtual().start(() -> ScheduleService.obtain().launchEngine(false));
     }
 
     private Parent loadLauncherRoot(LauncherLayoutController controller) throws IOException {

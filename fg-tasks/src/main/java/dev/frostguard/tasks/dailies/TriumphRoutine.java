@@ -9,6 +9,7 @@ import dev.frostguard.api.domain.PointData;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import java.time.LocalDateTime;
 
@@ -26,6 +27,7 @@ public TriumphRoutine(AccountDescriptor profile, TpDailyTaskEnum dailyMission) {
 @Override
 	protected void execute() {;
 
+		int triumphRewardsClaimed = 0;
 
 		logInfo(routineLogTriumphLine("Pressing alliance button at bottom of screen"));
 		tapRandomPoint(new PointData(493, 1187), new PointData(561, 1240));
@@ -60,6 +62,7 @@ public TriumphRoutine(AccountDescriptor profile, TpDailyTaskEnum dailyMission) {
 					tapRandomPoint(result.getPoint(), result.getPoint(), 10, 50);
 					sleepTask(1000);
 
+					triumphRewardsClaimed++;
 					logInfo(routineLogTriumphLine("Daily rewards collected finished cleanly"));
 					reschedule(GameTimeUtils.dailyResetTime());
 				} else {
@@ -91,11 +94,16 @@ public TriumphRoutine(AccountDescriptor profile, TpDailyTaskEnum dailyMission) {
 				sleepTask(1500);
 
 				pressBack();
+				triumphRewardsClaimed++;
 				logInfo(routineLogTriumphLine("Weekly Triumph collected finished cleanly"));
 			} else {
 				logInfo(routineLogTriumphLine("Weekly Triumph rewards not available or already collected"));
 			}
 
+
+			if (triumphRewardsClaimed > 0) {
+				StatisticsService.obtain().addToCounter(profile, "Alliance Triumph Rewards", triumphRewardsClaimed);
+			}
 
 			logDebug(routineLogTriumphLine("Returning to home screen"));
 			pressBack();

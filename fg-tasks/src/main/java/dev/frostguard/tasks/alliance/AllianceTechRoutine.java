@@ -41,6 +41,17 @@ private static final int DEFAULT_OFFSET_MINUTES_VALUE = 60;
 
 private static final int ERROR_RETRY_MINUTES_VALUE = 10;
 
+	/**
+	 * Minutes to wait after emptying the pool before another visit is worthwhile.
+	 *
+	 * <p>matt, 2026-08-09: only donate when ~15 contributions have banked, and they refill about
+	 * one every ten minutes — so a full donation leaves the pool empty and the next useful visit is
+	 * ~150 minutes out, not the old blind 60. The hourly timer sweep still re-reads the live
+	 * counter and trues this up; this just stops the routine from coming back on its own to donate
+	 * a handful.</p>
+	 */
+	private static final int REFILL_TO_TRIGGER_MINUTES = 150;
+
 private static final TesseractSettingsData COIN_COUNT_OCR_SETTINGS_VALUE = TesseractSettingsData.assembler()
 			.charWhitelist("0123456789")
 			.pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
@@ -229,10 +240,15 @@ private boolean reachTechMenu() {
 	}
 
 private void queueNextRun() {
-		LocalDateTime nextExecutionTime = LocalDateTime.now().plusMinutes(offsetMinutes);
+		// The pool was just emptied, so honour the refill window rather than the small config
+		// offset — coming back in an hour would only donate ~6 contributions. Whichever is longer
+		// wins, so a deliberately large configured offset is still respected.
+		int waitMinutes = Math.max(offsetMinutes, REFILL_TO_TRIGGER_MINUTES);
+		LocalDateTime nextExecutionTime = LocalDateTime.now().plusMinutes(waitMinutes);
 		reschedule(nextExecutionTime);
 
 		logInfo(routineLogAllianceTechLine("Alliance Tech task finished cleanly. Next execution in " +
-				offsetMinutes + " minutes"));
+				waitMinutes + " minutes (pool refills ~1/10min toward the "
+				+ REFILL_TO_TRIGGER_MINUTES / 10 + " trigger)"));
 	}
 }

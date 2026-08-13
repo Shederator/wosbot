@@ -19,6 +19,7 @@ import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.TesseractSettingsData;
 import dev.frostguard.engine.service.StaminaService;
+import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.nav.SearchConfigConstants;
@@ -62,8 +63,17 @@ public class StorehouseChestRoutine extends DelayedTask {
     private static final PointData STAMINA_CLAIM_BUTTON_BOTTOM_RIGHT = new PointData(450, 950);
 
     // ========== Fallback Timer OCR ==========
-    private static final PointData FALLBACK_TIMER_TOP_LEFT = new PointData(285, 642);
-    private static final PointData FALLBACK_TIMER_BOTTOM_RIGHT = new PointData(430, 666);
+    // matt, 2026-08-08: only ~15px wider than the long-standing (285,642)-(430,666) box, which
+    // was very nearly right. Verified against a real frame captured mid-routine (Storehouse
+    // selected, timer showing 00:53:16): the old box read it correctly, and the extra width
+    // just stops the last digit clipping when the label sits slightly right of centre.
+    //
+    // Do NOT re-derive these from an idle city-view screenshot. The chest timer renders in two
+    // different places — over the building on the free-panning city view, and under the
+    // "Storehouse" name plate once the building is selected. This routine always reads the
+    // second one. Calibrating against the first produced a box that OCR'd to "" every run.
+    private static final PointData FALLBACK_TIMER_TOP_LEFT = new PointData(285, 638);
+    private static final PointData FALLBACK_TIMER_BOTTOM_RIGHT = new PointData(455, 674);
 
     // ========== Constants ==========
     private static final int TIMER_OCR_MAX_ATTEMPTS = 3;
@@ -90,6 +100,27 @@ public class StorehouseChestRoutine extends DelayedTask {
     private LocalDateTime nextChestTime;
     private LocalDateTime nextStaminaTime;
 
+    /** True once a chest timer has actually been OCR'd this pass, proving the Storehouse screen loaded. */
+    private boolean chestTimerRead;
+
+    /** Time for the reward animation to finish and repaint the next-chest counter. */
+    private static final long POST_CLAIM_SETTLE_MS = 1500L;
+
+    /**
+     * matt, 2026-08-08: return a little after the chest is actually ready, never exactly on it.
+     * Proportional rather than fixed so a thirty-second interval slips by a second or two while
+     * an hour-long one slips by a few minutes — arriving on the same round number every cycle is
+     * the tell worth avoiding, and being slightly late costs nothing because the chest waits.
+     */
+    private static final int RETURN_JITTER_MIN_PERCENT = 1;
+    private static final int RETURN_JITTER_MAX_PERCENT = 8;
+
+    // matt, 2026-08-08: he asked "without OCRing, how much is left on the storehouse?" and the
+    // honest answer was that the stored number could not be trusted — a measured 1h31m read and
+    // an invented +1h fallback were both persisted as plain timestamps, indistinguishable after
+    // the fact. These track provenance so the log says which is which.
+    private boolean staminaTimeMeasured;
+
     public StorehouseChestRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDailyTask) {
         super(profile, tpDailyTask);
     }
@@ -114,6 +145,7 @@ public class StorehouseChestRoutine extends DelayedTask {
     private void resetExecutionState() {
         this.nextChestTime = null;
         this.nextStaminaTime = null;
+        this.chestTimerRead = false;
         logDebug("Execution state reset");
     }
 
@@ -181,13 +213,31 @@ public class StorehouseChestRoutine extends DelayedTask {
         if (chest.isFound()) {
             logInfo("Chest found. Claiming reward.");
             tapPoint(chest.getPoint());
-            sleepTask(500); // Wait for reward screen
+
+            // Real accomplishment: a chest template was matched and tapped, so exactly one chest
+            // was claimed this pass. Count only here, never on the not-found/fallback path below.
+            StatisticsService.obtain().addToCounter(profile, "Storehouse Chests Opened", 1);
+
+            // matt, 2026-08-08: the next chest interval is not fixed — he has seen it come back
+            // in thirty seconds and in an hour — so the timer printed immediately after claiming
+            // is the only thing that knows when to return. 500ms was not enough for the reward
+            // screen to settle and repaint it, which is why this read intermittently came back
+            // empty and fell through to a fabricated interval.
+            sleepTask(POST_CLAIM_SETTLE_MS);
 
             nextChestTime = readChestTimer();
+            if (nextChestTime == null) {
+                // One more look; the counter sometimes appears a beat after the reward animation.
+                sleepTask(POST_CLAIM_SETTLE_MS);
+                nextChestTime = readChestTimer();
+            }
 
             if (nextChestTime == null) {
                 nextChestTime = LocalDateTime.now().plusMinutes(FALLBACK_RESCHEDULE_MINUTES);
-                logWarning("Failed to read chest timer, using fallback.");
+                logWarning("Failed to read chest timer even after settling, using fallback.");
+            } else {
+                chestTimerRead = true;
+                nextChestTime = applyReturnJitter(nextChestTime);
             }
 
             // Close reward screen
@@ -200,6 +250,8 @@ public class StorehouseChestRoutine extends DelayedTask {
 
         if (nextChestTime == null) {
             nextChestTime = LocalDateTime.now().plusMinutes(FALLBACK_RESCHEDULE_MINUTES);
+        } else {
+            chestTimerRead = true;
         }
     }
 
@@ -220,6 +272,29 @@ public class StorehouseChestRoutine extends DelayedTask {
         return templateSearchHelper.locatePattern(
                 TemplatesEnum.STOREHOUSE_CHEST_2,
                 SearchConfigConstants.SINGLE_WITH_RETRIES);
+    }
+
+    /**
+     * Pushes a measured return time out by a small random percentage of the wait itself.
+     *
+     * @param measured the moment the chest is genuinely ready, as read off the screen
+     * @return the same moment nudged later by {@value #RETURN_JITTER_MIN_PERCENT}-{@value
+     *         #RETURN_JITTER_MAX_PERCENT}% of the remaining wait
+     */
+    private LocalDateTime applyReturnJitter(LocalDateTime measured) {
+        long waitSeconds = java.time.Duration.between(LocalDateTime.now(), measured).getSeconds();
+        if (waitSeconds <= 0) {
+            return measured;
+        }
+
+        int percent = java.util.concurrent.ThreadLocalRandom.current()
+                .nextInt(RETURN_JITTER_MIN_PERCENT, RETURN_JITTER_MAX_PERCENT + 1);
+        long offsetSeconds = Math.max(1L, (waitSeconds * percent) / 100L);
+
+        LocalDateTime jittered = measured.plusSeconds(offsetSeconds);
+        logInfo(String.format("Chest ready in %ds; returning %ds later (+%d%%) at %s.",
+                waitSeconds, offsetSeconds, percent, jittered.format(DATETIME_FORMATTER)));
+        return jittered;
     }
 
     /**
@@ -306,9 +381,21 @@ public class StorehouseChestRoutine extends DelayedTask {
                 logDebug("Claim button confirmed visible. Proceeding with claim.");
                 claimStaminaReward();
                 nextStaminaTime = GameTimeUtils.nextCycleReset();
+                staminaTimeMeasured = true;
             }
+        } else if (chestTimerRead) {
+            // matt, 2026-08-08: a successful chest-timer OCR this same pass proves we were
+            // actually looking at the Storehouse, so a missing stamina icon means it is already
+            // claimed for this cycle — not that navigation failed. Claiming again is impossible
+            // until the cycle rolls, so the blind 1-hour retry here was ~20 pointless trips to
+            // the Storehouse per cycle. Go to the real refresh time instead.
+            logInfo("Stamina icon absent but Storehouse screen confirmed — already claimed this cycle. "
+                    + "Waiting for the cycle reset rather than polling.");
+            nextStaminaTime = GameTimeUtils.nextCycleReset();
         } else {
-            logWarning("Stamina icon not found after retries. Will retry in 1 hour as fallback.");
+            // Screen never confirmed, so this may be a navigation failure rather than a claimed
+            // reward. Keep the short retry so a genuinely available claim is not skipped.
+            logWarning("Stamina icon not found and Storehouse screen unconfirmed. Retrying in 1 hour.");
             nextStaminaTime = LocalDateTime.now().plusHours(1);
         }
 
@@ -489,8 +576,10 @@ public class StorehouseChestRoutine extends DelayedTask {
             }
         }
 
-        logInfo(String.format("Rescheduling for %s at: %s",
-                reason, scheduledTime.format(DATETIME_FORMATTER)));
+        logInfo(String.format("Rescheduling for %s at: %s | chest=%s stamina=%s",
+                reason, scheduledTime.format(DATETIME_FORMATTER),
+                chestTimerRead ? "MEASURED" : "GUESS",
+                staminaTimeMeasured ? "MEASURED" : "GUESS"));
 
         if (!reason.contains("fallback")) {
             logDebug(String.format("Chest: %s, Stamina: %s",
@@ -498,7 +587,9 @@ public class StorehouseChestRoutine extends DelayedTask {
                     (nextStaminaTime != null) ? nextStaminaTime.format(DATETIME_FORMATTER) : "null"));
         }
 
-        reschedule(scheduledTime);
+        // Exact: the chest time already carries its own 1-8% return jitter, and the queue-wide
+        // jitter on reschedule() would stack a second offset on top of it.
+        rescheduleExact(scheduledTime);
     }
 
     @Override

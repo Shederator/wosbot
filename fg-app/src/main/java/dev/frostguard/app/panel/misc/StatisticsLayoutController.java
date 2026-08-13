@@ -1,5 +1,8 @@
 package dev.frostguard.app.panel.misc;
 
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -20,9 +23,25 @@ import javafx.fxml.FXML;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import org.kordamp.ikonli.Ikon;
+import org.kordamp.ikonli.javafx.FontIcon;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignA;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignC;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignD;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignE;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignF;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignG;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignM;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignP;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignS;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignT;
+import org.kordamp.ikonli.materialdesign2.MaterialDesignW;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 
 public class StatisticsLayoutController extends AbstractProfileController {
@@ -54,6 +73,10 @@ public class StatisticsLayoutController extends AbstractProfileController {
         COUNTER_CATEGORIES.put("Nomadic Merchant Free Resources Claimed", "Economy");
         COUNTER_CATEGORIES.put("Nomadic Merchant VIP Points Purchased", "Economy");
         COUNTER_CATEGORIES.put("Nomadic Merchant Daily Refresh Used", "Economy");
+        COUNTER_CATEGORIES.put("Storehouse Chests Opened", "Economy");
+        COUNTER_CATEGORIES.put("Alliance Gifts Collected", "Economy");
+        COUNTER_CATEGORIES.put("Pet Adventure Chests", "Economy");
+        COUNTER_CATEGORIES.put("Alliance Triumph Rewards", "Economy");
 
         // Training & Research
         COUNTER_CATEGORIES.put("Training Batches Started", "Training & Research");
@@ -85,8 +108,155 @@ public class StatisticsLayoutController extends AbstractProfileController {
     @FXML private VBox vboxCounterSections;
     @FXML private Label lblNoData;
 
+    // "What the bot did for you" section
+    @FXML private FlowPane flowEarnings;
+    @FXML private FlowPane flowActivity;
+    @FXML private Label lblWindow;
+    @FXML private Label lblEarningsEmpty;
+    @FXML private Button btnReportNight;
+    @FXML private Button btnReport24h;
+    @FXML private Button btnReport7d;
+    @FXML private Button btnReportTotal;
+
+    /** Display names + accent colours for the six telemetry metrics. */
+    private static final Map<String, String> METRIC_LABELS = new LinkedHashMap<>();
+    private static final Map<String, String> METRIC_COLORS = new LinkedHashMap<>();
+    static {
+        METRIC_LABELS.put("power", "Power");   METRIC_COLORS.put("power", "#4fc3f7");
+        METRIC_LABELS.put("gems", "Gems");     METRIC_COLORS.put("gems", "#ba68c8");
+        METRIC_LABELS.put("meat", "Meat");     METRIC_COLORS.put("meat", "#ff8a65");
+        METRIC_LABELS.put("wood", "Wood");     METRIC_COLORS.put("wood", "#81c784");
+        METRIC_LABELS.put("coal", "Coal");     METRIC_COLORS.put("coal", "#90a4ae");
+        METRIC_LABELS.put("iron", "Iron");     METRIC_COLORS.put("iron", "#ffb74d");
+        METRIC_LABELS.put("steel", "Steel");   METRIC_COLORS.put("steel", "#b0bec5");
+        // Speedup durations (minutes) — formatted as "6d 3h" for display.
+        METRIC_LABELS.put("sp_general", "Gen. speedup");        METRIC_COLORS.put("sp_general", "#4dd0e1");
+        METRIC_LABELS.put("sp_training", "Training spd");       METRIC_COLORS.put("sp_training", "#7986cb");
+        METRIC_LABELS.put("sp_construction", "Construction spd"); METRIC_COLORS.put("sp_construction", "#a1887f");
+        METRIC_LABELS.put("sp_research", "Research spd");       METRIC_COLORS.put("sp_research", "#4db6ac");
+        METRIC_LABELS.put("sp_healing", "Healing spd");         METRIC_COLORS.put("sp_healing", "#e57373");
+    }
+
+    /**
+     * Icon key per resource metric. Drop <key>.png into <cwd>/stat-icons/ to set any of these.
+     */
+    private static final Map<String, String> METRIC_ICONS = new LinkedHashMap<>();
+    static {
+        METRIC_ICONS.put("power", "power");
+        METRIC_ICONS.put("gems", "gems");
+        METRIC_ICONS.put("meat", "meat");
+        METRIC_ICONS.put("wood", "wood");
+        METRIC_ICONS.put("coal", "coal");
+        METRIC_ICONS.put("iron", "iron");
+        METRIC_ICONS.put("steel", "steel");
+        METRIC_ICONS.put("sp_general", "sp_general");
+        METRIC_ICONS.put("sp_training", "sp_training");
+        METRIC_ICONS.put("sp_construction", "sp_construction");
+        METRIC_ICONS.put("sp_research", "sp_research");
+        METRIC_ICONS.put("sp_healing", "sp_healing");
+    }
+    /** Icon key per activity tile. Drop <key>.png into <cwd>/stat-icons/ to set any of these. */
+    private static final Map<String, String> ACTIVITY_ICONS = new LinkedHashMap<>();
+    static {
+        ACTIVITY_ICONS.put("Beasts hunted", "beasts");
+        ACTIVITY_ICONS.put("Journeys scouted", "journeys");
+        ACTIVITY_ICONS.put("Survivor camps", "survivor_camps");
+        ACTIVITY_ICONS.put("Gather marches", "gather");
+        ACTIVITY_ICONS.put("Daily missions", "daily_missions");
+        ACTIVITY_ICONS.put("Growth missions", "growth_missions");
+        ACTIVITY_ICONS.put("Mail rewards", "mail");
+        ACTIVITY_ICONS.put("Exploration wins", "exploration_win");
+        ACTIVITY_ICONS.put("Arena wins", "arena_win");
+        ACTIVITY_ICONS.put("Beast attacks", "beast_attacks");
+        ACTIVITY_ICONS.put("Storehouse chests", "storehouse");
+        ACTIVITY_ICONS.put("Alliance chests", "alliance_chest");
+        ACTIVITY_ICONS.put("Pet chests", "pet");
+        ACTIVITY_ICONS.put("Triumph rewards", "triumph");
+    }
+
+    /** Clean flat glyphs per icon key — the default look. Overridable by a dropped-in PNG. */
+    private static final Map<String, Ikon> GLYPHS = new LinkedHashMap<>();
+    static {
+        GLYPHS.put("power", MaterialDesignA.ARM_FLEX);
+        GLYPHS.put("gems", MaterialDesignD.DIAMOND_STONE);
+        GLYPHS.put("meat", MaterialDesignF.FOOD_STEAK);
+        GLYPHS.put("wood", MaterialDesignP.PINE_TREE);
+        GLYPHS.put("coal", MaterialDesignG.GRAIN);
+        GLYPHS.put("iron", MaterialDesignA.ANVIL);
+        // Steel → steel-mill; speedups → fast-forward / clock / timer family.
+        GLYPHS.put("steel", MaterialDesignF.FACTORY);
+        GLYPHS.put("sp_general", MaterialDesignF.FAST_FORWARD);
+        GLYPHS.put("sp_training", MaterialDesignC.CLOCK_FAST);
+        GLYPHS.put("sp_construction", MaterialDesignT.TIMER_SAND);
+        GLYPHS.put("sp_research", MaterialDesignF.FLASK);
+        GLYPHS.put("sp_healing", MaterialDesignM.MEDICAL_BAG);
+        GLYPHS.put("intel", MaterialDesignC.CHART_BAR);
+        GLYPHS.put("beasts", MaterialDesignT.TARGET);
+        GLYPHS.put("survivor_camps", MaterialDesignT.TENT);
+        GLYPHS.put("journeys", MaterialDesignC.COMPASS_OUTLINE);
+        GLYPHS.put("exploration_win", MaterialDesignT.TROPHY);
+        GLYPHS.put("training", MaterialDesignS.SWORD_CROSS);
+        GLYPHS.put("research", MaterialDesignF.FLASK);
+        GLYPHS.put("gather", MaterialDesignA.AXE);
+        GLYPHS.put("storehouse", MaterialDesignW.WAREHOUSE);
+        GLYPHS.put("alliance_chest", MaterialDesignS.SHIELD);
+        GLYPHS.put("pet", MaterialDesignP.PAW);
+        GLYPHS.put("exploration", MaterialDesignC.COMPASS);
+        GLYPHS.put("exploration_chest", MaterialDesignT.TREASURE_CHEST);
+        GLYPHS.put("daily_missions", MaterialDesignC.CLIPBOARD_CHECK);
+        GLYPHS.put("growth_missions", MaterialDesignT.TRENDING_UP);
+        GLYPHS.put("mail", MaterialDesignE.EMAIL);
+        GLYPHS.put("life_essence", MaterialDesignS.SPROUT);
+        GLYPHS.put("labyrinth", MaterialDesignM.MAP_MARKER_PATH);
+        GLYPHS.put("arena_win", MaterialDesignT.TROPHY_VARIANT);
+        GLYPHS.put("beast_attacks", MaterialDesignS.SWORD);
+        GLYPHS.put("triumph", MaterialDesignT.TROPHY_AWARD);
+    }
+
+    /**
+     * The tile icon for a key: a user-supplied PNG at {@code <cwd>/stat-icons/<key>.png} if present
+     * (drop one in and hit Refresh — no rebuild), otherwise a clean flat glyph. Returns a JavaFX
+     * Node either way.
+     */
+    private static javafx.scene.Node iconNodeFor(String key, String accent) {
+        if (key == null) return null;
+        try {
+            java.io.File ext = new java.io.File(System.getProperty("user.dir"), "stat-icons/" + key + ".png");
+            if (ext.isFile()) {
+                ImageView iv = new ImageView(new Image(ext.toURI().toString(), 72, 72, true, true));
+                iv.setFitWidth(72); iv.setFitHeight(72); iv.setPreserveRatio(true);
+                return iv;
+            }
+        } catch (Exception ignored) { }
+        Ikon glyph = GLYPHS.get(key);
+        if (glyph == null) return null;
+        // Size via a CSS STYLE CLASS, not setIconSize(): ikonli's CSS pass overrides the
+        // programmatic value, so every setIconSize() number rendered at the default. The app's
+        // own nav icons size themselves through CSS (.nav-button .ikonli-font-icon) and render
+        // real glyphs — so .stat-tile-glyph { -fx-icon-size } is the mechanism that actually takes.
+        // Colour still works programmatically (it varies per tile, so it can't be a static class).
+        FontIcon fi = new FontIcon(glyph);
+        fi.getStyleClass().add("stat-tile-glyph");
+        fi.setIconColor(javafx.scene.paint.Color.web(accent == null ? "#9eaab6" : accent));
+        return fi;
+    }
+
+    /** matt's sleep window for the "last night" report (11pm–8:30am local). */
+    private static final LocalTime SLEEP_START = LocalTime.of(23, 0);
+    private static final LocalTime WAKE_END = LocalTime.of(8, 0);
+
     private ProfileAux currentProfile;
+    private TelemetryReport telemetry = TelemetryReport.load(null);
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    /** The "what the bot did" timeframe segments. */
+    private enum ReportWindow { NIGHT, LAST_24H, LAST_7D, TOTAL }
+
+    /**
+     * Which timeframe is currently shown. Defaults to All time so the page never opens blank, but
+     * once the user picks a segment, Refresh must stay on it instead of snapping back to All time.
+     */
+    private ReportWindow activeWindow = ReportWindow.TOTAL;
 
     // ========================================================================
     // INITIALIZATION
@@ -146,6 +316,8 @@ public class StatisticsLayoutController extends AbstractProfileController {
 
     private void refreshStatisticsView() {
         if (currentProfile == null) return;
+
+        refreshEarnings();
 
         String json = currentProfile.getConfiguration(ConfigurationKeyEnum.STATISTICS_JSON_STRING);
         ProfilesData stats = parseJsonToStats(json);
@@ -216,7 +388,7 @@ public class StatisticsLayoutController extends AbstractProfileController {
     }
 
     private VBox createSummaryCard(String title, String value, String accentColor) {
-        VBox card = new VBox(4);
+        VBox card = new VBox(3);
         card.setAlignment(Pos.CENTER);
         card.getStyleClass().add("stat-summary-card");
         HBox.setHgrow(card, Priority.ALWAYS);
@@ -291,6 +463,235 @@ public class StatisticsLayoutController extends AbstractProfileController {
         card.getChildren().addAll(lblName, lblValue);
 
         return card;
+    }
+
+    // ========================================================================
+    // EARNINGS (telemetry)
+    // ========================================================================
+
+    private void refreshEarnings() {
+        String profileName = currentProfile != null ? currentProfile.getName() : null;
+        telemetry = TelemetryReport.load(profileName);
+        // Reload the data but stay on whatever timeframe the user last selected (defaults to All
+        // time on first open). Refresh must never yank the view back to All time.
+        showActiveWindow();
+    }
+
+    /** Renders the currently-selected timeframe, highlighting its segment. */
+    private void showActiveWindow() {
+        switch (activeWindow) {
+            case NIGHT -> {
+                setActiveSegment(btnReportNight);
+                showWindow("Last night (" + SLEEP_START + "–" + WAKE_END + ")",
+                        telemetry.lastNight(ZoneId.systemDefault(), SLEEP_START, WAKE_END),
+                        telemetry.activityLastNight(ZoneId.systemDefault(), SLEEP_START, WAKE_END));
+            }
+            case LAST_24H -> {
+                setActiveSegment(btnReport24h);
+                showWindow("Last 24 hours",
+                        telemetry.last(24, ChronoUnit.HOURS), telemetry.activityLast(24, ChronoUnit.HOURS));
+            }
+            case LAST_7D -> {
+                setActiveSegment(btnReport7d);
+                showWindow("Last 7 days",
+                        telemetry.last(7, ChronoUnit.DAYS), telemetry.activityLast(7, ChronoUnit.DAYS));
+            }
+            case TOTAL -> {
+                setActiveSegment(btnReportTotal);
+                showWindow("All recorded time", telemetry.total(), telemetry.activityTotal());
+            }
+        }
+    }
+
+    /** Highlights the chosen timeframe segment and clears the others. */
+    private void setActiveSegment(Button active) {
+        for (Button b : new Button[]{btnReportNight, btnReport24h, btnReport7d, btnReportTotal}) {
+            if (b == null) continue;
+            b.getStyleClass().remove("seg-btn-active");
+            if (b == active) b.getStyleClass().add("seg-btn-active");
+        }
+    }
+
+    @FXML private void handleReportNight(ActionEvent e) {
+        activeWindow = ReportWindow.NIGHT;
+        showActiveWindow();
+    }
+
+    @FXML private void handleReport24h(ActionEvent e) {
+        activeWindow = ReportWindow.LAST_24H;
+        showActiveWindow();
+    }
+
+    @FXML private void handleReport7d(ActionEvent e) {
+        activeWindow = ReportWindow.LAST_7D;
+        showActiveWindow();
+    }
+
+    @FXML private void handleReportTotal(ActionEvent e) {
+        activeWindow = ReportWindow.TOTAL;
+        showActiveWindow();
+    }
+
+    /** Rebuilds both the "earned" and "did" sections for the chosen window. */
+    private void showWindow(String windowLabel, List<TelemetryReport.Delta> earned,
+                            List<TelemetryReport.Activity> did) {
+        boolean nothing = (earned == null || earned.isEmpty()) && (did == null || did.isEmpty());
+
+        if (lblEarningsEmpty != null) {
+            lblEarningsEmpty.setVisible(nothing);
+            lblEarningsEmpty.setManaged(nothing);
+        }
+        if (lblWindow != null) {
+            lblWindow.setText(nothing
+                    ? windowLabel + " — not enough samples yet to measure a change."
+                    : windowLabel);
+        }
+
+        if (flowEarnings != null) {
+            flowEarnings.getChildren().clear();
+            // Always show every resource the bot captured (power, gems, meat, wood, coal, iron) —
+            // never drop one just because its delta is zero or it has a single data point. Value is
+            // the gain when we can measure it, otherwise the current amount.
+            Map<String, TelemetryReport.Delta> byMetric = new HashMap<>();
+            if (earned != null) {
+                for (TelemetryReport.Delta d : earned) byMetric.put(d.metric(), d);
+            }
+            TelemetryReport.Sample latest = telemetry.latest();
+            for (String metric : TelemetryReport.METRICS) {
+                Long current = latest == null ? null : latest.get(metric);
+                if (current == null) continue; // metric never captured
+                TelemetryReport.Delta d = byMetric.get(metric);
+                boolean changed = d != null && d.change() != 0;
+                // Speedup metrics (sp_*) are DURATIONS in minutes, so they format as "6d 3h",
+                // "+3h 12m" (gained) / "-1d" (spent) — not the M/K resource formatter.
+                boolean isSpeedup = metric.startsWith("sp_");
+                String value;
+                String sub;
+                if (isSpeedup) {
+                    value = changed ? fmtMinutesSigned(d.change()) : fmtMinutes(current);
+                    sub = changed ? fmtMinutes(d.start()) + " → " + fmtMinutes(d.end()) : "on hand now";
+                } else {
+                    // Measured change → show the before→after range (headline already carries the +/- gain).
+                    // Single data point → the headline IS the current stockpile, so label it plainly.
+                    value = changed ? fmtSigned(d.change()) : fmt(current);
+                    sub = changed ? fmt(d.start()) + " → " + fmt(d.end()) : "on hand now";
+                }
+                flowEarnings.getChildren().add(createStatCard(
+                        METRIC_ICONS.get(metric),
+                        METRIC_LABELS.getOrDefault(metric, metric),
+                        value, sub,
+                        METRIC_COLORS.getOrDefault(metric, "#4fc3f7")));
+            }
+        }
+
+        if (flowActivity != null) {
+            flowActivity.getChildren().clear();
+            if (did != null && !did.isEmpty()) {
+                for (TelemetryReport.Activity a : did) {
+                    flowActivity.getChildren().add(createStatCard(
+                            ACTIVITY_ICONS.get(a.label()),
+                            a.label(), String.valueOf(a.change()), "", "#81c784"));
+                }
+            } else {
+                // Windowed views need two activity snapshots (~2h apart) before they can show a
+                // delta. Say so instead of leaving a blank section that looks broken.
+                Label hint = new Label("Filling in — this window needs a couple more sample cycles"
+                        + " (the bot snapshots roughly every 2 hours). “All time” shows totals now.");
+                hint.getStyleClass().add("label-muted");
+                hint.setWrapText(true);
+                flowActivity.getChildren().add(hint);
+            }
+        }
+    }
+
+    private static final double CARD_W = 140;
+    private static final double CARD_H = 176;
+
+    private VBox createStatCard(String iconKey, String title, String value, String subtitle, String accent) {
+        VBox card = new VBox(3);
+        card.setAlignment(Pos.TOP_CENTER);
+        card.getStyleClass().add("stat-summary-card");
+        card.setPadding(new Insets(9, 8, 9, 8));
+        // Every card is exactly the same size — no more ragged rows.
+        card.setPrefSize(CARD_W, CARD_H);
+        card.setMinSize(CARD_W, CARD_H);
+        card.setMaxSize(CARD_W, CARD_H);
+
+        // Fixed-height icon slot, present on every card (empty when there's no icon) so heights match.
+        StackPane iconSlot = new StackPane();
+        javafx.scene.Node iconNode = iconNodeFor(iconKey, accent);
+        if (iconNode != null) iconSlot.getChildren().add(iconNode);
+        iconSlot.setPrefHeight(72);
+        iconSlot.setMinHeight(72);
+        iconSlot.setMaxHeight(72);
+
+        Label lblValue = new Label(value);
+        lblValue.getStyleClass().add("stat-value");
+        lblValue.setStyle("-fx-text-fill: " + accent + ";");
+
+        Label lblTitle = new Label(title);
+        lblTitle.getStyleClass().add("stat-title");
+        lblTitle.setWrapText(true);
+        lblTitle.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+        lblTitle.setAlignment(Pos.CENTER);
+        lblTitle.setMaxWidth(CARD_W - 20);
+
+        card.getChildren().addAll(iconSlot, lblValue, lblTitle);
+        if (subtitle != null && !subtitle.isBlank()) {
+            Label lblSub = new Label(subtitle);
+            lblSub.getStyleClass().add("label-muted");
+            lblSub.setWrapText(true);
+            lblSub.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+            lblSub.setAlignment(Pos.CENTER);
+            lblSub.setMaxWidth(CARD_W - 12);
+            card.getChildren().add(lblSub);
+        }
+        return card;
+    }
+
+    /** Abbreviates a large number for display: 15685506 → "15.69M". */
+    static String fmt(Long value) {
+        if (value == null) return "—";
+        long v = value;
+        long abs = Math.abs(v);
+        if (abs >= 1_000_000_000L) return trim(v / 1_000_000_000.0) + "B";
+        if (abs >= 1_000_000L) return trim(v / 1_000_000.0) + "M";
+        // Below a million, show the real number with commas — no "K". matt: "million makes
+        // sense, the K does not." 76944 → "76,944", not "76.04K".
+        return String.format(Locale.US, "%,d", v);
+    }
+
+    static String fmtSigned(Long change) {
+        if (change == null) return "—";
+        String body = fmt(Math.abs(change));
+        if (change > 0) return "+" + body;
+        if (change < 0) return "-" + body;
+        return "0";
+    }
+
+    /** Formats a speedup duration in minutes as "6d 3h", "1d 22h 31m", "45m". */
+    static String fmtMinutes(Long minutes) {
+        if (minutes == null) return "—";
+        long m = Math.abs(minutes);
+        long days = m / 1440; m %= 1440;
+        long hours = m / 60; long mins = m % 60;
+        StringBuilder sb = new StringBuilder();
+        if (days > 0) sb.append(days).append('d');
+        if (hours > 0) { if (sb.length() > 0) sb.append(' '); sb.append(hours).append('h'); }
+        // Always show minutes when nothing bigger applies, so "0" renders as "0m" not "".
+        if (mins > 0 || sb.length() == 0) { if (sb.length() > 0) sb.append(' '); sb.append(mins).append('m'); }
+        return sb.toString();
+    }
+
+    /** Signed speedup delta: "+3h 12m" gained, "-1d" spent, "0" unchanged. */
+    static String fmtMinutesSigned(Long change) {
+        if (change == null) return "—";
+        if (change == 0) return "0";
+        return (change > 0 ? "+" : "-") + fmtMinutes(Math.abs(change));
+    }
+
+    private static String trim(double d) {
+        return String.format(Locale.US, "%.2f", d);
     }
 
     // ========================================================================

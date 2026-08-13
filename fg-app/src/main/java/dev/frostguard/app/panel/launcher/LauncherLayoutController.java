@@ -32,6 +32,7 @@ import dev.frostguard.app.panel.misc.DummyLayoutController;
 import dev.frostguard.engine.emulator.EmulatorType;
 import dev.frostguard.app.panel.emulator.EmuConfigLayoutController;
 import dev.frostguard.app.panel.dailies.EventsLayoutController;
+import dev.frostguard.app.panel.dailies.LabyrinthLayoutController;
 import dev.frostguard.app.panel.heroes.ExpertsLayoutController;
 import dev.frostguard.app.panel.misc.FishingLayoutController;
 import dev.frostguard.app.panel.economy.GatherLayoutController;
@@ -54,6 +55,7 @@ import dev.frostguard.engine.service.ConfigService;
 import dev.frostguard.engine.service.ScheduleService;
 import dev.frostguard.engine.service.StaminaService;
 import dev.frostguard.app.panel.economy.ShopLayoutController;
+import dev.frostguard.app.panel.economy.DealsLayoutController;
 import dev.frostguard.app.panel.scheduler.TaskManagerLayoutController;
 import dev.frostguard.app.panel.misc.SkipTutorialLayoutController;
 import dev.frostguard.app.panel.training.TrainingLayoutController;
@@ -98,9 +100,12 @@ import org.kordamp.ikonli.materialdesign2.MaterialDesignH;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignV;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignW;
 import org.kordamp.ikonli.Ikon;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class LauncherLayoutController implements IProfileLoadListener, StaminaChangeListener {
 
+    private static final Logger logger = LoggerFactory.getLogger(LauncherLayoutController.class);
     private static LauncherLayoutController instance;
 
     final private Map<String, Object> moduleControllers = new HashMap<>();
@@ -115,6 +120,8 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     @FXML
     private Button buttonStartStop;
     @FXML
+    private Label labelBotStatus;
+    @FXML
     private SplitMenuButton buttonPauseResume;
     @FXML
     private MenuItem menuToggleAllQueues;
@@ -124,6 +131,8 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     private Label labelRunTime;
     @FXML
     private Label labelVersion;
+    @FXML
+    private Label labelActiveProfile;
     @FXML
     private ComboBox<ProfileAux> profileComboBox;
     @FXML
@@ -202,6 +211,16 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     private long uptimeStartedAtNanos;
     private int autoStartSecondsRemaining;
     private boolean isStartup = true;
+    // matt, 2026-08-06: "if I want a perma stop, I want it to perma stop" -
+    // clicking Stop must never re-arm the auto-start countdown, full stop,
+    // regardless of AUTO_START_MODE_STRING. isStartup alone couldn't carry
+    // this: onEngineStateTransition sets it false on EVERY stop (including a
+    // crash), so a config of "Continuous" would still restart after a crash
+    // but a user-clicked Stop needs to win unconditionally. This flag is
+    // scoped to exactly that one case and consumed (reset false) the moment
+    // it's used, so a later crash-driven stop is still free to auto-start
+    // per whatever the config says.
+    private volatile boolean userInitiatedStop = false;
 
     public LauncherLayoutController(Stage stage) {
         this.stage = stage;
@@ -216,8 +235,20 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     @FXML
     private void initialize() { /* internal */
         initializeDiscordBot();
-        initializeEmulatorController();
+        // matt/2026-08-13: initializeLogModule() + scheduleAutoStart() moved ahead of
+        // initializeEmulatorController() -- that method can pop a BLOCKING modal Alert
+        // (the "Emulator Not Found" manual-picker flow) on the FX thread whenever the
+        // saved emulator path doesn't resolve. scheduleAutoStart() used to run after it,
+        // so the 30-second countdown silently never even started until that dialog was
+        // dismissed -- on a fresh run needing the picker, "no visible auto-start" was
+        // the result. actionController (built by initializeLogModule()) is the only
+        // prerequisite scheduleAutoStart's Timeline needs, so both move up together.
         initializeLogModule();
+        buttonStartStop.setDisable(false);
+        buttonPauseResume.setDisable(true);
+        configurePauseMenu();
+        scheduleAutoStart();
+        initializeEmulatorController();
         initializeProfileModule();
         initializePinnedModules();
         initializeProfileComboBox();
@@ -226,10 +257,6 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         initializeTelegramBot();
         showVersion();
         initializeUptime();
-        buttonStartStop.setDisable(false);
-        buttonPauseResume.setDisable(true);
-        configurePauseMenu();
-        scheduleAutoStart();
         initializeQuickNav();
         initializeSearch();
         setupSocialIcons();
@@ -246,6 +273,29 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     private void updateUptimeLabel() { /* internal */
         long elapsedSeconds = (System.nanoTime() - uptimeStartedAtNanos) / 1_000_000_000L;
         labelRunTime.setText("Uptime: " + formatUptime(elapsedSeconds));
+
+        // matt, 2026-08-08: while the bot is running, the sleep window is the more useful thing
+        // to show — "Sleeping 04:12:33" answers "why is nothing happening right now" at a glance,
+        // which was the whole point of adding a status readout.
+        if (estado) {
+            // A live phase (e.g. the timer sweep) outranks both sleep and the generic Active
+            // label — it is the thing matt actually wants to see while it is happening.
+            String phase = dev.frostguard.engine.schedule.BotPhaseState.current();
+            if (phase != null) {
+                setBotStatus(phase);
+                return;
+            }
+            java.time.Duration sleepLeft =
+                    dev.frostguard.engine.schedule.SleepWindowPolicy.remaining(java.time.LocalDateTime.now());
+            if (!sleepLeft.isZero()) {
+                long h = sleepLeft.toHours();
+                long m = sleepLeft.toMinutesPart();
+                long s = sleepLeft.toSecondsPart();
+                setBotStatus(String.format("Sleeping %02d:%02d:%02d", h, m, s));
+            } else if (!allQueuesPaused) {
+                setBotStatus("Active");
+            }
+        }
     }
 
     static String formatUptime(long elapsedSeconds) {
@@ -511,21 +561,34 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         Parent taskPane = loadNode("TaskManagerLayout", taskCtrl);
         Parent customTasksPane = loadNode("CustomTasksLayout", customTasksCtrl);
 
-        // Show Logs by default on startup
-        setMainContent(logsPane);
+        // matt/2026-08-09: default startup view is set at the end of init (Control → Tasks), so the
+        // app opens on the task list rather than the raw log.
 
         TabPane controlTabs = new TabPane();
         controlTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         controlTabs.getTabs().addAll(
+                makeTab("Tasks", taskPane),
                 makeTab("Logs", logsPane),
                 makeTab("Profiles", profilesPane),
-                makeTab("Tasks", taskPane),
                 makeTab("Custom Tasks", customTasksPane)
         );
         controlTabs.setMaxWidth(Double.MAX_VALUE);
         controlTabs.setMaxHeight(Double.MAX_VALUE);
 
-        addPinnedButton("Control", MaterialDesignC.CONTROLLER_CLASSIC, controlTabs);
+        // Statistics — pinned at the bottom, above Control and Config (matt's layout request:
+        // "Statistics then Control then Config"). Wired to profile updates exactly like a module.
+        StatisticsLayoutController statsCtrl = new StatisticsLayoutController();
+        if (statsCtrl instanceof IProfileObserverInjectable) {
+            ((IProfileObserverInjectable) statsCtrl).attachProfileListener(profileManagerLayoutController);
+        }
+        Parent statsPane = loadNode("StatisticsLayout", statsCtrl);
+        moduleControllers.put("Statistics", statsCtrl);
+        addPinnedButton("Statistics", MaterialDesignV.VIEW_DASHBOARD_OUTLINE, statsPane);
+        if (statsCtrl instanceof IProfileLoadListener) {
+            profileManagerLayoutController.addProfileLoadListener((IProfileLoadListener) statsCtrl);
+        }
+
+        Button controlButton = addPinnedButton("Control", MaterialDesignC.CONTROLLER_CLASSIC, controlTabs);
 
         // Config pinned button — TabPane with Emulators + Telegram
         EmuConfigLayoutController configCtrl = new EmuConfigLayoutController();
@@ -544,6 +607,11 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         configTabs.setMaxHeight(Double.MAX_VALUE);
 
         addPinnedButton("Config", MaterialDesignC.COG_OUTLINE, configTabs);
+
+        // matt/2026-08-09: open Bearguard on the Tasks view instead of the raw log. Select the first
+        // Control tab (Tasks) and fire the Control button so startup lands there with it highlighted.
+        controlTabs.getSelectionModel().selectFirst();
+        controlButton.fire();
     }
 
     private Tab makeTab(String title, Parent content) { /* internal */
@@ -653,6 +721,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
                 new ModuleDefinition("CityEventsExtraLayout",    "Extra City Events",    MaterialDesignC.CALENDAR_PLUS,              CityEventsExtraLayoutController::new),
                 new ModuleDefinition("PolarTerrorLayout",        "Rally",                MaterialDesignF.FLAG_OUTLINE,               PolarTerrorLayoutController::new),
                 new ModuleDefinition("ShopLayout",               "Shop",                 MaterialDesignS.STORE_OUTLINE,              ShopLayoutController::new),
+                new ModuleDefinition("DealsLayout",              "Deals",                MaterialDesignT.TAG_OUTLINE,                 DealsLayoutController::new),
                 new ModuleDefinition("GatherLayout",             "Gather",               MaterialDesignP.PACKAGE_VARIANT,            GatherLayoutController::new),
                 new ModuleDefinition("IntelLayout",              "Intel",                MaterialDesignB.BINOCULARS,                 IntelLayoutController::new),
                 new ModuleDefinition("AllianceLayout",           "Alliance",             MaterialDesignA.ACCOUNT_GROUP_OUTLINE,      AllianceLayoutController::new),
@@ -674,12 +743,24 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
                 new ModuleDefinition("SkipTutorialLayout",       "Skip Tutorial",        MaterialDesignS.SKIP_NEXT_OUTLINE,          SkipTutorialLayoutController::new),
                 new ModuleDefinition("CharacterLayout",          "Character",            MaterialDesignA.ACCOUNT_OUTLINE,            CharacterLayoutController::new),
-                new ModuleDefinition("StatisticsLayout",         "Statistics",           MaterialDesignV.VIEW_DASHBOARD_OUTLINE,     StatisticsLayoutController::new),
+                // Statistics is pinned at the sidebar bottom (with Control/Config), not in this list — see buildPinnedButtons.
 
                 // Bearguard
                 new ModuleDefinition("ChatCaptureLayout",        "Chat",                 MaterialDesignC.CHAT_OUTLINE,               ChatCaptureLayoutController::new)
         );
         //@formatter:on
+
+        // matt, 2026-08-10: event-type screens are consolidated into ONE "Events" sidebar item that
+        // opens a tabbed page (a tab per event + a Labyrinth tab), instead of many separate entries.
+        // Everything else he doesn't use day-to-day stays in the "More" collapsible group.
+        java.util.List<String> eventOrder = java.util.List.of(
+                "Events", "Alliance Championship", "Alliance Mobilization", "Bear Trap", "Fishing Tournament");
+        java.util.Set<String> tucked = java.util.Set.of(
+                "Dummy Task", "Shop", "Alliance Shop", "Beast Hunting",
+                "Experts", "Debugging", "Task Builder", "Skip Tutorial", "Character");
+
+        java.util.LinkedHashMap<String, Parent> eventRoots = new java.util.LinkedHashMap<>();
+        java.util.List<Button> tuckedButtons = new java.util.ArrayList<>();
 
         for (ModuleDefinition module : modules) {
             consoleLogLayoutController.appendMessage(
@@ -687,13 +768,113 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
             Object controller = module.createController(profileManagerLayoutController);
             moduleControllers.put(module.buttonTitle(), controller);
-            addButton(module.fxmlName(), module.buttonTitle(), module.icon(), controller);
+
+            if (eventOrder.contains(module.buttonTitle())) {
+                // Event screens become tabs in the Events hub — load the root, no standalone button.
+                eventRoots.put(module.buttonTitle(), loadNode(module.fxmlName(), controller));
+            } else {
+                Button moduleButton = addButton(module.fxmlName(), module.buttonTitle(), module.icon(), controller);
+                if (tucked.contains(module.buttonTitle())) {
+                    tuckedButtons.add(moduleButton);
+                }
+            }
 
             if (controller instanceof IProfileLoadListener) {
                 profileManagerLayoutController.addProfileLoadListener((IProfileLoadListener) controller);
             }
         }
+
+        // The Labyrinth screen is only ever a tab (never a standalone nav button), so build it here.
+        LabyrinthLayoutController labyrinthController = new LabyrinthLayoutController();
+        labyrinthController.attachProfileListener(profileManagerLayoutController);
+        moduleControllers.put("Labyrinth", labyrinthController);
+        profileManagerLayoutController.addProfileLoadListener(labyrinthController);
+        Parent labyrinthRoot = loadNode("LabyrinthLayout", labyrinthController);
+
+        installEventsHub(eventOrder, eventRoots, labyrinthRoot);
+        installCollapsibleSection("More", tuckedButtons, false);
+
         profileManagerLayoutController.addProfileLoadListener(this);
+    }
+
+    /**
+     * Builds a single "Events" sidebar button that opens a tabbed page: one tab per event screen (in
+     * {@code order}), plus a Labyrinth tab. Each tab hosts the screen's already-loaded root, so all
+     * their settings work exactly as before — they're just consolidated onto one page.
+     */
+    private void installEventsHub(java.util.List<String> order,
+                                  java.util.Map<String, Parent> eventRoots,
+                                  Parent labyrinthRoot) {
+        javafx.scene.control.TabPane pane = new javafx.scene.control.TabPane();
+        pane.setTabClosingPolicy(javafx.scene.control.TabPane.TabClosingPolicy.UNAVAILABLE);
+        pane.setMaxWidth(Double.MAX_VALUE);
+        pane.setMaxHeight(Double.MAX_VALUE);
+
+        for (String title : order) {
+            Parent root = eventRoots.get(title);
+            if (root != null) {
+                javafx.scene.control.Tab tab = new javafx.scene.control.Tab(title, root);
+                tab.setClosable(false);
+                pane.getTabs().add(tab);
+            }
+        }
+        if (labyrinthRoot != null) {
+            javafx.scene.control.Tab lab = new javafx.scene.control.Tab("Labyrinth", labyrinthRoot);
+            lab.setClosable(false);
+            pane.getTabs().add(lab);
+        }
+        if (pane.getTabs().isEmpty()) {
+            return;
+        }
+
+        Button eventsButton = createAndConfigureButton("Events", MaterialDesignC.CALENDAR_STAR, pane);
+        buttonsContainer.getChildren().add(eventsButton);
+    }
+
+    /**
+     * Groups the given module buttons under a single collapsible header ("More", …) on the sidebar.
+     * Nothing is deleted — the buttons are the same instances, simply re-parented under the
+     * header and shown/hidden when it's clicked, so every screen stays reachable.
+     *
+     * @param label        section title shown in the header (a count is appended)
+     * @param buttons      the module buttons to tuck under this header
+     * @param startExpanded whether the section is open on first render
+     */
+    private void installCollapsibleSection(String label, java.util.List<Button> buttons, boolean startExpanded) {
+        if (buttons.isEmpty()) {
+            return;
+        }
+
+        VBox box = new VBox(8);
+        box.setVisible(startExpanded);
+        box.setManaged(startExpanded);
+
+        for (Button b : buttons) {
+            buttonsContainer.getChildren().remove(b);
+            box.getChildren().add(b);
+        }
+
+        Label caret = new Label(startExpanded ? "▾" : "▸");
+        Label title = new Label(label + " (" + buttons.size() + ")");
+        title.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(title, Priority.ALWAYS);
+
+        HBox header = new HBox(10, caret, title);
+        header.setAlignment(Pos.CENTER_LEFT);
+        header.setMaxWidth(Double.MAX_VALUE);
+
+        Button toggle = new Button();
+        toggle.setGraphic(header);
+        toggle.setMaxWidth(Double.MAX_VALUE);
+        toggle.getStyleClass().add("nav-button");
+        toggle.setOnAction(e -> {
+            boolean showing = !box.isVisible();
+            box.setVisible(showing);
+            box.setManaged(showing);
+            caret.setText(showing ? "▾" : "▸");
+        });
+
+        buttonsContainer.getChildren().addAll(toggle, box);
     }
 
     @Override
@@ -728,6 +909,11 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
             if (null != labelWindowTitle) {
                 labelWindowTitle.setText(title);
             }
+            // matt: status bar should always say which profile Start/Stop is
+            // about to act on, independent of the window title.
+            if (null != labelActiveProfile) {
+                labelActiveProfile.setText("Profile: " + currentProfile.getName());
+            }
         });
     }
 
@@ -741,6 +927,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
                     allQueuesPaused = true;
                     buttonPauseResume.setDisable(false);
                     estado = true;
+                    setBotStatus("Paused");
                     updatePauseButtonState();
                     refreshPauseMenuItems();
                 } else {
@@ -749,6 +936,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
                     allQueuesPaused = false;
                     buttonPauseResume.setDisable(false);
                     estado = true;
+                    setBotStatus("Active");
                     updatePauseButtonState();
                     refreshPauseMenuItems();
                 }
@@ -759,7 +947,13 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
                 resetPauseStates();
                 estado = false;
                 isStartup = false;
-                scheduleAutoStart();
+                setBotStatus("Stopped");
+                if (userInitiatedStop) {
+                    // Consume it and stay stopped - this is the perma-stop case.
+                    userInitiatedStop = false;
+                } else {
+                    scheduleAutoStart();
+                }
             }
         }
     }
@@ -1099,21 +1293,45 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
             if (!estado) {
                 Platform.runLater(() -> {
                     buttonStartStop.setText("Starting...");
+                    setBotStatus("Starting up");
                     buttonStartStop.setDisable(true);
                 });
+                userInitiatedStop = false;
                 actionController.startBot();
             } else {
                 Platform.runLater(() -> {
                     buttonStartStop.setText("Stopping...");
+                    setBotStatus("Stopping");
                     buttonStartStop.setDisable(true);
                     buttonPauseResume.setDisable(true);
                 });
                 isStartup = false;
+                userInitiatedStop = true;
                 actionController.stopBot();
             }
         });
         startStopThread.setName("Start-Stop-Thread");
         startStopThread.start();
+    }
+
+
+
+    /**
+     * Updates the status readout that replaced the Full Stop button.
+     *
+     * <p>matt, 2026-08-08: "somewhere on the page that is, like, what's the current status?
+     * It could be active. It could be sleeping." Safe to call from any thread — it hops to the
+     * FX thread itself, because the engine's state callbacks arrive on worker threads.</p>
+     */
+    private void setBotStatus(String status) {
+        if (labelBotStatus == null) {
+            return;
+        }
+        if (Platform.isFxApplicationThread()) {
+            labelBotStatus.setText(status);
+        } else {
+            Platform.runLater(() -> labelBotStatus.setText(status));
+        }
     }
 
     public void forceStartBot() { /* bind */
@@ -1122,8 +1340,10 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
             Thread startStopThread = Thread.ofVirtual().unstarted(() -> {
                 Platform.runLater(() -> {
                     buttonStartStop.setText("Starting...");
+                    setBotStatus("Starting up");
                     buttonStartStop.setDisable(true);
                 });
+                userInitiatedStop = false;
                 actionController.startBot();
             });
             startStopThread.setName("Force-Start-Thread");
@@ -1266,6 +1486,15 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         cancelAutoStart();
         HashMap<String, String> globalConfig = ConfigService.obtain().loadGlobalSettings();
         if (null == globalConfig) return;
+
+        // matt, 2026-08-08: the AUTO_START_SUPPRESSED_BOOL gate that used to sit here is gone
+        // along with the Full Stop button that set it. Leaving the read in place would have been
+        // a trap: nothing could ever clear the flag again, so a stale "true" left over from a
+        // previous Full Stop press would have silently blocked auto-start forever with no
+        // visible cause. A manual Stop already keeps the bot stopped (userInitiatedStop is
+        // consumed in onEngineStateTransition without rescheduling), which is the behaviour matt
+        // confirmed he wanted and the reason the button was redundant.
+
         boolean autoStartEnabled = Boolean.parseBoolean(
                 globalConfig.getOrDefault(ConfigurationKeyEnum.AUTO_START_ENABLED_BOOL.name(), "false"));
         if (!autoStartEnabled) return;
@@ -1273,26 +1502,31 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         String autoStartMode = globalConfig.getOrDefault(ConfigurationKeyEnum.AUTO_START_MODE_STRING.name(), "Continuous");
         if ("Startup Only".equalsIgnoreCase(autoStartMode) && !isStartup) return;
 
-        int delayMinutes;
+        // matt, 2026-08-08: seconds-based delay (he wants 30s specifically) —
+        // takes priority over the older minutes-only key, which stays only
+        // for backward compatibility with anything still reading it.
+        int delaySeconds;
         try {
-            delayMinutes = Integer.parseInt(
-                    globalConfig.getOrDefault(ConfigurationKeyEnum.AUTO_START_DELAY_MINUTES_INT.name(), "5"));
+            delaySeconds = Integer.parseInt(
+                    globalConfig.getOrDefault(ConfigurationKeyEnum.AUTO_START_DELAY_SECONDS_INT.name(), "30"));
         } catch (NumberFormatException e) {
-            delayMinutes = 5;
+            delaySeconds = 30;
         }
-        if (delayMinutes <= 0) return;
+        if (delaySeconds <= 0) return;
 
-        autoStartSecondsRemaining = delayMinutes * 60;
+        autoStartSecondsRemaining = delaySeconds;
         autoStartTimeline = new Timeline(new KeyFrame(Duration.seconds(1), e -> {
             autoStartSecondsRemaining--;
             int mins = autoStartSecondsRemaining / 60;
             int secs = autoStartSecondsRemaining % 60;
             buttonStartStop.setText(String.format("Start (%02d:%02d)", mins, secs));
+            setBotStatus(String.format("Auto-start in %02d:%02d", mins, secs));
             if (autoStartSecondsRemaining <= 0) {
                 cancelAutoStart();
                 Thread autoStartThread = Thread.ofVirtual().unstarted(() -> {
                     Platform.runLater(() -> {
                         buttonStartStop.setText("Starting...");
+                    setBotStatus("Starting up");
                         buttonStartStop.setDisable(true);
                     });
                     actionController.startBot();
@@ -1376,18 +1610,33 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         button.setOnAction(e -> {
             hideSearchOverlay();
             setMainContent(root);
-            // Deselect all buttons in both containers
-            for (Node node : buttonsContainer.getChildren()) {
-                if (node instanceof Button) node.getStyleClass().remove("active");
-            }
+            // matt/2026-08-12: "More" section buttons stayed highlighted together once
+            // more than one had been clicked. Root cause -- this deselect pass only
+            // walked DIRECT children of buttonsContainer/pinnedButtonsContainer, but
+            // installCollapsibleSection() re-parents tucked buttons one level deeper
+            // into a nested VBox, so they were never reached and never lost "active".
+            // Recursing into the whole subtree fixes it without needing a separate
+            // flat registry of every button (which wouldn't have covered the Events
+            // hub button either, since that's added straight to buttonsContainer
+            // outside of quickNavEntries).
+            deselectAllNavButtonsRecursively(buttonsContainer);
             if (null != pinnedButtonsContainer) {
-                for (Node node : pinnedButtonsContainer.getChildren()) {
-                    if (node instanceof Button) node.getStyleClass().remove("active");
-                }
+                deselectAllNavButtonsRecursively(pinnedButtonsContainer);
             }
             button.getStyleClass().add("active");
         });
         return button;
+    }
+
+    private void deselectAllNavButtonsRecursively(Parent container) {
+        for (Node node : container.getChildrenUnmodifiable()) {
+            if (node instanceof Button) {
+                node.getStyleClass().remove("active");
+            }
+            if (node instanceof Parent nestedParent) {
+                deselectAllNavButtonsRecursively(nestedParent);
+            }
+        }
     }
 
     private Button addButton(String fxmlName, String title, Ikon icon, Object controller) { /* internal */

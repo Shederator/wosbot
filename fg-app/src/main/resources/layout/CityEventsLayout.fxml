@@ -89,6 +89,15 @@
                     <!-- War academy -->
                     <CheckBox fx:id="checkBoxWarAcademyShards" graphicTextGap="6.0"
                               mnemonicParsing="false" text="Claim war academy crystal shards" />
+
+                    <Separator style="-fx-opacity: 0.25;" />
+
+                    <!-- matt/2026-08-12: Monument, aka "Explore the World" Atlas, claims ready
+                         quest rows, opens owned Scene Fragment Packs, and runs the daily
+                         Alliance Trade puzzle-piece requests/sends. First pass, not yet
+                         live-verified end to end, default OFF. -->
+                    <CheckBox fx:id="checkBoxMonument" graphicTextGap="6.0"
+                              mnemonicParsing="false" text="Explore the World (Monument): claim, Fragment Packs, Alliance Trade" />
                 </VBox>
             </VBox>
 

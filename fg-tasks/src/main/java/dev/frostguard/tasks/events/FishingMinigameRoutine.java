@@ -16,8 +16,8 @@ import dev.frostguard.engine.schedule.DelayedTask;
  * Fishing Minigame Task â€” Predictive Constant-Velocity (PCV) Algorithm
  *
  * <p>
- * Automates the fishing minigame in Whiteout Survival. Fish have empirically
- * measured <b>constant</b> horizontal velocities (px/ms):
+ * Automates the Fishing Tournament minigame in Whiteout Survival. Fish have
+ * empirically measured <b>constant</b> horizontal velocities (px/ms):
  * <ul>
  *   <li>Pufferfish: 0.030 (1.0 px/frame)</li>
  *   <li>Small fish: 0.017 (0.57 px/frame)</li>
@@ -30,8 +30,24 @@ import dev.frostguard.engine.schedule.DelayedTask;
  * <p>
  * <b>Algorithm:</b> Template matching is performed every N ticks to detect new
  * fish and correct positional drift. Between scans, fish positions are predicted
- * using constant-velocity physics with wall bouncing. Danger zones are computed
- * from predicted future positions, and the hook is steered into safe gaps.
+ * using constant-velocity physics with wall bouncing.
+ *
+ * <p>
+ * <b>Steering policy â€” changed by matt, 2026-08-06:</b> this used to steer
+ * the hook <i>away</i> from every tracked fish (treating all of them as
+ * hazards). A live-captured 30s Tournament run (70 frames, sampled early/
+ * mid/late) showed the shield meter (0/4) never took a single hit despite
+ * the hook repeatedly passing through/near fish, and every one of the 4
+ * tracked species is confirmed already-caught in the account's almanac
+ * (C:\Bearguard\fish_catalog\catalog.md) â€” catching them again still counts
+ * toward Fishing Points (used for missions/gear upgrades per the wiki), so
+ * there's no evidence any of these 4 types is a hazard and real evidence
+ * they're worth intercepting. The hook now steers <i>onto</i> the nearest
+ * tracked fish instead of away from it (see {@link #chooseInterceptTarget}).
+ * If a genuine hazard type is ever identified (the live run never triggered
+ * one, so it's still unconfirmed), reintroduce it via the untouched
+ * {@link #computeDangerZones}/{@link #chooseSafeTarget} pair below rather
+ * than deleting them.
  */
 public class FishingMinigameRoutine extends DelayedTask {
 
@@ -81,6 +97,16 @@ public class FishingMinigameRoutine extends DelayedTask {
     private static final int SWIPE_DEADZONE_PX = 6;
     /** Template scan interval (every N ticks) for drift correction + new fish. */
     private static final int SCAN_INTERVAL = 5;
+    /** Unknown-species discovery interval (every N ticks, must be a multiple
+     *  of SCAN_INTERVAL) - coarser than the main scan since full-frame
+     *  background subtraction is heavier than a few targeted template matches. */
+    private static final int DISCOVERY_INTERVAL = 20;
+    /** How close (px) a discovered blob's center must be to an already-tracked
+     *  known fish's center to be considered "that's the known one, not new." */
+    private static final double DISCOVERY_DEDUP_RADIUS = 40.0;
+    /** Cap on discovery crops saved per fishing attempt - a busy frame can
+     *  produce a dozen candidates; this bounds disk usage from one dive. */
+    private static final int MAX_DISCOVERIES_PER_ATTEMPT = 40;
     /** Max pixel distance to associate a detection with an existing track. */
     private static final float TRACK_MATCH_DIST = 60.0f;
     /** Remove single-detection tracks after this many consecutive missed scans. */
@@ -93,6 +119,7 @@ public class FishingMinigameRoutine extends DelayedTask {
     // â”€â”€ Runtime state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     private final List<TrackedFish> trackedFish = new ArrayList<>();
     private int nextTrackId = 0;
+    private int discoveriesThisAttempt = 0;
 
     public FishingMinigameRoutine(dev.frostguard.api.domain.AccountDescriptor profile, TpDailyTaskEnum tpTask) {
         super(profile, tpTask);
@@ -116,6 +143,7 @@ public class FishingMinigameRoutine extends DelayedTask {
     protected void execute() {
         trackedFish.clear();
         nextTrackId = 0;
+        discoveriesThisAttempt = 0;
 
         // â”€â”€ 0. Wait for the hook to appear (game loading buffer) â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (!waitForHook()) {
@@ -220,6 +248,17 @@ public class FishingMinigameRoutine extends DelayedTask {
                 }
                 logInfo(String.format("T%d | SCAN %d det, %d tracked: %s| scan=%dms",
                         ticks, detections.size(), trackedFish.size(), detSb.toString(), scanMs));
+
+                // matt, 2026-08-06: "grows over time" species discovery - every
+                // scan also checks for creatures that don't match any of the 4
+                // known templates, and logs a crop of each so a future review
+                // pass can name them. Runs at DISCOVERY_INTERVAL (coarser than
+                // the main SCAN_INTERVAL - full-frame background-subtraction is
+                // heavier than a handful of targeted template matches) so it
+                // doesn't eat into the fast reaction loop's budget.
+                if (ticks % DISCOVERY_INTERVAL == 0) {
+                    runSpeciesDiscovery(raw, hookCx, hookCy);
+                }
             }
 
             // â”€â”€ 6. Log tracked fish state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -234,19 +273,13 @@ public class FishingMinigameRoutine extends DelayedTask {
                         ticks, trackedFish.size(), belowCount, hookCy, fishSb.toString()));
             }
 
-            // â”€â”€ 7. Danger zones from predicted positions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // â”€â”€ 7â€“8. Intercept target from predicted positions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // matt, 2026-08-06: steer ONTO the nearest fish, not away from
+            // it (see class doc above for why). computeDangerZones/
+            // chooseSafeTarget are kept below, unused, in case a real
+            // hazard type is identified later.
             long l0 = System.nanoTime();
-            List<int[]> dangers = computeDangerZones(hookCx, hookCy);
-
-            // Log danger zone details
-            if (!dangers.isEmpty()) {
-                StringBuilder zSb = new StringBuilder();
-                for (int[] d : dangers) zSb.append(String.format("[%d,%d] ", d[0], d[1]));
-                logInfo(String.format("T%d | DANGER %d zones: %s", ticks, dangers.size(), zSb.toString()));
-            }
-
-            // â”€â”€ 8. Pick safe target â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            int targetX = chooseSafeTarget(hookCx, dangers);
+            int targetX = chooseInterceptTarget(hookCx, hookCy);
             long l1 = System.nanoTime();
             long logicMs = (l1 - l0) / 1_000_000;
             totalLogicMs += logicMs;
@@ -326,6 +359,42 @@ public class FishingMinigameRoutine extends DelayedTask {
     // =========================================================================
     // PERIODIC TEMPLATE SCANNING
     // =========================================================================
+
+    /**
+     * Runs generic background-subtraction detection ({@link FishSpeciesDiscovery})
+     * over the current frame, discards any blob that's just one of the 4
+     * already-tracked known species (so the log only fills up with genuinely
+     * unidentified creatures), and saves a crop of the rest for future review.
+     * Best-effort and non-fatal by design - a detection hiccup here must never
+     * interrupt the actual dodge/steer loop it's riding alongside.
+     */
+    private void runSpeciesDiscovery(RawImageData raw, int hookCx, int hookCy) {
+        if (discoveriesThisAttempt >= MAX_DISCOVERIES_PER_ATTEMPT) {
+            return;
+        }
+        try {
+            List<FishSpeciesDiscovery.Candidate> candidates =
+                    FishSpeciesDiscovery.findCandidates(raw, hookCx, hookCy);
+            for (FishSpeciesDiscovery.Candidate c : candidates) {
+                if (discoveriesThisAttempt >= MAX_DISCOVERIES_PER_ATTEMPT) {
+                    break;
+                }
+                double cx = c.x() + c.w() / 2.0;
+                double cy = c.y() + c.h() / 2.0;
+                boolean matchesKnown = trackedFish.stream().anyMatch(f ->
+                        Math.hypot(f.cx - cx, f.cy - cy) <= DISCOVERY_DEDUP_RADIUS);
+                if (matchesKnown) {
+                    continue;
+                }
+                FishSpeciesDiscovery.saveDiscovery(raw, c, "fishing_tournament");
+                discoveriesThisAttempt++;
+            }
+        } catch (Exception e) {
+            // Best-effort logging feature - never worth interrupting the
+            // actual dodge/steer loop over a discovery-detection hiccup.
+            logDebug("Species discovery scan failed this cycle: " + e.getMessage());
+        }
+    }
 
     /**
      * Scans for all fish types below the hook using template matching.
@@ -488,6 +557,28 @@ public class FishingMinigameRoutine extends DelayedTask {
             }
         }
         return dangers;
+    }
+
+    /**
+     * matt, 2026-08-06: replaces {@link #chooseSafeTarget} as the live
+     * target-selection path. Picks the nearest tracked fish below the hook
+     * (soonest to reach hook-Y) and aims for the CENTER of its projected
+     * arrival window â€” i.e. the same physics projection {@link
+     * #computeDangerZone} already does, just steered onto instead of away
+     * from. Holds position (returns hookCx) when nothing is tracked below.
+     */
+    private int chooseInterceptTarget(int hookCx, int hookCy) {
+        List<TrackedFish> below = new ArrayList<>();
+        for (TrackedFish f : trackedFish) {
+            if (f.cy > hookCy) below.add(f);
+        }
+        if (below.isEmpty()) return hookCx;
+        below.sort(Comparator.comparingDouble(f -> f.cy));
+
+        TrackedFish nearest = below.get(0);
+        int[] window = computeDangerZone(nearest, hookCy);
+        if (window == null) return hookCx;
+        return (window[0] + window[1]) / 2;
     }
 
     /**

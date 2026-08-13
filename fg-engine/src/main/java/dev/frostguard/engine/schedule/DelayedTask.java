@@ -3,6 +3,10 @@ package dev.frostguard.engine.schedule;
 import dev.frostguard.vision.convert.RegexNumberParser;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
 import dev.frostguard.data.repository.ProfileRepository;
+import java.util.LinkedHashMap;
+import java.util.concurrent.ThreadLocalRandom;
+
+import dev.frostguard.engine.service.ConfigService;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TpMessageSeverityEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
@@ -354,6 +358,14 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
         emuManager.swipeScreen(EMULATOR_NUMBER, start, end);
     }
 
+    /** Duration-aware swipe -- a real, controlled drag instead of the default
+     *  fast-flick (which triggers momentum scrolling far past the intended
+     *  distance on the World map). Use this for any map-panning navigation. */
+    public void swipe(PointData start, PointData end, int durationMs) {
+        checkPreemption();
+        emuManager.swipeScreen(EMULATOR_NUMBER, start, end, durationMs);
+    }
+
     public void pressBack() {
         checkPreemption();
         emuManager.pressBack(EMULATOR_NUMBER);
@@ -449,9 +461,74 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
 
     // ── scheduling ──────────────────────────────────────────────────
 
+    /**
+     * Schedules the next run, nudged by a small random amount so wake-ups do not land on
+     * mechanically exact times.
+     *
+     * <p>matt, 2026-08-08: every routine funnels its reschedule through here, so this is the one
+     * place that can scatter the bot's clock. Without it Intel fires at exactly 15:00.00 after
+     * every run, hourly tasks land on the same second forever, and the whole schedule is a
+     * metronome.</p>
+     *
+     * <p>The jitter is a percentage <em>with an absolute ceiling</em>, which is matt's
+     * requirement and the part that matters: 15% of a 16-hour research timer would be nearly
+     * two and a half hours of dead waiting, which trades a cosmetic tell for real lost progress.
+     * Capping at {@link ConfigurationKeyEnum#SCHEDULE_JITTER_MAX_SECONDS_INT} (default 150s)
+     * means long timers get a couple of harmless minutes while short ones still get a
+     * proportional nudge.</p>
+     *
+     * <p>Only ever delays, never pulls forward — arriving early at a timer that has not expired
+     * wastes a navigation cycle and can read as a retry loop.</p>
+     */
     public void reschedule(LocalDateTime rescheduledTime) {
         long gapMs = Duration.between(LocalDateTime.now(), rescheduledTime).toMillis();
+        scheduledTime = LocalDateTime.now().plus(Duration.ofMillis(gapMs + resolveJitterMs(gapMs)));
+    }
+
+    /**
+     * Schedules without jitter, for callers that must hit an exact moment.
+     *
+     * <p>Reserved for hard external deadlines — a fixed event window, a march landing — where
+     * arriving late costs something real.</p>
+     */
+    public void rescheduleExact(LocalDateTime rescheduledTime) {
+        long gapMs = Duration.between(LocalDateTime.now(), rescheduledTime).toMillis();
         scheduledTime = LocalDateTime.now().plus(Duration.ofMillis(gapMs));
+    }
+
+    private long resolveJitterMs(long gapMs) {
+        if (gapMs <= 0) {
+            // Already due (or forced to "now"): leave it alone so forced runs stay immediate.
+            return 0L;
+        }
+
+        try {
+            LinkedHashMap<String, String> cfg = ConfigService.obtain().loadGlobalSettings();
+
+            int percent = parseSetting(cfg, ConfigurationKeyEnum.SCHEDULE_JITTER_PERCENT_INT);
+            int maxSeconds = parseSetting(cfg, ConfigurationKeyEnum.SCHEDULE_JITTER_MAX_SECONDS_INT);
+
+            if (percent <= 0 || maxSeconds <= 0) {
+                return 0L;
+            }
+
+            long percentBudgetMs = (gapMs * percent) / 100L;
+            long ceilingMs = maxSeconds * 1000L;
+            long budgetMs = Math.min(percentBudgetMs, ceilingMs);
+
+            return budgetMs <= 0 ? 0L : ThreadLocalRandom.current().nextLong(budgetMs + 1);
+        } catch (Exception ex) {
+            return 0L;
+        }
+    }
+
+    private int parseSetting(LinkedHashMap<String, String> cfg, ConfigurationKeyEnum key) {
+        String raw = cfg.getOrDefault(key.name(), key.getDefaultValue());
+        try {
+            return Integer.parseInt(raw.trim());
+        } catch (NumberFormatException ex) {
+            return Integer.parseInt(key.getDefaultValue());
+        }
     }
 
     public void clearSchedule() {

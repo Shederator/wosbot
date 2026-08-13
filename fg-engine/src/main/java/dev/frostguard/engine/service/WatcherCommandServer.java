@@ -44,6 +44,7 @@ public class WatcherCommandServer {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 10);
         server.createContext("/command", this::handleRequest);
         server.createContext("/pid", this::handlePidRequest);
+        server.createContext("/status", this::handleStatusRequest);
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         server.start();
         logger.info("WatcherCommandServer listening on 127.0.0.1:{}", port);
@@ -95,6 +96,38 @@ public class WatcherCommandServer {
         }
 
         exchange.getResponseBody().write(responseBytes);
+        exchange.close();
+    }
+
+    /**
+     * Synchronous GET /status — {"queueRunning": true|false}. Added 2026-08-07
+     * for run-full-capture.js: the 2h sync must know whether the automation
+     * queue was already running before it decides to stop/scrape/resume, so it
+     * never turns the bot on when matt had it manually stopped (or the app
+     * closed, in which case this endpoint isn't reachable at all — a connection
+     * failure IS the "closed" signal to callers).
+     */
+    private void handleStatusRequest(HttpExchange exchange) throws IOException {
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            exchange.sendResponseHeaders(405, 0);
+            exchange.close();
+            return;
+        }
+
+        try {
+            boolean queueRunning = botService.isBotCurrentlyRunning();
+            String response = "{\"queueRunning\":" + queueRunning + "}";
+            byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, responseBytes.length);
+            exchange.getResponseBody().write(responseBytes);
+        } catch (Exception e) {
+            logger.error("WatcherCommandServer: error handling status request: {}", e.getMessage(), e);
+            byte[] responseBytes = ("{\"ok\":false,\"error\":\"" + e.getMessage() + "\"}")
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(500, responseBytes.length);
+            exchange.getResponseBody().write(responseBytes);
+        }
+
         exchange.close();
     }
 

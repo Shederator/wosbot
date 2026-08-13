@@ -166,7 +166,7 @@ public ResearchRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
                     LocalDateTime rescheduleTime = LocalDateTime.now().plus(recheckDelay);
                     logInfo(routineLogResearchLine("Research busy for "
                             + formatDuration(busyTime)
-                            + ". Planning next run at half time in "
+                            + ". Planning next run when it completes, in "
                             + formatDuration(recheckDelay) + "."));
                     this.reschedule(rescheduleTime);
                 } else {
@@ -234,7 +234,7 @@ public ResearchRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 
                     logInfo(routineLogResearchLine("Research time is "
                             + formatDuration(researchTime)
-                            + ". Planning next run at half time in "
+                            + ". Planning next run when it completes, in "
                             + formatDuration(recheckDelay) + "."));
                     logInfo(routineLogResearchLine("Research task completed. Planning next run for: " + rescheduleTime));
                     this.reschedule(rescheduleTime);

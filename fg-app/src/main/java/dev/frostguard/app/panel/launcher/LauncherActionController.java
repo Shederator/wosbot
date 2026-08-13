@@ -90,6 +90,12 @@ public class LauncherActionController implements BotStateListener, QueueStateLis
             if (profileManagerLayoutController != null) {
                 profileManagerLayoutController.setLoadedProfileId(profile.getId());
                 profileManagerLayoutController.notifyProfileLoadListeners(profile);
+                // matt: only when the user actually picked this from the dropdown -
+                // not on the startup fallback selection (userTriggered=false), which
+                // should never silently flip which profile is enabled.
+                if (userTriggered) {
+                    profileManagerLayoutController.setOnlyEnabledProfile(profile);
+                }
             }
             layoutController.onProfileLoad(profile);
         });

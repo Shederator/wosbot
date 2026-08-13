@@ -52,12 +52,18 @@ import dev.frostguard.vision.ocr.TesseractOcrProvider;
  * or hits a safety cap. This keeps repeat runs from re-saving the same
  * history every cycle.
  *
- * <p><b>NOT YET LIVE-VERIFIED.</b> Coordinates are carried over from the
- * measured 720x1280 chat screenshots used to build the original
- * {@code bg_chatcapture} custom-task prototype, plus a freshly measured
- * Personal tab position. The diff/dedup logic itself has not been run against
- * the live game - flagged honestly per matt's "scaffold it, then we test"
- * instruction, same as Cryptid Hosting was before its own live pass.
+ * <p><b>Sender/message structure.</b> Each capture now parses the OCR'd
+ * feed into actual {@code {sender, text}} pairs at capture time (see
+ * {@link #parseMessages}), not as a flat list of lines left for some
+ * downstream process to guess boundaries from later - that guessing is
+ * exactly what was merging different people's messages together. A line
+ * matching {@link #SENDER_LINE_PATTERN} opens a new message; every
+ * following line (handles wrapped multi-line messages) belongs to it,
+ * until the next sender line or end of capture.
+ *
+ * <p>Live-verified 2026-08-06 against real saved captures from this
+ * account's own history (frames + OCR'd lines under
+ * {@code telemetry/chat/frames/} and {@code chat.jsonl}) - not guessed.
  */
 public class ChatCaptureRoutine extends DelayedTask {
 
@@ -78,18 +84,77 @@ public class ChatCaptureRoutine extends DelayedTask {
     private static final int FEED_BOTTOM = 1150;
     private static final int FEED_X = 360;
 
+    // matt, 2026-08-06: OCR region now EXCLUDES the avatar column (x < ~112
+    // on a live capture - avatar art + rank badge). Feeding player-portrait
+    // images into Tesseract as if they were text was a real source of the
+    // garbage glyphs polluting every capture. Sender name + message bubble
+    // both live to the right of the avatar, so this loses nothing.
+    private static final int FEED_LEFT = 112;
+    private static final int FEED_RIGHT = 710;
+
     private static final int MAX_SCROLL_BACK = 8;
 
     /**
-     * Message text is light on a dark navy panel. No character whitelist -
-     * unlike the HUD there is no useful restriction for arbitrary chat, and
-     * imposing one would mangle non-English text rather than improve it.
+     * matt, 2026-08-06: two real bugs fixed here, found by comparing this
+     * task's actual saved output against a live screenshot of the real chat
+     * UI:
+     * (1) TesseractOcrProvider hardcoded "eng" regardless of what any caller
+     *     configured. Tried eng+chi_sim first (chi_sim being the only extra
+     *     language pack already bundled) but live evidence was net-negative:
+     *     small UI icons/badges started getting misread AS Chinese glyphs
+     *     (a stray "全" appearing in otherwise-Portuguese/English text,
+     *     verified against real captures) - CJK's huge glyph set is more
+     *     prone to false-positive-matching an icon shape than English's
+     *     small character set is. Reverted to eng-only. Translation for
+     *     genuinely non-English text happens downstream in
+     *     chat_summarize.py instead (Google Translate, not local OCR
+     *     language packs) - see that file for why that's the more robust
+     *     place for it.
+     * (2) TesseractOcrProvider's recognizeText() unconditionally stripped
+     *     ALL newlines before returning, which is exactly right for a
+     *     single HUD value but was quietly flattening this task's entire
+     *     multi-message chat panel into one run-on string with no line
+     *     boundaries at all - that's the direct cause of captures coming
+     *     back as one giant garbled blob mixing several people's messages.
+     *     preserveLineBreaks(true) keeps Tesseract's real line segmentation.
      */
     private static final TesseractSettingsData CHAT_TEXT_SETTINGS =
             TesseractSettingsData.assembler()
                     .pageAnalysis(PageAnalysis.UNIFORM_BLOCK)
                     .stripBackground(false)
+                    .language("eng")
+                    .preserveLineBreaks(true)
                     .build();
+
+    /**
+     * A sender-HEADER line (the bubble label above a message) looks like
+     * "VIP4 [INF]Abu Ibrahim" or "[INF]Abu Ibrahim" or "Abu Ibrahim" -
+     * short, no sentence-like punctuation, often with a VIP tier and/or a
+     * bracketed alliance tag. Message text, by contrast, is free-form
+     * prose. Bracket/paren accepted interchangeably on either side
+     * ("[INF)Mrs_Lasanha" was observed live - Tesseract mixing them up on
+     * a real capture) since that's an OCR-glyph-confusion issue, not a
+     * different UI element.
+     */
+    private static final java.util.regex.Pattern SENDER_HEADER_PATTERN =
+            java.util.regex.Pattern.compile(
+                    "^(VIP\\d+\\s*)?([\\[(][A-Za-z0-9]{2,5}[\\])]\\s*)?[\\p{L}0-9_.'\\- ]{2,24}$");
+
+    /**
+     * matt, 2026-08-06: added after live evidence the header-only pattern
+     * above was missing a second, equally common format - the small gray
+     * "reply preview" strip under a bubble, which renders inline as
+     * "Name: message" on ONE line rather than name-then-text on separate
+     * lines (e.g. "Kratos: Mas agora k so criar tropa..." seen live,
+     * completely missed by the header pattern since it never appears alone
+     * on its own line). This is checked as a distinct, self-contained
+     * message: sender is the part before the colon, text is everything
+     * after - it does not open a new multi-line block the way a header
+     * does, since a reply preview is always exactly one line.
+     */
+    private static final java.util.regex.Pattern INLINE_SENDER_PATTERN =
+            java.util.regex.Pattern.compile(
+                    "^([\\p{L}0-9_.'\\- ]{2,24}):\\s+(.+)$");
 
     private static final DateTimeFormatter FILE_STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
 
@@ -182,7 +247,7 @@ public class ChatCaptureRoutine extends DelayedTask {
         ChatDiffState previous = loadState(channel);
         Set<String> previousSignatures = previous.frameSignatures;
         Set<String> thisRunSignatures = new LinkedHashSet<>();
-        List<String> newFrontier = null;
+        List<ChatMessage> newFrontier = null;
 
         int saved = 0;
         for (int i = 0; i < MAX_SCROLL_BACK; i++) {
@@ -193,13 +258,26 @@ public class ChatCaptureRoutine extends DelayedTask {
             }
             BufferedImage image = TesseractOcrProvider.toBufferedImage(frame);
 
-            String rawText = readStringValue(
-                    new PointData(0, FEED_TOP), new PointData(720, FEED_BOTTOM), CHAT_TEXT_SETTINGS);
+            String rawText;
+            try {
+                // Direct call, bypassing readStringValue()'s indirection -
+                // that path doesn't expose preserveLineBreaks/language, and
+                // this task already holds its own frame to pass through.
+                rawText = TesseractOcrProvider.recognizeText(
+                        frame,
+                        new PointData(FEED_LEFT, FEED_TOP), new PointData(FEED_RIGHT, FEED_BOTTOM),
+                        CHAT_TEXT_SETTINGS);
+            } catch (Exception e) {
+                logWarning("ChatCaptureRoutine | OCR failed for " + channel + ": " + e.getMessage());
+                rawText = null;
+            }
+
             List<String> lines = cleanLines(rawText);
-            String signature = signatureOf(lines);
+            List<ChatMessage> messages = parseMessages(lines);
+            String signature = signatureOf(messages);
 
             if (i == 0) {
-                newFrontier = lines;
+                newFrontier = messages;
                 if (signature.equals(previous.frontierSignature)) {
                     // Nothing has changed since last run's newest capture -
                     // stop immediately rather than re-walking history that is
@@ -213,8 +291,8 @@ public class ChatCaptureRoutine extends DelayedTask {
                 break;
             }
 
-            if (!lines.isEmpty()) {
-                saveFrame(channel, i, image, lines, signature);
+            if (!messages.isEmpty()) {
+                saveFrame(channel, i, image, messages, signature);
                 thisRunSignatures.add(signature);
                 saved++;
             }
@@ -231,6 +309,54 @@ public class ChatCaptureRoutine extends DelayedTask {
         }
 
         return saved;
+    }
+
+    /** One parsed chat message: who sent it (best-effort) and what it says. */
+    private record ChatMessage(String sender, String text) {}
+
+    /**
+     * Groups OCR'd lines into {sender, text} pairs. A line matching
+     * {@link #SENDER_LINE_PATTERN} starts a new message; subsequent lines
+     * (handles a message that wraps across multiple physical lines) are
+     * appended to that message's text until the next sender line appears.
+     * Lines before the first recognized sender (page furniture, a message
+     * cut off by scroll position) are dropped rather than guessed at.
+     */
+    private List<ChatMessage> parseMessages(List<String> lines) {
+        List<ChatMessage> out = new ArrayList<>();
+        String currentSender = null;
+        StringBuilder currentText = null;
+
+        for (String line : lines) {
+            var inlineMatch = INLINE_SENDER_PATTERN.matcher(line);
+            if (inlineMatch.matches()) {
+                // Self-contained "Name: text" (reply-preview strip) - closes
+                // whatever multi-line header block was open, then stands as
+                // its own complete message immediately.
+                if (currentSender != null && currentText != null && currentText.length() > 0) {
+                    out.add(new ChatMessage(currentSender, currentText.toString().trim()));
+                }
+                out.add(new ChatMessage(inlineMatch.group(1).trim(), inlineMatch.group(2).trim()));
+                currentSender = null;
+                currentText = null;
+            } else if (SENDER_HEADER_PATTERN.matcher(line).matches()) {
+                if (currentSender != null && currentText != null && currentText.length() > 0) {
+                    out.add(new ChatMessage(currentSender, currentText.toString().trim()));
+                }
+                currentSender = line;
+                currentText = new StringBuilder();
+            } else if (currentSender != null) {
+                if (currentText.length() > 0) {
+                    currentText.append(' ');
+                }
+                currentText.append(line);
+            }
+            // else: text before any recognized sender - dropped, not guessed.
+        }
+        if (currentSender != null && currentText != null && currentText.length() > 0) {
+            out.add(new ChatMessage(currentSender, currentText.toString().trim()));
+        }
+        return out;
     }
 
     private void swipeUpThroughHistory() {
@@ -265,11 +391,15 @@ public class ChatCaptureRoutine extends DelayedTask {
         return lines;
     }
 
-    private String signatureOf(List<String> lines) {
-        return String.join(" | ", lines);
+    private String signatureOf(List<ChatMessage> messages) {
+        StringBuilder sb = new StringBuilder();
+        for (ChatMessage m : messages) {
+            sb.append(m.sender()).append(':').append(m.text()).append(" | ");
+        }
+        return sb.toString();
     }
 
-    private void saveFrame(String channel, int scrollIndex, BufferedImage image, List<String> lines, String signature) {
+    private void saveFrame(String channel, int scrollIndex, BufferedImage image, List<ChatMessage> messages, String signature) {
         String stamp = LocalDateTime.now(ZoneOffset.UTC).format(FILE_STAMP);
         Path framesDir = baseDir().resolve("frames");
         Path shot = framesDir.resolve(channel + "-" + stamp + "-" + scrollIndex + ".png");
@@ -282,12 +412,24 @@ public class ChatCaptureRoutine extends DelayedTask {
             return;
         }
 
+        List<Map<String, Object>> messageRows = new ArrayList<>();
+        for (ChatMessage m : messages) {
+            Map<String, Object> mr = new LinkedHashMap<>();
+            mr.put("sender", m.sender());
+            mr.put("text", m.text());
+            messageRows.add(mr);
+        }
+
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("capturedAt", LocalDateTime.now(ZoneOffset.UTC).toString() + "Z");
         row.put("channel", channel);
         row.put("mode", mode);
         row.put("frame", baseDir().relativize(shot).toString().replace('\\', '/'));
-        row.put("lines", lines);
+        // matt, 2026-08-06: was a flat "lines" array with no sender/message
+        // structure at all - that's what the downstream Python summarizer
+        // was trying (and failing) to reconstruct with regex. Now the
+        // capture itself owns that structure (see parseMessages above).
+        row.put("messages", messageRows);
         row.put("signature", signature);
         appendRow(toJson(row));
     }
@@ -407,7 +549,15 @@ public class ChatCaptureRoutine extends DelayedTask {
                     sb.append(',');
                 }
                 first = false;
-                sb.append('"').append(escape(String.valueOf(item))).append('"');
+                // matt, 2026-08-06: "messages" is now a List<Map<String,Object>>
+                // (one map per {sender, text} pair) - the old version assumed
+                // every list item was a plain string and would have serialized
+                // each message as its Java toString(), not valid JSON.
+                if (item instanceof Map<?, ?> m) {
+                    sb.append(toJson((Map<String, Object>) m));
+                } else {
+                    sb.append('"').append(escape(String.valueOf(item))).append('"');
+                }
             }
             return sb.append(']').toString();
         }

@@ -56,6 +56,23 @@
                 </VBox>
             </VBox>
 
+            <!-- matt/2026-08-12: standalone, deliberately NOT tied to the Training master
+                 toggle above, since healing injured troops is a separate concern from
+                 training new ones. -->
+            <VBox styleClass="content-card">
+                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-green">
+                    <Label text="Heal Injured Troops" />
+                </HBox>
+                <VBox spacing="10" styleClass="task-section-inner">
+                    <Label styleClass="task-card-description"
+                           text="Checks the World-map Heal Injured panel, starts healing the highest-priority injured troops (Quick Select + Heal), and requests alliance Help to speed the queue up. Rechecks every 30 minutes when nothing is currently injured."
+                           wrapText="true" />
+                    <Separator style="-fx-opacity: 0.25;" />
+                    <CheckBox fx:id="checkBoxHealInjured" mnemonicParsing="false"
+                              text="Enable Heal Injured Troops" />
+                </VBox>
+            </VBox>
+
         </VBox>
     </ScrollPane>
 </StackPane>

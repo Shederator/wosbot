@@ -100,6 +100,11 @@ public enum ConfigurationKeyEnum {
     ARENA_TASK_ACTIVATION_TIME_STRING   ("23:50",   String.class,   ConfigCategory.DAILIES),
     ARENA_TASK_BOOL                     ("false",   Boolean.class,  ConfigCategory.DAILIES),
     ARENA_TASK_EXTRA_ATTEMPTS_INT       ("0",       Integer.class,  ConfigCategory.DAILIES),
+    /** matt, 2026-08-08: Testing-profile-only safety valve — taps the challenge
+     *  button to confirm which opponent was selected, then stops before the
+     *  actual battle so a targeting-logic change can be verified live without
+     *  spending a real attempt. Default false everywhere. */
+    ARENA_TASK_DRY_RUN_BOOL             ("false",   Boolean.class,  ConfigCategory.DAILIES),
     /** Legacy arena state filter key retained only so existing persisted profiles can still be read. */
     ARENA_TASK_PLAYER_STATE_INT         ("0",       Integer.class,  ConfigCategory.DAILIES, true),
     ARENA_TASK_SERVER_POLICY_STRING     ("Any server", String.class, ConfigCategory.DAILIES),
@@ -108,6 +113,21 @@ public enum ConfigurationKeyEnum {
     ARENA_TASK_PROTECT_ALLIANCE_BOOL    ("true",    Boolean.class,  ConfigCategory.DAILIES, true),
     ARENA_TASK_REFRESH_WITH_GEMS_BOOL   ("false",   Boolean.class,  ConfigCategory.DAILIES),
     DAILY_LABYRINTH_BOOL                ("false",   Boolean.class,  ConfigCategory.DAILIES),
+    /** matt/2026-08-10: Testing-only gate for the Land-of-Heroes formation-setup flow. When true,
+     *  DailyLabyrinthRoutine.execute() ONLY runs setupLandOfHeroesFormation() (tap Challenge → Quick
+     *  Deploy → Balance → OCR-drive the troop ratio → use-as-default → Confirm → Edit Formation → STOP)
+     *  and skips the normal daily-clear logic, so the free formation-setup can be triggered without
+     *  spending a daily battle attempt. Default false everywhere. */
+    LABYRINTH_FORMATION_TEST_BOOL       ("false",   Boolean.class,  ConfigCategory.DAILIES),
+    /** Labyrinth generation the account is playing (matt is Gen 1). Informational + future tuning. */
+    LABYRINTH_GENERATION_STRING         ("Gen 1",   String.class,   ConfigCategory.DAILIES),
+    /** Land-of-Heroes per-squad troop ratios (Infantry/Lancer/Marksman), driven from the Labyrinth tab. */
+    LABYRINTH_SQUAD1_INFANTRY_INT       ("60",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_SQUAD1_LANCER_INT         ("40",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_SQUAD1_MARKSMAN_INT       ("0",       Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_SQUAD2_INFANTRY_INT       ("50",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_SQUAD2_LANCER_INT         ("0",       Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_SQUAD2_MARKSMAN_INT       ("50",      Integer.class,  ConfigCategory.DAILIES),
     DAILY_MISSION_AUTO_SCHEDULE_BOOL    ("false",   Boolean.class,  ConfigCategory.DAILIES),
     DAILY_MISSION_BOOL                  ("false",   Boolean.class,  ConfigCategory.DAILIES),
     DAILY_MISSION_OFFSET_INT            ("60",      Integer.class,  ConfigCategory.DAILIES),
@@ -187,6 +207,16 @@ public enum ConfigurationKeyEnum {
     INTEL_FIRE_BEAST_BOOL                       ("false",   Boolean.class,  ConfigCategory.INTEL),
     INTEL_RECALL_GATHER_TROOPS_BOOL             ("false",   Boolean.class,  ConfigCategory.INTEL),
     INTEL_SMART_PROCESSING_BOOL                 ("false",   Boolean.class,  ConfigCategory.INTEL),
+    // matt/2026-08-09: set by IntelligenceRoutine each pass — true when the board actually had a
+    // mission, false when empty. GatherRoutine reads it so it only defers/recalls for an imminent
+    // Intel that will really consume a march slot, never for Intel's idle ~15-min beast-recheck.
+    INTEL_LAST_RUN_HAD_MISSIONS_BOOL            ("false",   Boolean.class,  ConfigCategory.INTEL),
+    // matt, 2026-08-06: "if we run on stamina, go ahead and refresh it" - same
+    // Chief Stamina item top-up pattern PolarTerror/Cryptid already use, wired
+    // into IntelligenceRoutine's stamina gate so a low-stamina Intel run tops
+    // up from the backpack instead of idling until natural regeneration.
+    INTEL_USE_STAMINA_ITEMS_BOOL                ("false",   Boolean.class,  ConfigCategory.INTEL),
+    INTEL_STAMINA_ITEM_RESERVE_INT              ("0",       Integer.class,  ConfigCategory.INTEL),
     INTEL_USE_FLAG_BOOL                         ("false",   Boolean.class,  ConfigCategory.INTEL),
 
     /* ─────────── experts ─────────── */
@@ -216,6 +246,30 @@ public enum ConfigurationKeyEnum {
     GATHER_LAST_RECALL_TIME_STRING  ("",                    String.class,   ConfigCategory.GATHERING),
     GATHER_SPEED_BOOL               ("false",               Boolean.class,  ConfigCategory.GATHERING),
     GATHER_SPEED_BOOST_TYPE_STRING  ("24h (600 gems)",      String.class,   ConfigCategory.GATHERING),
+    // matt/2026-08-06: when enabled, the rotation pool is ordered by scarcity-relative-to-value
+    // (stockpile / valueWeight, ascending) instead of Collections.shuffle(). See
+    // GatherRoutine.RESOURCE_VALUE_WEIGHT for the sourced value ratio. Off by default so existing
+    // blind-rotation behavior is unchanged unless a user opts in.
+    GATHER_SMART_PRIORITY_BOOL      ("false",               Boolean.class,  ConfigCategory.GATHERING),
+    // matt/2026-08-06: cache written by ResourceStockpileRoutine (runs only when
+    // GATHER_SMART_PRIORITY_BOOL is on - no separate checkbox to find/enable), read back by
+    // GatherRoutine.readCurrentStockpiles(). Source screen: Research Center -> Research -> any
+    // non-maxed tech node's "Research Cost" panel, which shows all 4 resources as current/cost -
+    // verified live 2026-08-06 (see RESOURCE_STOCKPILE_SCREEN comment in ResourceStockpileRoutine).
+    RESOURCE_STOCKPILE_MEAT_LONG        ("0",  Long.class,    ConfigCategory.GATHERING),
+    RESOURCE_STOCKPILE_WOOD_LONG        ("0",  Long.class,    ConfigCategory.GATHERING),
+    RESOURCE_STOCKPILE_COAL_LONG        ("0",  Long.class,    ConfigCategory.GATHERING),
+    RESOURCE_STOCKPILE_IRON_LONG        ("0",  Long.class,    ConfigCategory.GATHERING),
+    // Added 2026-08-10 for the Backpack "Resource & Speedup Summary" reader. Steel is the 5th
+    // resource (no "Total Items" column, so its "Total Resources" value is read instead), and the
+    // five speedup buckets are stored in MINUTES (parsed from the game's "6 day(s)3 hr(s)3 min" form).
+    RESOURCE_STOCKPILE_STEEL_LONG       ("0",  Long.class,    ConfigCategory.GATHERING),
+    SPEEDUP_GENERAL_MIN_LONG            ("0",  Long.class,    ConfigCategory.GATHERING),
+    SPEEDUP_TRAINING_MIN_LONG          ("0",  Long.class,    ConfigCategory.GATHERING),
+    SPEEDUP_CONSTRUCTION_MIN_LONG      ("0",  Long.class,    ConfigCategory.GATHERING),
+    SPEEDUP_RESEARCH_MIN_LONG          ("0",  Long.class,    ConfigCategory.GATHERING),
+    SPEEDUP_HEALING_MIN_LONG           ("0",  Long.class,    ConfigCategory.GATHERING),
+    RESOURCE_STOCKPILE_LAST_READ_STRING ("",   String.class,  ConfigCategory.GATHERING),
     GATHER_TASK_BOOL                ("false",               Boolean.class,  ConfigCategory.GATHERING),
     GATHER_WOOD_BOOL                ("false",               Boolean.class,  ConfigCategory.GATHERING),
     GATHER_WOOD_LEVEL_INT           ("8",                   Integer.class,  ConfigCategory.GATHERING),
@@ -258,9 +312,43 @@ public enum ConfigurationKeyEnum {
     /* ─────────── system ─────────── */
 
     AUTO_START_DELAY_MINUTES_INT        ("5",           Integer.class,  ConfigCategory.SYSTEM),
+    /** matt, 2026-08-08: sub-minute precision for the countdown (he wants 30s specifically). Takes priority over the minutes key when present. */
+    AUTO_START_DELAY_SECONDS_INT        ("30",          Integer.class,  ConfigCategory.SYSTEM),
     AUTO_START_ENABLED_BOOL             ("false",       Boolean.class,  ConfigCategory.SYSTEM),
     AUTO_START_MODE_STRING              ("Continuous",  String.class,   ConfigCategory.SYSTEM),
+    /** matt, 2026-08-08: set by the "Full Stop" button — persists across app restarts, unlike a
+     *  regular Stop. Suppresses auto-start entirely until Start Bot is clicked manually again. */
+    AUTO_START_SUPPRESSED_BOOL          ("false",       Boolean.class,  ConfigCategory.SYSTEM),
     BOOL_DEBUG                          ("false",       Boolean.class,  ConfigCategory.SYSTEM),
+    /** matt, 2026-08-08: pixels of scatter applied to every tap so repeats never land identically.
+     *  0 restores the old exact-pixel behaviour. Kept small — tap targets are button centres. */
+    TAP_JITTER_RADIUS_PX_INT            ("3",           Integer.class,  ConfigCategory.SYSTEM),
+    /** matt, 2026-08-08: percent of the wait added as random delay, so reschedules never land on
+     *  an exact repeating time. Always paired with the absolute cap below. 0 disables. */
+    SCHEDULE_JITTER_PERCENT_INT         ("15",          Integer.class,  ConfigCategory.SYSTEM),
+    /** Hard ceiling on schedule jitter. Without it, 15% of a 16h timer would idle ~2.5h — matt's
+     *  explicit requirement was a cap of a couple of minutes, not a percentage of a long wait. */
+    SCHEDULE_JITTER_MAX_SECONDS_INT     ("150",         Integer.class,  ConfigCategory.SYSTEM),
+    /** matt, 2026-08-08: an idle gap at least this long counts as sleep rather than a pause
+     *  between tasks. His spec: minimum twenty minutes, no upper bound. Derived from the real
+     *  schedule, so it replaced the fixed nightly window he originally asked for. */
+    SLEEP_IDLE_THRESHOLD_MINUTES_INT    ("20",          Integer.class,  ConfigCategory.SYSTEM),
+    /** matt, 2026-08-08: read-only timer sweep at startup and hourly. */
+    TIMER_SWEEP_ENABLED_BOOL            ("true",        Boolean.class,  ConfigCategory.SYSTEM),
+    /** Minutes between timer sweeps once the startup sweep has run. */
+    TIMER_SWEEP_INTERVAL_MINUTES_INT    ("60",          Integer.class,  ConfigCategory.SYSTEM),
+    /** matt, 2026-08-08: DEFAULT OFF, deliberately reversed after matt watched it run.
+     *
+     *  <p>Forcing every task due at startup does re-derive real timers, but it does so by
+     *  running each routine's full workload — navigate, perform the task, then reschedule.
+     *  From the outside that is a bot blindly tearing through every activity it owns the moment
+     *  it starts, which is the opposite of the order of operations matt asked for: read all the
+     *  timers first, record them, then act only on what is genuinely due.</p>
+     *
+     *  <p>Left in place as an escape hatch for the case it was built for — schedules gone badly
+     *  stale after a profile sat disabled — but it is not the startup path. The read-only timer
+     *  sweep is.</p> */
+    STARTUP_FULL_RESCAN_BOOL            ("false",       Boolean.class,  ConfigCategory.SYSTEM),
     CURRENT_EMULATOR_STRING             ("",            String.class,   ConfigCategory.SYSTEM),
     DISCORD_TOKEN_STRING                ("",            String.class,   ConfigCategory.SYSTEM),
     GAME_VERSION_STRING                 ("GLOBAL",      String.class,   ConfigCategory.SYSTEM),
@@ -305,6 +393,27 @@ public enum ConfigurationKeyEnum {
     TRAIN_MINISTRY_APPOINTMENT_BOOL     ("false",   Boolean.class,  ConfigCategory.TRAINING),
     TRAIN_MINISTRY_APPOINTMENT_TIME_LONG("0",       Long.class,     ConfigCategory.TRAINING),
     TRAIN_PRIORITIZE_PROMOTION_BOOL     ("false",   Boolean.class,  ConfigCategory.TRAINING),
+
+    // matt/2026-08-12: auto-heal injured troops (World map -> the "Heal Injured" panel
+    // above My City) + tap Help to speed the queue up via alliance assistance.
+    HEAL_INJURED_ENABLED_BOOL           ("false",   Boolean.class,  ConfigCategory.TRAINING),
+
+    // matt/2026-08-12: "Explore the World" Atlas/Monument -- claim ready quest rows,
+    // open owned Scene Fragment Packs, run daily Alliance Trade requests/sends.
+    MONUMENT_ENABLED_BOOL               ("false",   Boolean.class,  ConfigCategory.CITY),
+
+    // matt/2026-08-12: "event slop" claim toggles -- rotating limited-time Events-tab
+    // events, one checkbox each so matt can pick which ones the bot bothers with.
+    EVENT_HALL_OF_CHIEFS_CLAIM_BOOL      ("false",   Boolean.class,  ConfigCategory.EVENTS),
+    EVENT_DEFEAT_BEASTS_CLAIM_BOOL       ("false",   Boolean.class,  ConfigCategory.EVENTS),
+    EVENT_HERO_RALLY_CLAIM_BOOL          ("false",   Boolean.class,  ConfigCategory.EVENTS),
+    EVENT_LUCKY_CHIP_SUPPLY_CLAIM_BOOL   ("false",   Boolean.class,  ConfigCategory.EVENTS),
+
+    // matt/2026-08-13: top-right cart-icon Shop panel, built out tab by tab. Custom
+    // Armament Chest's free "Claimable" chest badge is periodic (may not appear for
+    // weeks) -- checked once a day, no-ops when nothing's there.
+    SHOP_CUSTOM_ARMAMENT_CHEST_CLAIM_BOOL ("false",  Boolean.class,  ConfigCategory.SHOPS),
+    SHOP_DAILY_DEALS_FREE_CHEST_CLAIM_BOOL ("false", Boolean.class,  ConfigCategory.SHOPS),
 
     // Bearguard: Berserk Cryptid rally HOSTING, distinct from the RALLY_* keys
     // above which configure joining someone else's. Appended at the end so

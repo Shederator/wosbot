@@ -1,0 +1,440 @@
+None	1	ALLIANCE_AUTOJOIN_BOOL	false
+None	1	ALLIANCE_AUTOJOIN_QUEUES_INT	1
+None	1	ALLIANCE_AUTOJOIN_USE_ALL_TROOPS_BOOL	true
+None	1	ALLIANCE_AUTOJOIN_USE_PREDEFINED_FORMATION_BOOL	false
+None	1	ALLIANCE_CHAMPIONSHIP_BOOL	false
+None	1	ALLIANCE_CHAMPIONSHIP_FLAG_STRING	No Flag
+None	1	ALLIANCE_CHAMPIONSHIP_INFANTRY_PERCENTAGE_INT	50
+None	1	ALLIANCE_CHAMPIONSHIP_LANCERS_PERCENTAGE_INT	20
+None	1	ALLIANCE_CHAMPIONSHIP_MARKSMANS_PERCENTAGE_INT	30
+None	1	ALLIANCE_CHAMPIONSHIP_OVERRIDE_DEPLOY_BOOL	false
+None	1	ALLIANCE_CHAMPIONSHIP_POSITION_STRING	CENTER
+None	1	ALLIANCE_CHESTS_BOOL	false
+None	1	ALLIANCE_CHESTS_OFFSET_INT	60
+None	1	ALLIANCE_HELP_BOOL	false
+None	1	ALLIANCE_HONOR_CHEST_BOOL	false
+None	1	ALLIANCE_LIFE_ESSENCE_BOOL	false
+None	1	ALLIANCE_LIFE_ESSENCE_OFFSET_INT	60
+None	1	ALLIANCE_MOBILIZATION_AUTO_ACCEPT_BOOL	true
+None	1	ALLIANCE_MOBILIZATION_BOOL	false
+None	1	ALLIANCE_MOBILIZATION_BUILD_SPEEDUPS_BOOL	false
+None	1	ALLIANCE_MOBILIZATION_BUY_PACKAGE_BOOL	false
+None	1	ALLIANCE_MOBILIZATION_CHIEF_GEAR_CHARM_BOOL	false
+None	1	ALLIANCE_MOBILIZATION_CHIEF_GEAR_SCORE_BOOL	false
+None	1	ALLIANCE_MOBILIZATION_DEFEAT_BEASTS_BOOL	false
+None	1	ALLIANCE_MOBILIZATION_FIRE_CRYSTAL_BOOL	false
+None	1	ALLIANCE_MOBILIZATION_GATHER_RESOURCES_BOOL	false
+None	1	ALLIANCE_MOBILIZATION_HERO_GEAR_STONE_BOOL	false
+None	1	ALLIANCE_MOBILIZATION_MINIMUM_POINTS_120_INT	520
+None	1	ALLIANCE_MOBILIZATION_MINIMUM_POINTS_200_INT	800
+None	1	ALLIANCE_MOBILIZATION_MYTHIC_SHARD_BOOL	false
+None	1	ALLIANCE_MOBILIZATION_RALLY_BOOL	false
+None	1	ALLIANCE_MOBILIZATION_REWARDS_PERCENTAGE_STRING	Any
+None	1	ALLIANCE_MOBILIZATION_TRAINING_SPEEDUPS_BOOL	false
+None	1	ALLIANCE_MOBILIZATION_TRAIN_TROOPS_BOOL	false
+None	1	ALLIANCE_MOBILIZATION_USE_GEMS_BOOL	false
+None	1	ALLIANCE_MOBILIZATION_USE_GEMS_FOR_ACCEPT_BOOL	false
+None	1	ALLIANCE_MOBILIZATION_USE_SPEEDUPS_BOOL	false
+None	1	ALLIANCE_PET_TREASURE_BOOL	false
+None	1	ALLIANCE_SHOP_ENABLED_BOOL	false
+None	1	ALLIANCE_SHOP_MIN_COINS_INT	0
+None	1	ALLIANCE_SHOP_MIN_COINS_TO_ACTIVATE_INT	0
+None	1	ALLIANCE_SHOP_MIN_PERCENTAGE_INT	50
+None	1	ALLIANCE_SHOP_PRIORITIES_STRING	
+None	1	ALLIANCE_TECH_BOOL	false
+None	1	ALLIANCE_TECH_OFFSET_INT	60
+None	1	ALLIANCE_TRIUMPH_BOOL	false
+None	1	ALLIANCE_TRIUMPH_OFFSET_INT	60
+None	1	ANALYTICS_ENABLED_BOOL	false
+None	1	ANALYTICS_ID_STRING	b8750759-7f16-4fbd-b004-0099d5c91366
+None	1	ARENA_TASK_ACTIVATION_TIME_STRING	23:50
+None	1	ARENA_TASK_ALLIANCE_POLICY_STRING	Any alliance
+None	1	ARENA_TASK_BOOL	false
+None	1	ARENA_TASK_DRY_RUN_BOOL	false
+None	1	ARENA_TASK_EXTRA_ATTEMPTS_INT	0
+None	1	ARENA_TASK_REFRESH_WITH_GEMS_BOOL	false
+None	1	ARENA_TASK_SERVER_POLICY_STRING	Any server
+None	1	AUTO_START_DELAY_MINUTES_INT	1
+None	1	AUTO_START_DELAY_SECONDS_INT	30
+None	1	AUTO_START_ENABLED_BOOL	true
+None	1	AUTO_START_MODE_STRING	Startup Only
+None	1	AUTO_START_SUPPRESSED_BOOL	false
+None	1	BEAR_TRAP_ACTIVE_PETS_BOOL	false
+None	1	BEAR_TRAP_CALL_RALLY_BOOL	false
+None	1	BEAR_TRAP_EVENT_BOOL	false
+None	1	BEAR_TRAP_JOIN_FLAG_INT	1
+None	1	BEAR_TRAP_JOIN_RALLY_BOOL	false
+None	1	BEAR_TRAP_NUMBER_INT	1
+None	1	BEAR_TRAP_PREPARATION_TIME_INT	5
+None	1	BEAR_TRAP_RALLY_FLAG_INT	1
+None	1	BEAR_TRAP_RECALL_TROOPS_BOOL	false
+None	1	BEAR_TRAP_SCHEDULE_DATETIME_STRING	
+None	1	BEAST_HUNTING_ENABLED_BOOL	false
+None	1	BEAST_HUNTING_LEVEL_INT	30
+None	1	BEAST_HUNTING_MARCHES_INT	3
+None	1	BOOL_BANK	false
+None	1	BOOL_CHIEF_ORDER_PRODUCTIVITY_DAY	false
+None	1	BOOL_CHIEF_ORDER_RUSH_JOB	false
+None	1	BOOL_CHIEF_ORDER_URGENT_MOBILISATION	false
+None	1	BOOL_CRYSTAL_LAB_DAILY_DISCOUNTED_RFC	false
+None	1	BOOL_CRYSTAL_LAB_FC	false
+None	1	BOOL_DEBUG	false
+None	1	BOOL_DO_EXPLORATION	false
+None	1	BOOL_EXPLORATION_CHEST	false
+None	1	BOOL_HERO_RECRUITMENT	false
+None	1	BOOL_MYSTERY_SHOP	false
+None	1	BOOL_MYSTERY_SHOP_250_HERO_WIDGET	false
+None	1	BOOL_NOMADIC_MERCHANT	false
+None	1	BOOL_NOMADIC_MERCHANT_VIP_POINTS	false
+None	1	BOOL_VIP_POINTS	false
+None	1	CHAT_CAPTURE_ENABLED_BOOL	false
+None	1	CHAT_CAPTURE_FILTER_NOISE_BOOL	true
+None	1	CHAT_CAPTURE_FREQUENCY_MINUTES_INT	30
+None	1	CHAT_CAPTURE_INCLUDE_ALLIANCE_BOOL	true
+None	1	CHAT_CAPTURE_INCLUDE_PERSONAL_BOOL	false
+None	1	CHAT_CAPTURE_INCLUDE_WORLD_BOOL	true
+None	1	CHAT_CAPTURE_MODE_STRING	TRANSCRIPT
+None	1	CITY_ACCEPT_NEW_SURVIVORS_BOOL	false
+None	1	CITY_ACCEPT_NEW_SURVIVORS_OFFSET_INT	60
+None	1	CITY_UPGRADE_CONSTRUCTION_LOCK_STRING	
+None	1	CITY_UPGRADE_FURNACE_BOOL	false
+None	1	CITY_UPGRADE_PRIORITISE_FURNACE_BOOL	false
+None	1	CITY_UPGRADE_RESERVE_PRODUCTION_BOOL	true
+None	1	CREATE_CHARACTER_ENABLED_BOOL	false
+None	1	CREATE_CHARACTER_MAX_AGE_MINUTES_INT	17
+None	1	CREATE_CHARACTER_SKIP_TUTORIAL_BOOL	false
+None	1	CRYPTID_HOST_ENABLED_BOOL	false
+None	1	CRYPTID_HOST_FLAG_INT	0
+None	1	CRYPTID_HOST_RUNS_INT	1
+None	1	CRYPTID_HOST_USE_STAMINA_ITEMS_BOOL	false
+None	1	CURRENT_EMULATOR_STRING	MUMU
+None	1	DAILY_LABYRINTH_BOOL	false
+None	1	DAILY_MISSION_AUTO_SCHEDULE_BOOL	false
+None	1	DAILY_MISSION_BOOL	false
+None	1	DAILY_MISSION_OFFSET_INT	60
+None	1	DISCORD_TOKEN_STRING	
+None	1	DUMMY_TASK_ENABLED_BOOL	false
+None	1	DUMMY_TASK_PRIORITY_INT	100
+None	1	EMULATOR_LAUNCH_DELAY_MS_INT	30000
+None	1	EXPERT_AGNES_INTEL_BOOL	false
+None	1	EXPERT_ROMULUS_TAG_BOOL	false
+None	1	EXPERT_ROMULUS_TROOPS_BOOL	false
+None	1	EXPERT_ROMULUS_TROOPS_TYPE_STRING	Infantry
+None	1	EXPERT_SKILL_TRAINING_ENABLED_BOOL	false
+None	1	EXPERT_SKILL_TRAINING_PRIORITIES_STRING	
+None	1	FISHING_MINIGAME_ENABLED_BOOL	false
+None	1	GAME_VERSION_STRING	GLOBAL
+None	1	GATHER_ACTIVE_MARCH_QUEUE_INT	6
+None	1	GATHER_COAL_BOOL	false
+None	1	GATHER_COAL_LEVEL_INT	8
+None	1	GATHER_DOWNGRADE_LEVEL_BOOL	true
+None	1	GATHER_IRON_BOOL	false
+None	1	GATHER_IRON_LEVEL_INT	8
+None	1	GATHER_LAST_RECALL_TIME_STRING	
+None	1	GATHER_MEAT_BOOL	false
+None	1	GATHER_MEAT_LEVEL_INT	8
+None	1	GATHER_ONLY_FULL_RESOURCES_BOOL	false
+None	1	GATHER_REMOVE_HEROS_BOOL	true
+None	1	GATHER_ROTATION_POOL	
+None	1	GATHER_SMART_PRIORITY_BOOL	false
+None	1	GATHER_SPEED_BOOL	false
+None	1	GATHER_SPEED_BOOST_TYPE_STRING	24h (600 gems)
+None	1	GATHER_TASK_BOOL	false
+None	1	GATHER_WOOD_BOOL	false
+None	1	GATHER_WOOD_LEVEL_INT	8
+None	1	HERO_MISSION_EVENT_BOOL	false
+None	1	HERO_MISSION_FLAG_INT	0
+None	1	HIDE_ANALYTICS_LOGS_BOOL	true
+None	1	IDLE_BEHAVIOR_STRING	SEND_TO_BACKGROUND
+None	1	INTEL_BEASTS_BOOL	false
+None	1	INTEL_BEASTS_EVENT_BOOL	false
+None	1	INTEL_BEASTS_FLAG_INT	1
+None	1	INTEL_BOOL	false
+None	1	INTEL_CAMP_BOOL	false
+None	1	INTEL_EXPLORATION_BOOL	false
+None	1	INTEL_FC_ERA_BOOL	false
+None	1	INTEL_FIRE_BEAST_BOOL	false
+None	1	INTEL_LAST_RUN_HAD_MISSIONS_BOOL	false
+None	1	INTEL_RECALL_GATHER_TROOPS_BOOL	false
+None	1	INTEL_SMART_PROCESSING_BOOL	false
+None	1	INTEL_STAMINA_ITEM_RESERVE_INT	0
+None	1	INTEL_USE_FLAG_BOOL	false
+None	1	INTEL_USE_STAMINA_ITEMS_BOOL	false
+None	1	INT_BANK_DELAY	1
+None	1	INT_EXPLORATION_CHEST_OFFSET	60
+None	1	INT_WEEKLY_RFC	0
+None	1	JOURNEY_OF_LIGHT_BOOL	false
+None	1	KEEP_EMULATOR_OPEN_BOOL	false
+None	1	LABYRINTH_FORMATION_TEST_BOOL	false
+None	1	LABYRINTH_GENERATION_STRING	Gen 1
+None	1	LABYRINTH_SQUAD1_INFANTRY_INT	60
+None	1	LABYRINTH_SQUAD1_LANCER_INT	40
+None	1	LABYRINTH_SQUAD1_MARKSMAN_INT	0
+None	1	LABYRINTH_SQUAD2_INFANTRY_INT	50
+None	1	LABYRINTH_SQUAD2_LANCER_INT	0
+None	1	LABYRINTH_SQUAD2_MARKSMAN_INT	50
+None	1	LDPLAYER_PATH_STRING	
+None	1	LIFE_ESSENCE_BOOL	false
+None	1	LIFE_ESSENCE_BUY_WEEKLY_SCROLL_BOOL	true
+None	1	LIFE_ESSENCE_CONSECUTIVE_FAILURES_INT	0
+None	1	LIFE_ESSENCE_NEXT_SCROLL_TIME_STRING	
+None	1	LIFE_ESSENCE_OFFSET_INT	60
+None	1	MAIL_REWARDS_BOOL	false
+None	1	MAIL_REWARDS_OFFSET_INT	60
+None	1	MAX_IDLE_TIME_INT	99999
+None	1	MAX_RUNNING_EMULATORS_INT	1
+None	1	MEMU_PATH_STRING	
+None	1	MERCENARY_EVENT_BOOL	false
+None	1	MERCENARY_FLAG_INT	0
+None	1	MUMU_PATH_STRING	D:\Program Files\Netease\MuMuPlayer\nx_main
+None	1	MYRIAD_BAZAAR_EVENT_BOOL	false
+None	1	PET_PERSONAL_TREASURE_BOOL	false
+None	1	PET_SKILLS_BOOL	false
+None	1	PET_SKILL_FOOD_BOOL	false
+None	1	PET_SKILL_GATHERING_BOOL	false
+None	1	PET_SKILL_GATHERING_RESOURCE_STRING	MEAT
+None	1	PET_SKILL_STAMINA_BOOL	false
+None	1	PET_SKILL_TREASURE_BOOL	false
+None	1	POLAR_TERROR_ENABLED_BOOL	false
+None	1	POLAR_TERROR_HIGHEST_LEVEL_BOOL	false
+None	1	POLAR_TERROR_LEVEL_INT	1
+None	1	POLAR_TERROR_MARCHES_INT	1
+None	1	POLAR_TERROR_MARCH_1_FLAG_STRING	No Flag
+None	1	POLAR_TERROR_MARCH_2_FLAG_STRING	No Flag
+None	1	POLAR_TERROR_MARCH_3_FLAG_STRING	No Flag
+None	1	POLAR_TERROR_MARCH_4_FLAG_STRING	No Flag
+None	1	POLAR_TERROR_MARCH_5_FLAG_STRING	No Flag
+None	1	POLAR_TERROR_MARCH_6_FLAG_STRING	No Flag
+None	1	POLAR_TERROR_MODE_STRING	Special Rewards (10)
+None	1	POLAR_TERROR_STAMINA_ITEM_RESERVE_INT	0
+None	1	POLAR_TERROR_USE_STAMINA_ITEMS_BOOL	false
+None	1	PROFILE_MAX_ACTIVE_TIME_ENABLED_BOOL	false
+None	1	PROFILE_MAX_ACTIVE_TIME_MINUTES_INT	60
+None	1	PROFILE_SWITCH_COOLDOWN_MS_INT	10000
+None	1	RALLY_ENABLED_BOOL	false
+None	1	RALLY_MARCHES_INT	1
+None	1	RALLY_MARCH_1_FLAG_STRING	No Flag
+None	1	RALLY_MARCH_2_FLAG_STRING	No Flag
+None	1	RALLY_MARCH_3_FLAG_STRING	No Flag
+None	1	RALLY_MARCH_4_FLAG_STRING	No Flag
+None	1	RALLY_MARCH_5_FLAG_STRING	No Flag
+None	1	RALLY_MARCH_6_FLAG_STRING	No Flag
+None	1	RALLY_MODE_STRING	Limited (10)
+None	1	RALLY_TARGET_STRING	berserkCryptid
+None	1	RESEARCH_BATTLE_BOOL	false
+None	1	RESEARCH_ECONOMY_BOOL	false
+None	1	RESEARCH_ENABLED_BOOL	false
+None	1	RESEARCH_GROWTH_BOOL	false
+None	1	RESEARCH_PRIORITIES_STRING	growth:Growth:1:true|economy:Economy:2:true|battle:Battle:3:true
+None	1	RESOURCE_STOCKPILE_COAL_LONG	0
+None	1	RESOURCE_STOCKPILE_IRON_LONG	0
+None	1	RESOURCE_STOCKPILE_LAST_READ_STRING	
+None	1	RESOURCE_STOCKPILE_MEAT_LONG	0
+None	1	RESOURCE_STOCKPILE_STEEL_LONG	0
+None	1	RESOURCE_STOCKPILE_WOOD_LONG	0
+None	1	SCHEDULE_JITTER_MAX_SECONDS_INT	150
+None	1	SCHEDULE_JITTER_PERCENT_INT	15
+None	1	SKIP_TUTORIAL_ENABLED_BOOL	false
+None	1	SLEEP_IDLE_THRESHOLD_MINUTES_INT	20
+None	1	SLEEP_WINDOW_ENABLED_BOOL	false
+None	1	SLEEP_WINDOW_END_STRING	07:00
+None	1	SLEEP_WINDOW_START_STRING	01:00
+None	1	SPEEDUP_CONSTRUCTION_MIN_LONG	0
+None	1	SPEEDUP_GENERAL_MIN_LONG	0
+None	1	SPEEDUP_HEALING_MIN_LONG	0
+None	1	SPEEDUP_RESEARCH_MIN_LONG	0
+None	1	SPEEDUP_TRAINING_MIN_LONG	0
+None	1	STAMINA_RESERVE_INT	130
+None	1	STARTUP_FULL_RESCAN_BOOL	false
+None	1	STATISTICS_JSON_STRING	{}
+None	1	STOP_BEHAVIOR_STRING	DO_NOTHING
+None	1	STOP_BEHAVIOR_TELEGRAM_STRING	DO_NOTHING
+None	1	STOREHOUSE_CHEST_BOOL	false
+None	1	STOREHOUSE_STAMINA_CLAIM_TIME_STRING	
+None	1	TAP_JITTER_RADIUS_PX_INT	3
+None	1	TELEGRAM_ALLOWED_CHAT_ID_STRING	
+None	1	TELEGRAM_BOT_ENABLED_BOOL	false
+None	1	TELEGRAM_BOT_TOKEN_STRING	
+None	1	TEST_GATHER_DEPLOY_PREEMPTION_BOOL	false
+None	1	TEST_HOOK_LOOP_ENABLED_BOOL	false
+None	1	TIMER_SWEEP_ENABLED_BOOL	true
+None	1	TIMER_SWEEP_INTERVAL_MINUTES_INT	60
+None	1	TRAIN_BOOL	false
+None	1	TRAIN_INFANTRY_BOOL	false
+None	1	TRAIN_LANCER_BOOL	false
+None	1	TRAIN_MARKSMAN_BOOL	false
+None	1	TRAIN_MINISTRY_APPOINTMENT_BOOL	false
+None	1	TRAIN_MINISTRY_APPOINTMENT_TIME_LONG	0
+None	1	TRAIN_PRIORITIZE_PROMOTION_BOOL	false
+None	1	TUNDRA_TREK_AUTOMATION_BOOL	false
+None	1	TUNDRA_TREK_SUPPLIES_BOOL	false
+None	1	TUNDRA_TRUCK_ACTIVATION_TIME_BOOL	false
+None	1	TUNDRA_TRUCK_ACTIVATION_TIME_STRING	14:00
+None	1	TUNDRA_TRUCK_EVENT_BOOL	false
+None	1	TUNDRA_TRUCK_SSR_BOOL	false
+None	1	TUNDRA_TRUCK_USE_GEMS_BOOL	false
+None	1	VIP_MONTHLY_BUY_BOOL	false
+None	1	VIP_NEXT_MONTHLY_BUY_TIME_STRING	
+None	1	WAR_ACADEMY_TASK_BOOL	false
+1	2	ALLIANCE_AUTOJOIN_BOOL	true
+1	2	ALLIANCE_CHESTS_BOOL	true
+1	2	ALLIANCE_HELP_BOOL	false
+1	2	ALLIANCE_HONOR_CHEST_BOOL	true
+1	2	ALLIANCE_LIFE_ESSENCE_BOOL	true
+1	2	ALLIANCE_MOBILIZATION_AUTO_ACCEPT_BOOL	false
+1	2	ALLIANCE_MOBILIZATION_BOOL	false
+1	2	ALLIANCE_MOBILIZATION_DEFEAT_BEASTS_BOOL	false
+1	2	ALLIANCE_MOBILIZATION_GATHER_RESOURCES_BOOL	false
+1	2	ALLIANCE_MOBILIZATION_TRAIN_TROOPS_BOOL	false
+1	2	ALLIANCE_PET_TREASURE_BOOL	true
+1	2	ALLIANCE_SHOP_ENABLED_BOOL	false
+1	2	ALLIANCE_SHOP_MIN_COINS_INT	0
+1	2	ALLIANCE_SHOP_MIN_COINS_TO_ACTIVATE_INT	0
+1	2	ALLIANCE_SHOP_MIN_PERCENTAGE_INT	50
+1	2	ALLIANCE_SHOP_PRIORITIES_STRING	ADVANCED_TELEPORT:Advanced Teleport:1:false|MARCH_RECALL:March Recall:2:false|MYTHIC_HERO_SHARDS:Mythic Hero Shards:3:false|PET_CHEST:Pet Chest:4:false|PET_FOOD:Pet Food:5:false|TERRITORY_TELEPORT:Territory Teleport:6:false|TRANSFER_PASS:Transfer Pass:7:false|VIP_XP_10:10 VIP XP:8:true|VIP_XP_100:100 VIP XP:9:true
+1	2	ALLIANCE_TECH_BOOL	true
+1	2	ALLIANCE_TRIUMPH_BOOL	true
+1	2	ARENA_TASK_ACTIVATION_TIME_STRING	23:50
+1	2	ARENA_TASK_BOOL	true
+1	2	ARENA_TASK_EXTRA_ATTEMPTS_INT	2
+1	2	ARENA_TASK_REFRESH_WITH_GEMS_BOOL	false
+1	2	ARENA_TASK_SERVER_POLICY_STRING	Any server
+1	2	BEAR_TRAP_EVENT_BOOL	false
+1	2	BEAR_TRAP_JOIN_RALLY_BOOL	false
+1	2	BEAST_HUNTING_ENABLED_BOOL	false
+1	2	BOOL_CHIEF_ORDER_PRODUCTIVITY_DAY	true
+1	2	BOOL_CHIEF_ORDER_RUSH_JOB	true
+1	2	BOOL_CHIEF_ORDER_URGENT_MOBILISATION	true
+1	2	BOOL_CRYSTAL_LAB_DAILY_DISCOUNTED_RFC	true
+1	2	BOOL_CRYSTAL_LAB_FC	true
+1	2	BOOL_DO_EXPLORATION	true
+1	2	BOOL_EXPLORATION_CHEST	true
+1	2	BOOL_HERO_RECRUITMENT	false
+1	2	BOOL_NOMADIC_MERCHANT_VIP_POINTS	true
+1	2	BOOL_VIP_POINTS	true
+1	2	CHAT_CAPTURE_FILTER_NOISE_BOOL	true
+1	2	CHAT_CAPTURE_FREQUENCY_MINUTES_INT	30
+1	2	CHAT_CAPTURE_INCLUDE_ALLIANCE_BOOL	true
+1	2	CHAT_CAPTURE_INCLUDE_WORLD_BOOL	true
+1	2	CITY_UPGRADE_RESERVE_PRODUCTION_BOOL	false
+1	2	CRYPTID_HOST_FLAG_INT	0
+1	2	CRYPTID_HOST_USE_STAMINA_ITEMS_BOOL	false
+1	2	DAILY_LABYRINTH_BOOL	true
+1	2	DAILY_MISSION_AUTO_SCHEDULE_BOOL	true
+1	2	DAILY_MISSION_BOOL	true
+1	2	GATHER_ACTIVE_MARCH_QUEUE_INT	4
+1	2	GATHER_COAL_BOOL	true
+1	2	GATHER_COAL_LEVEL_INT	8
+1	2	GATHER_DOWNGRADE_LEVEL_BOOL	true
+1	2	GATHER_IRON_BOOL	true
+1	2	GATHER_IRON_LEVEL_INT	8
+1	2	GATHER_LAST_RECALL_TIME_STRING	
+1	2	GATHER_MEAT_BOOL	true
+1	2	GATHER_MEAT_LEVEL_INT	8
+1	2	GATHER_ONLY_FULL_RESOURCES_BOOL	false
+1	2	GATHER_REMOVE_HEROS_BOOL	true
+1	2	GATHER_ROTATION_POOL	WOOD,COAL,MEAT
+1	2	GATHER_SMART_PRIORITY_BOOL	true
+1	2	GATHER_SPEED_BOOL	true
+1	2	GATHER_TASK_BOOL	true
+1	2	GATHER_WOOD_BOOL	true
+1	2	GATHER_WOOD_LEVEL_INT	8
+1	2	INTEL_BEASTS_BOOL	true
+1	2	INTEL_BOOL	true
+1	2	INTEL_CAMP_BOOL	true
+1	2	INTEL_EXPLORATION_BOOL	true
+1	2	INTEL_FC_ERA_BOOL	false
+1	2	INTEL_FIRE_BEAST_BOOL	true
+1	2	INTEL_LAST_RUN_HAD_MISSIONS_BOOL	true
+1	2	INTEL_RECALL_GATHER_TROOPS_BOOL	true
+1	2	INTEL_SMART_PROCESSING_BOOL	false
+1	2	INTEL_STAMINA_ITEM_RESERVE_INT	0
+1	2	INTEL_USE_FLAG_BOOL	false
+1	2	INTEL_USE_STAMINA_ITEMS_BOOL	false
+1	2	INT_WEEKLY_RFC	0
+1	2	LABYRINTH_FORMATION_TEST_BOOL	true
+1	2	LABYRINTH_SQUAD1_INFANTRY_INT	60
+1	2	LABYRINTH_SQUAD1_LANCER_INT	40
+1	2	LABYRINTH_SQUAD1_MARKSMAN_INT	0
+1	2	LABYRINTH_SQUAD2_INFANTRY_INT	60
+1	2	LABYRINTH_SQUAD2_LANCER_INT	40
+1	2	LABYRINTH_SQUAD2_MARKSMAN_INT	0
+1	2	LIFE_ESSENCE_BOOL	true
+1	2	LIFE_ESSENCE_BUY_WEEKLY_SCROLL_BOOL	true
+1	2	LIFE_ESSENCE_CONSECUTIVE_FAILURES_INT	0
+1	2	LIFE_ESSENCE_NEXT_SCROLL_TIME_STRING	2026-08-17T00:00
+1	2	LIFE_ESSENCE_OFFSET_INT	60
+1	2	MAIL_REWARDS_BOOL	true
+1	2	PET_PERSONAL_TREASURE_BOOL	true
+1	2	PET_SKILLS_BOOL	true
+1	2	PET_SKILL_GATHERING_BOOL	true
+1	2	PET_SKILL_STAMINA_BOOL	true
+1	2	PET_SKILL_TREASURE_BOOL	true
+1	2	POLAR_TERROR_ENABLED_BOOL	false
+1	2	POLAR_TERROR_HIGHEST_LEVEL_BOOL	true
+1	2	POLAR_TERROR_LEVEL_INT	8
+1	2	POLAR_TERROR_MARCHES_INT	1
+1	2	POLAR_TERROR_MARCH_1_FLAG_STRING	No Flag
+1	2	POLAR_TERROR_MARCH_2_FLAG_STRING	No Flag
+1	2	POLAR_TERROR_MARCH_3_FLAG_STRING	No Flag
+1	2	POLAR_TERROR_MARCH_4_FLAG_STRING	No Flag
+1	2	POLAR_TERROR_MARCH_5_FLAG_STRING	No Flag
+1	2	POLAR_TERROR_MARCH_6_FLAG_STRING	No Flag
+1	2	POLAR_TERROR_MODE_STRING	Special Rewards (10)
+1	2	POLAR_TERROR_STAMINA_ITEM_RESERVE_INT	100
+1	2	POLAR_TERROR_USE_STAMINA_ITEMS_BOOL	true
+1	2	RESEARCH_ENABLED_BOOL	true
+1	2	RESOURCE_STOCKPILE_COAL_LONG	105000000
+1	2	RESOURCE_STOCKPILE_IRON_LONG	2200000
+1	2	RESOURCE_STOCKPILE_LAST_READ_STRING	2026-08-12T14:38:26.595094300
+1	2	RESOURCE_STOCKPILE_MEAT_LONG	58700000
+1	2	RESOURCE_STOCKPILE_WOOD_LONG	52000000
+1	2	SPEEDUP_CONSTRUCTION_MIN_LONG	693
+1	2	SPEEDUP_GENERAL_MIN_LONG	1151
+1	2	SPEEDUP_HEALING_MIN_LONG	5043
+1	2	SPEEDUP_RESEARCH_MIN_LONG	5075
+1	2	SPEEDUP_TRAINING_MIN_LONG	3447
+1	2	STAMINA_RESERVE_INT	110
+1	2	STATISTICS_JSON_STRING	{"routineStats":{"Initialize":{"routineName":"Initialize","executionCount":120,"cumulativeTimeMs":831279,"lastExecutedAt":"2026-08-12 14:37:36","ocrErrorCount":0,"matchErrorCount":294,"taskName":"Initialize","lastRunTime":"2026-08-12 14:37:36","averageExecutionTimeMs":6927,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":2.45,"totalExecutionTimeMs":831279,"numberOfRuns":120,"totalTemplateSearchFailures":294},"Timer Sweep":{"routineName":"Timer Sweep","executionCount":149,"cumulativeTimeMs":3326371,"lastExecutedAt":"2026-08-12 14:37:58","ocrErrorCount":0,"matchErrorCount":0,"taskName":"Timer Sweep","lastRunTime":"2026-08-12 14:37:58","averageExecutionTimeMs":22324,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.0,"totalExecutionTimeMs":3326371,"numberOfRuns":149,"totalTemplateSearchFailures":0},"Gather Resources":{"routineName":"Gather Resources","executionCount":187,"cumulativeTimeMs":5948434,"lastExecutedAt":"2026-08-12 14:29:58","ocrErrorCount":0,"matchErrorCount":479,"taskName":"Gather Resources","lastRunTime":"2026-08-12 14:29:58","averageExecutionTimeMs":31809,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":2.5614973262032086,"totalExecutionTimeMs":5948434,"numberOfRuns":187,"totalTemplateSearchFailures":479},"Alliance Autojoin":{"routineName":"Alliance Autojoin","executionCount":88,"cumulativeTimeMs":1484430,"lastExecutedAt":"2026-08-12 13:23:48","ocrErrorCount":0,"matchErrorCount":0,"taskName":"Alliance Autojoin","lastRunTime":"2026-08-12 13:23:48","averageExecutionTimeMs":16868,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.0,"totalExecutionTimeMs":1484430,"numberOfRuns":88,"totalTemplateSearchFailures":0},"Crystal Laboratory":{"routineName":"Crystal Laboratory","executionCount":717,"cumulativeTimeMs":6962124,"lastExecutedAt":"2026-08-12 14:43:38","ocrErrorCount":0,"matchErrorCount":714,"taskName":"Crystal Laboratory","lastRunTime":"2026-08-12 14:43:38","averageExecutionTimeMs":9710,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.99581589958159,"totalExecutionTimeMs":6962124,"numberOfRuns":717,"totalTemplateSearchFailures":714},"Chief Order: Rush Job":{"routineName":"Chief Order: Rush Job","executionCount":10,"cumulativeTimeMs":147252,"lastExecutedAt":"2026-08-12 11:16:17","ocrErrorCount":0,"matchErrorCount":5,"taskName":"Chief Order: Rush Job","lastRunTime":"2026-08-12 11:16:17","averageExecutionTimeMs":14725,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.5,"totalExecutionTimeMs":147252,"numberOfRuns":10,"totalTemplateSearchFailures":5},"Storehouse Chest":{"routineName":"Storehouse Chest","executionCount":93,"cumulativeTimeMs":1327601,"lastExecutedAt":"2026-08-12 14:38:18","ocrErrorCount":14,"matchErrorCount":55,"taskName":"Storehouse Chest","lastRunTime":"2026-08-12 14:38:18","averageExecutionTimeMs":14275,"totalOcrFailures":14,"averageOcrFailures":0.15053763440860216,"averageTemplateFailures":0.5913978494623656,"totalExecutionTimeMs":1327601,"numberOfRuns":93,"totalTemplateSearchFailures":55},"Chief Order: Productivity Day":{"routineName":"Chief Order: Productivity Day","executionCount":16,"cumulativeTimeMs":234132,"lastExecutedAt":"2026-08-12 02:41:44","ocrErrorCount":0,"matchErrorCount":6,"taskName":"Chief Order: Productivity Day","lastRunTime":"2026-08-12 02:41:44","averageExecutionTimeMs":14633,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.375,"totalExecutionTimeMs":234132,"numberOfRuns":16,"totalTemplateSearchFailures":6},"Mail Rewards":{"routineName":"Mail Rewards","executionCount":76,"cumulativeTimeMs":1227028,"lastExecutedAt":"2026-08-12 14:20:56","ocrErrorCount":0,"matchErrorCount":304,"taskName":"Mail Rewards","lastRunTime":"2026-08-12 14:20:56","averageExecutionTimeMs":16145,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":4.0,"totalExecutionTimeMs":1227028,"numberOfRuns":76,"totalTemplateSearchFailures":304},"Alliance Chests":{"routineName":"Alliance Chests","executionCount":74,"cumulativeTimeMs":1769563,"lastExecutedAt":"2026-08-12 14:21:17","ocrErrorCount":0,"matchErrorCount":296,"taskName":"Alliance Chests","lastRunTime":"2026-08-12 14:21:17","averageExecutionTimeMs":23913,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":4.0,"totalExecutionTimeMs":1769563,"numberOfRuns":74,"totalTemplateSearchFailures":296},"Alliance Triumph":{"routineName":"Alliance Triumph","executionCount":22,"cumulativeTimeMs":283995,"lastExecutedAt":"2026-08-12 04:32:22","ocrErrorCount":0,"matchErrorCount":62,"taskName":"Alliance Triumph","lastRunTime":"2026-08-12 04:32:22","averageExecutionTimeMs":12908,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":2.8181818181818183,"totalExecutionTimeMs":283995,"numberOfRuns":22,"totalTemplateSearchFailures":62},"Intel":{"routineName":"Intel","executionCount":120,"cumulativeTimeMs":14950975,"lastExecutedAt":"2026-08-12 13:15:42","ocrErrorCount":0,"matchErrorCount":7100,"taskName":"Intel","lastRunTime":"2026-08-12 13:15:42","averageExecutionTimeMs":124591,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":59.166666666666664,"totalExecutionTimeMs":14950975,"numberOfRuns":120,"totalTemplateSearchFailures":7100},"Daily Missions":{"routineName":"Daily Missions","executionCount":90,"cumulativeTimeMs":1167605,"lastExecutedAt":"2026-08-12 14:38:53","ocrErrorCount":0,"matchErrorCount":312,"taskName":"Daily Missions","lastRunTime":"2026-08-12 14:38:53","averageExecutionTimeMs":12973,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":3.466666666666667,"totalExecutionTimeMs":1167605,"numberOfRuns":90,"totalTemplateSearchFailures":312},"Exploration Chest":{"routineName":"Exploration Chest","executionCount":73,"cumulativeTimeMs":959100,"lastExecutedAt":"2026-08-12 14:20:05","ocrErrorCount":0,"matchErrorCount":146,"taskName":"Exploration Chest","lastRunTime":"2026-08-12 14:20:05","averageExecutionTimeMs":13138,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":2.0,"totalExecutionTimeMs":959100,"numberOfRuns":73,"totalTemplateSearchFailures":146},"Do Exploration":{"routineName":"Do Exploration","executionCount":73,"cumulativeTimeMs":2526862,"lastExecutedAt":"2026-08-12 14:22:24","ocrErrorCount":0,"matchErrorCount":851,"taskName":"Do Exploration","lastRunTime":"2026-08-12 14:22:24","averageExecutionTimeMs":34614,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":11.657534246575343,"totalExecutionTimeMs":2526862,"numberOfRuns":73,"totalTemplateSearchFailures":851},"Life Essence":{"routineName":"Life Essence","executionCount":74,"cumulativeTimeMs":1166346,"lastExecutedAt":"2026-08-12 14:23:03","ocrErrorCount":0,"matchErrorCount":232,"taskName":"Life Essence","lastRunTime":"2026-08-12 14:23:03","averageExecutionTimeMs":15761,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":3.135135135135135,"totalExecutionTimeMs":1166346,"numberOfRuns":74,"totalTemplateSearchFailures":232},"Labyrinth":{"routineName":"Labyrinth","executionCount":16,"cumulativeTimeMs":1376356,"lastExecutedAt":"2026-08-11 20:01:33","ocrErrorCount":38,"matchErrorCount":6,"taskName":"Labyrinth","lastRunTime":"2026-08-11 20:01:33","averageExecutionTimeMs":86022,"totalOcrFailures":38,"averageOcrFailures":2.375,"averageTemplateFailures":0.375,"totalExecutionTimeMs":1376356,"numberOfRuns":16,"totalTemplateSearchFailures":6},"Chief Order: Urgent Mobilization":{"routineName":"Chief Order: Urgent Mobilization","executionCount":12,"cumulativeTimeMs":223640,"lastExecutedAt":"2026-08-12 11:09:44","ocrErrorCount":0,"matchErrorCount":2,"taskName":"Chief Order: Urgent Mobilization","lastRunTime":"2026-08-12 11:09:44","averageExecutionTimeMs":18636,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.16666666666666666,"totalExecutionTimeMs":223640,"numberOfRuns":12,"totalTemplateSearchFailures":2},"bg_powerpriorities":{"routineName":"bg_powerpriorities","executionCount":40,"cumulativeTimeMs":698348,"lastExecutedAt":"2026-08-12 13:17:39","ocrErrorCount":0,"matchErrorCount":0,"taskName":"bg_powerpriorities","lastRunTime":"2026-08-12 13:17:39","averageExecutionTimeMs":17458,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.0,"totalExecutionTimeMs":698348,"numberOfRuns":40,"totalTemplateSearchFailures":0},"bg_telemetry":{"routineName":"bg_telemetry","executionCount":44,"cumulativeTimeMs":266114,"lastExecutedAt":"2026-08-12 13:17:24","ocrErrorCount":1,"matchErrorCount":0,"taskName":"bg_telemetry","lastRunTime":"2026-08-12 13:17:24","averageExecutionTimeMs":6048,"totalOcrFailures":1,"averageOcrFailures":0.022727272727272728,"averageTemplateFailures":0.0,"totalExecutionTimeMs":266114,"numberOfRuns":44,"totalTemplateSearchFailures":0},"Resource Stockpile Scan":{"routineName":"Resource Stockpile Scan","executionCount":74,"cumulativeTimeMs":1655004,"lastExecutedAt":"2026-08-12 14:38:39","ocrErrorCount":0,"matchErrorCount":0,"taskName":"Resource Stockpile Scan","lastRunTime":"2026-08-12 14:38:39","averageExecutionTimeMs":22364,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.0,"totalExecutionTimeMs":1655004,"numberOfRuns":74,"totalTemplateSearchFailures":0},"Pet Adventure":{"routineName":"Pet Adventure","executionCount":10,"cumulativeTimeMs":338711,"lastExecutedAt":"2026-08-12 11:08:12","ocrErrorCount":0,"matchErrorCount":49,"taskName":"Pet Adventure","lastRunTime":"2026-08-12 11:08:12","averageExecutionTimeMs":33871,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":4.9,"totalExecutionTimeMs":338711,"numberOfRuns":10,"totalTemplateSearchFailures":49},"Gather Speed Boost":{"routineName":"Gather Speed Boost","executionCount":4,"cumulativeTimeMs":51636,"lastExecutedAt":"2026-08-12 02:12:49","ocrErrorCount":0,"matchErrorCount":0,"taskName":"Gather Speed Boost","lastRunTime":"2026-08-12 02:12:49","averageExecutionTimeMs":12909,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.0,"totalExecutionTimeMs":51636,"numberOfRuns":4,"totalTemplateSearchFailures":0},"Alliance Tech":{"routineName":"Alliance Tech","executionCount":52,"cumulativeTimeMs":637770,"lastExecutedAt":"2026-08-12 13:42:40","ocrErrorCount":0,"matchErrorCount":8,"taskName":"Alliance Tech","lastRunTime":"2026-08-12 13:42:40","averageExecutionTimeMs":12264,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.15384615384615385,"totalExecutionTimeMs":637770,"numberOfRuns":52,"totalTemplateSearchFailures":8},"Pet Skills":{"routineName":"Pet Skills","executionCount":50,"cumulativeTimeMs":1853798,"lastExecutedAt":"2026-08-11 13:36:08","ocrErrorCount":0,"matchErrorCount":274,"taskName":"Pet Skills","lastRunTime":"2026-08-11 13:36:08","averageExecutionTimeMs":37075,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":5.48,"totalExecutionTimeMs":1853798,"numberOfRuns":50,"totalTemplateSearchFailures":274},"Training":{"routineName":"Training","executionCount":9,"cumulativeTimeMs":893509,"lastExecutedAt":"2026-08-12 13:23:08","ocrErrorCount":0,"matchErrorCount":303,"taskName":"Training","lastRunTime":"2026-08-12 13:23:08","averageExecutionTimeMs":99278,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":33.666666666666664,"totalExecutionTimeMs":893509,"numberOfRuns":9,"totalTemplateSearchFailures":303},"Pet Skill: Stamina":{"routineName":"Pet Skill: Stamina","executionCount":4,"cumulativeTimeMs":35822,"lastExecutedAt":"2026-08-12 03:30:35","ocrErrorCount":0,"matchErrorCount":5,"taskName":"Pet Skill: Stamina","lastRunTime":"2026-08-12 03:30:35","averageExecutionTimeMs":8955,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":1.25,"totalExecutionTimeMs":35822,"numberOfRuns":4,"totalTemplateSearchFailures":5},"Pet Skill: Treasure":{"routineName":"Pet Skill: Treasure","executionCount":5,"cumulativeTimeMs":33990,"lastExecutedAt":"2026-08-11 20:55:44","ocrErrorCount":0,"matchErrorCount":5,"taskName":"Pet Skill: Treasure","lastRunTime":"2026-08-11 20:55:44","averageExecutionTimeMs":6798,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":1.0,"totalExecutionTimeMs":33990,"numberOfRuns":5,"totalTemplateSearchFailures":5},"Arena":{"routineName":"Arena","executionCount":3,"cumulativeTimeMs":324320,"lastExecutedAt":"2026-08-11 19:54:55","ocrErrorCount":16,"matchErrorCount":0,"taskName":"Arena","lastRunTime":"2026-08-11 19:54:55","averageExecutionTimeMs":108106,"totalOcrFailures":16,"averageOcrFailures":5.333333333333333,"averageTemplateFailures":0.0,"totalExecutionTimeMs":324320,"numberOfRuns":3,"totalTemplateSearchFailures":0},"Life Essence Caring":{"routineName":"Life Essence Caring","executionCount":3,"cumulativeTimeMs":132403,"lastExecutedAt":"2026-08-11 20:03:30","ocrErrorCount":0,"matchErrorCount":14,"taskName":"Life Essence Caring","lastRunTime":"2026-08-11 20:03:30","averageExecutionTimeMs":44134,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":4.666666666666667,"totalExecutionTimeMs":132403,"numberOfRuns":3,"totalTemplateSearchFailures":14},"Alliance Pet Treasure":{"routineName":"Alliance Pet Treasure","executionCount":3,"cumulativeTimeMs":45730,"lastExecutedAt":"2026-08-11 20:03:56","ocrErrorCount":0,"matchErrorCount":1,"taskName":"Alliance Pet Treasure","lastRunTime":"2026-08-11 20:03:56","averageExecutionTimeMs":15243,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.3333333333333333,"totalExecutionTimeMs":45730,"numberOfRuns":3,"totalTemplateSearchFailures":1},"VIP Points":{"routineName":"VIP Points","executionCount":3,"cumulativeTimeMs":28495,"lastExecutedAt":"2026-08-11 20:03:39","ocrErrorCount":0,"matchErrorCount":0,"taskName":"VIP Points","lastRunTime":"2026-08-11 20:03:39","averageExecutionTimeMs":9498,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.0,"totalExecutionTimeMs":28495,"numberOfRuns":3,"totalTemplateSearchFailures":0},"Research":{"routineName":"Research","executionCount":3,"cumulativeTimeMs":107149,"lastExecutedAt":"2026-08-12 13:18:40","ocrErrorCount":0,"matchErrorCount":3,"taskName":"Research","lastRunTime":"2026-08-12 13:18:40","averageExecutionTimeMs":35716,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":1.0,"totalExecutionTimeMs":107149,"numberOfRuns":3,"totalTemplateSearchFailures":3},"Training: Infantry":{"routineName":"Training: Infantry","executionCount":1,"cumulativeTimeMs":14395,"lastExecutedAt":"2026-08-12 14:20:39","ocrErrorCount":0,"matchErrorCount":0,"taskName":"Training: Infantry","lastRunTime":"2026-08-12 14:20:39","averageExecutionTimeMs":14395,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.0,"totalExecutionTimeMs":14395,"numberOfRuns":1,"totalTemplateSearchFailures":0}},"namedCounters":{"Mail Rewards Claimed":142,"Gather Marches Deployed":90,"Daily Missions Claimed":56,"Growth Missions Claimed":50,"Exploration Fights Lost":73,"Intel Beast":110,"Intel Survivor Camps":16,"Intel Journeys":33,"Exploration Fights Won":6,"Alliance Gifts Collected":154,"Storehouse Chests Opened":36,"Arena Battles Won":14,"Arena Gems Spent":600,"Pet Adventure Chests":8,"Alliance Triumph Rewards":2},"customCounters":{"Mail Rewards Claimed":142,"Gather Marches Deployed":90,"Daily Missions Claimed":56,"Growth Missions Claimed":50,"Exploration Fights Lost":73,"Intel Beast":110,"Intel Survivor Camps":16,"Intel Journeys":33,"Exploration Fights Won":6,"Alliance Gifts Collected":154,"Storehouse Chests Opened":36,"Arena Battles Won":14,"Arena Gems Spent":600,"Pet Adventure Chests":8,"Alliance Triumph Rewards":2},"taskStatistics":{"Initialize":{"routineName":"Initialize","executionCount":120,"cumulativeTimeMs":831279,"lastExecutedAt":"2026-08-12 14:37:36","ocrErrorCount":0,"matchErrorCount":294,"taskName":"Initialize","lastRunTime":"2026-08-12 14:37:36","averageExecutionTimeMs":6927,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":2.45,"totalExecutionTimeMs":831279,"numberOfRuns":120,"totalTemplateSearchFailures":294},"Timer Sweep":{"routineName":"Timer Sweep","executionCount":149,"cumulativeTimeMs":3326371,"lastExecutedAt":"2026-08-12 14:37:58","ocrErrorCount":0,"matchErrorCount":0,"taskName":"Timer Sweep","lastRunTime":"2026-08-12 14:37:58","averageExecutionTimeMs":22324,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.0,"totalExecutionTimeMs":3326371,"numberOfRuns":149,"totalTemplateSearchFailures":0},"Gather Resources":{"routineName":"Gather Resources","executionCount":187,"cumulativeTimeMs":5948434,"lastExecutedAt":"2026-08-12 14:29:58","ocrErrorCount":0,"matchErrorCount":479,"taskName":"Gather Resources","lastRunTime":"2026-08-12 14:29:58","averageExecutionTimeMs":31809,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":2.5614973262032086,"totalExecutionTimeMs":5948434,"numberOfRuns":187,"totalTemplateSearchFailures":479},"Alliance Autojoin":{"routineName":"Alliance Autojoin","executionCount":88,"cumulativeTimeMs":1484430,"lastExecutedAt":"2026-08-12 13:23:48","ocrErrorCount":0,"matchErrorCount":0,"taskName":"Alliance Autojoin","lastRunTime":"2026-08-12 13:23:48","averageExecutionTimeMs":16868,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.0,"totalExecutionTimeMs":1484430,"numberOfRuns":88,"totalTemplateSearchFailures":0},"Crystal Laboratory":{"routineName":"Crystal Laboratory","executionCount":717,"cumulativeTimeMs":6962124,"lastExecutedAt":"2026-08-12 14:43:38","ocrErrorCount":0,"matchErrorCount":714,"taskName":"Crystal Laboratory","lastRunTime":"2026-08-12 14:43:38","averageExecutionTimeMs":9710,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.99581589958159,"totalExecutionTimeMs":6962124,"numberOfRuns":717,"totalTemplateSearchFailures":714},"Chief Order: Rush Job":{"routineName":"Chief Order: Rush Job","executionCount":10,"cumulativeTimeMs":147252,"lastExecutedAt":"2026-08-12 11:16:17","ocrErrorCount":0,"matchErrorCount":5,"taskName":"Chief Order: Rush Job","lastRunTime":"2026-08-12 11:16:17","averageExecutionTimeMs":14725,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.5,"totalExecutionTimeMs":147252,"numberOfRuns":10,"totalTemplateSearchFailures":5},"Storehouse Chest":{"routineName":"Storehouse Chest","executionCount":93,"cumulativeTimeMs":1327601,"lastExecutedAt":"2026-08-12 14:38:18","ocrErrorCount":14,"matchErrorCount":55,"taskName":"Storehouse Chest","lastRunTime":"2026-08-12 14:38:18","averageExecutionTimeMs":14275,"totalOcrFailures":14,"averageOcrFailures":0.15053763440860216,"averageTemplateFailures":0.5913978494623656,"totalExecutionTimeMs":1327601,"numberOfRuns":93,"totalTemplateSearchFailures":55},"Chief Order: Productivity Day":{"routineName":"Chief Order: Productivity Day","executionCount":16,"cumulativeTimeMs":234132,"lastExecutedAt":"2026-08-12 02:41:44","ocrErrorCount":0,"matchErrorCount":6,"taskName":"Chief Order: Productivity Day","lastRunTime":"2026-08-12 02:41:44","averageExecutionTimeMs":14633,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.375,"totalExecutionTimeMs":234132,"numberOfRuns":16,"totalTemplateSearchFailures":6},"Mail Rewards":{"routineName":"Mail Rewards","executionCount":76,"cumulativeTimeMs":1227028,"lastExecutedAt":"2026-08-12 14:20:56","ocrErrorCount":0,"matchErrorCount":304,"taskName":"Mail Rewards","lastRunTime":"2026-08-12 14:20:56","averageExecutionTimeMs":16145,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":4.0,"totalExecutionTimeMs":1227028,"numberOfRuns":76,"totalTemplateSearchFailures":304},"Alliance Chests":{"routineName":"Alliance Chests","executionCount":74,"cumulativeTimeMs":1769563,"lastExecutedAt":"2026-08-12 14:21:17","ocrErrorCount":0,"matchErrorCount":296,"taskName":"Alliance Chests","lastRunTime":"2026-08-12 14:21:17","averageExecutionTimeMs":23913,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":4.0,"totalExecutionTimeMs":1769563,"numberOfRuns":74,"totalTemplateSearchFailures":296},"Alliance Triumph":{"routineName":"Alliance Triumph","executionCount":22,"cumulativeTimeMs":283995,"lastExecutedAt":"2026-08-12 04:32:22","ocrErrorCount":0,"matchErrorCount":62,"taskName":"Alliance Triumph","lastRunTime":"2026-08-12 04:32:22","averageExecutionTimeMs":12908,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":2.8181818181818183,"totalExecutionTimeMs":283995,"numberOfRuns":22,"totalTemplateSearchFailures":62},"Intel":{"routineName":"Intel","executionCount":120,"cumulativeTimeMs":14950975,"lastExecutedAt":"2026-08-12 13:15:42","ocrErrorCount":0,"matchErrorCount":7100,"taskName":"Intel","lastRunTime":"2026-08-12 13:15:42","averageExecutionTimeMs":124591,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":59.166666666666664,"totalExecutionTimeMs":14950975,"numberOfRuns":120,"totalTemplateSearchFailures":7100},"Daily Missions":{"routineName":"Daily Missions","executionCount":90,"cumulativeTimeMs":1167605,"lastExecutedAt":"2026-08-12 14:38:53","ocrErrorCount":0,"matchErrorCount":312,"taskName":"Daily Missions","lastRunTime":"2026-08-12 14:38:53","averageExecutionTimeMs":12973,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":3.466666666666667,"totalExecutionTimeMs":1167605,"numberOfRuns":90,"totalTemplateSearchFailures":312},"Exploration Chest":{"routineName":"Exploration Chest","executionCount":73,"cumulativeTimeMs":959100,"lastExecutedAt":"2026-08-12 14:20:05","ocrErrorCount":0,"matchErrorCount":146,"taskName":"Exploration Chest","lastRunTime":"2026-08-12 14:20:05","averageExecutionTimeMs":13138,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":2.0,"totalExecutionTimeMs":959100,"numberOfRuns":73,"totalTemplateSearchFailures":146},"Do Exploration":{"routineName":"Do Exploration","executionCount":73,"cumulativeTimeMs":2526862,"lastExecutedAt":"2026-08-12 14:22:24","ocrErrorCount":0,"matchErrorCount":851,"taskName":"Do Exploration","lastRunTime":"2026-08-12 14:22:24","averageExecutionTimeMs":34614,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":11.657534246575343,"totalExecutionTimeMs":2526862,"numberOfRuns":73,"totalTemplateSearchFailures":851},"Life Essence":{"routineName":"Life Essence","executionCount":74,"cumulativeTimeMs":1166346,"lastExecutedAt":"2026-08-12 14:23:03","ocrErrorCount":0,"matchErrorCount":232,"taskName":"Life Essence","lastRunTime":"2026-08-12 14:23:03","averageExecutionTimeMs":15761,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":3.135135135135135,"totalExecutionTimeMs":1166346,"numberOfRuns":74,"totalTemplateSearchFailures":232},"Labyrinth":{"routineName":"Labyrinth","executionCount":16,"cumulativeTimeMs":1376356,"lastExecutedAt":"2026-08-11 20:01:33","ocrErrorCount":38,"matchErrorCount":6,"taskName":"Labyrinth","lastRunTime":"2026-08-11 20:01:33","averageExecutionTimeMs":86022,"totalOcrFailures":38,"averageOcrFailures":2.375,"averageTemplateFailures":0.375,"totalExecutionTimeMs":1376356,"numberOfRuns":16,"totalTemplateSearchFailures":6},"Chief Order: Urgent Mobilization":{"routineName":"Chief Order: Urgent Mobilization","executionCount":12,"cumulativeTimeMs":223640,"lastExecutedAt":"2026-08-12 11:09:44","ocrErrorCount":0,"matchErrorCount":2,"taskName":"Chief Order: Urgent Mobilization","lastRunTime":"2026-08-12 11:09:44","averageExecutionTimeMs":18636,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.16666666666666666,"totalExecutionTimeMs":223640,"numberOfRuns":12,"totalTemplateSearchFailures":2},"bg_powerpriorities":{"routineName":"bg_powerpriorities","executionCount":40,"cumulativeTimeMs":698348,"lastExecutedAt":"2026-08-12 13:17:39","ocrErrorCount":0,"matchErrorCount":0,"taskName":"bg_powerpriorities","lastRunTime":"2026-08-12 13:17:39","averageExecutionTimeMs":17458,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.0,"totalExecutionTimeMs":698348,"numberOfRuns":40,"totalTemplateSearchFailures":0},"bg_telemetry":{"routineName":"bg_telemetry","executionCount":44,"cumulativeTimeMs":266114,"lastExecutedAt":"2026-08-12 13:17:24","ocrErrorCount":1,"matchErrorCount":0,"taskName":"bg_telemetry","lastRunTime":"2026-08-12 13:17:24","averageExecutionTimeMs":6048,"totalOcrFailures":1,"averageOcrFailures":0.022727272727272728,"averageTemplateFailures":0.0,"totalExecutionTimeMs":266114,"numberOfRuns":44,"totalTemplateSearchFailures":0},"Resource Stockpile Scan":{"routineName":"Resource Stockpile Scan","executionCount":74,"cumulativeTimeMs":1655004,"lastExecutedAt":"2026-08-12 14:38:39","ocrErrorCount":0,"matchErrorCount":0,"taskName":"Resource Stockpile Scan","lastRunTime":"2026-08-12 14:38:39","averageExecutionTimeMs":22364,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.0,"totalExecutionTimeMs":1655004,"numberOfRuns":74,"totalTemplateSearchFailures":0},"Pet Adventure":{"routineName":"Pet Adventure","executionCount":10,"cumulativeTimeMs":338711,"lastExecutedAt":"2026-08-12 11:08:12","ocrErrorCount":0,"matchErrorCount":49,"taskName":"Pet Adventure","lastRunTime":"2026-08-12 11:08:12","averageExecutionTimeMs":33871,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":4.9,"totalExecutionTimeMs":338711,"numberOfRuns":10,"totalTemplateSearchFailures":49},"Gather Speed Boost":{"routineName":"Gather Speed Boost","executionCount":4,"cumulativeTimeMs":51636,"lastExecutedAt":"2026-08-12 02:12:49","ocrErrorCount":0,"matchErrorCount":0,"taskName":"Gather Speed Boost","lastRunTime":"2026-08-12 02:12:49","averageExecutionTimeMs":12909,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.0,"totalExecutionTimeMs":51636,"numberOfRuns":4,"totalTemplateSearchFailures":0},"Alliance Tech":{"routineName":"Alliance Tech","executionCount":52,"cumulativeTimeMs":637770,"lastExecutedAt":"2026-08-12 13:42:40","ocrErrorCount":0,"matchErrorCount":8,"taskName":"Alliance Tech","lastRunTime":"2026-08-12 13:42:40","averageExecutionTimeMs":12264,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.15384615384615385,"totalExecutionTimeMs":637770,"numberOfRuns":52,"totalTemplateSearchFailures":8},"Pet Skills":{"routineName":"Pet Skills","executionCount":50,"cumulativeTimeMs":1853798,"lastExecutedAt":"2026-08-11 13:36:08","ocrErrorCount":0,"matchErrorCount":274,"taskName":"Pet Skills","lastRunTime":"2026-08-11 13:36:08","averageExecutionTimeMs":37075,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":5.48,"totalExecutionTimeMs":1853798,"numberOfRuns":50,"totalTemplateSearchFailures":274},"Training":{"routineName":"Training","executionCount":9,"cumulativeTimeMs":893509,"lastExecutedAt":"2026-08-12 13:23:08","ocrErrorCount":0,"matchErrorCount":303,"taskName":"Training","lastRunTime":"2026-08-12 13:23:08","averageExecutionTimeMs":99278,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":33.666666666666664,"totalExecutionTimeMs":893509,"numberOfRuns":9,"totalTemplateSearchFailures":303},"Pet Skill: Stamina":{"routineName":"Pet Skill: Stamina","executionCount":4,"cumulativeTimeMs":35822,"lastExecutedAt":"2026-08-12 03:30:35","ocrErrorCount":0,"matchErrorCount":5,"taskName":"Pet Skill: Stamina","lastRunTime":"2026-08-12 03:30:35","averageExecutionTimeMs":8955,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":1.25,"totalExecutionTimeMs":35822,"numberOfRuns":4,"totalTemplateSearchFailures":5},"Pet Skill: Treasure":{"routineName":"Pet Skill: Treasure","executionCount":5,"cumulativeTimeMs":33990,"lastExecutedAt":"2026-08-11 20:55:44","ocrErrorCount":0,"matchErrorCount":5,"taskName":"Pet Skill: Treasure","lastRunTime":"2026-08-11 20:55:44","averageExecutionTimeMs":6798,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":1.0,"totalExecutionTimeMs":33990,"numberOfRuns":5,"totalTemplateSearchFailures":5},"Arena":{"routineName":"Arena","executionCount":3,"cumulativeTimeMs":324320,"lastExecutedAt":"2026-08-11 19:54:55","ocrErrorCount":16,"matchErrorCount":0,"taskName":"Arena","lastRunTime":"2026-08-11 19:54:55","averageExecutionTimeMs":108106,"totalOcrFailures":16,"averageOcrFailures":5.333333333333333,"averageTemplateFailures":0.0,"totalExecutionTimeMs":324320,"numberOfRuns":3,"totalTemplateSearchFailures":0},"Life Essence Caring":{"routineName":"Life Essence Caring","executionCount":3,"cumulativeTimeMs":132403,"lastExecutedAt":"2026-08-11 20:03:30","ocrErrorCount":0,"matchErrorCount":14,"taskName":"Life Essence Caring","lastRunTime":"2026-08-11 20:03:30","averageExecutionTimeMs":44134,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":4.666666666666667,"totalExecutionTimeMs":132403,"numberOfRuns":3,"totalTemplateSearchFailures":14},"Alliance Pet Treasure":{"routineName":"Alliance Pet Treasure","executionCount":3,"cumulativeTimeMs":45730,"lastExecutedAt":"2026-08-11 20:03:56","ocrErrorCount":0,"matchErrorCount":1,"taskName":"Alliance Pet Treasure","lastRunTime":"2026-08-11 20:03:56","averageExecutionTimeMs":15243,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.3333333333333333,"totalExecutionTimeMs":45730,"numberOfRuns":3,"totalTemplateSearchFailures":1},"VIP Points":{"routineName":"VIP Points","executionCount":3,"cumulativeTimeMs":28495,"lastExecutedAt":"2026-08-11 20:03:39","ocrErrorCount":0,"matchErrorCount":0,"taskName":"VIP Points","lastRunTime":"2026-08-11 20:03:39","averageExecutionTimeMs":9498,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.0,"totalExecutionTimeMs":28495,"numberOfRuns":3,"totalTemplateSearchFailures":0},"Research":{"routineName":"Research","executionCount":3,"cumulativeTimeMs":107149,"lastExecutedAt":"2026-08-12 13:18:40","ocrErrorCount":0,"matchErrorCount":3,"taskName":"Research","lastRunTime":"2026-08-12 13:18:40","averageExecutionTimeMs":35716,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":1.0,"totalExecutionTimeMs":107149,"numberOfRuns":3,"totalTemplateSearchFailures":3},"Training: Infantry":{"routineName":"Training: Infantry","executionCount":1,"cumulativeTimeMs":14395,"lastExecutedAt":"2026-08-12 14:20:39","ocrErrorCount":0,"matchErrorCount":0,"taskName":"Training: Infantry","lastRunTime":"2026-08-12 14:20:39","averageExecutionTimeMs":14395,"totalOcrFailures":0,"averageOcrFailures":0.0,"averageTemplateFailures":0.0,"totalExecutionTimeMs":14395,"numberOfRuns":1,"totalTemplateSearchFailures":0}}}
+1	2	STOREHOUSE_CHEST_BOOL	true
+1	2	STOREHOUSE_STAMINA_CLAIM_TIME_STRING	2026-08-12T20:00
+1	2	TEST_GATHER_DEPLOY_PREEMPTION_BOOL	false
+1	2	TIMER_SWEEP_INTERVAL_MINUTES_INT	60
+1	2	TRAIN_BOOL	true
+1	2	TRAIN_INFANTRY_BOOL	true
+1	2	TRAIN_LANCER_BOOL	true
+1	2	TRAIN_MARKSMAN_BOOL	true
+1	2	TRAIN_PRIORITIZE_PROMOTION_BOOL	true
+1	2	VIP_NEXT_MONTHLY_BUY_TIME_STRING	2026-09-20T17:19:20.527828800
+1	2	WAR_ACADEMY_TASK_BOOL	false
+2	2	ARENA_TASK_ACTIVATION_TIME_STRING	00:00
+2	2	ARENA_TASK_BOOL	true
+2	2	ARENA_TASK_DRY_RUN_BOOL	true
+2	2	BEAR_TRAP_EVENT_BOOL	false
+2	2	CHAT_CAPTURE_ENABLED_BOOL	false
+2	2	CHAT_CAPTURE_FILTER_NOISE_BOOL	true
+2	2	CHAT_CAPTURE_FREQUENCY_MINUTES_INT	30
+2	2	CHAT_CAPTURE_INCLUDE_ALLIANCE_BOOL	true
+2	2	CHAT_CAPTURE_INCLUDE_PERSONAL_BOOL	true
+2	2	CHAT_CAPTURE_INCLUDE_WORLD_BOOL	true
+2	2	CHAT_CAPTURE_MODE_STRING	TRANSCRIPT
+2	2	CITY_UPGRADE_RESERVE_PRODUCTION_BOOL	false
+2	2	CRYPTID_HOST_ENABLED_BOOL	false
+2	2	CRYPTID_HOST_FLAG_INT	0
+2	2	CRYPTID_HOST_RUNS_INT	1
+2	2	CRYPTID_HOST_USE_STAMINA_ITEMS_BOOL	false
+2	2	GATHER_ACTIVE_MARCH_QUEUE_INT	6
+2	2	GATHER_TASK_BOOL	false
+2	2	INTEL_BEASTS_BOOL	true
+2	2	INTEL_BOOL	true
+2	2	INTEL_CAMP_BOOL	true
+2	2	INTEL_EXPLORATION_BOOL	true
+2	2	INTEL_FC_ERA_BOOL	false
+2	2	INTEL_FIRE_BEAST_BOOL	true
+2	2	INTEL_RECALL_GATHER_TROOPS_BOOL	true
+2	2	INTEL_SMART_PROCESSING_BOOL	false
+2	2	INTEL_STAMINA_ITEM_RESERVE_INT	0
+2	2	INTEL_USE_FLAG_BOOL	false
+2	2	INTEL_USE_STAMINA_ITEMS_BOOL	true
+2	2	LIFE_ESSENCE_BUY_WEEKLY_SCROLL_BOOL	false
+2	2	STATISTICS_JSON_STRING	{"routineStats":{"Initialize":{"routineName":"Initialize","executionCount":37,"cumulativeTimeMs":209582,"lastExecutedAt":"2026-08-08 13:30:27","ocrErrorCount":0,"matchErrorCount":67,"numberOfRuns":37,"lastRunTime":"2026-08-08 13:30:27","taskName":"Initialize","totalExecutionTimeMs":209582,"totalOcrFailures":0,"totalTemplateSearchFailures":67,"averageExecutionTimeMs":5664,"averageOcrFailures":0.0,"averageTemplateFailures":1.8108108108108107},"bg_telemetry":{"routineName":"bg_telemetry","executionCount":8,"cumulativeTimeMs":36985,"lastExecutedAt":"2026-08-08 12:16:08","ocrErrorCount":0,"matchErrorCount":0,"numberOfRuns":8,"lastRunTime":"2026-08-08 12:16:08","taskName":"bg_telemetry","totalExecutionTimeMs":36985,"totalOcrFailures":0,"totalTemplateSearchFailures":0,"averageExecutionTimeMs":4623,"averageOcrFailures":0.0,"averageTemplateFailures":0.0},"Host Cryptid Rally":{"routineName":"Host Cryptid Rally","executionCount":4,"cumulativeTimeMs":172119,"lastExecutedAt":"2026-08-05 10:48:37","ocrErrorCount":0,"matchErrorCount":17,"numberOfRuns":4,"lastRunTime":"2026-08-05 10:48:37","taskName":"Host Cryptid Rally","totalExecutionTimeMs":172119,"totalOcrFailures":0,"totalTemplateSearchFailures":17,"averageExecutionTimeMs":43029,"averageOcrFailures":0.0,"averageTemplateFailures":4.25},"Chat Capture":{"routineName":"Chat Capture","executionCount":6,"cumulativeTimeMs":316105,"lastExecutedAt":"2026-08-05 17:13:26","ocrErrorCount":0,"matchErrorCount":0,"numberOfRuns":6,"lastRunTime":"2026-08-05 17:13:26","taskName":"Chat Capture","totalExecutionTimeMs":316105,"totalOcrFailures":0,"totalTemplateSearchFailures":0,"averageExecutionTimeMs":52684,"averageOcrFailures":0.0,"averageTemplateFailures":0.0},"bg_powerpriorities":{"routineName":"bg_powerpriorities","executionCount":6,"cumulativeTimeMs":100782,"lastExecutedAt":"2026-08-08 12:16:04","ocrErrorCount":0,"matchErrorCount":0,"numberOfRuns":6,"lastRunTime":"2026-08-08 12:16:04","taskName":"bg_powerpriorities","totalExecutionTimeMs":100782,"totalOcrFailures":0,"totalTemplateSearchFailures":0,"averageExecutionTimeMs":16797,"averageOcrFailures":0.0,"averageTemplateFailures":0.0},"Intel":{"routineName":"Intel","executionCount":11,"cumulativeTimeMs":1296634,"lastExecutedAt":"2026-08-08 13:20:10","ocrErrorCount":1,"matchErrorCount":614,"numberOfRuns":11,"lastRunTime":"2026-08-08 13:20:10","taskName":"Intel","totalExecutionTimeMs":1296634,"totalOcrFailures":1,"totalTemplateSearchFailures":614,"averageExecutionTimeMs":117875,"averageOcrFailures":0.09090909090909091,"averageTemplateFailures":55.81818181818182},"Arena":{"routineName":"Arena","executionCount":3,"cumulativeTimeMs":47168,"lastExecutedAt":"2026-08-08 00:22:12","ocrErrorCount":0,"matchErrorCount":0,"numberOfRuns":3,"lastRunTime":"2026-08-08 00:22:12","taskName":"Arena","totalExecutionTimeMs":47168,"totalOcrFailures":0,"totalTemplateSearchFailures":0,"averageExecutionTimeMs":15722,"averageOcrFailures":0.0,"averageTemplateFailures":0.0}},"namedCounters":{"Intel Beast":15,"Intel Survivor Camps":6,"Intel Journeys":7},"taskStatistics":{"Initialize":{"routineName":"Initialize","executionCount":37,"cumulativeTimeMs":209582,"lastExecutedAt":"2026-08-08 13:30:27","ocrErrorCount":0,"matchErrorCount":67,"numberOfRuns":37,"lastRunTime":"2026-08-08 13:30:27","taskName":"Initialize","totalExecutionTimeMs":209582,"totalOcrFailures":0,"totalTemplateSearchFailures":67,"averageExecutionTimeMs":5664,"averageOcrFailures":0.0,"averageTemplateFailures":1.8108108108108107},"bg_telemetry":{"routineName":"bg_telemetry","executionCount":8,"cumulativeTimeMs":36985,"lastExecutedAt":"2026-08-08 12:16:08","ocrErrorCount":0,"matchErrorCount":0,"numberOfRuns":8,"lastRunTime":"2026-08-08 12:16:08","taskName":"bg_telemetry","totalExecutionTimeMs":36985,"totalOcrFailures":0,"totalTemplateSearchFailures":0,"averageExecutionTimeMs":4623,"averageOcrFailures":0.0,"averageTemplateFailures":0.0},"Host Cryptid Rally":{"routineName":"Host Cryptid Rally","executionCount":4,"cumulativeTimeMs":172119,"lastExecutedAt":"2026-08-05 10:48:37","ocrErrorCount":0,"matchErrorCount":17,"numberOfRuns":4,"lastRunTime":"2026-08-05 10:48:37","taskName":"Host Cryptid Rally","totalExecutionTimeMs":172119,"totalOcrFailures":0,"totalTemplateSearchFailures":17,"averageExecutionTimeMs":43029,"averageOcrFailures":0.0,"averageTemplateFailures":4.25},"Chat Capture":{"routineName":"Chat Capture","executionCount":6,"cumulativeTimeMs":316105,"lastExecutedAt":"2026-08-05 17:13:26","ocrErrorCount":0,"matchErrorCount":0,"numberOfRuns":6,"lastRunTime":"2026-08-05 17:13:26","taskName":"Chat Capture","totalExecutionTimeMs":316105,"totalOcrFailures":0,"totalTemplateSearchFailures":0,"averageExecutionTimeMs":52684,"averageOcrFailures":0.0,"averageTemplateFailures":0.0},"bg_powerpriorities":{"routineName":"bg_powerpriorities","executionCount":6,"cumulativeTimeMs":100782,"lastExecutedAt":"2026-08-08 12:16:04","ocrErrorCount":0,"matchErrorCount":0,"numberOfRuns":6,"lastRunTime":"2026-08-08 12:16:04","taskName":"bg_powerpriorities","totalExecutionTimeMs":100782,"totalOcrFailures":0,"totalTemplateSearchFailures":0,"averageExecutionTimeMs":16797,"averageOcrFailures":0.0,"averageTemplateFailures":0.0},"Intel":{"routineName":"Intel","executionCount":11,"cumulativeTimeMs":1296634,"lastExecutedAt":"2026-08-08 13:20:10","ocrErrorCount":1,"matchErrorCount":614,"numberOfRuns":11,"lastRunTime":"2026-08-08 13:20:10","taskName":"Intel","totalExecutionTimeMs":1296634,"totalOcrFailures":1,"totalTemplateSearchFailures":614,"averageExecutionTimeMs":117875,"averageOcrFailures":0.09090909090909091,"averageTemplateFailures":55.81818181818182},"Arena":{"routineName":"Arena","executionCount":3,"cumulativeTimeMs":47168,"lastExecutedAt":"2026-08-08 00:22:12","ocrErrorCount":0,"matchErrorCount":0,"numberOfRuns":3,"lastRunTime":"2026-08-08 00:22:12","taskName":"Arena","totalExecutionTimeMs":47168,"totalOcrFailures":0,"totalTemplateSearchFailures":0,"averageExecutionTimeMs":15722,"averageOcrFailures":0.0,"averageTemplateFailures":0.0}},"customCounters":{"Intel Beast":15,"Intel Survivor Camps":6,"Intel Journeys":7}}

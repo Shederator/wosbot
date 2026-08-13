@@ -16,6 +16,7 @@ import dev.frostguard.tasks.exploration.*;
 import dev.frostguard.tasks.heroes.*;
 import dev.frostguard.tasks.lifecycle.*;
 import dev.frostguard.tasks.pets.*;
+import dev.frostguard.tasks.shop.*;
 
 /**
  * Registers all task factories with the DelayedTaskRegistry.
@@ -50,7 +51,21 @@ public class TaskRegistrations {
             case CITY_UPGRADE_FURNACE -> new UpgradeBuildingsRoutine(profile, type);
             case CITY_UPGRADE_PRIORITISE_FURNACE -> new PrioritiseFurnaceRoutine(profile, type);
             case CITY_SURVIVORS -> new NewSurvivorsRoutine(profile, type);
+            // matt/2026-08-12: TRAINING_TROOPS retired (configKey nulled, never auto-
+            // scheduled) in favor of the 3 independent tasks below -- kept mapped here
+            // only so the switch stays exhaustive / a stray manual construction doesn't NPE.
             case TRAINING_TROOPS -> new TrainingRoutine(profile, type);
+            case TRAINING_INFANTRY -> new TrainingRoutine(profile, type);
+            case TRAINING_LANCER -> new TrainingRoutine(profile, type);
+            case TRAINING_MARKSMAN -> new TrainingRoutine(profile, type);
+            case HEAL_INJURED_TROOPS -> new HealInjuredRoutine(profile, type);
+            case MONUMENT -> new MonumentRoutine(profile, type);
+            case EVENT_HALL_OF_CHIEFS -> new EventClaimRoutine(profile, type, EventClaimRoutine.EventKind.HALL_OF_CHIEFS);
+            case EVENT_DEFEAT_BEASTS -> new EventClaimRoutine(profile, type, EventClaimRoutine.EventKind.DEFEAT_NEARBY_BEASTS);
+            case EVENT_HERO_RALLY_CLAIM -> new HeroRallyClaimRoutine(profile, type);
+            case EVENT_LUCKY_CHIP_SUPPLY -> new LuckyChipSupplyRoutine(profile, type);
+            case SHOP_CUSTOM_ARMAMENT_CHEST -> new CustomArmamentChestRoutine(profile, type);
+            case SHOP_DAILY_DEALS_FREE_CHEST -> new DailyDealsFreeChestRoutine(profile, type);
             case RESEARCH -> new ResearchRoutine(profile, type);
 
             // Dailies
@@ -77,6 +92,8 @@ public class TaskRegistrations {
             // Pets
             case PET_ADVENTURE -> new PetAdventureChestRoutine(profile, type);
             case PET_SKILLS -> new PetSkillsRoutine(profile, type);
+            case PET_SKILL_STAMINA -> new PetSkillsRoutine(profile, type, PetSkillsRoutine.PetSkill.STAMINA);
+            case PET_SKILL_TREASURE -> new PetSkillsRoutine(profile, type, PetSkillsRoutine.PetSkill.TREASURE);
             case LIFE_ESSENCE -> new LifeEssenceRoutine(profile, type);
             case LIFE_ESSENCE_CARING -> new LifeEssenceCaringRoutine(profile, type);
 
@@ -115,6 +132,8 @@ public class TaskRegistrations {
             // Bearguard
             case EVENT_CRYPTID_HOST -> new CryptidHostingRoutine(profile, type);
             case CHAT_CAPTURE -> new ChatCaptureRoutine(profile, type);
+            case RESOURCE_STOCKPILE_SCAN -> new ResourceStockpileRoutine(profile, type);
+            case TIMER_SWEEP -> new TimerSweepRoutine(profile, type);
 
             default -> null;
         };

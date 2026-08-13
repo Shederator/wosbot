@@ -77,8 +77,17 @@ public class PetSkillsRoutine extends DelayedTask {
     private static final PointData STAMINA_SKILL_BOTTOM_RIGHT = new PointData(320, 350);
     private static final PointData GATHERING_SKILL_TOP_LEFT = new PointData(380, 260);
     private static final PointData GATHERING_SKILL_BOTTOM_RIGHT = new PointData(460, 350);
-    private static final PointData FOOD_SKILL_TOP_LEFT = new PointData(540, 260);
-    private static final PointData FOOD_SKILL_BOTTOM_RIGHT = new PointData(620, 350);
+    // matt, 2026-08-08: repointed from (540,260)-(620,350), which was past the right-hand edge of
+    // the last skill tile and therefore tapped bare panel. The Pet Skill dialog lays its tiles out
+    // in ONE row of three, not the 2x2 grid these constants assumed:
+    //     slot 1 x 75-205   slot 2 x 220-355 (Stamina)   slot 3 x 365-500 (Gathering)
+    // Slot 1 was the only tile nothing ever selected, and in the 14:47 capture it held the
+    // SOONEST cooldown of the three (07:27:25, ready ~22:14) — so the skill most worth waking up
+    // for was the one guaranteed to be missed. Pointing Food at slot 1 means every real tile now
+    // gets visited. The slot-1 skill's actual identity is still unconfirmed; whatever it is, its
+    // cooldown now reaches the scheduler instead of being invisible.
+    private static final PointData FOOD_SKILL_TOP_LEFT = new PointData(95, 260);
+    private static final PointData FOOD_SKILL_BOTTOM_RIGHT = new PointData(185, 350);
     private static final PointData TREASURE_SKILL_TOP_LEFT = new PointData(240, 410);
     private static final PointData TREASURE_SKILL_BOTTOM_RIGHT = new PointData(320, 490);
 
@@ -95,11 +104,63 @@ public class PetSkillsRoutine extends DelayedTask {
     private static final AreaData STAMINA_COOLDOWN_OCR_AREA = new AreaData(
             new PointData(229, 285),
             new PointData(334, 320));
+    // matt, 2026-08-08: the authoritative cooldown for whichever skill is currently selected,
+    // rendered as "On cooldown: HH:MM:SS" in red under the description panel. Calibrated from
+    // 30 live 720x1280 frames captured mid-routine; read cleanly on every single one
+    // ("On cooldown: 15:10:00", "On cooldown: 14:21:44", ...).
+    //
+    // This replaces four per-icon crops of the small red timer drawn ON each skill tile. Those
+    // were failing for three of four skills: two pointed at blank panel space (the code assumed
+    // a 2x2 grid of four skills; this pet has three in a single row), and the third clipped the
+    // bottom few pixels of its digits. Reading the shared line avoids per-tile calibration
+    // entirely and stays correct however many skills a pet has.
+    private static final AreaData SELECTED_SKILL_COOLDOWN_AREA = new AreaData(
+            new PointData(200, 1070),
+            new PointData(520, 1110));
+
+    /**
+     * Matches the cooldown timestamp inside the "On cooldown:" line, with or without a day part
+     * (the game renders long cooldowns as e.g. "1d 03:00:00").
+     */
+    private static final Pattern COOLDOWN_TIMESTAMP_PATTERN =
+            Pattern.compile("(?:\\d+\\s*d\\s*)?\\d{1,2}:\\d{2}:\\d{2}");
+
     private static final PointData SKILL_LEVEL_OCR_TOP_LEFT = new PointData(276, 779);
     private static final PointData SKILL_LEVEL_OCR_BOTTOM_RIGHT = new PointData(363, 811);
 
     // ========== Retry Constants ==========
-    private static final int FALLBACK_RESCHEDULE_MINUTES = 5;
+    // matt, 2026-08-06: was 5. Real account log showed Stamina/Gathering OCR
+    // reading correctly (cooldowns of 10-20+ HOURS), but Food/Treasure's OCR
+    // crop consistently fails every single run and falls back to this value
+    // - and since the task reschedules to the EARLIEST cooldown across all 4
+    // skills, that one broken 5-minute guess was dragging the whole task down
+    // to a ~4-5 minute loop regardless of the other 3 skills' real (correctly
+    // read) day-long cooldowns. Raised to a value that assumes an unreadable
+    // skill is probably ALSO on a long cooldown (matches the pattern of every
+    // skill actually observed), not "ready any second" - still short enough
+    // to recover if a read failure is transient rather than a stale crop.
+    // If Food/Treasure keep hitting this even after an hour, the OCR crop
+    // coordinates (FOOD_COOLDOWN_OCR_AREA / TREASURE_COOLDOWN_OCR_AREA) need
+    // remeasuring against a live capture - that's a UI-region bug, not
+    // something this constant can fully paper over.
+    private static final int FALLBACK_RESCHEDULE_MINUTES = 60;
+
+    // matt/2026-08-09 (Part 3): when a skill's Use button was present (so it was ready and we just
+    // pressed it) but the new "On cooldown:" line couldn't be read back, the skill is on a fresh
+    // cooldown of unknown length — not genuinely unschedulable. A SHORT deterministic recheck reads
+    // the now-settled timer moments later instead of sleeping the full 60-minute blind fallback.
+    private static final int READY_NOW_RECHECK_MINUTES = 3;
+
+    /**
+     * Backoff for retrying the opportunistic GATHERING skill deploy when it can't place a march
+     * (no free march / tile occupied). One hour instead of the old five minutes — a free march
+     * won't appear in five minutes, and the retry must never out-prioritise the real cooldown
+     * skills. reschedule() adds its own jitter on top.
+     */
+    private static final int GATHERING_DEPLOY_RETRY_MINUTES = 60;
+
+    /** Tries at opening the Pets menu, with a back press between attempts to clear popups. */
+    private static final int MAX_NAVIGATION_ATTEMPTS = 3;
     private static final int SKILL_LEVEL_OCR_MAX_RETRIES = 3;
     private static final int OCR_RETRY_DELAY_MS = 200;
 
@@ -139,13 +200,72 @@ public class PetSkillsRoutine extends DelayedTask {
     private LocalDateTime earliestCooldown;
 
     /**
-     * Constructs a new PetSkillsRoutine.
+     * When the opportunistic GATHERING deploy should be retried, tracked separately from
+     * {@link #earliestCooldown}.
+     *
+     * <p>matt, 2026-08-09: the GATHERING skill deploys a gather march, which fails whenever there
+     * is no free march or the tile is occupied — a near-constant state. Every failure used to feed
+     * a 5-minute time into {@code earliestCooldown}, and because the task reschedules to the
+     * <em>earliest</em> cooldown, that 5 minutes always beat the real 19-hour STAMINA/TREASURE
+     * cooldowns and dragged the whole task into a ~6-minute loop (10+ runs/hour). The gathering
+     * retry is opportunistic and belongs on its own, gentler cadence; it must never pull the
+     * cooldown skills forward.</p>
+     */
+    private LocalDateTime gatheringRetryAt;
+
+    /**
+     * Set when a processed skill is not learned or is locked. Such a skill has no cooldown to read
+     * and its status won't change within the day, so the task should sleep until the daily reset
+     * rather than fall back to the generic short retry and re-open the pets menu every hour.
+     */
+    private boolean skillUnusable;
+
+    /**
+     * matt/2026-08-09 (Part 3): set when a skill's Use button was present (skill ready, just pressed)
+     * but its fresh cooldown couldn't be read back. Drives a SHORT deterministic recheck in
+     * {@link #finalizeRescheduling()} instead of the 60-minute blind fallback.
+     */
+    private boolean readyNowCooldownUnread;
+
+    /**
+     * matt/2026-08-09: the raw timestamp string of the most recently read "On cooldown:" line. The
+     * cooldown line is shared across skill tiles and reflects whichever tile is selected, so if a
+     * tile-tap misses, the next skill would read the previous skill's timer. Tracking the last raw
+     * read lets {@link #readAndTrackCooldown} spot a byte-identical repeat (impossible to the second
+     * unless the line never refreshed) and avoid attributing a neighbour's cooldown.
+     */
+    private String lastSelectedCooldownRaw;
+
+    /**
+     * When non-null, this task handles exactly one cooldown skill and reschedules to that skill's
+     * own OCR'd cooldown — the chief-order model matt asked for, one task per pet skill. When null
+     * (the legacy {@code PET_SKILLS} task) it handles only the opportunistic GATHERING deploy, since
+     * STAMINA/TREASURE now live in their own tasks.
+     */
+    private final PetSkill onlySkill;
+
+    /**
+     * Constructs the legacy multi-purpose task. With STAMINA and TREASURE broken out into their own
+     * tasks, this now drives only the GATHERING skill deploy.
      *
      * @param profile the profile this task belongs to
      * @param tpTask  the task type enum
      */
     public PetSkillsRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
+        this(profile, tpTask, null);
+    }
+
+    /**
+     * Constructs a single-skill task, mirroring how each Chief Order is its own task on its own
+     * timer. The skill is used when ready and the task reschedules to that skill's cooldown.
+     *
+     * @param profile   the profile this task belongs to
+     * @param tpTask    the task type enum
+     * @param onlySkill the one skill this task manages, or {@code null} for the gathering-only task
+     */
+    public PetSkillsRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask, PetSkill onlySkill) {
         super(profile, tpTask);
+        this.onlySkill = onlySkill;
     }
 
     /**
@@ -199,6 +319,10 @@ public class PetSkillsRoutine extends DelayedTask {
     private void resetExecutionState() {
         this.navigationAttempts = 0;
         this.earliestCooldown = null;
+        this.gatheringRetryAt = null;
+        this.skillUnusable = false;
+        this.readyNowCooldownUnread = false;
+        this.lastSelectedCooldownRaw = null;
         logDebug("Execution state reset");
     }
 
@@ -277,21 +401,34 @@ public class PetSkillsRoutine extends DelayedTask {
     private List<PetSkill> buildEnabledSkillsList() {
         List<PetSkill> skills = new ArrayList<>();
 
-        if (staminaEnabled) {
-            skills.add(PetSkill.STAMINA);
+        // Single-skill task (PET_SKILL_STAMINA / PET_SKILL_TREASURE): handle only that skill, and
+        // only while its own toggle is on. The scheduler already gated the task on the same bool,
+        // so this is just belt-and-suspenders against a config flipped mid-session.
+        if (onlySkill != null) {
+            if (isSkillEnabled(onlySkill)) {
+                skills.add(onlySkill);
+            }
+            logDebug("Single-skill task skills: " + skills);
+            return skills;
         }
-        if (foodEnabled) {
-            skills.add(PetSkill.FOOD);
-        }
-        if (treasureEnabled) {
-            skills.add(PetSkill.TREASURE);
-        }
+
+        // Legacy PET_SKILLS task: gathering only. STAMINA/TREASURE/FOOD now run as their own tasks,
+        // so processing them here too would double-drive them.
         if (gatheringEnabled) {
             skills.add(PetSkill.GATHERING);
         }
 
-        logDebug("Enabled skills: " + skills);
+        logDebug("Gathering-only task skills: " + skills);
         return skills;
+    }
+
+    private boolean isSkillEnabled(PetSkill skill) {
+        return switch (skill) {
+            case STAMINA -> staminaEnabled;
+            case FOOD -> foodEnabled;
+            case TREASURE -> treasureEnabled;
+            case GATHERING -> gatheringEnabled;
+        };
     }
 
     /**
@@ -305,19 +442,36 @@ public class PetSkillsRoutine extends DelayedTask {
     private boolean openPetsMenu() {
         logDebug("Opening Pets menu");
 
-        ImageSearchResultData petsButton = templateSearchHelper.locatePattern(
-                TemplatesEnum.GAME_HOME_PETS,
-                SearchConfigConstants.DEFAULT_SINGLE);
+        // matt, 2026-08-08: this "retry" never retried. It incremented a counter and returned
+        // false on the very first miss, so a single blocked frame abandoned the whole task —
+        // the log read "attempt 1/3" immediately followed by "Failed to open Pets menu".
+        // Observed live at 14:13: the bot was sitting on the world map with an "Assault Squad
+        // Invites" rally popup covering the bottom-right corner, which is exactly where the
+        // Pets button lives. A back press clears both conditions (dismisses the modal, and
+        // returns the world map to the city view), so retry properly instead of giving up.
+        ImageSearchResultData petsButton = null;
 
-        if (!petsButton.isFound()) {
-            navigationAttempts++;
+        for (int attempt = 1; attempt <= MAX_NAVIGATION_ATTEMPTS; attempt++) {
+            petsButton = templateSearchHelper.locatePattern(
+                    TemplatesEnum.GAME_HOME_PETS,
+                    SearchConfigConstants.DEFAULT_SINGLE);
 
-            if (navigationAttempts >= 3) { // Max navigation attempts
-                logError("Could not find Pets menu after 3 attempts.");
-                return false;
+            if (petsButton.isFound()) {
+                break;
             }
 
-            logWarning("Pets button not found (attempt " + navigationAttempts + "/3).");
+            navigationAttempts++;
+            logWarning("Pets button not found (attempt " + attempt + "/" + MAX_NAVIGATION_ATTEMPTS
+                    + "). Clearing any blocking popup and retrying.");
+
+            if (attempt < MAX_NAVIGATION_ATTEMPTS) {
+                pressBack();
+                sleepTask(1200);
+            }
+        }
+
+        if (petsButton == null || !petsButton.isFound()) {
+            logError("Could not find Pets menu after " + MAX_NAVIGATION_ATTEMPTS + " attempts.");
             return false;
         }
 
@@ -374,10 +528,12 @@ public class PetSkillsRoutine extends DelayedTask {
         tapSkillIcon(skill);
 
         if (!isSkillLearned(skill)) {
+            skillUnusable = true;
             return;
         }
 
         if (isSkillLocked(skill)) {
+            skillUnusable = true;
             return;
         }
 
@@ -396,7 +552,13 @@ public class PetSkillsRoutine extends DelayedTask {
             logDebug(skill.name() + " skill is on cooldown.");
         }
 
-        readAndTrackCooldown(skill);
+        boolean cooldownTracked = readAndTrackCooldown(skill);
+        // matt/2026-08-09 (Part 3): the Use button was present and pressed, but the freshly-started
+        // cooldown didn't read back. Flag a short recheck rather than letting this fall through to the
+        // 60-minute blind fallback — the timer is simply mid-animation, not genuinely unschedulable.
+        if (skillUsed && !cooldownTracked) {
+            readyNowCooldownUnread = true;
+        }
     }
 
     /**
@@ -498,34 +660,60 @@ public class PetSkillsRoutine extends DelayedTask {
      * If OCR fails, logs a warning and continues without updating cooldown.
      * 
      * @param skill the skill whose cooldown to read
+     * @return {@code true} when a real cooldown was read and tracked, {@code false} when OCR failed
      */
-    private void readAndTrackCooldown(PetSkill skill) {
+    private boolean readAndTrackCooldown(PetSkill skill) {
         Duration cooldownDuration;
 
         switch (skill) {
+            // matt, 2026-08-08: every skill now reads the same shared "On cooldown:" line, which
+            // reflects whichever tile is currently selected. The old per-skill crops are gone --
+            // see SELECTED_SKILL_COOLDOWN_AREA for why they could not work.
             case STAMINA:
-                cooldownDuration = readSkillCooldown(STAMINA_COOLDOWN_OCR_AREA);
-                break;
-
             case FOOD:
-                cooldownDuration = readSkillCooldown(FOOD_COOLDOWN_OCR_AREA);
-                break;
-
             case TREASURE:
-                cooldownDuration = readSkillCooldown(TREASURE_COOLDOWN_OCR_AREA);
+            case GATHERING: {
+                // matt/2026-08-09: guard the shared "On cooldown:" line against a missed tile-tap.
+                // If this skill reads a timestamp byte-identical to the previously-read skill's, the
+                // selected tile almost certainly didn't switch (a real coincidence would need identical
+                // H:MM:SS to the second), so we'd be attributing a neighbour's cooldown. Re-select once
+                // and re-read; if it STILL matches, exclude this skill rather than trust a stale value.
+                String prevRaw = this.lastSelectedCooldownRaw;
+                cooldownDuration = readSelectedSkillCooldown();
+                if (cooldownDuration != null && prevRaw != null
+                        && prevRaw.equals(this.lastSelectedCooldownRaw)) {
+                    logWarning(skill.name() + " cooldown line matched the previous skill's exactly ("
+                            + prevRaw + ") — likely a stale shared read. Re-selecting and retrying.");
+                    tapSkillIcon(skill);
+                    cooldownDuration = readSelectedSkillCooldown();
+                    if (cooldownDuration != null && prevRaw.equals(this.lastSelectedCooldownRaw)) {
+                        logWarning(skill.name() + " still read the same cooldown after re-select — "
+                                + "excluding it rather than attributing a neighbour's timer.");
+                        return false;
+                    }
+                }
                 break;
-
-            case GATHERING:
-                cooldownDuration = readSkillCooldown(GATHERING_COOLDOWN_OCR_AREA);
-                break;
+            }
 
             default:
                 cooldownDuration = null;
         }
 
         if (cooldownDuration == null) {
-            logWarning("Failed to read cooldown for " + skill.name() + ". Using 5 minute fallback cooldown.");
-            cooldownDuration = Duration.ofMinutes(5);
+            // matt, 2026-08-08: do NOT invent a cooldown here any more. The old behaviour was to
+            // substitute a flat 60 minutes, which meant an unreadable skill produced a confident-
+            // looking but fabricated wake-up time — and because finalizeRescheduling takes the
+            // EARLIEST cooldown across skills, one fabricated 60-minute entry overrode genuine
+            // multi-hour reads and dragged the whole task back every hour for nothing. Observed
+            // live 14:25: Stamina read a real 15:32:22, then three fabricated 60-minute entries
+            // buried it and the task rescheduled to 15:25.
+            //
+            // Contributing nothing is strictly better: finalizeRescheduling already falls back to
+            // FALLBACK_RESCHEDULE_MINUTES when NO skill yields a real time, so a genuine total
+            // failure still retries, while a partial failure now trusts the skills that did read.
+            logWarning("Could not read cooldown for " + skill.name()
+                    + " — excluding it from scheduling rather than inventing one.");
+            return false;
         }
 
         LocalDateTime cooldownEnd = LocalDateTime.now().plus(cooldownDuration);
@@ -536,6 +724,7 @@ public class PetSkillsRoutine extends DelayedTask {
                 GameTimeUtils.formatCountdown(cooldownEnd)));
 
         updateEarliestCooldown(cooldownEnd);
+        return true;
     }
 
     /**
@@ -544,6 +733,45 @@ public class PetSkillsRoutine extends DelayedTask {
      * @param area The area containing the cooldown text
      * @return Duration representing the cooldown time, or null if OCR fails
      */
+    /**
+     * Reads the cooldown of the currently selected skill from the shared "On cooldown:" line.
+     *
+     * <p>The value is regex-extracted rather than parsed whole. The OCR whitelist keeps digits,
+     * {@code d} and {@code :}, so the label's own colon survives and the raw read looks like
+     * {@code ":15:10:00"} — feeding that straight to a duration parser fails. Pulling out the
+     * timestamp substring makes the read immune to whatever the label leaves behind.</p>
+     *
+     * @return the remaining cooldown, or {@code null} when no timestamp could be read
+     */
+    private Duration readSelectedSkillCooldown() {
+        String raw = stringHelper.attemptRecognition(
+                SELECTED_SKILL_COOLDOWN_AREA.topLeft(),
+                SELECTED_SKILL_COOLDOWN_AREA.bottomRight(),
+                5, // Max retries
+                200L, // Retry delay in ms
+                COOLDOWN_OCR_SETTINGS,
+                s -> s != null && COOLDOWN_TIMESTAMP_PATTERN.matcher(s).find(),
+                s -> s.trim());
+
+        if (raw == null) {
+            this.lastSelectedCooldownRaw = null;
+            return null;
+        }
+
+        java.util.regex.Matcher matcher = COOLDOWN_TIMESTAMP_PATTERN.matcher(raw);
+        if (!matcher.find()) {
+            logDebug("Cooldown line read as '" + raw + "' but held no usable timestamp.");
+            this.lastSelectedCooldownRaw = null;
+            return null;
+        }
+
+        String timestamp = matcher.group().trim();
+        Duration parsed = GameTimeUtils.parseDuration(timestamp);
+        logDebug("Selected skill cooldown read as '" + timestamp + "'.");
+        this.lastSelectedCooldownRaw = timestamp;
+        return parsed;
+    }
+
     private Duration readSkillCooldown(AreaData area) {
         return durationHelper.attemptRecognition(
                 area.topLeft(),
@@ -676,10 +904,34 @@ public class PetSkillsRoutine extends DelayedTask {
      * </ul>
      */
     private void finalizeRescheduling() {
-        if (earliestCooldown != null) {
-            logInfo("Rescheduling Pet Skills task for: " +
-                    earliestCooldown.format(DATETIME_FORMATTER));
-            reschedule(earliestCooldown);
+        // Wake at whichever is sooner: a real skill cooldown expiring, or the opportunistic
+        // gathering retry. The gathering retry is an hour out at minimum, so a genuinely readable
+        // 19-hour STAMINA/TREASURE cooldown no longer gets buried under a 5-minute gathering churn.
+        LocalDateTime next = earliestCooldown;
+        if (gatheringRetryAt != null && (next == null || gatheringRetryAt.isBefore(next))) {
+            next = gatheringRetryAt;
+        }
+
+        if (next != null) {
+            logInfo("Rescheduling Pet Skills task for: " + next.format(DATETIME_FORMATTER)
+                    + (next.equals(gatheringRetryAt) ? " (opportunistic gathering retry)" : " (soonest skill cooldown)"));
+            reschedule(next);
+        } else if (readyNowCooldownUnread) {
+            // matt/2026-08-09 (Part 3): a skill was ready and just used, but its fresh cooldown didn't
+            // read back (timer mid-animation). Recheck shortly to catch the now-settled value rather
+            // than sleeping the full blind fallback.
+            LocalDateTime recheckAt = LocalDateTime.now().plusMinutes(READY_NOW_RECHECK_MINUTES);
+            logInfo("A pet skill was just used but its new cooldown could not be read; short recheck at "
+                    + recheckAt.format(DATETIME_FORMATTER) + " (" + READY_NOW_RECHECK_MINUTES
+                    + " min) instead of the " + FALLBACK_RESCHEDULE_MINUTES + "-min fallback.");
+            reschedule(recheckAt);
+        } else if (skillUnusable) {
+            // The skill isn't learned/unlocked yet — that won't change today, so sleep to reset
+            // instead of re-opening the pets menu every hour to find the same thing.
+            LocalDateTime reset = GameTimeUtils.dailyResetTime();
+            logInfo("Skill not learned/unlocked — nothing to schedule from it. Rescheduling to daily reset: "
+                    + reset.format(DATETIME_FORMATTER));
+            reschedule(reset);
         } else {
             logWarning("No cooldown parsed for any enabled skill. Rescheduling in " +
                     FALLBACK_RESCHEDULE_MINUTES + " minutes.");
@@ -727,9 +979,9 @@ public class PetSkillsRoutine extends DelayedTask {
 
             // Step 2: Check for idle marches using MarchHelper
             if (!marchHelper.checkMarchesAvailable()) {
-                logWarning("No idle marches available for gathering skill march. Config 5 minute fallback cooldown.");
-                LocalDateTime fallbackCooldown = LocalDateTime.now().plusMinutes(5);
-                updateEarliestCooldown(fallbackCooldown);
+                logInfo("No idle march for the gathering skill right now — retrying it in about "
+                        + GATHERING_DEPLOY_RETRY_MINUTES + " min without disturbing the cooldown skills.");
+                scheduleGatheringRetry();
                 return;
             }
 
@@ -739,8 +991,7 @@ public class PetSkillsRoutine extends DelayedTask {
             // Step 3: Open resource search menu
             if (!openResourceSearchMenu()) {
                 logWarning("Failed to open resource search menu");
-                LocalDateTime fallbackCooldown = LocalDateTime.now().plusMinutes(5);
-                updateEarliestCooldown(fallbackCooldown);
+                scheduleGatheringRetry();
                 return;
             }
 
@@ -749,8 +1000,7 @@ public class PetSkillsRoutine extends DelayedTask {
             if (!deployGatheringMarch(resourceType)) {
                 logWarning("Failed to deploy gathering march");
                 pressBack();
-                LocalDateTime fallbackCooldown = LocalDateTime.now().plusMinutes(5);
-                updateEarliestCooldown(fallbackCooldown);
+                scheduleGatheringRetry();
                 return;
             }
 
@@ -763,14 +1013,20 @@ public class PetSkillsRoutine extends DelayedTask {
                 readAndTrackCooldown(PetSkill.GATHERING);
             } else {
                 logWarning("Could not reopen pets menu to read gathering skill cooldown. Using fallback.");
-                LocalDateTime fallbackCooldown = LocalDateTime.now().plusMinutes(5);
-                updateEarliestCooldown(fallbackCooldown);
+                scheduleGatheringRetry();
             }
         } catch (Exception e) {
             logWarning("Error deploying gathering skill march: " + e.getMessage());
-            LocalDateTime fallbackCooldown = LocalDateTime.now().plusMinutes(5);
-            updateEarliestCooldown(fallbackCooldown);
+            scheduleGatheringRetry();
         }
+    }
+
+    /**
+     * Books the opportunistic gathering retry on its own gentle cadence, kept apart from the real
+     * cooldown-skill schedule so it can never drag the whole task into a short loop.
+     */
+    private void scheduleGatheringRetry() {
+        gatheringRetryAt = LocalDateTime.now().plusMinutes(GATHERING_DEPLOY_RETRY_MINUTES);
     }
 
     /**

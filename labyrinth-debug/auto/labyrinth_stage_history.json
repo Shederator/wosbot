@@ -1,0 +1,54 @@
+{
+  "cave_of_monsters": {
+    "3-8": {
+      "status": "power_wall",
+      "last_checked": "2026-08-12",
+      "losses_recorded": 1,
+      "enemy_comp": {
+        "inf": 33,
+        "lan": 33,
+        "mrk": 33
+      },
+      "best_ratio_tried": {
+        "inf": 33,
+        "lan": 33,
+        "mrk": 33
+      },
+      "note": "Enemy \"Cave Beast\", 33/33/33 (even, matches our default Equalize). Killed 74,889/150,000 (49.9%% eff) on the recorded loss. Comp already matched enemy exactly (both 33/33/33) -- confirmed raw pet-power gap, not comp-fixable. Lost twice total today (2 attempts spent)."
+    },
+    "3-6": {
+      "status": "power_wall",
+      "last_checked": "2026-08-12",
+      "losses_recorded": 1,
+      "enemy_comp": {
+        "inf": 33,
+        "lan": 33,
+        "mrk": 33
+      },
+      "best_ratio_tried": {
+        "inf": 33,
+        "lan": 33,
+        "mrk": 33
+      },
+      "note": "Enemy \"Steelfang Beast\", 33/33/33. Equalize (33/33/33) matched exactly, still lost -- killed 129,803/150,000 (86.5%% eff) at best. Close but not close enough; confirmed power wall."
+    }
+  },
+  "charm_mine": {
+    "4-10": {
+      "status": "power_wall",
+      "last_checked": "2026-08-12",
+      "losses_recorded": 1,
+      "enemy_comp": {
+        "inf": 53,
+        "lan": 26,
+        "mrk": 20
+      },
+      "best_ratio_tried": {
+        "inf": 26,
+        "lan": 20,
+        "mrk": 53
+      },
+      "note": "Enemy \"Dungeon Architect\", 53/26/20. Lost with default ratio, then lost again after the script read the real enemy comp and set the exact rotated counter (26/20/53) -- confirmed Chief Charm power wall, not comp-fixable."
+    }
+  }
+}

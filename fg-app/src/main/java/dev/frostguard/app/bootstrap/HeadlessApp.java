@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import dev.frostguard.vision.match.OpenCvPatternLocator;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.engine.emulator.EmulatorType;
+import dev.frostguard.engine.service.BotRunStateFileWriter;
 import dev.frostguard.engine.service.ConfigService;
 import dev.frostguard.engine.service.ScheduleService;
 import dev.frostguard.engine.service.TelegramBotService;
@@ -34,6 +35,9 @@ public class HeadlessApp {
 
 		// 3. Initialize Telegram Bot manually
 		initializeTelegramBot();
+
+		// 3b. Always-on queue run-state file — independent of Telegram config.
+		ScheduleService.obtain().addEngineObserver(new BotRunStateFileWriter());
 
 		boolean autostart = false;
 		for (String arg : args) {

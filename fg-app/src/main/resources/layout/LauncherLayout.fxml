@@ -95,24 +95,23 @@
     <bottom>
         <HBox styleClass="status-bar" alignment="CENTER_LEFT" spacing="16">
 
-            <!-- Left cluster: branding + social -->
+            <!-- Left cluster: branding + active profile. Social icons (Discord/GitHub)
+                 and the Buy-Me-a-Coffee bubble removed by matt's request - this is a
+                 personal fork, not the upstream project those link to. -->
             <VBox alignment="CENTER_LEFT" spacing="2">
                 <HBox alignment="CENTER_LEFT" spacing="12">
                     <Label fx:id="labelVersion" text="Bearguard" styleClass="app-version"
                            style="-fx-text-fill: #e6edf3; -fx-font-weight: bold; -fx-font-size: 13px;" />
-                    <org.kordamp.ikonli.javafx.FontIcon fx:id="iconDiscord" iconSize="18"
-                        iconColor="#e6edf3" styleClass="social-icon"
-                        onMouseClicked="#openDiscord" style="-fx-cursor: hand;" />
-                    <org.kordamp.ikonli.javafx.FontIcon fx:id="iconGithub" iconSize="18"
-                        iconColor="#e6edf3" styleClass="social-icon"
-                        onMouseClicked="#openGithub" style="-fx-cursor: hand;" />
+                    <Label fx:id="labelActiveProfile" text="Profile: —"
+                           style="-fx-text-fill: #8fa8bd; -fx-font-size: 12px;" />
                 </HBox>
             </VBox>
 
-            <!-- Notification bubbles cluster -->
+            <!-- Notification bubbles cluster: both hidden by default (visible=false,
+                 managed=false so they don't reserve layout space either). Kept in the
+                 tree rather than deleted so the close-button handlers still resolve
+                 if either is ever turned back on. -->
             <HBox spacing="10" alignment="CENTER_LEFT">
-                <!-- Bearguard: hidden. managed=false so it also stops reserving
-                     layout space, matching what handleCloseDiscordBubble does. -->
                 <HBox fx:id="discordBubbleContainer" alignment="CENTER" styleClass="discord-bubble"
                       visible="false" managed="false">
                     <Label text="Having problems? Join our Discord" styleClass="discord-bubble-text"
@@ -123,7 +122,8 @@
                             onAction="#handleCloseDiscordBubble" focusTraversable="false" />
                 </HBox>
 
-                <HBox fx:id="coffeeBubbleContainer" alignment="CENTER" styleClass="coffee-bubble">
+                <HBox fx:id="coffeeBubbleContainer" alignment="CENTER" styleClass="coffee-bubble"
+                      visible="false" managed="false">
                     <Label text="Like the bot? Buy me a Coffee" styleClass="coffee-bubble-text"
                            onMouseClicked="#openCoffee" />
                     <org.kordamp.ikonli.javafx.FontIcon fx:id="iconCoffeeBubble" iconSize="18"
@@ -142,7 +142,7 @@
 
                 <SplitMenuButton fx:id="buttonPauseResume" disable="true" mnemonicParsing="false"
                                  onAction="#handleButtonPauseResume" text="Pause"
-                                 styleClass="action-button-pause" prefHeight="38" prefWidth="140"
+                                 styleClass="action-button-pause" prefHeight="38" prefWidth="190"
                                  minWidth="-Infinity">
                     <items>
                         <MenuItem fx:id="menuToggleCurrentQueue" onAction="#handleToggleCurrentQueue"
@@ -156,6 +156,15 @@
                         onAction="#handleButtonStartStop" text="Start Bot"
                         styleClass="action-button-start" prefHeight="38" prefWidth="140"
                         minWidth="-Infinity" />
+
+                <!-- matt, 2026-08-08: the Full Stop button lived here and has been removed.
+                     It existed to suppress auto-start across restarts, but auto-start only
+                     ever fires on a fresh app launch — a manual Stop already keeps the bot
+                     stopped — so the button solved a problem that does not occur. Replaced
+                     by a plain status readout, which is what matt actually wanted to know:
+                     what is the bot doing right now. -->
+                <Label fx:id="labelBotStatus" text="Stopped"
+                       styleClass="bot-status-label" minWidth="-Infinity" />
             </HBox>
         </HBox>
     </bottom>

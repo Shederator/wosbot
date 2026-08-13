@@ -26,6 +26,13 @@ import org.slf4j.LoggerFactory;
 public class EmulatorController {
 
     private static final Logger LOG = LoggerFactory.getLogger(EmulatorController.class);
+
+    /** Emulator resolution every template and coordinate in this project is calibrated against. */
+    private static final int SCREEN_WIDTH_PX = 720;
+    private static final int SCREEN_HEIGHT_PX = 1280;
+
+    /** Fallback jitter radius when the config value cannot be read. */
+    private static final int DEFAULT_TAP_JITTER_RADIUS_PX = 3;
     private static final PointData ORIGIN = new PointData(0, 0);
     private static final PointData FULL   = new PointData(720, 1280);
 
@@ -96,10 +103,50 @@ public class EmulatorController {
 
     // --- input dispatch ---
 
+    /**
+     * Taps a point, scattered by a few pixels so repeat taps never land identically.
+     *
+     * <p>matt, 2026-08-08: this used to pass {@code (pt, pt)} — a zero-area box — so every tap
+     * on a given control hit the exact same pixel forever. A human cannot do that, and it is
+     * one of the cheapest behavioural tells to remove. Because every routine in the codebase
+     * funnels through here, widening the box in this one place jitters the whole bot.</p>
+     *
+     * <p>The radius stays small ({@link ConfigurationKeyEnum#TAP_JITTER_RADIUS_PX_INT}, default
+     * {@value #DEFAULT_TAP_JITTER_RADIUS_PX}px) because tap targets are template-match centres
+     * or hand-calibrated button centres; a few pixels is invisible to hit-testing on controls
+     * that are dozens of pixels across, while still meaning no two taps repeat. Set the key to
+     * 0 to restore exact-pixel behaviour.</p>
+     */
     public void touchPoint(String idx, PointData pt) {
         requireBackend();
-        LOG.info("{} tap ({},{}) dev {}", label(idx), pt.getX(), pt.getY(), idx);
-        backend.touchArea(idx, pt, pt);
+
+        int radius = resolveTapJitterRadius();
+        if (radius <= 0) {
+            LOG.info("{} tap ({},{}) dev {}", label(idx), pt.getX(), pt.getY(), idx);
+            backend.touchArea(idx, pt, pt);
+            return;
+        }
+
+        PointData topLeft = new PointData(
+                Math.max(0, pt.getX() - radius),
+                Math.max(0, pt.getY() - radius));
+        PointData bottomRight = new PointData(
+                Math.min(SCREEN_WIDTH_PX - 1, pt.getX() + radius),
+                Math.min(SCREEN_HEIGHT_PX - 1, pt.getY() + radius));
+
+        LOG.info("{} tap ({},{}) +/-{}px dev {}", label(idx), pt.getX(), pt.getY(), radius, idx);
+        backend.touchArea(idx, topLeft, bottomRight);
+    }
+
+    private int resolveTapJitterRadius() {
+        try {
+            String raw = ConfigService.obtain().loadGlobalSettings()
+                    .getOrDefault(ConfigurationKeyEnum.TAP_JITTER_RADIUS_PX_INT.name(),
+                            ConfigurationKeyEnum.TAP_JITTER_RADIUS_PX_INT.getDefaultValue());
+            return Math.max(0, Integer.parseInt(raw.trim()));
+        } catch (Exception ex) {
+            return DEFAULT_TAP_JITTER_RADIUS_PX;
+        }
     }
 
     public boolean touchArea(String idx, PointData a, PointData b) {
@@ -118,6 +165,14 @@ public class EmulatorController {
         requireBackend();
         LOG.info("{} swipe dev {}", label(idx), idx);
         backend.swipe(idx, from, to);
+    }
+
+    /** Duration-aware swipe -- see EmulatorInstance.swipe(..., durationMs) for why
+     *  this exists alongside the fast-flick default. */
+    public void swipeScreen(String idx, PointData from, PointData to, int durationMs) {
+        requireBackend();
+        LOG.info("{} swipe (duration {}ms) dev {}", label(idx), durationMs, idx);
+        backend.swipe(idx, from, to, durationMs);
     }
 
     public void pressBack(String idx) { requireBackend(); LOG.info("{} back dev {}", label(idx), idx); backend.pressBackButton(idx); }

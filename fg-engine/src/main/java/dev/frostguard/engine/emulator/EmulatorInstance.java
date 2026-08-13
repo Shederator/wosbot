@@ -294,6 +294,27 @@ public abstract class EmulatorInstance {
         }, "swipe");
     }
 
+    /**
+     * matt/2026-08-12: the no-duration overload above sends a bare "input swipe"
+     * with no duration argument, which Android/the game's map engine treats as a
+     * fast flick -- real momentum/inertia scrolling kicks in, sweeping the camera
+     * MUCH further than the raw start/end pixel delta suggests (confirmed live:
+     * MonumentRoutine's pan meant to move one screen-width overshot into unrelated
+     * rival cities). A deliberate, explicit duration (matching a manual "adb shell
+     * input swipe ... 400" test that behaved predictably) gives callers a
+     * controlled drag instead. Left as a separate overload rather than changing the
+     * default, since other existing call sites may already be tuned around the
+     * current fast-flick distance.
+     */
+    public void swipe(String idx, PointData from, PointData to, int durationMs) {
+        withRetries(idx, dev -> {
+            try { dev.executeShellCommand("input swipe " + from.getX() + " " + from.getY() + " "
+                    + to.getX() + " " + to.getY() + " " + durationMs, new NullOutputReceiver()); }
+            catch (Exception e) { throw new RuntimeException(e); }
+            return Boolean.TRUE;
+        }, "swipe");
+    }
+
     public void pressBackButton(String idx) {
         withRetries(idx, dev -> {
             try { dev.executeShellCommand("input keyevent KEYCODE_BACK", new NullOutputReceiver()); }

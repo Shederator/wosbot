@@ -52,6 +52,19 @@ public class TaskQueue {
 
     private static final Logger logger = LoggerFactory.getLogger(TaskQueue.class);
     private static final long   TICK_INTERVAL_MS = 999L;
+
+    /**
+     * Minimum gap between progress-triggered Daily Missions pushes. matt's stated cadence:
+     * daily missions can wait hours, there is no rush. This only bounds the follow-up push —
+     * the routine's own schedule still runs it on its normal cycle.
+     */
+    private static final int DAILY_MISSION_PUSH_MIN_GAP_MINUTES = 180;
+
+    /** When the follow-up push last fired, for the rate limit above. */
+    private LocalDateTime lastDailyMissionPushAt;
+
+    /** Guards the sleep-window log so it announces on entry/exit, not once per second. */
+    private boolean sleepAnnounced;
     protected static final DateTimeFormatter TS_FMT =
             DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss");
 
@@ -85,6 +98,81 @@ public class TaskQueue {
         if (hit) emitInfoTask(ref, "Removed " + kind.getName() + " from queue");
         else     emitInfo("Task " + kind.getName() + " not present in queue");
         return hit;
+    }
+
+    /**
+     * Pushes a task that is already waiting in the backlog out to a later time.
+     *
+     * <p>matt, 2026-08-09, holding the Chief Order shelf up against the app: <em>"productive day
+     * is kicking off in three minutes. Rush job is kicking off in three minutes. Urgent
+     * mobilization is kicking off in three minutes... it's like you're not even trying."</em> The
+     * sweep had read all three cooldowns correctly and written them to the database — but a
+     * database row is only consulted when a task is <em>enqueued</em>, at startup. The live
+     * objects in the backlog kept the times they were built with, so the screen said ten hours and
+     * the bot went back in three minutes. Reading a timer is worthless unless it moves the queued
+     * task itself, not just its record.</p>
+     *
+     * <p>Only ever defers. A swept timer is authoritative about the earliest a visit could be
+     * worth making, and must never drag a task forward.</p>
+     *
+     * @return {@code true} when a queued task was actually moved
+     */
+    public synchronized boolean deferQueued(TpDailyTaskEnum kind, LocalDateTime until) {
+        if (kind == null || until == null) { return false; }
+        DelayedTask ref = DelayedTaskRegistry.create(kind, profile);
+        if (ref == null) { return false; }
+
+        DelayedTask queued = taskBacklog.stream().filter(t -> t.equals(ref)).findFirst().orElse(null);
+        if (queued == null) { return false; }
+
+        LocalDateTime current = queued.getScheduled();
+        if (current != null && !current.isBefore(until)) { return false; }
+
+        // The backlog is a priority queue keyed on the scheduled time, so the entry has to come
+        // out before that key changes — mutating it in place leaves the heap mis-ordered and the
+        // task can still be handed back at its old position.
+        taskBacklog.remove(queued);
+        queued.rescheduleExact(until);
+        taskBacklog.offer(queued);
+        recordScheduleAdjustment(queued);
+
+        emitInfoTask(queued, "Deferred to " + until.format(TS_FMT) + " from the swept on-screen timer.");
+        return true;
+    }
+
+    /**
+     * Moves a queued task to an on-screen time in <em>either</em> direction.
+     *
+     * <p>The blanket "only ever defer" rule is right for camp/research/order timers, but wrong for
+     * a task whose work is waiting to be collected. matt, 2026-08-09, on Pet Adventure:
+     * <em>"two are done and you're not doing anything about it... you should be pushing out pets on
+     * new adventures if there are allotted times left."</em> Finished adventures sit unclaimed and
+     * daily attempts expire at reset, so when the sweep reads that the soonest adventure is (or is
+     * nearly) done, that task needs to be pulled forward to claim and redeploy — not held behind a
+     * stale two-hour fallback.</p>
+     *
+     * @return {@code true} when the queued task was actually moved
+     */
+    public synchronized boolean requeueAt(TpDailyTaskEnum kind, LocalDateTime when) {
+        if (kind == null || when == null) { return false; }
+        DelayedTask ref = DelayedTaskRegistry.create(kind, profile);
+        if (ref == null) { return false; }
+
+        DelayedTask queued = taskBacklog.stream().filter(t -> t.equals(ref)).findFirst().orElse(null);
+        if (queued == null) { return false; }
+
+        LocalDateTime current = queued.getScheduled();
+        if (current != null && Math.abs(java.time.Duration.between(current, when).toSeconds()) < 30) {
+            return false; // already essentially there — don't churn the heap
+        }
+
+        taskBacklog.remove(queued);
+        queued.rescheduleExact(when);
+        taskBacklog.offer(queued);
+        recordScheduleAdjustment(queued);
+
+        emitInfoTask(queued, "Rescheduled to " + when.format(TS_FMT) + " from the swept on-screen timer.");
+        return true;
     }
 
     public synchronized boolean dequeueByKey(String distinctKey) {
@@ -275,6 +363,10 @@ public class TaskQueue {
         statusModel.setNeedsReconnect(true);
 
         DelayedTask present = taskBacklog.stream().filter(ref::equals).findFirst().orElse(null);
+        // Track the object actually placed back in the backlog: when an existing task was found we
+        // enqueue THAT one, and the throwaway `ref` prototype is never scheduled. Persisting from
+        // `ref` below recorded a null/stale nextExecutionTime for the real, enqueued task.
+        DelayedTask enqueued;
         if (present != null) {
             taskBacklog.remove(present);
             present.setProfile(profile);
@@ -282,18 +374,20 @@ public class TaskQueue {
             present.reschedule(LocalDateTime.now());
             present.setRecurring(recurring);
             taskBacklog.offer(present);
+            enqueued = present;
             emitInfoTask(present, "Rescheduled " + kind + " to NOW");
         } else {
             ref.reschedule(LocalDateTime.now());
             ref.setRecurring(recurring);
             taskBacklog.offer(ref);
+            enqueued = ref;
             emitInfoTask(ref, "Enqueued " + kind + " for immediate execution");
         }
 
         TaskStateData st = new TaskStateData();
         st.setProfileId(profile.getId()); st.setTaskId(kind.getId());
         st.setScheduled(true); st.setExecuting(false);
-        st.setLastExecutionTime(LocalDateTime.now()); st.setNextExecutionTime(ref.getScheduled());
+        st.setLastExecutionTime(LocalDateTime.now()); st.setNextExecutionTime(enqueued.getScheduled());
         TaskManagementService.shared().recordTaskState(profile.getId(), st);
     }
 
@@ -326,8 +420,9 @@ public class TaskQueue {
             handleIdleTransitions();
 
             if (!statusModel.getLoopState().isExecutedTask() && !statusModel.isPaused()) {
-                String nextLabel = taskBacklog.isEmpty() ? "None" : taskBacklog.peek().getTaskName();
-                broadcastStatus("Idle " + formatCountdown(statusModel.getDelayUntil()) + "\nNext: " + nextLabel);
+                DelayedTask head = taskBacklog.peek();
+                String nextLabel = head == null ? "None" : head.getTaskName();
+                broadcastStatus(describeIdleState(head == null ? null : head.getScheduled(), nextLabel));
                 statusModel.getLoopState().endLoop();
                 long nap = Math.max(0, TICK_INTERVAL_MS - statusModel.getLoopState().getDuration());
                 try { Thread.sleep(nap); } catch (InterruptedException ie) { 
@@ -336,6 +431,37 @@ public class TaskQueue {
                 }
             }
         }
+    }
+
+    /**
+     * Classifies the current idle gap as sleep when the next task is far enough out.
+     *
+     * <p>Purely observational — it never withholds a task. If something is due it has already
+     * run by the time this is called, which is what makes matt's "why sleep if it is doing
+     * nothing anyway" point the right design: the queue is idle regardless, and this only gives
+     * that idleness a name and an end time the UI can show.</p>
+     *
+     * @param nextDueAt when the head of the backlog is scheduled, may be {@code null}
+     * @return a status line describing the wait
+     */
+    private String describeIdleState(LocalDateTime nextDueAt, String nextLabel) {
+        boolean asleep = SleepWindowPolicy.reportIdleUntil(profile.getId(), nextDueAt);
+
+        if (asleep) {
+            if (!sleepAnnounced) {
+                sleepAnnounced = true;
+                emitInfo("Nothing due for " + formatCountdown(nextDueAt)
+                        + " (over the " + SleepWindowPolicy.thresholdMinutes()
+                        + "-minute idle threshold) - sleeping until " + nextLabel + " is due.");
+            }
+            return "Sleeping " + formatCountdown(nextDueAt) + "\nNext: " + nextLabel;
+        }
+
+        if (sleepAnnounced) {
+            sleepAnnounced = false;
+            emitInfo("Waking - " + nextLabel + " is coming due.");
+        }
+        return "Idle " + formatCountdown(statusModel.getDelayUntil()) + "\nNext: " + nextLabel;
     }
 
     private synchronized DelayedTask selectNextTask() {
@@ -502,9 +628,26 @@ public class TaskQueue {
 
     private void checkDailyMissionFollow(DelayedTask task) {
         if (!profile.getConfig(ConfigurationKeyEnum.DAILY_MISSION_AUTO_SCHEDULE_BOOL, Boolean.class) || !task.provideDailyMissionProgress()) return;
+
+        // matt, 2026-08-08: rate-limit this. It fires after EVERY completed task reporting daily
+        // mission progress, and a great many of them do, so Daily Missions was dragged back to
+        // "now" about once a minute — measured at 4 runs in under 4 minutes, and 52 runs across
+        // three hours, the busiest task on the board. Each run now also walks the Growth tab, so
+        // the cost per push went up. matt's call on cadence: "that could be checked every, like,
+        // three hours. There's no rush on that at all." The rewards do not expire; only the
+        // daily reset matters, and the routine's own scheduling already covers that.
+        LocalDateTime now = LocalDateTime.now();
+        if (lastDailyMissionPushAt != null
+                && lastDailyMissionPushAt.plusMinutes(DAILY_MISSION_PUSH_MIN_GAP_MINUTES).isAfter(now)) {
+            return;
+        }
+
         TaskStateData s = TaskManagementService.shared().lookupTaskState(profile.getId(), TpDailyTaskEnum.DAILY_MISSIONS.getId());
         LocalDateTime next = (s != null) ? s.getNextExecutionTime() : null;
-        if (s == null || next == null || next.isAfter(LocalDateTime.now())) pushDailyMissionsToNow();
+        if (s == null || next == null || next.isAfter(now)) {
+            lastDailyMissionPushAt = now;
+            pushDailyMissionsToNow();
+        }
     }
 
     private synchronized void pushDailyMissionsToNow() {

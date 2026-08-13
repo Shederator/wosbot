@@ -81,11 +81,19 @@ public enum TpDailyTaskEnum {
 
     /* ── military ── */
 
-    TRAINING_TROOPS        (60,  "Training",                     ConfigurationKeyEnum.TRAIN_BOOL,                              RoutineCategory.MILITARY),
+    // matt/2026-08-12: retired as a live task -- one combined task juggling all 3 troop
+    // camps rescheduled to the single earliest completion across all of them, which meant
+    // OCR/timing state for one camp could get tangled with another's. Split into 3
+    // independent tasks below (TRAINING_INFANTRY/LANCER/MARKSMAN), each scheduling itself
+    // off its own camp only. configKey nulled so this entry is never auto-scheduled; kept
+    // (not deleted) so historical DB rows referencing task id 60 don't orphan.
+    TRAINING_TROOPS        (60,  "Training (legacy, superseded)", null,                                                         RoutineCategory.MILITARY),
 
     /* ── pet ── */
 
     PET_SKILLS             (51,  "Pet Skills",                   ConfigurationKeyEnum.PET_SKILLS_BOOL,                         RoutineCategory.PET),
+    PET_SKILL_STAMINA      (106, "Pet Skill: Stamina",          ConfigurationKeyEnum.PET_SKILL_STAMINA_BOOL,                  RoutineCategory.PET),
+    PET_SKILL_TREASURE     (107, "Pet Skill: Treasure",         ConfigurationKeyEnum.PET_SKILL_TREASURE_BOOL,                 RoutineCategory.PET),
 
     /* ── resource ── */
 
@@ -117,7 +125,45 @@ public enum TpDailyTaskEnum {
     EVENT_CRYPTID_HOST     (900, "Host Cryptid Rally",           ConfigurationKeyEnum.CRYPTID_HOST_ENABLED_BOOL,              RoutineCategory.EVENT),
     // No category here is a clean fit - closest existing bucket is ALLIANCE,
     // since Alliance chat is one of the three captured channels.
-    CHAT_CAPTURE           (901, "Chat Capture",                 ConfigurationKeyEnum.CHAT_CAPTURE_ENABLED_BOOL,              RoutineCategory.ALLIANCE);
+    CHAT_CAPTURE           (901, "Chat Capture",                 ConfigurationKeyEnum.CHAT_CAPTURE_ENABLED_BOOL,              RoutineCategory.ALLIANCE),
+    // matt/2026-08-06: deliberately gated on the SAME bool as Smart Gathering
+    // (GATHER_SMART_PRIORITY_BOOL), not a separate flag - matt shouldn't need to find and
+    // check a second, unrelated-looking checkbox just to make the one he actually checked
+    // do anything. Enabling Smart Gathering is enabling this scan; there is no standalone toggle.
+    RESOURCE_STOCKPILE_SCAN (902, "Resource Stockpile Scan",     ConfigurationKeyEnum.GATHER_SMART_PRIORITY_BOOL,             RoutineCategory.RESOURCE),
+    // matt/2026-08-08: read-only timer sweep. Runs first at startup and hourly thereafter,
+    // reading every on-screen countdown and writing schedules WITHOUT performing any activity.
+    TIMER_SWEEP             (903, "Timer Sweep",                  ConfigurationKeyEnum.TIMER_SWEEP_ENABLED_BOOL,               RoutineCategory.LIFECYCLE),
+
+    // matt/2026-08-12: split out of the old combined TRAINING_TROOPS task. Each camp now
+    // schedules independently off its own OCR'd completion time instead of all 3 sharing
+    // one reschedule-to-earliest. Reuses the same three checkboxes/config keys the combined
+    // task already read per-type -- no UI change needed, they just each drive their own task now.
+    TRAINING_INFANTRY       (904, "Training: Infantry",           ConfigurationKeyEnum.TRAIN_INFANTRY_BOOL,                    RoutineCategory.MILITARY),
+    TRAINING_LANCER         (905, "Training: Lancer",             ConfigurationKeyEnum.TRAIN_LANCER_BOOL,                      RoutineCategory.MILITARY),
+    TRAINING_MARKSMAN       (906, "Training: Marksman",           ConfigurationKeyEnum.TRAIN_MARKSMAN_BOOL,                    RoutineCategory.MILITARY),
+
+    // matt/2026-08-12: World map "Heal Injured" panel (over My City) -- Quick Select + Heal
+    // the highest-priority injured troop queue, then tap Help to speed it via alliance
+    // assistance (measured live: cut a 14:21 timer down to 1:45). Idle re-check every 30
+    // minutes per matt when there's nothing currently injured.
+    HEAL_INJURED_TROOPS     (907, "Heal Injured Troops",          ConfigurationKeyEnum.HEAL_INJURED_ENABLED_BOOL,              RoutineCategory.MILITARY),
+
+    // matt/2026-08-12: "Explore the World" Atlas/Monument -- claims ready quest rows,
+    // opens owned Scene Fragment Packs, runs daily Alliance Trade requests/sends.
+    MONUMENT                (908, "Explore the World (Monument)", ConfigurationKeyEnum.MONUMENT_ENABLED_BOOL,                  RoutineCategory.MILITARY),
+
+    // matt/2026-08-12: "event slop" -- rotating limited-time Events-tab events where
+    // the bot's only job is finding a ready Claim and hitting it. Twice-a-day recheck.
+    EVENT_HALL_OF_CHIEFS    (909, "Event: Hall of Chiefs",        ConfigurationKeyEnum.EVENT_HALL_OF_CHIEFS_CLAIM_BOOL,        RoutineCategory.MILITARY),
+    EVENT_DEFEAT_BEASTS     (910, "Event: Defeat Nearby Beasts",  ConfigurationKeyEnum.EVENT_DEFEAT_BEASTS_CLAIM_BOOL,         RoutineCategory.MILITARY),
+    EVENT_HERO_RALLY_CLAIM  (911, "Event: Hero Rally Claim All",  ConfigurationKeyEnum.EVENT_HERO_RALLY_CLAIM_BOOL,            RoutineCategory.MILITARY),
+    EVENT_LUCKY_CHIP_SUPPLY (912, "Event: Lucky Chip Supply",     ConfigurationKeyEnum.EVENT_LUCKY_CHIP_SUPPLY_CLAIM_BOOL,     RoutineCategory.MILITARY),
+
+    // matt/2026-08-13: top-right cart-icon Shop panel, built tab by tab. Custom
+    // Armament Chest's free Claimable badge is periodic -- once-a-day recheck.
+    SHOP_CUSTOM_ARMAMENT_CHEST (913, "Shop: Custom Armament Chest", ConfigurationKeyEnum.SHOP_CUSTOM_ARMAMENT_CHEST_CLAIM_BOOL, RoutineCategory.MILITARY),
+    SHOP_DAILY_DEALS_FREE_CHEST (914, "Shop: Daily Deals Free Chest", ConfigurationKeyEnum.SHOP_DAILY_DEALS_FREE_CHEST_CLAIM_BOOL, RoutineCategory.MILITARY);
 
     /* ================================================================
      *  Category taxonomy used to group routines in the management UI.

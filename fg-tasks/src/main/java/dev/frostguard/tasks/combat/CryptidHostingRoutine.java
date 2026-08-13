@@ -26,6 +26,7 @@ import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.engine.schedule.TroopSlotPolicy;
 
 /**
  * Hosts Berserk Cryptid rallies (the Gina's Revenge event) for a configured
@@ -232,6 +233,10 @@ public class CryptidHostingRoutine extends DelayedTask {
                 // the queue for however long the march takes to return - stop
                 // this pass and let the reschedule below bring the task back
                 // once it should be home.
+                // matt/2026-08-09 (troop-slot economy): publish the real slot demand so Gather stands
+                // down until this rally can actually run, rather than redeploying into the freed slot.
+                TroopSlotPolicy.claim(profile, TpDailyTaskEnum.EVENT_CRYPTID_HOST, 1,
+                        LocalDateTime.now().plusMinutes(15));
                 waitingOnRecall = true;
                 break;
             }
@@ -247,6 +252,10 @@ public class CryptidHostingRoutine extends DelayedTask {
                 break;
             }
             hosted++;
+            // matt/2026-08-09 (troop-slot economy): a rally is genuinely out holding this slot; publish
+            // the demand so Gather won't grab the slot back before the muster completes.
+            TroopSlotPolicy.claim(profile, TpDailyTaskEnum.EVENT_CRYPTID_HOST, 1,
+                    LocalDateTime.now().plusMinutes(15));
         }
 
         logInfo("CryptidHostingRoutine | Hosted " + hosted + " of " + runs + " planned.");
@@ -257,6 +266,9 @@ public class CryptidHostingRoutine extends DelayedTask {
             logInfo("CryptidHostingRoutine | Waiting on a recalled march; checking back in 5 minutes.");
             reschedule(LocalDateTime.now().plusMinutes(5));
         } else {
+            // matt/2026-08-09 (troop-slot economy): done hosting for this pass — release the slot claim
+            // (also pulls Gather forward) so freed slots go back to gathering until the next pass.
+            TroopSlotPolicy.release(profile, TpDailyTaskEnum.EVENT_CRYPTID_HOST);
             // Rally muster plus travel there and back; re-check a little after.
             reschedule(LocalDateTime.now().plusMinutes(hosted > 0 ? 10 : 30));
         }
