@@ -70,9 +70,12 @@ changes.
 
 Logs should make decisions explainable: include relevant profile context,
 evidence, the chosen outcome, and retry or fallback reasons without flooding hot
-loops. Runtime evidence is normally under `modules/desktop/target`: account logs in
-`logs/`, the global log in `log/frostguard.log`, archives in `log/archive/`, and
-debug screenshots in `temp/`.
+loops. Runtime evidence belongs to the selected workspace, not generated
+`target/` output. Source and IDE launches normally use `<worktree>/.frostguard-dev`;
+installed Stable and Nightly releases default to
+`~/.frostguard/workspaces/<channel>/<name>`. Each workspace keeps the global log
+at `logs/frostguard.log`, account logs as `logs/account_<name>_<id>.log`, and
+rotated archives under `logs/archive/`.
 
 State the evidence level whenever reporting a behavioral fix:
 
