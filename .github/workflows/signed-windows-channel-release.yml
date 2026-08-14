@@ -445,6 +445,21 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
               throw "Signed manifest could not be uploaded to the immutable release"
           }
+          $tagRef = "refs/tags/$($env:TAG)"
+          $createdRefJson = gh api --method POST `
+              "repos/$($env:GITHUB_REPOSITORY)/git/refs" `
+              -f ref=$tagRef -f sha=$env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) {
+              throw "Immutable release tag could not be created"
+          }
+          "tag_created=true" | Out-File -FilePath $env:GITHUB_OUTPUT `
+              -Encoding utf8 -Append
+          $createdRef = $createdRefJson | ConvertFrom-Json
+          if ($createdRef.ref -cne $tagRef -or
+              $createdRef.object.type -cne 'commit' -or
+              $createdRef.object.sha -cne $env:GITHUB_SHA) {
+              throw "Immutable release tag does not target the current build"
+          }
           if ($env:CHANNEL -eq 'stable') {
               gh release edit $env:TAG --repo $env:GITHUB_REPOSITORY --draft=false --latest
               if ($LASTEXITCODE -ne 0) {
@@ -585,6 +600,7 @@ jobs:
         shell: pwsh
         env:
           TAG: ${{ steps.identity.outputs.tag }}
+          TAG_CREATED: ${{ steps.publish.outputs.tag_created }}
         run: |
           $releasesJson = gh api "repos/$($env:GITHUB_REPOSITORY)/releases?per_page=100"
           if ($LASTEXITCODE -ne 0) {
@@ -593,11 +609,29 @@ jobs:
           $releases = $releasesJson | ConvertFrom-Json
           $release = $releases | Where-Object { $_.tag_name -ceq $env:TAG } |
               Select-Object -First 1
+          $publishedReleaseExists = $null -ne $release -and -not $release.draft
           if ($null -ne $release -and $release.draft) {
               gh api --method DELETE `
                   "repos/$($env:GITHUB_REPOSITORY)/releases/$($release.id)"
               if ($LASTEXITCODE -ne 0) {
                   throw "Abandoned draft release could not be removed"
+              }
+          }
+          if ($env:TAG_CREATED -eq 'true' -and -not $publishedReleaseExists) {
+              $tagRef = gh api `
+                  "repos/$($env:GITHUB_REPOSITORY)/git/refs/tags/$($env:TAG)" |
+                  ConvertFrom-Json
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Run-created immutable tag could not be resolved during cleanup"
+              }
+              if ($tagRef.object.type -cne 'commit' -or
+                  $tagRef.object.sha -cne $env:GITHUB_SHA) {
+                  throw "Run-created immutable tag no longer targets the current build"
+              }
+              gh api --method DELETE `
+                  "repos/$($env:GITHUB_REPOSITORY)/git/refs/tags/$($env:TAG)"
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Run-created immutable tag could not be removed"
               }
           }
 

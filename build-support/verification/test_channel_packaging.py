@@ -205,6 +205,22 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertIn("-pl packaging/desktop clean", installers)
         self.assertIn('gh api --method DELETE `', workflow)
         self.assertIn('releases/$($release.id)', workflow)
+        manifest_upload = workflow.index("gh release upload $env:TAG $env:MANIFEST")
+        immutable_tag_create = workflow.index(
+            '"repos/$($env:GITHUB_REPOSITORY)/git/refs"')
+        immutable_release_publish = workflow.index("gh release edit $env:TAG")
+        self.assertLess(manifest_upload, immutable_tag_create)
+        self.assertLess(immutable_tag_create, immutable_release_publish)
+        self.assertIn('"tag_created=true"', workflow)
+        self.assertIn("TAG_CREATED: ${{ steps.publish.outputs.tag_created }}", workflow)
+        self.assertIn(
+            "if ($env:TAG_CREATED -eq 'true' -and -not $publishedReleaseExists)",
+            workflow)
+        self.assertGreaterEqual(
+            workflow.count(
+                '"repos/$($env:GITHUB_REPOSITORY)/git/refs/tags/$($env:TAG)"'),
+            2)
+        self.assertIn("$tagRef.object.sha -cne $env:GITHUB_SHA", workflow)
         self.assertNotIn("--cleanup-tag --yes", workflow)
         legacy_stable = (REPO_ROOT / ".github/workflows/stable-windows-release.yml").read_text(
             encoding="utf-8")
