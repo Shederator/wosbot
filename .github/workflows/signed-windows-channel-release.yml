@@ -349,6 +349,21 @@ jobs:
           TAG: ${{ steps.identity.outputs.tag }}
           INSTALLER: ${{ steps.installer.outputs.path }}
         run: |
+          $tagRef = "refs/tags/$($env:TAG)"
+          $createdRefJson = gh api --method POST `
+              "repos/$($env:GITHUB_REPOSITORY)/git/refs" `
+              -f ref=$tagRef -f sha=$env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) {
+              throw "Immutable release tag could not be created"
+          }
+          "tag_created=true" | Out-File -FilePath $env:GITHUB_OUTPUT `
+              -Encoding utf8 -Append
+          $createdRef = $createdRefJson | ConvertFrom-Json
+          if ($createdRef.ref -cne $tagRef -or
+              $createdRef.object.type -cne 'commit' -or
+              $createdRef.object.sha -cne $env:GITHUB_SHA) {
+              throw "Immutable release tag does not target the current build"
+          }
           $title = if ($env:CHANNEL -eq 'nightly') {
               if ($env:VERSION -notmatch '^\d+\.\d+\.\d+-nightly\.(\d{4})(\d{2})(\d{2})\.(\d+)$') {
                   throw "Nightly title requires X.Y.Z-nightly.YYYYMMDD.N"
@@ -444,21 +459,6 @@ jobs:
           gh release upload $env:TAG $env:MANIFEST --repo $env:GITHUB_REPOSITORY
           if ($LASTEXITCODE -ne 0) {
               throw "Signed manifest could not be uploaded to the immutable release"
-          }
-          $tagRef = "refs/tags/$($env:TAG)"
-          $createdRefJson = gh api --method POST `
-              "repos/$($env:GITHUB_REPOSITORY)/git/refs" `
-              -f ref=$tagRef -f sha=$env:GITHUB_SHA
-          if ($LASTEXITCODE -ne 0) {
-              throw "Immutable release tag could not be created"
-          }
-          "tag_created=true" | Out-File -FilePath $env:GITHUB_OUTPUT `
-              -Encoding utf8 -Append
-          $createdRef = $createdRefJson | ConvertFrom-Json
-          if ($createdRef.ref -cne $tagRef -or
-              $createdRef.object.type -cne 'commit' -or
-              $createdRef.object.sha -cne $env:GITHUB_SHA) {
-              throw "Immutable release tag does not target the current build"
           }
           if ($env:CHANNEL -eq 'stable') {
               gh release edit $env:TAG --repo $env:GITHUB_REPOSITORY --draft=false --latest
@@ -600,7 +600,7 @@ jobs:
         shell: pwsh
         env:
           TAG: ${{ steps.identity.outputs.tag }}
-          TAG_CREATED: ${{ steps.publish.outputs.tag_created }}
+          TAG_CREATED: ${{ steps.draft.outputs.tag_created }}
         run: |
           $releasesJson = gh api "repos/$($env:GITHUB_REPOSITORY)/releases?per_page=100"
           if ($LASTEXITCODE -ne 0) {

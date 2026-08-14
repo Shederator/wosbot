@@ -205,14 +205,16 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertIn("-pl packaging/desktop clean", installers)
         self.assertIn('gh api --method DELETE `', workflow)
         self.assertIn('releases/$($release.id)', workflow)
-        manifest_upload = workflow.index("gh release upload $env:TAG $env:MANIFEST")
         immutable_tag_create = workflow.index(
             '"repos/$($env:GITHUB_REPOSITORY)/git/refs"')
+        draft_release_create = workflow.index("gh release create $env:TAG")
+        manifest_upload = workflow.index("gh release upload $env:TAG $env:MANIFEST")
         immutable_release_publish = workflow.index("gh release edit $env:TAG")
-        self.assertLess(manifest_upload, immutable_tag_create)
-        self.assertLess(immutable_tag_create, immutable_release_publish)
+        self.assertLess(immutable_tag_create, draft_release_create)
+        self.assertLess(draft_release_create, manifest_upload)
+        self.assertLess(manifest_upload, immutable_release_publish)
         self.assertIn('"tag_created=true"', workflow)
-        self.assertIn("TAG_CREATED: ${{ steps.publish.outputs.tag_created }}", workflow)
+        self.assertIn("TAG_CREATED: ${{ steps.draft.outputs.tag_created }}", workflow)
         self.assertIn(
             "if ($env:TAG_CREATED -eq 'true' -and -not $publishedReleaseExists)",
             workflow)
