@@ -199,6 +199,49 @@ public final class TelemetryReport {
         return deltaOverWindow(samples.get(0).at(), samples.get(samples.size() - 1).at());
     }
 
+    // ---- real recorded coverage (matt/2026-08-15) ---------------------------
+    // "I just don't trust these statistics... put like at the top the timeframe that it was
+    // recorded." A window LABEL like "Last night (23:00-08:30)" describes the intended window,
+    // not what was actually captured -- if bg_telemetry was disabled, gapped, or only caught two
+    // samples three hours apart, the label alone hides that. This exposes the REAL first/last
+    // sample timestamps a window's delta was actually built from, so the UI can show both.
+
+    /** The actual [firstSampleAt, lastSampleAt] a window's delta was built from -- not the
+     *  requested window bounds, the real timestamps of the samples used. Null when there's
+     *  nothing to show (matches deltaOverWindow's own "not enough data" case). */
+    public record Coverage(Instant actualFrom, Instant actualTo) {}
+
+    public Coverage coverageForWindow(Instant from, Instant to) {
+        Sample endS = latestAtOrBefore(to);
+        if (endS == null) {
+            return null;
+        }
+        Sample startS = earliestAtOrAfter(from);
+        if (startS == null || startS.at().isAfter(endS.at())) {
+            return null;
+        }
+        return new Coverage(startS.at(), endS.at());
+    }
+
+    public Coverage coverageForLastNight(ZoneId zone, LocalTime sleepStart, LocalTime wakeEnd) {
+        LocalDate today = LocalDate.now(zone);
+        Instant from = today.minusDays(1).atTime(sleepStart).atZone(zone).toInstant();
+        Instant to = today.atTime(wakeEnd).plusMinutes(WAKE_ANCHOR_GRACE_MINUTES).atZone(zone).toInstant();
+        return coverageForWindow(from, to);
+    }
+
+    public Coverage coverageForLast(long amount, ChronoUnit unit) {
+        Instant now = Instant.now();
+        return coverageForWindow(now.minus(amount, unit), now);
+    }
+
+    public Coverage coverageForTotal() {
+        if (samples.size() < 2) {
+            return null;
+        }
+        return new Coverage(samples.get(0).at(), samples.get(samples.size() - 1).at());
+    }
+
     // ---- activity ("what the bot did") --------------------------------------
 
     /** Human-readable names for the activity keys worth surfacing, in display order. */

@@ -1,7 +1,10 @@
 package dev.frostguard.app.panel.misc;
 
+import java.time.Instant;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 
@@ -484,23 +487,44 @@ public class StatisticsLayoutController extends AbstractProfileController {
                 setActiveSegment(btnReportNight);
                 showWindow("Last night (" + SLEEP_START + "–" + WAKE_END + ")",
                         telemetry.lastNight(ZoneId.systemDefault(), SLEEP_START, WAKE_END),
-                        telemetry.activityLastNight(ZoneId.systemDefault(), SLEEP_START, WAKE_END));
+                        telemetry.activityLastNight(ZoneId.systemDefault(), SLEEP_START, WAKE_END),
+                        telemetry.coverageForLastNight(ZoneId.systemDefault(), SLEEP_START, WAKE_END));
             }
             case LAST_24H -> {
                 setActiveSegment(btnReport24h);
                 showWindow("Last 24 hours",
-                        telemetry.last(24, ChronoUnit.HOURS), telemetry.activityLast(24, ChronoUnit.HOURS));
+                        telemetry.last(24, ChronoUnit.HOURS), telemetry.activityLast(24, ChronoUnit.HOURS),
+                        telemetry.coverageForLast(24, ChronoUnit.HOURS));
             }
             case LAST_7D -> {
                 setActiveSegment(btnReport7d);
                 showWindow("Last 7 days",
-                        telemetry.last(7, ChronoUnit.DAYS), telemetry.activityLast(7, ChronoUnit.DAYS));
+                        telemetry.last(7, ChronoUnit.DAYS), telemetry.activityLast(7, ChronoUnit.DAYS),
+                        telemetry.coverageForLast(7, ChronoUnit.DAYS));
             }
             case TOTAL -> {
                 setActiveSegment(btnReportTotal);
-                showWindow("All recorded time", telemetry.total(), telemetry.activityTotal());
+                showWindow("All recorded time", telemetry.total(), telemetry.activityTotal(),
+                        telemetry.coverageForTotal());
             }
         }
+    }
+
+    // matt/2026-08-15: "I just don't trust these statistics... put like at the top the timeframe
+    // that it was recorded." A window label like "Last night (23:00-08:30)" is the INTENDED
+    // window, not proof of what was actually captured — this formats the REAL first/last sample
+    // timestamps a window's numbers were built from, so a gapped or stale telemetry run is
+    // visible right at the top instead of hidden behind a label that always looks the same.
+    private static final DateTimeFormatter COVERAGE_FORMATTER = DateTimeFormatter.ofPattern("M/d h:mm a");
+
+    private String formatCoverage(TelemetryReport.Coverage coverage) {
+        if (coverage == null) {
+            return null;
+        }
+        ZoneId zone = ZoneId.systemDefault();
+        ZonedDateTime from = ZonedDateTime.ofInstant(coverage.actualFrom(), zone);
+        ZonedDateTime to = ZonedDateTime.ofInstant(coverage.actualTo(), zone);
+        return "recorded " + from.format(COVERAGE_FORMATTER) + " → " + to.format(COVERAGE_FORMATTER);
     }
 
     /** Highlights the chosen timeframe segment and clears the others. */
@@ -534,7 +558,7 @@ public class StatisticsLayoutController extends AbstractProfileController {
 
     /** Rebuilds both the "earned" and "did" sections for the chosen window. */
     private void showWindow(String windowLabel, List<TelemetryReport.Delta> earned,
-                            List<TelemetryReport.Activity> did) {
+                            List<TelemetryReport.Activity> did, TelemetryReport.Coverage coverage) {
         boolean nothing = (earned == null || earned.isEmpty()) && (did == null || did.isEmpty());
 
         if (lblEarningsEmpty != null) {
@@ -542,9 +566,11 @@ public class StatisticsLayoutController extends AbstractProfileController {
             lblEarningsEmpty.setManaged(nothing);
         }
         if (lblWindow != null) {
-            lblWindow.setText(nothing
+            String coverageSuffix = formatCoverage(coverage);
+            String label = nothing
                     ? windowLabel + " — not enough samples yet to measure a change."
-                    : windowLabel);
+                    : coverageSuffix != null ? windowLabel + "  (" + coverageSuffix + ")" : windowLabel;
+            lblWindow.setText(label);
         }
 
         if (flowEarnings != null) {

@@ -150,9 +150,24 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
     protected void execute() {
         logInfo("bg_telemetry | Sampling HUD.");
 
-        Long power = readScaledNumber(POWER_TL, POWER_BR, HUD_FULL_NUMBER_SETTINGS, "power");
+        // matt/2026-08-15: "I lost forty thousand gems... I don't trust these statistics."
+        // Root-caused against real history.jsonl data: gems was intermittently flip-flopping
+        // between two distinct bands roughly 40,000 apart sample to sample (e.g. 90,629 then
+        // 50,739 then back to 90,499) while power trended smoothly the whole time -- a real
+        // OCR misread, not an actual gem swing (confirmed: a live screenshot mid-session showed
+        // the true value sitting in the lower band). The crop itself checked out clean against a
+        // fresh screenshot, so this is intermittent (a different screen state at capture time,
+        // not a static coordinate bug) and not worth chasing blind. Same "decline rather than
+        // guess" pattern used throughout this codebase: reject a reading that jumps implausibly
+        // from the last known-good sample instead of trusting it, so a bad OCR frame produces a
+        // gap in the graph, never a fake spike/drop.
+        Map<String, Object> lastKnownGood = readLatestSample();
+
+        Long power = sanityCheckAgainstLastKnown("power",
+                readScaledNumber(POWER_TL, POWER_BR, HUD_FULL_NUMBER_SETTINGS, "power"), lastKnownGood);
         Long coal = readScaledNumber(COAL_TL, COAL_BR, HUD_NUMBER_SETTINGS, "coal");
-        Long gems = readScaledNumber(GEMS_TL, GEMS_BR, HUD_FULL_NUMBER_SETTINGS, "gems");
+        Long gems = sanityCheckAgainstLastKnown("gems",
+                readScaledNumber(GEMS_TL, GEMS_BR, HUD_FULL_NUMBER_SETTINGS, "gems"), lastKnownGood);
 
         // A frame where nothing at all resolved almost always means we are not
         // actually on the HUD (a popup, an event takeover). Recording that as a
@@ -251,6 +266,66 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
             logWarning("bg_telemetry | Unparseable " + label + " reading: '" + raw.trim() + "'");
         }
         return parsed;
+    }
+
+    /** Fraction outside of which a new power/gems reading is rejected as an implausible OCR
+     *  misread rather than a real change -- see the execute() call site's header note. Real
+     *  changes between 2-hour samples are gradual; the actual misreads observed live jumped
+     *  ~1.7-1.8x, well outside this band. */
+    private static final double SANITY_BAND_MAX_RATIO = 1.5;
+    private static final double SANITY_BAND_MIN_RATIO = 1.0 / SANITY_BAND_MAX_RATIO;
+
+    /**
+     * Rejects a candidate reading that jumps implausibly far from the last known-good value for
+     * the same field, returning null (a graph gap) instead of a likely-wrong number. Passes
+     * through unchanged when there's nothing to compare against (first-ever sample, previous
+     * value missing, or the candidate is already null).
+     */
+    private Long sanityCheckAgainstLastKnown(String field, Long candidate, Map<String, Object> lastKnownGood) {
+        if (candidate == null || lastKnownGood == null) {
+            return candidate;
+        }
+        Object prevObj = lastKnownGood.get(field);
+        if (!(prevObj instanceof Long)) {
+            return candidate;
+        }
+        long prev = (Long) prevObj;
+        if (prev <= 0) {
+            return candidate;
+        }
+        double ratio = (double) candidate / (double) prev;
+        if (ratio > SANITY_BAND_MAX_RATIO || ratio < SANITY_BAND_MIN_RATIO) {
+            logWarning("bg_telemetry | " + field + " reading " + candidate + " is implausibly far from the "
+                    + "last known-good " + prev + " (ratio " + String.format("%.2f", ratio) + ") -- rejecting "
+                    + "as a likely OCR misread rather than recording a fake swing.");
+            return null;
+        }
+        return candidate;
+    }
+
+    /** Reads telemetry/latest.json (the previous sample) as a flat field->value map, numbers
+     *  only. Hand-rolled rather than pulling in a JSON library, matching {@link #toJson} below.
+     *  Returns null on any problem -- callers already treat that as "nothing to compare against". */
+    private Map<String, Object> readLatestSample() {
+        Path file = Paths.get(System.getProperty("user.dir"), "telemetry", "latest.json");
+        try {
+            if (!Files.exists(file)) {
+                return null;
+            }
+            String content = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+            Map<String, Object> result = new LinkedHashMap<>();
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("\"(\\w+)\":(null|-?\\d+)(?!\\.)")
+                    .matcher(content);
+            while (m.find()) {
+                String key = m.group(1);
+                String value = m.group(2);
+                result.put(key, "null".equals(value) ? null : Long.parseLong(value));
+            }
+            return result;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**
