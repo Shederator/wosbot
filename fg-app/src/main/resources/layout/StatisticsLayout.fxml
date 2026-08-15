@@ -31,16 +31,14 @@
                         <Label text="What the bot did for you" />
                     </HBox>
 
-                    <!-- Timeframe segmented control — drives both sections below -->
+                    <!-- Timeframe picker — drives both sections below. matt/2026-08-15: "a
+                         dropdown where I can pick easy things -- last night, last 24 hours,
+                         last week, this month" (a custom range is explicitly out of scope for
+                         now). ComboBox instead of the old button row -- easier to scan and
+                         room to grow without the row wrapping. -->
                     <HBox spacing="8" alignment="CENTER_LEFT" style="-fx-padding: 4 4 0 4;">
-                        <Button fx:id="btnReportNight" mnemonicParsing="false"
-                                onAction="#handleReportNight" styleClass="seg-btn" text="Last night" />
-                        <Button fx:id="btnReport24h" mnemonicParsing="false"
-                                onAction="#handleReport24h" styleClass="seg-btn" text="Last 24 hours" />
-                        <Button fx:id="btnReport7d" mnemonicParsing="false"
-                                onAction="#handleReport7d" styleClass="seg-btn" text="Last 7 days" />
-                        <Button fx:id="btnReportTotal" mnemonicParsing="false"
-                                onAction="#handleReportTotal" styleClass="seg-btn" text="All time" />
+                        <Label styleClass="task-field-label" text="Timeframe" />
+                        <ComboBox fx:id="comboReportWindow" prefWidth="160" />
                     </HBox>
 
                     <!-- Prominent heading of the currently-selected window -->

@@ -116,10 +116,7 @@ public class StatisticsLayoutController extends AbstractProfileController {
     @FXML private FlowPane flowActivity;
     @FXML private Label lblWindow;
     @FXML private Label lblEarningsEmpty;
-    @FXML private Button btnReportNight;
-    @FXML private Button btnReport24h;
-    @FXML private Button btnReport7d;
-    @FXML private Button btnReportTotal;
+    @FXML private ComboBox<String> comboReportWindow;
 
     /** Display names + accent colours for the six telemetry metrics. */
     private static final Map<String, String> METRIC_LABELS = new LinkedHashMap<>();
@@ -252,8 +249,21 @@ public class StatisticsLayoutController extends AbstractProfileController {
     private TelemetryReport telemetry = TelemetryReport.load(null);
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    /** The "what the bot did" timeframe segments. */
-    private enum ReportWindow { NIGHT, LAST_24H, LAST_7D, TOTAL }
+    /** The "what the bot did" timeframe segments. matt/2026-08-15: dropdown replaces the old
+     *  button row -- Past Hour and This Month are new, This Week is the renamed Last 7 Days
+     *  (same rolling-7-day math, just a friendlier label). A custom range was explicitly
+     *  descoped ("let's just do those for now"). */
+    private enum ReportWindow { PAST_HOUR, NIGHT, LAST_24H, THIS_WEEK, THIS_MONTH, TOTAL }
+
+    private static final Map<String, ReportWindow> WINDOW_LABELS = new LinkedHashMap<>();
+    static {
+        WINDOW_LABELS.put("Past hour", ReportWindow.PAST_HOUR);
+        WINDOW_LABELS.put("Last night", ReportWindow.NIGHT);
+        WINDOW_LABELS.put("Last 24 hours", ReportWindow.LAST_24H);
+        WINDOW_LABELS.put("This week", ReportWindow.THIS_WEEK);
+        WINDOW_LABELS.put("This month", ReportWindow.THIS_MONTH);
+        WINDOW_LABELS.put("All time", ReportWindow.TOTAL);
+    }
 
     /**
      * Which timeframe is currently shown. Defaults to All time so the page never opens blank, but
@@ -274,6 +284,16 @@ public class StatisticsLayoutController extends AbstractProfileController {
         colAvgOcr.setCellValueFactory(cellData -> new SimpleStringProperty(String.format("%.2f", cellData.getValue().getAverageOcrFailures())));
         colAvgImg.setCellValueFactory(cellData -> new SimpleStringProperty(String.format("%.2f", cellData.getValue().getAverageTemplateFailures())));
         colLastRun.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getLastRunTime()));
+
+        comboReportWindow.getItems().setAll(WINDOW_LABELS.keySet());
+        comboReportWindow.getSelectionModel().select("All time");
+        comboReportWindow.valueProperty().addListener((obs, oldV, newV) -> {
+            ReportWindow selected = WINDOW_LABELS.get(newV);
+            if (selected != null) {
+                activeWindow = selected;
+                showActiveWindow();
+            }
+        });
     }
 
     // ========================================================================
@@ -480,30 +500,42 @@ public class StatisticsLayoutController extends AbstractProfileController {
         showActiveWindow();
     }
 
-    /** Renders the currently-selected timeframe, highlighting its segment. */
+    /** Renders the currently-selected timeframe and keeps the dropdown's shown value in sync. */
     private void showActiveWindow() {
         switch (activeWindow) {
+            case PAST_HOUR -> {
+                setActiveSegment("Past hour");
+                showWindow("Past hour",
+                        telemetry.last(1, ChronoUnit.HOURS), telemetry.activityLast(1, ChronoUnit.HOURS),
+                        telemetry.coverageForLast(1, ChronoUnit.HOURS));
+            }
             case NIGHT -> {
-                setActiveSegment(btnReportNight);
+                setActiveSegment("Last night");
                 showWindow("Last night (" + SLEEP_START + "–" + WAKE_END + ")",
                         telemetry.lastNight(ZoneId.systemDefault(), SLEEP_START, WAKE_END),
                         telemetry.activityLastNight(ZoneId.systemDefault(), SLEEP_START, WAKE_END),
                         telemetry.coverageForLastNight(ZoneId.systemDefault(), SLEEP_START, WAKE_END));
             }
             case LAST_24H -> {
-                setActiveSegment(btnReport24h);
+                setActiveSegment("Last 24 hours");
                 showWindow("Last 24 hours",
                         telemetry.last(24, ChronoUnit.HOURS), telemetry.activityLast(24, ChronoUnit.HOURS),
                         telemetry.coverageForLast(24, ChronoUnit.HOURS));
             }
-            case LAST_7D -> {
-                setActiveSegment(btnReport7d);
-                showWindow("Last 7 days",
+            case THIS_WEEK -> {
+                setActiveSegment("This week");
+                showWindow("This week (last 7 days)",
                         telemetry.last(7, ChronoUnit.DAYS), telemetry.activityLast(7, ChronoUnit.DAYS),
                         telemetry.coverageForLast(7, ChronoUnit.DAYS));
             }
+            case THIS_MONTH -> {
+                setActiveSegment("This month");
+                showWindow("This month (last 30 days)",
+                        telemetry.last(30, ChronoUnit.DAYS), telemetry.activityLast(30, ChronoUnit.DAYS),
+                        telemetry.coverageForLast(30, ChronoUnit.DAYS));
+            }
             case TOTAL -> {
-                setActiveSegment(btnReportTotal);
+                setActiveSegment("All time");
                 showWindow("All recorded time", telemetry.total(), telemetry.activityTotal(),
                         telemetry.coverageForTotal());
             }
@@ -527,33 +559,12 @@ public class StatisticsLayoutController extends AbstractProfileController {
         return "recorded " + from.format(COVERAGE_FORMATTER) + " → " + to.format(COVERAGE_FORMATTER);
     }
 
-    /** Highlights the chosen timeframe segment and clears the others. */
-    private void setActiveSegment(Button active) {
-        for (Button b : new Button[]{btnReportNight, btnReport24h, btnReport7d, btnReportTotal}) {
-            if (b == null) continue;
-            b.getStyleClass().remove("seg-btn-active");
-            if (b == active) b.getStyleClass().add("seg-btn-active");
+    /** Keeps the dropdown showing the active window without re-firing its change listener
+     *  (e.g. after Refresh reloads data but the user's selection hasn't changed). */
+    private void setActiveSegment(String label) {
+        if (comboReportWindow != null && !label.equals(comboReportWindow.getValue())) {
+            comboReportWindow.setValue(label);
         }
-    }
-
-    @FXML private void handleReportNight(ActionEvent e) {
-        activeWindow = ReportWindow.NIGHT;
-        showActiveWindow();
-    }
-
-    @FXML private void handleReport24h(ActionEvent e) {
-        activeWindow = ReportWindow.LAST_24H;
-        showActiveWindow();
-    }
-
-    @FXML private void handleReport7d(ActionEvent e) {
-        activeWindow = ReportWindow.LAST_7D;
-        showActiveWindow();
-    }
-
-    @FXML private void handleReportTotal(ActionEvent e) {
-        activeWindow = ReportWindow.TOTAL;
-        showActiveWindow();
     }
 
     /** Rebuilds both the "earned" and "did" sections for the chosen window. */
