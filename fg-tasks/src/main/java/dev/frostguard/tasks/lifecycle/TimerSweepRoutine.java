@@ -408,11 +408,25 @@ public class TimerSweepRoutine extends DelayedTask {
                     earliestRecruit = remaining;
                 }
             } else if (label.equals("Pet Adventure")) {
-                // Pull-forward allowed: a finished adventure is waiting to be claimed and
-                // redeployed before daily attempts expire, so this timer may move the task
-                // earlier as well as later — unlike the camp/order timers.
-                applyScheduleAllowingEarlier(TpDailyTaskEnum.PET_ADVENTURE,
-                        LocalDateTime.now().plus(remaining));
+                // matt/2026-08-13: caught live -- this countdown is the chest-completion timer on
+                // the left-menu panel, not a daily-attempts timer, so it has nothing to do with when
+                // fresh attempts become available. A read taken before daily reset (e.g. "14h36m
+                // remaining" at 19:34) got projected straight through reset into the next day
+                // (~10 AM), even though reset itself refreshes attempts hours sooner. Same class of
+                // bug already fixed for Intel's own refresh countdown (see IntelligenceRoutine's
+                // MAX_INTEL_REFRESH_MINUTES) -- clamp at the next daily reset (+ a couple minutes'
+                // buffer for the reset to actually land) so a stale pre-reset read can never push
+                // this past a reset that would have made it moot.
+                LocalDateTime naiveNext = LocalDateTime.now().plus(remaining);
+                LocalDateTime resetCeiling = GameTimeUtils.dailyResetTime().plusMinutes(2);
+                LocalDateTime next = naiveNext.isAfter(resetCeiling) ? resetCeiling : naiveNext;
+                if (next.isBefore(naiveNext)) {
+                    logInfo(String.format(
+                            "Pet Adventure countdown (%s) read before daily reset would run past reset "
+                                    + "(%s) -- capping there instead, since reset refreshes attempts anyway.",
+                            GameTimeUtils.formatCountdown(naiveNext), GameTimeUtils.formatCountdown(resetCeiling)));
+                }
+                applyScheduleAllowingEarlier(TpDailyTaskEnum.PET_ADVENTURE, next);
                 recorded++;
             }
         }

@@ -562,7 +562,15 @@ public class TaskQueue {
 
     private boolean shouldRunInitialize() {
         // Changed by pernerch | Date: 2026-07-04 | Why: keep first Initialize mandatory, then fall back to previous worth-check behavior.
-        return forceInitialInitialize || isInitializeWorthRunning();
+        // matt/2026-08-14: the "mandatory" force ran Initialize even for a profile with ZERO
+        // enabled tasks (Testing, freshly cleared) -- there was nothing to initialize FOR, so
+        // it just tapped the screen for no reason. Only force it when there's actually at
+        // least one other task queued; an empty backlog means truly do nothing.
+        return (forceInitialInitialize && hasAnyNonInitializeTaskQueued()) || isInitializeWorthRunning();
+    }
+
+    private boolean hasAnyNonInitializeTaskQueued() {
+        return taskBacklog.stream().anyMatch(t -> t.getTpTask() != TpDailyTaskEnum.INITIALIZE);
     }
 
     private TaskStateData recordPreExecution(DelayedTask task) {

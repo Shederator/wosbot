@@ -34,7 +34,6 @@ public class LuckyChipSupplyRoutine extends DelayedTask {
     private static final PointData TAB_SWIPE_END = new PointData(2, 128);
     private static final int MAX_TAB_SWIPES = 3;
 
-    private static final int IDLE_RECHECK_HOURS = 24;
     private static final int PANEL_SETTLE_MS = 1200;
     private static final int ACTION_SETTLE_MS = 900;
 
@@ -57,8 +56,9 @@ public class LuckyChipSupplyRoutine extends DelayedTask {
         ImageSearchResultData eventsBtn = templateSearchHelper.locatePattern(
                 TemplatesEnum.HOME_EVENTS_BUTTON, SearchConfigConstants.SINGLE_WITH_RETRIES);
         if (!eventsBtn.isFound()) {
-            logInfo(logLine("Events icon not found. Rechecking in " + IDLE_RECHECK_HOURS + " hours."));
-            reschedule(LocalDateTime.now().plusHours(IDLE_RECHECK_HOURS));
+            LocalDateTime next = nextNoon();
+            logInfo(logLine("Events icon not found. Rechecking at noon: " + next.format(DATETIME_FORMATTER) + "."));
+            reschedule(next);
             return;
         }
         tapPoint(eventsBtn.getPoint());
@@ -66,10 +66,11 @@ public class LuckyChipSupplyRoutine extends DelayedTask {
 
         ImageSearchResultData tab = findLuckyWheelTab();
         if (!tab.isFound()) {
+            LocalDateTime next = nextNoon();
             logInfo(logLine("Lucky Wheel tab not found even after swiping the tab strip. Closing "
-                    + "and rechecking in " + IDLE_RECHECK_HOURS + " hours."));
+                    + "and rechecking at noon: " + next.format(DATETIME_FORMATTER) + "."));
             pressBack();
-            reschedule(LocalDateTime.now().plusHours(IDLE_RECHECK_HOURS));
+            reschedule(next);
             return;
         }
         tapPoint(tab.getPoint());
@@ -99,8 +100,21 @@ public class LuckyChipSupplyRoutine extends DelayedTask {
         sleepTask(ACTION_SETTLE_MS);
         pressBack();
 
-        logInfo(logLine("Rechecking in " + IDLE_RECHECK_HOURS + " hours."));
-        reschedule(LocalDateTime.now().plusHours(IDLE_RECHECK_HOURS));
+        LocalDateTime next = nextNoon();
+        logInfo(logLine("Rechecking at noon: " + next.format(DATETIME_FORMATTER) + "."));
+        reschedule(next);
+    }
+
+    // matt/2026-08-14: "have Hall of Chiefs and other rewards claimed at noon everyday, every
+    // 24h" -- was rescheduling on a rolling "+24h from whenever it last ran" basis, which drifts
+    // across DST/late-night runs. Anchoring to the next real noon instead.
+    private LocalDateTime nextNoon() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime noon = now.toLocalDate().atTime(12, 0);
+        if (!noon.isAfter(now)) {
+            noon = noon.plusDays(1);
+        }
+        return noon;
     }
 
     private String logLine(String note) {

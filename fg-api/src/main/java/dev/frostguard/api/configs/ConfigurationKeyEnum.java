@@ -429,12 +429,16 @@ public enum ConfigurationKeyEnum {
     EVENT_DEFEAT_BEASTS_CLAIM_BOOL       ("false",   Boolean.class,  ConfigCategory.EVENTS),
     EVENT_HERO_RALLY_CLAIM_BOOL          ("false",   Boolean.class,  ConfigCategory.EVENTS),
     EVENT_LUCKY_CHIP_SUPPLY_CLAIM_BOOL   ("false",   Boolean.class,  ConfigCategory.EVENTS),
+    EVENT_BROTHERS_IN_ARMS_CLAIM_BOOL    ("false",   Boolean.class,  ConfigCategory.EVENTS),
 
     // matt/2026-08-13: top-right cart-icon Shop panel, built out tab by tab. Custom
     // Armament Chest's free "Claimable" chest badge is periodic (may not appear for
     // weeks) -- checked once a day, no-ops when nothing's there.
     SHOP_CUSTOM_ARMAMENT_CHEST_CLAIM_BOOL ("false",  Boolean.class,  ConfigCategory.SHOPS),
     SHOP_DAILY_DEALS_FREE_CHEST_CLAIM_BOOL ("false", Boolean.class,  ConfigCategory.SHOPS),
+
+    // matt/2026-08-14: "the new labyrinth" -- Research Center + Gear Forge stage-raid claims.
+    LABYRINTH_RAID_ENABLED_BOOL ("false", Boolean.class, ConfigCategory.DAILIES),
 
     // Bearguard: Berserk Cryptid rally HOSTING, distinct from the RALLY_* keys
     // above which configure joining someone else's. Appended at the end so

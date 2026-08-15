@@ -1,20 +1,24 @@
 package dev.frostguard.tasks.pets;
 
+import java.awt.image.BufferedImage;
 import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
+import java.util.ArrayList;
 import java.util.List;
 
 import dev.frostguard.vision.convert.GameTimeUtils;
+import dev.frostguard.vision.ocr.TesseractOcrProvider;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
+import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -207,6 +211,145 @@ public class LifeEssenceRoutine extends DelayedTask {
 	 * 
 	 * @return number of essence items claimed
 	 */
+	// matt/2026-08-14, caught live via screenshot: template matching kept missing real, visible
+	// claimable badges (0 claimed while 2 badges sat unclaimed on screen). Root cause turned out to
+	// be TWO different badge shapes in play (a white/orange rounded-square badge over buildings, and
+	// a solid-orange speech-bubble/pin badge directly over the tree) -- AND both bounce/animate like
+	// the Custom Armament Chest badge did earlier tonight, so even a freshly-recaptured template only
+	// self-matched at ~0.84, under the 0.90 threshold. Rather than chase more template shapes, switch
+	// to color-blob detection: both badge shapes share the same solid-orange fill, so scanning the
+	// search area for orange pixel clusters and tapping each cluster's centroid finds every claimable
+	// badge regardless of exact shape or animation phase. Same "always look for the [color], not the
+	// exact frame" philosophy matt asked for with the red-dot fix.
+	// matt/2026-08-14: first cut of the color-blob detection over-fired -- "Claimed 12" when only 2
+	// real badges were on screen. Root cause: the search area also catches OTHER orange UI (an event
+	// banner -- "The battle for the Fortress will start in..." -- was live on screen during that
+	// run), and a wide banner sliver can easily clear a bare pixel-count threshold. Fix: also require
+	// the blob's bounding box to be badge-shaped (compact, roughly square, ~30-75px each side) and
+	// densely filled (fill ratio = pixelCount / bboxArea) -- live-measured real badges score
+	// 0.51/0.58 fill in a ~45-55px square bbox, while a live-measured banner fragment scored 0.10
+	// fill in a non-square bbox. This is a shape check, not just a color count.
+	private static final int ORANGE_R_MIN = 200;
+	private static final int ORANGE_G_MIN = 90;
+	private static final int ORANGE_G_MAX = 180;
+	private static final int ORANGE_B_MAX = 90;
+	private static final int MIN_BLOB_PIXELS = 150;
+	private static final int BADGE_MIN_DIMENSION = 30;
+	private static final int BADGE_MAX_DIMENSION = 75;
+	private static final double BADGE_MIN_FILL_RATIO = 0.35;
+
+	private BufferedImage captureFrame() {
+		try {
+			RawImageData frame = emuManager.captureScreen(String.valueOf(EMULATOR_NUMBER));
+			return TesseractOcrProvider.toBufferedImage(frame);
+		} catch (Exception e) {
+			logWarning("Failed to capture frame for badge scan: " + e.getMessage());
+			return null;
+		}
+	}
+
+	/**
+	 * Scans the search area for solid-orange pixel clusters (the shared color of both claim badge
+	 * shapes) and returns each cluster's centroid as a tap target. Flood-fill connected components,
+	 * filtered by a minimum pixel count to reject noise.
+	 */
+	private List<PointData> findClaimableBadges(BufferedImage img) {
+		int left = LIFE_ESSENCE_SEARCH_AREA.topLeft().col();
+		int top = LIFE_ESSENCE_SEARCH_AREA.topLeft().row();
+		int right = Math.min(LIFE_ESSENCE_SEARCH_AREA.bottomRight().col(), img.getWidth());
+		int bottom = Math.min(LIFE_ESSENCE_SEARCH_AREA.bottomRight().row(), img.getHeight());
+
+		int width = right - left;
+		int height = bottom - top;
+		if (width <= 0 || height <= 0) {
+			return List.of();
+		}
+
+		boolean[] mask = new boolean[width * height];
+		for (int y = 0; y < height; y++) {
+			for (int x = 0; x < width; x++) {
+				int rgb = img.getRGB(left + x, top + y);
+				int r = (rgb >> 16) & 0xFF;
+				int g = (rgb >> 8) & 0xFF;
+				int b = rgb & 0xFF;
+				if (r > ORANGE_R_MIN && g > ORANGE_G_MIN && g < ORANGE_G_MAX && b < ORANGE_B_MAX) {
+					mask[y * width + x] = true;
+				}
+			}
+		}
+
+		boolean[] visited = new boolean[width * height];
+		int[] stackX = new int[width * height];
+		int[] stackY = new int[width * height];
+		int[] dx = {-1, 1, 0, 0};
+		int[] dy = {0, 0, -1, 1};
+		List<PointData> centroids = new ArrayList<>();
+
+		for (int y = 0; y < height; y++) {
+			for (int x = 0; x < width; x++) {
+				int idx = y * width + x;
+				if (!mask[idx] || visited[idx]) {
+					continue;
+				}
+
+				int sp = 0;
+				stackX[sp] = x;
+				stackY[sp] = y;
+				sp++;
+				visited[idx] = true;
+				long sumX = 0;
+				long sumY = 0;
+				int count = 0;
+				int minX = x, maxX = x, minY = y, maxY = y;
+
+				while (sp > 0) {
+					sp--;
+					int cx = stackX[sp];
+					int cy = stackY[sp];
+					sumX += cx;
+					sumY += cy;
+					count++;
+					if (cx < minX) minX = cx;
+					if (cx > maxX) maxX = cx;
+					if (cy < minY) minY = cy;
+					if (cy > maxY) maxY = cy;
+
+					for (int d = 0; d < 4; d++) {
+						int nx = cx + dx[d];
+						int ny = cy + dy[d];
+						if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
+							continue;
+						}
+						int nidx = ny * width + nx;
+						if (mask[nidx] && !visited[nidx]) {
+							visited[nidx] = true;
+							stackX[sp] = nx;
+							stackY[sp] = ny;
+							sp++;
+						}
+					}
+				}
+
+				int bboxWidth = maxX - minX + 1;
+				int bboxHeight = maxY - minY + 1;
+				double fillRatio = (double) count / (bboxWidth * bboxHeight);
+				boolean badgeShaped = count >= MIN_BLOB_PIXELS
+						&& bboxWidth >= BADGE_MIN_DIMENSION && bboxWidth <= BADGE_MAX_DIMENSION
+						&& bboxHeight >= BADGE_MIN_DIMENSION && bboxHeight <= BADGE_MAX_DIMENSION
+						&& fillRatio >= BADGE_MIN_FILL_RATIO;
+
+				if (badgeShaped) {
+					centroids.add(new PointData(left + (int) (sumX / count), top + (int) (sumY / count)));
+				} else if (count >= MIN_BLOB_PIXELS) {
+					logDebug("Rejected non-badge orange blob: size=" + count + " bbox=" + bboxWidth + "x"
+							+ bboxHeight + " fill=" + String.format("%.2f", fillRatio));
+				}
+			}
+		}
+
+		return centroids;
+	}
+
 	private int claimLifeEssence() {
 		logInfo("Searching for claimable Life Essence");
 		int totalClaimed = 0;
@@ -215,18 +358,10 @@ public class LifeEssenceRoutine extends DelayedTask {
 		for (int searchAttempt = 1; searchAttempt <= MAX_CLAIM_SEARCH_ATTEMPTS; searchAttempt++) {
 			logDebug("Claim search attempt " + searchAttempt + "/" + MAX_CLAIM_SEARCH_ATTEMPTS);
 
-			// Search for claimable essence in the defined area
-			List<ImageSearchResultData> essenceList = templateSearchHelper.locateAllPatterns(
-					TemplatesEnum.LIFE_ESSENCE_CLAIM,
-					SearchConfig.builder()
-							.withArea(new AreaData(LIFE_ESSENCE_SEARCH_AREA.topLeft(),
-									LIFE_ESSENCE_SEARCH_AREA.bottomRight()))
-							.withThreshold(90)
-							.withMaxAttempts(1)
-							.withMaxResults(MAX_CLAIM_RESULTS)
-							.build());
+			BufferedImage frame = captureFrame();
+			List<PointData> badges = frame != null ? findClaimableBadges(frame) : List.of();
 
-			if (essenceList.isEmpty()) {
+			if (badges.isEmpty()) {
 				emptySearches++;
 				logDebug("No claimable essence found on attempt " + searchAttempt);
 
@@ -245,9 +380,9 @@ public class LifeEssenceRoutine extends DelayedTask {
 			emptySearches = 0;
 
 			// Claim each found essence
-			logDebug("Found " + essenceList.size() + " claimable essence items");
-			for (ImageSearchResultData essence : essenceList) {
-				tapPoint(essence.getPoint());
+			logDebug("Found " + badges.size() + " claimable essence items (color-blob, shape/animation-proof)");
+			for (PointData badge : badges) {
+				tapPoint(badge);
 				sleepTask(500); // Wait for claim animation
 				totalClaimed++;
 			}

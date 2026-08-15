@@ -7,12 +7,14 @@ import javafx.scene.control.CheckBox;
 
 import java.util.List;
 
+// matt/2026-08-13: "General Shop" -- split out of the old combined "Shop" page. Everything here is
+// NOT the top-right cart-icon panel (that split off into GemShopLayoutController) -- Nomadic
+// Merchant and Mystery Shop, to keep the two genuinely different shops from being lumped together.
 public class ShopLayoutController extends AbstractProfileController {
 
 	@FXML
 	private CheckBox checkBoxNomadicMerchant, checkBoxNomadicMerchantVip,
-			checkBoxMysteryShop, checkBoxMysteryShop50DiscountGear,
-			checkBoxCustomArmamentChest, checkBoxDailyDealsFreeChest;
+			checkBoxMysteryShop, checkBoxMysteryShop50DiscountGear;
 
 	@FXML
 	private void initialize() {
@@ -25,9 +27,7 @@ public class ShopLayoutController extends AbstractProfileController {
 			new ShopSwitch(checkBoxNomadicMerchant, ConfigurationKeyEnum.BOOL_NOMADIC_MERCHANT),
 			new ShopSwitch(checkBoxNomadicMerchantVip, ConfigurationKeyEnum.BOOL_NOMADIC_MERCHANT_VIP_POINTS),
 			new ShopSwitch(checkBoxMysteryShop, ConfigurationKeyEnum.BOOL_MYSTERY_SHOP),
-			new ShopSwitch(checkBoxMysteryShop50DiscountGear, ConfigurationKeyEnum.BOOL_MYSTERY_SHOP_250_HERO_WIDGET),
-			new ShopSwitch(checkBoxCustomArmamentChest, ConfigurationKeyEnum.SHOP_CUSTOM_ARMAMENT_CHEST_CLAIM_BOOL),
-			new ShopSwitch(checkBoxDailyDealsFreeChest, ConfigurationKeyEnum.SHOP_DAILY_DEALS_FREE_CHEST_CLAIM_BOOL)
+			new ShopSwitch(checkBoxMysteryShop50DiscountGear, ConfigurationKeyEnum.BOOL_MYSTERY_SHOP_250_HERO_WIDGET)
 		);
 	}
 

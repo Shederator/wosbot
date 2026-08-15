@@ -46,7 +46,6 @@ public class HeroRallyClaimRoutine extends DelayedTask {
     private static final PointData TAB_SWIPE_END = new PointData(2, 128);
     private static final int MAX_TAB_SWIPES = 3;
 
-    private static final int IDLE_RECHECK_HOURS = 12;
     private static final int PANEL_SETTLE_MS = 1200;
     private static final int ACTION_SETTLE_MS = 900;
 
@@ -69,8 +68,9 @@ public class HeroRallyClaimRoutine extends DelayedTask {
         ImageSearchResultData dealsBtn = templateSearchHelper.locatePattern(
                 TemplatesEnum.HOME_DEALS_BUTTON, SearchConfigConstants.SINGLE_WITH_RETRIES);
         if (!dealsBtn.isFound()) {
-            logInfo(logLine("Deals icon not found. Rechecking in " + IDLE_RECHECK_HOURS + " hours."));
-            reschedule(LocalDateTime.now().plusHours(IDLE_RECHECK_HOURS));
+            LocalDateTime next = nextNoon();
+            logInfo(logLine("Deals icon not found. Rechecking at noon: " + next.format(DATETIME_FORMATTER) + "."));
+            reschedule(next);
             return;
         }
         tapPoint(dealsBtn.getPoint());
@@ -78,10 +78,11 @@ public class HeroRallyClaimRoutine extends DelayedTask {
 
         ImageSearchResultData tab = findHeroRallyTab();
         if (!tab.isFound()) {
+            LocalDateTime next = nextNoon();
             logInfo(logLine("Hero Rally tab not found even after swiping the tab strip. Closing "
-                    + "and rechecking in " + IDLE_RECHECK_HOURS + " hours."));
+                    + "and rechecking at noon: " + next.format(DATETIME_FORMATTER) + "."));
             pressBack();
-            reschedule(LocalDateTime.now().plusHours(IDLE_RECHECK_HOURS));
+            reschedule(next);
             return;
         }
         tapPoint(tab.getPoint());
@@ -107,8 +108,21 @@ public class HeroRallyClaimRoutine extends DelayedTask {
         sleepTask(ACTION_SETTLE_MS);
         pressBack();
 
-        logInfo(logLine("Rechecking in " + IDLE_RECHECK_HOURS + " hours."));
-        reschedule(LocalDateTime.now().plusHours(IDLE_RECHECK_HOURS));
+        LocalDateTime next = nextNoon();
+        logInfo(logLine("Rechecking at noon: " + next.format(DATETIME_FORMATTER) + "."));
+        reschedule(next);
+    }
+
+    // matt/2026-08-14: "have Hall of Chiefs and other rewards claimed at noon everyday, every
+    // 24h" -- was rescheduling on a rolling "+12h from whenever it last ran" basis, which drifts.
+    // Anchoring to the next real noon instead so this always lands at the same clock time.
+    private LocalDateTime nextNoon() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime noon = now.toLocalDate().atTime(12, 0);
+        if (!noon.isAfter(now)) {
+            noon = noon.plusDays(1);
+        }
+        return noon;
     }
 
     /** matt/2026-08-13: the common single-level case -- a plain "Claim" pill (not

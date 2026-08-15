@@ -55,6 +55,7 @@ import dev.frostguard.engine.service.ConfigService;
 import dev.frostguard.engine.service.ScheduleService;
 import dev.frostguard.engine.service.StaminaService;
 import dev.frostguard.app.panel.economy.ShopLayoutController;
+import dev.frostguard.app.panel.economy.GemShopLayoutController;
 import dev.frostguard.app.panel.economy.DealsLayoutController;
 import dev.frostguard.app.panel.scheduler.TaskManagerLayoutController;
 import dev.frostguard.app.panel.misc.SkipTutorialLayoutController;
@@ -720,7 +721,8 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
                 new ModuleDefinition("CityEventsLayout",         "City Events",          MaterialDesignC.CALENDAR_OUTLINE,           CityEventsLayoutController::new),
                 new ModuleDefinition("CityEventsExtraLayout",    "Extra City Events",    MaterialDesignC.CALENDAR_PLUS,              CityEventsExtraLayoutController::new),
                 new ModuleDefinition("PolarTerrorLayout",        "Rally",                MaterialDesignF.FLAG_OUTLINE,               PolarTerrorLayoutController::new),
-                new ModuleDefinition("ShopLayout",               "Shop",                 MaterialDesignS.STORE_OUTLINE,              ShopLayoutController::new),
+                new ModuleDefinition("ShopLayout",               "General Shop",         MaterialDesignS.STORE_OUTLINE,              ShopLayoutController::new),
+                new ModuleDefinition("GemShopLayout",            "Gem Shop",             MaterialDesignS.STORE_OUTLINE,              GemShopLayoutController::new),
                 new ModuleDefinition("DealsLayout",              "Deals",                MaterialDesignT.TAG_OUTLINE,                 DealsLayoutController::new),
                 new ModuleDefinition("GatherLayout",             "Gather",               MaterialDesignP.PACKAGE_VARIANT,            GatherLayoutController::new),
                 new ModuleDefinition("IntelLayout",              "Intel",                MaterialDesignB.BINOCULARS,                 IntelLayoutController::new),
@@ -770,7 +772,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         java.util.List<String> allianceOrder = java.util.List.of(
                 "Alliance", "Alliance Championship", "Alliance Mobilization", "Alliance Shop");
         java.util.List<String> economyOrder = java.util.List.of(
-                "Shop", "Deals", "Get Giftcodes");
+                "Gem Shop", "General Shop", "Deals", "Get Giftcodes");
         java.util.List<String> troopsOrder = java.util.List.of(
                 "Training", "Gather", "Intel", "Rally", "Beast Hunting", "Chief Order", "Pets");
         java.util.List<String> accountOrder = java.util.List.of(

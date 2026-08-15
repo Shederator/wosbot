@@ -298,6 +298,38 @@ public class DailyLabyrinthRoutine extends DelayedTask {
         }
     }
 
+    /**
+     * matt/2026-08-13, caught live: right after a real Charm-Mine-flow battle, one attempt found the
+     * screen already drifted into an unrelated City popup (March Queue) by the time we went looking
+     * for the Labyrinth menu item -- {@link #navigateToLabyrinthMenu} assumes it's starting from a
+     * clean home/city screen and has no way to close a stray popup on its own, so the menu-item search
+     * (which only exists on the bare city screen) came back "not found" even though nothing was
+     * actually wrong. This wrapper presses back a few times first to settle onto a clean screen, then
+     * calls the normal navigation, and retries once more (with extra back-presses) if that still
+     * doesn't find the menu -- covers a stray popup/dialog without needing to guess exactly which one.
+     */
+    private boolean settleAndNavigateToLabyrinthMenu(int dungeonNumber) {
+        settleToCleanScreen(2);
+        if (navigateToLabyrinthMenu()) {
+            return true;
+        }
+
+        logWarning("First re-navigation attempt before dungeon " + dungeonNumber
+                + " failed to find the Labyrinth menu item; settling further and retrying once.");
+        settleToCleanScreen(3);
+        return navigateToLabyrinthMenu();
+    }
+
+    /** Presses back N times with a short settle delay between each, to close any lingering
+     *  popup/dialog left over from the previous screen before attempting fresh navigation. */
+    private void settleToCleanScreen(int backPresses) {
+        for (int i = 0; i < backPresses; i++) {
+            pressBack();
+            sleepTask(TAB_SWITCH_DELAY);
+        }
+        sleepTask(MENU_NAVIGATION_DELAY);
+    }
+
     // =========================== CHALLENGE EXECUTION ===========================
 
     /**
@@ -311,6 +343,19 @@ public class DailyLabyrinthRoutine extends DelayedTask {
 
         boolean anyCompleted = false;
         for (Integer dungeonNumber : availableDungeons) {
+            // matt/2026-08-13, caught live: after a completed battle, attemptNormalChallenge's single
+            // pressBack() only returns to the zone's OWN stage-select screen, not the outer "The
+            // Labyrinth" map -- so the next dungeon's banner search (which only exists on the outer
+            // map) silently failed with a false "not available today". Re-navigating explicitly
+            // before every dungeon (not just relying on back-taps) is more robust than guessing a
+            // back-press count -- reuses the same menu path already proven reliable at task start.
+            if (dungeonNumber != availableDungeons.get(0)) {
+                if (!settleAndNavigateToLabyrinthMenu(dungeonNumber)) {
+                    logWarning("Could not re-navigate to the Labyrinth map before dungeon " + dungeonNumber
+                            + "; skipping it this pass.");
+                    continue;
+                }
+            }
             if (executeDungeonChallenge(dungeonNumber)) {
                 logInfo("Successfully completed challenge for dungeon " + dungeonNumber + ".");
                 anyCompleted = true;
@@ -332,10 +377,35 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     private boolean executeDungeonChallenge(int dungeonNumber) {
         logInfo("Attempting to execute challenge for dungeon " + dungeonNumber + ".");
 
-        ImageSearchResultData labyrinthResult = templateSearchHelper.locatePattern(
-                getDungeonTemplate(dungeonNumber),
-                SearchConfigConstants.DEFAULT_SINGLE);
+        // matt/2026-08-13, caught live: on a dungeon that comes right after a just-completed battle
+        // (i.e. after settleAndNavigateToLabyrinthMenu's re-navigation, not the task's very first
+        // dungeon), the very first banner search sometimes missed even though navigateToLabyrinthMenu
+        // itself reported success -- the outer map likely hadn't finished settling/rendering (or a
+        // trailing reward animation from the just-completed battle was still resolving) in the single
+        // instant the search ran. The first dungeon of the day never showed this because nothing had
+        // just played out on top of the map. Retrying a few times with a short pause is a cheap,
+        // low-risk way to ride out that race without guessing exactly what's still animating.
+        ImageSearchResultData labyrinthResult = null;
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            labyrinthResult = templateSearchHelper.locatePattern(
+                    getDungeonTemplate(dungeonNumber),
+                    SearchConfigConstants.DEFAULT_SINGLE);
+            if (labyrinthResult.isFound()) {
+                break;
+            }
+            if (attempt < 3) {
+                logInfo("Dungeon " + dungeonNumber + " banner not found on attempt " + attempt
+                        + "; giving the map a moment to settle and retrying.");
+                sleepTask(TAB_SWITCH_DELAY);
+            }
+        }
         if (!labyrinthResult.isFound()) {
+            // matt/2026-08-13: caught live twice now that the retry above doesn't actually fix this --
+            // by the time a screenshot gets pulled externally, the app has already moved on to whatever
+            // screen the NEXT queued task opened, so there was never a real look at what the banner
+            // search actually saw. Capture the frame right here, in the same instant as the failed
+            // search, so the next occurrence has real evidence instead of a guess.
+            saveLabyrinthFrame("banner_missing", dungeonNumber);
             logWarning("Dungeon " + dungeonNumber + " is not available today.");
             return false;
         }

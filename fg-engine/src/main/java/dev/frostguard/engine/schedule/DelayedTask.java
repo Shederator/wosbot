@@ -369,6 +369,14 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
     public void pressBack() {
         checkPreemption();
         emuManager.pressBack(EMULATOR_NUMBER);
+        // matt/2026-08-14: "quit game screen still happening with intel, anywhere" -- a bare
+        // screen with nothing open responds to this game's own back-button handling by popping a
+        // native "Quit game?" confirmation, one accidental tap from actually exiting mid-run. This
+        // is the single shared pressBack() every routine in the codebase calls, so checking here
+        // covers every call site at once instead of chasing individual back-press chains.
+        if (navigationHelper != null) {
+            navigationHelper.dismissQuitGameDialogIfPresent();
+        }
     }
 
     // ── interruptible sleep with injection ───────────────────────────

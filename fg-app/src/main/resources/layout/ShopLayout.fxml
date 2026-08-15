@@ -3,7 +3,9 @@
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 
-<!-- Shop — StackPane root with FlowPane-based shop sections -->
+<!-- General Shop — matt/2026-08-13: split out of the old combined "Shop" page. This is
+     everything that is NOT the top-right cart-icon panel (that's now the separate "Gem
+     Shop" page) -- Nomadic Merchant and Mystery Shop. -->
 <StackPane maxHeight="Infinity" maxWidth="Infinity"
            HBox.hgrow="ALWAYS" VBox.vgrow="ALWAYS"
            xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1">
@@ -46,38 +48,6 @@
                               text="Buy 50% discounted hero gear (250 badges)" />
                 </VBox>
             </TitledPane>
-
-            <!-- matt/2026-08-13: top-right cart-icon Shop panel, built out tab by tab. -->
-
-            <!-- Custom Armament Chest -->
-            <VBox styleClass="content-card">
-                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
-                    <Label text="Custom Armament Chest" />
-                </HBox>
-                <VBox spacing="10" styleClass="task-section-inner">
-                    <Label styleClass="task-card-description"
-                           text="Rotating, periodic event (may not appear for weeks) -- claims only the free 'Claimable' chest badge, never the paid chest packs. Checked once a day."
-                           wrapText="true" />
-                    <Separator style="-fx-opacity: 0.25;" />
-                    <CheckBox fx:id="checkBoxCustomArmamentChest" mnemonicParsing="false"
-                              text="Claim free chest badge" />
-                </VBox>
-            </VBox>
-
-            <!-- Daily Deals -->
-            <VBox styleClass="content-card">
-                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
-                    <Label text="Daily Deals" />
-                </HBox>
-                <VBox spacing="10" styleClass="task-section-inner">
-                    <Label styleClass="task-card-description"
-                           text="A genuinely free chest badge once a day -- everything else on this tab is a paid pack. Checked once a day."
-                           wrapText="true" />
-                    <Separator style="-fx-opacity: 0.25;" />
-                    <CheckBox fx:id="checkBoxDailyDealsFreeChest" mnemonicParsing="false"
-                              text="Claim free chest badge" />
-                </VBox>
-            </VBox>
 
         </VBox>
     </ScrollPane>

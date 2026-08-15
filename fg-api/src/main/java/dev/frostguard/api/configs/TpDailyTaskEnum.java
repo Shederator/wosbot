@@ -151,7 +151,7 @@ public enum TpDailyTaskEnum {
 
     // matt/2026-08-12: "Explore the World" Atlas/Monument -- claims ready quest rows,
     // opens owned Scene Fragment Packs, runs daily Alliance Trade requests/sends.
-    MONUMENT                (908, "Explore the World (Monument)", ConfigurationKeyEnum.MONUMENT_ENABLED_BOOL,                  RoutineCategory.MILITARY),
+    MONUMENT                (908, "Monument",                    ConfigurationKeyEnum.MONUMENT_ENABLED_BOOL,                  RoutineCategory.MILITARY),
 
     // matt/2026-08-12: "event slop" -- rotating limited-time Events-tab events where
     // the bot's only job is finding a ready Claim and hitting it. Twice-a-day recheck.
@@ -160,10 +160,22 @@ public enum TpDailyTaskEnum {
     EVENT_HERO_RALLY_CLAIM  (911, "Event: Hero Rally Claim All",  ConfigurationKeyEnum.EVENT_HERO_RALLY_CLAIM_BOOL,            RoutineCategory.MILITARY),
     EVENT_LUCKY_CHIP_SUPPLY (912, "Event: Lucky Chip Supply",     ConfigurationKeyEnum.EVENT_LUCKY_CHIP_SUPPLY_CLAIM_BOOL,     RoutineCategory.MILITARY),
 
+    // matt/2026-08-13: live-verified by hand -- tab icon cropped fresh from a live account, real
+    // ranking (15th, 1,004,289 points) with 4 tiers already green/ready to claim.
+    EVENT_BROTHERS_IN_ARMS (915, "Event: Brothers in Arms",       ConfigurationKeyEnum.EVENT_BROTHERS_IN_ARMS_CLAIM_BOOL,      RoutineCategory.MILITARY),
+
     // matt/2026-08-13: top-right cart-icon Shop panel, built tab by tab. Custom
     // Armament Chest's free Claimable badge is periodic -- once-a-day recheck.
-    SHOP_CUSTOM_ARMAMENT_CHEST (913, "Shop: Custom Armament Chest", ConfigurationKeyEnum.SHOP_CUSTOM_ARMAMENT_CHEST_CLAIM_BOOL, RoutineCategory.MILITARY),
-    SHOP_DAILY_DEALS_FREE_CHEST (914, "Shop: Daily Deals Free Chest", ConfigurationKeyEnum.SHOP_DAILY_DEALS_FREE_CHEST_CLAIM_BOOL, RoutineCategory.MILITARY);
+    // matt/2026-08-13, Part 2: "Gem Shop" prefix on both -- this is the top-right cart-icon panel,
+    // distinct from the bottom-nav "Shop" (Backpack/Recycle Shop/etc, a completely different feature).
+    SHOP_CUSTOM_ARMAMENT_CHEST (913, "Gem Shop - Custom Armament Chest", ConfigurationKeyEnum.SHOP_CUSTOM_ARMAMENT_CHEST_CLAIM_BOOL, RoutineCategory.MILITARY),
+    SHOP_DAILY_DEALS_FREE_CHEST (914, "Gem Shop - Daily Deals Free Chest", ConfigurationKeyEnum.SHOP_DAILY_DEALS_FREE_CHEST_CLAIM_BOOL, RoutineCategory.MILITARY),
+
+    // matt/2026-08-14: "the new labyrinth" -- Research Center (Tech stats) + Gear Forge (Chief
+    // Gear stats), the stage-ladder raid system distinct from the classic Land of Heroes/Cave of
+    // Monsters/Charm Mine zones (LABYRINTH, id 11, above). Raid-claim only -- Challenge (real
+    // battle, limited daily attempts) deliberately not automated yet.
+    LABYRINTH_RAID (916, "Labyrinth Raid Claims", ConfigurationKeyEnum.LABYRINTH_RAID_ENABLED_BOOL, RoutineCategory.RESOURCE);
 
     /* ================================================================
      *  Category taxonomy used to group routines in the management UI.

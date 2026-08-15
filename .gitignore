@@ -72,3 +72,12 @@ custom_tasks/custom_tasks.json
 
 # Runtime telemetry output - machine-specific, regenerated every run.
 telemetry/
+
+# ── Live-debug screenshot dumps (throwaway diagnostic artifacts, not source) ──
+/*.png
+/shop-debug/
+/monument_trace/
+/labyrinth-debug/*.png
+
+# ── Runtime settings snapshots (regenerated hourly, machine-specific) ──
+/settings-backups/

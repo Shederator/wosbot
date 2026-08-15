@@ -43,7 +43,13 @@ public class EventClaimRoutine extends DelayedTask {
 
     public enum EventKind {
         HALL_OF_CHIEFS("Hall of Chiefs", TemplatesEnum.EVENTS_TAB_HALL_OF_CHIEFS),
-        DEFEAT_NEARBY_BEASTS("Defeat Nearby Beasts", TemplatesEnum.EVENTS_TAB_DEFEAT_BEASTS);
+        DEFEAT_NEARBY_BEASTS("Defeat Nearby Beasts", TemplatesEnum.EVENTS_TAB_DEFEAT_BEASTS),
+        // matt/2026-08-13: live-verified by hand -- tab icon cropped fresh from the live account,
+        // Claim buttons already green/ready with a real 1,004,289-point ranking behind them (4 tiers
+        // claimable at once: 1,000 / 33,000 / 83,000 / 167,000). Same shared Claim-button skin as
+        // Hall of Chiefs, so this reuses the exact same claim loop below -- only the tab template
+        // differs.
+        BROTHERS_IN_ARMS("Brothers in Arms", TemplatesEnum.EVENTS_TAB_BROTHERS_IN_ARMS);
 
         private final String label;
         private final TemplatesEnum tabTemplate;
@@ -63,9 +69,6 @@ public class EventClaimRoutine extends DelayedTask {
     }
 
     private static final int MAX_CLAIM_LOOPS = 10;
-    /** matt, 2026-08-12: these are short-lived rotating events, not a daily -- twice
-     *  a day is enough to catch anything without hammering the panel. */
-    private static final int IDLE_RECHECK_HOURS = 12;
     private static final int PANEL_SETTLE_MS = 1200;
     private static final int ACTION_SETTLE_MS = 900;
 
@@ -91,8 +94,9 @@ public class EventClaimRoutine extends DelayedTask {
         ImageSearchResultData eventsBtn = templateSearchHelper.locatePattern(
                 TemplatesEnum.HOME_EVENTS_BUTTON, SearchConfigConstants.SINGLE_WITH_RETRIES);
         if (!eventsBtn.isFound()) {
-            logInfo(logLine("Events icon not found. Rechecking in " + IDLE_RECHECK_HOURS + " hours."));
-            reschedule(LocalDateTime.now().plusHours(IDLE_RECHECK_HOURS));
+            LocalDateTime next = nextNoon();
+            logInfo(logLine("Events icon not found. Rechecking at noon: " + next.format(DATETIME_FORMATTER) + "."));
+            reschedule(next);
             return;
         }
 
@@ -102,10 +106,11 @@ public class EventClaimRoutine extends DelayedTask {
         ImageSearchResultData tab = templateSearchHelper.locatePattern(
                 eventKind.getTabTemplate(), SearchConfigConstants.SINGLE_WITH_RETRIES);
         if (!tab.isFound()) {
+            LocalDateTime next = nextNoon();
             logInfo(logLine(eventKind.getLabel() + " tab not currently showing (probably not running "
-                    + "right now). Closing and rechecking in " + IDLE_RECHECK_HOURS + " hours."));
+                    + "right now). Closing and rechecking at noon: " + next.format(DATETIME_FORMATTER) + "."));
             pressBack();
-            reschedule(LocalDateTime.now().plusHours(IDLE_RECHECK_HOURS));
+            reschedule(next);
             return;
         }
 
@@ -137,8 +142,23 @@ public class EventClaimRoutine extends DelayedTask {
             StatisticsService.obtain().addToCounter(profile, eventKind.getLabel() + " Claimed", claimed);
         }
 
-        logInfo(logLine("Rechecking in " + IDLE_RECHECK_HOURS + " hours."));
-        reschedule(LocalDateTime.now().plusHours(IDLE_RECHECK_HOURS));
+        LocalDateTime next = nextNoon();
+        logInfo(logLine("Rechecking at noon: " + next.format(DATETIME_FORMATTER) + "."));
+        reschedule(next);
+    }
+
+    // matt/2026-08-14: "have Hall of Chiefs and other rewards claimed at noon everyday, every
+    // 24h" -- was rescheduling on a rolling "+12h from whenever it last ran" basis, which drifts
+    // (a 3:47pm run lands the next check at 3:47am, then 3:47pm again, never settling on a fixed
+    // time of day). Anchoring to the next real noon instead so this always lands at the same
+    // clock time, once a day.
+    private LocalDateTime nextNoon() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime noon = now.toLocalDate().atTime(12, 0);
+        if (!noon.isAfter(now)) {
+            noon = noon.plusDays(1);
+        }
+        return noon;
     }
 
     private String logLine(String note) {

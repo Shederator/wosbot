@@ -1213,6 +1213,32 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 							+ "OCR either. Falling back to the " + MAX_INTEL_REFRESH_MINUTES
 							+ "-minute ceiling -- rescheduling for " + backoffTime.format(DATETIME_FORMATTER) + "."));
 				}
+
+				// matt/2026-08-14, caught live watching the app: "intel timer is wrong" -- this branch
+				// was scheduling straight off the full board-refresh cooldown (up to
+				// MAX_INTEL_REFRESH_MINUTES / 8h away, confirmed live jumping from a 12:00 to a 20:00
+				// UTC read), completely ignoring MAX_BEAST_RECHECK_MINUTES. That constant's own header
+				// comment already establishes new Beast/Fire Beast spawns happen well inside the full
+				// refresh window (3 separate fire beasts ~10 min apart in one observed session) -- it
+				// was only ever applied to the march-slot claim expiry (line ~285), never to this actual
+				// reschedule() call, so a board that's just stuck on one unbeatable beast (the exact
+				// case that lands here, since a stuck beast keeps anyIntelProcessed false) could sit
+				// unrechecked for hours with new, winnable spawns appearing and going completely
+				// unattended. Cap the backoff at the same 15-minute recheck interval whenever
+				// Beast/Fire Beast hunting is enabled, regardless of how far out the real board refresh
+				// reads.
+				if (beastsEnabled || fireBeastsEnabled) {
+					LocalDateTime beastRecheckCeiling = LocalDateTime.now().plusMinutes(MAX_BEAST_RECHECK_MINUTES);
+					if (backoffTime.isAfter(beastRecheckCeiling)) {
+						logWarning(routineLogIntelligenceLine(String.format(
+								"Backoff of %s is beyond the %d-minute Beast/Fire Beast recheck cap -- capping "
+										+ "there so a new spawn is never missed by more than that, regardless of "
+										+ "how far out the board's own full refresh reads.",
+								backoffTime.format(DATETIME_FORMATTER), MAX_BEAST_RECHECK_MINUTES)));
+						backoffTime = beastRecheckCeiling;
+					}
+				}
+
 				reschedule(backoffTime);
 				processingTask = false;
 				consecutiveNoProgressCycles = 0;
@@ -1300,22 +1326,19 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 		return false;
 	}
 
+	// matt/2026-08-14, caught live watching the app: "that purple is being ignored... it SHOULD
+	// atk firebeast last." Root cause -- Fire Beast was scanned FIRST here, and Fire Beast is
+	// disproportionately likely to be "too strong to beat" (confirmed live: two straight
+	// "certain to fail" deployments). consecutiveBeastDeploymentFailures/beastStuckThisRun are
+	// SHARED between Fire Beast and the regular Beast (skull icon) -- once Fire Beast trips that
+	// circuit breaker, the outer loop's `!beastStuckThisRun` gate blocks handleBeastIntel() from
+	// running again for the REST of the run, meaning the regular Beast never gets attempted on
+	// any later cycle even if it's genuinely winnable. Reordered so the regular Beast goes
+	// first and Fire Beast goes last, exactly as matt asked -- a Fire Beast that's too strong
+	// can no longer crowd out a beatable regular Beast.
 	private boolean handleBeastIntel() {
 		intelScreenHelper.ensureOnIntelScreen();
 		boolean beastFound = false;
-
-
-		if (fireBeastsEnabled && !(useFlag && beastMarchSent)) {
-			logInfo(routineLogIntelligenceLine("Scanning for fire beasts."));
-			if (seekAndProcessGrayscale(TemplatesEnum.INTEL_FIRE_BEAST, this::handleBeast, SearchConfigConstants.FIRE_BEAST_SEARCH)) {
-				beastFound = true;
-				if (useFlag) {
-					return true;
-
-				}
-			}
-		}
-
 
 		if (!(useFlag && beastMarchSent)) {
 			logInfo(routineLogIntelligenceLine("Scanning for beasts using grayscale matching."));
@@ -1338,12 +1361,58 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 			for (TemplatesEnum beast_screening : beast_screenings) {
 				if (seekAndProcessGrayscale(beast_screening, this::handleBeast)) {
 					beastFound = true;
+					if (useFlag) {
+						return true;
+					}
 					break;
 				}
 			}
 		}
 
+
+		if (fireBeastsEnabled && !(useFlag && beastMarchSent)) {
+			logInfo(routineLogIntelligenceLine("Scanning for fire beasts."));
+			if (seekAndProcessGrayscale(TemplatesEnum.INTEL_FIRE_BEAST, this::handleBeast, SearchConfigConstants.FIRE_BEAST_SEARCH)) {
+				beastFound = true;
+			}
+		}
+
 		return beastFound;
+	}
+
+	// matt/2026-08-14, caught live watching the app: several recovery paths in this routine press
+	// back TWICE unconditionally, assuming exactly two screens are stacked (e.g. Attack detail +
+	// Deploy screen). That assumption isn't always true -- when only ONE layer was actually open,
+	// the second back press lands on a bare screen, and this game's own back-button handling
+	// there is to pop a native "Quit game?" confirmation dialog. Left alone, that's one accidental
+	// tap away from actually exiting the game mid-automation -- confirmed live, matt found it
+	// sitting open after a beast-deployment abort. Safety net: after any back-press chain that
+	// might overshoot, check specifically for this dialog's "Quit game?" body text and tap Cancel
+	// -- never Confirm -- to back out of it safely. Coordinates/OCR region calibrated from a live
+	// capture of the actual dialog.
+	private static final PointData QUIT_DIALOG_BODY_TL = new PointData(80, 505);
+	private static final PointData QUIT_DIALOG_BODY_BR = new PointData(640, 705);
+	private static final PointData QUIT_DIALOG_CANCEL_BUTTON = new PointData(207, 789);
+
+	private static final TesseractSettingsData QUIT_DIALOG_OCR_SETTINGS = TesseractSettingsData.assembler()
+			.stripBackground(true)
+			.charWhitelist("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ? ")
+			.pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
+			.build();
+
+	private void dismissQuitGameDialogIfPresent() {
+		String bodyText = stringHelper.attemptRecognition(
+				QUIT_DIALOG_BODY_TL, QUIT_DIALOG_BODY_BR,
+				2, 150L, QUIT_DIALOG_OCR_SETTINGS,
+				s -> s != null && !s.isBlank(),
+				s -> s);
+		if (bodyText != null && bodyText.toLowerCase(Locale.ROOT).contains("quit")) {
+			logWarning(routineLogIntelligenceLine(
+					"Quit-game confirmation dialog detected after a back-press chain -- tapping Cancel "
+							+ "to back out safely instead of risking an accidental exit."));
+			tapPoint(QUIT_DIALOG_CANCEL_BUTTON);
+			sleepTask(500);
+		}
 	}
 
 private void handleSurvivor(ImageSearchResultData result) {
@@ -1372,6 +1441,7 @@ private void handleSurvivor(ImageSearchResultData result) {
 			logWarning(routineLogIntelligenceLine("Could not find the 'Rescue' button for the survivor. Going back."));
 			pressBack();
 			pressBack();
+			dismissQuitGameDialogIfPresent();
 
 			return;
 		}
@@ -1402,6 +1472,7 @@ private void handleJourney(ImageSearchResultData result) {
 			logWarning(routineLogIntelligenceLine("Could not find the 'Explore' button for the journey. Going back."));
 			pressBack();
 			pressBack();
+			dismissQuitGameDialogIfPresent();
 
 			return;
 		}
@@ -1422,6 +1493,17 @@ private void handleJourney(ImageSearchResultData result) {
 	private static final PointData FAIL_WARNING_TOP_LEFT = new PointData(0, 590);
 	private static final PointData FAIL_WARNING_BOTTOM_RIGHT = new PointData(720, 640);
 
+	// matt/2026-08-13: caught live, real troop losses (5 attacks against the same beast before it
+	// stopped) — the real in-game warning reads "Not likely to prevail," which never contains the
+	// literal word "fail" this check was looking for. The substring match silently returned false
+	// every single time and let the deploy go straight through the warning. Broadened to the actual
+	// confirmed wording plus reasonable variants, since the exact on-screen phrasing wasn't
+	// available to lock down further at the time of this fix -- narrow this to the precise string
+	// once a real screenshot of the warning is in hand.
+	private static final String[] DEPLOYMENT_FAIL_WARNING_PHRASES = {
+			"fail", "not likely to prevail", "unlikely to prevail", "likely to lose", "low chance"
+	};
+
 	private boolean isDeploymentCertainToFail() {
 		TesseractSettingsData settings = TesseractSettingsData.assembler()
 				.pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
@@ -1429,7 +1511,9 @@ private void handleJourney(ImageSearchResultData result) {
 				.stripBackground(true)
 				.build();
 		String text = readStringValue(FAIL_WARNING_TOP_LEFT, FAIL_WARNING_BOTTOM_RIGHT, settings);
-		boolean failing = text != null && text.toLowerCase(Locale.ROOT).contains("fail");
+		String normalized = text == null ? null : text.toLowerCase(Locale.ROOT);
+		boolean failing = normalized != null && java.util.Arrays.stream(DEPLOYMENT_FAIL_WARNING_PHRASES)
+				.anyMatch(normalized::contains);
 		if (failing) {
 			logWarning(routineLogIntelligenceLine("Deployment warning detected even at max troops: '" + text + "'"));
 		}
@@ -1464,6 +1548,7 @@ private void handleBeast(ImageSearchResultData beast) {
 			logWarning(routineLogIntelligenceLine("Could not find the 'Attack' button for the beast. Going back."));
 			pressBack();
 			pressBack();
+			dismissQuitGameDialogIfPresent();
 
 			return;
 		}
@@ -1525,6 +1610,7 @@ private void handleBeast(ImageSearchResultData beast) {
 			}
 			pressBack();
 			pressBack();
+			dismissQuitGameDialogIfPresent();
 			recallGatherTroopsFlow();
 			return;
 		}
@@ -1557,6 +1643,7 @@ private void handleBeast(ImageSearchResultData beast) {
 					"Another march is already targeting this beast. Cancelling deployment without stamina deduction."));
 			pressBack();
 			pressBack();
+			dismissQuitGameDialogIfPresent();
 			reschedule(LocalDateTime.now().plusMinutes(1));
 			processingTask = false;
 			return;

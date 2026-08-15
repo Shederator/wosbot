@@ -45,12 +45,40 @@ public class DailyDealsFreeChestRoutine extends DelayedTask {
         return true;
     }
 
-    @Override
-    protected void execute() {
+    // matt/2026-08-13: same fix as CustomArmamentChestRoutine -- a single locatePattern attempt for
+    // the cart icon had no recovery if some other task left a popup/panel open, so it silently gave
+    // up and waited a full day instead of clearing back to a known screen and retrying.
+    private static final int MAX_NAV_RETRIES = 3;
+
+    private ImageSearchResultData locateCartButtonRobust() {
         ImageSearchResultData cartBtn = templateSearchHelper.locatePattern(
                 TemplatesEnum.HOME_SHOP_CART_BUTTON, SearchConfigConstants.SINGLE_WITH_RETRIES);
+        if (cartBtn.isFound()) {
+            return cartBtn;
+        }
+
+        logInfo(logLine("Cart icon not visible on the first look -- clearing whatever's in the way "
+                + "and retrying instead of assuming it's genuinely gone."));
+        for (int attempt = 1; attempt <= MAX_NAV_RETRIES; attempt++) {
+            pressBack();
+            sleepTask(500);
+            navigationHelper.ensureCorrectScreenLocation(LaunchPoint.WORLD);
+            cartBtn = templateSearchHelper.locatePattern(
+                    TemplatesEnum.HOME_SHOP_CART_BUTTON, SearchConfigConstants.SINGLE_WITH_RETRIES);
+            if (cartBtn.isFound()) {
+                logInfo(logLine("Cart icon found after " + attempt + " recovery attempt(s)."));
+                return cartBtn;
+            }
+        }
+        return cartBtn;
+    }
+
+    @Override
+    protected void execute() {
+        ImageSearchResultData cartBtn = locateCartButtonRobust();
         if (!cartBtn.isFound()) {
-            logInfo(logLine("Shop cart icon not found. Rechecking in " + IDLE_RECHECK_HOURS + " hours."));
+            logInfo(logLine("Shop cart icon not found even after clearing/retrying. Rechecking in "
+                    + IDLE_RECHECK_HOURS + " hours."));
             reschedule(LocalDateTime.now().plusHours(IDLE_RECHECK_HOURS));
             return;
         }
