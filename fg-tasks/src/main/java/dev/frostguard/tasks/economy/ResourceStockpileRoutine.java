@@ -83,16 +83,26 @@ public class ResourceStockpileRoutine extends DelayedTask {
     // ever calibrated for it. The popup's default landing tab is "Resources" (Meat/Wood/Coal/Iron/
     // Steel/Chief Stamina, one screen, no scroll) -- same popup the Speedup tab already reads, just
     // read BEFORE switching tabs. "Total Resources" column crop, verified against a live capture
-    // showing "811.71K"; same text colour as the Speedup durations below (81,104,143) since it's the
-    // same popup chrome.
-    private static final PointData STEEL_TL = new PointData(498, 800);
-    private static final PointData STEEL_BR = new PointData(618, 838);
+    // showing "811.71K".
+    //
+    // matt/2026-08-15: first two live passes both misread this as "117MK" regardless of settle
+    // delay. Root-caused by replaying TesseractOcrProvider's exact preprocessing in isolation
+    // (color-distance-from-target -> grayscale, see cropAndPreprocess): the decimal point's pixels
+    // are anti-aliased against the background, so their colour sits far enough from the pure text
+    // colour (81,104,143) that CHANNEL_TOLERANCE washes the dot out to pure white before Tesseract
+    // ever sees it -- "811.71K" becomes "811 71K" with no dot at all, and different OCR passes
+    // segment/guess the two fragments differently. The raw (non-isolated) crop keeps the dot fine on
+    // its own (dark digits on a light, fairly uniform blue popup background give plenty of natural
+    // contrast) -- stripBackground(false) here, unlike the Speedup durations below which are larger
+    // text with more spacing and read fine isolated. Widened a few px on every edge too so descenders
+    // aren't clipped at the crop boundary.
+    private static final PointData STEEL_TL = new PointData(494, 796);
+    private static final PointData STEEL_BR = new PointData(622, 842);
     private static final TesseractSettingsData STEEL_TEXT_SETTINGS =
             TesseractSettingsData.assembler()
                     .charWhitelist("0123456789.,KMB")
                     .pageAnalysis(PageAnalysis.SINGLE_LINE)
-                    .stripBackground(true)
-                    .setTextColor(new Color(81, 104, 143))
+                    .stripBackground(false)
                     .build();
     // "Total Speedup" duration crops (x418-672, ~90px row pitch, verified against a live capture).
     private static final PointData SPD_GENERAL_TL = new PointData(418, 456);

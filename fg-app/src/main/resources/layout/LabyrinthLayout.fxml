@@ -23,7 +23,7 @@
                     </HBox>
                     <VBox spacing="10" styleClass="task-section-inner">
                         <Label styleClass="task-card-description" wrapText="true"
-                               text="Runs the weekly Labyrinth on its normal schedule, clearing whichever zone is open each day. Troop-ratio automation covers Land of Heroes, Cave of Monsters, and Charm Mine -- the remaining zones (Research Center, Gear Forge, Gaia Heart) are attempted with whatever formation is already set in-game, not configured by the bot." />
+                               text="Runs the weekly Labyrinth on its normal schedule, clearing whichever zone is open each day. Troop-ratio automation covers Land of Heroes, Cave of Monsters, Charm Mine, Research Center, and Gear Forge -- Gaia Heart is attempted with whatever formation is already set in-game, not configured by the bot." />
                         <CheckBox fx:id="checkBoxFormationTest" mnemonicParsing="false"
                                   text="Formation test mode" />
                         <Label styleClass="task-card-description" wrapText="true"
@@ -193,6 +193,62 @@
                         </VBox>
 
                         <Label fx:id="labelCharmRatioHint" wrapText="true"
+                               style="-fx-font-size: 11px; -fx-text-fill: #b9770e;" text="" />
+                    </VBox>
+                </VBox>
+
+                <!-- Research Center default ratio card -->
+                <VBox styleClass="content-card">
+                    <HBox maxWidth="Infinity" styleClass="header-yellow">
+                        <Label style="-fx-font-size: 15px; -fx-font-weight: bold;"
+                               text="Research Center — Default Troop Ratio" />
+                    </HBox>
+                    <VBox spacing="12" styleClass="task-section-inner">
+                        <Label styleClass="task-card-description" wrapText="true"
+                               text="One troop composition, not two squads -- this is the Challenge deploy screen's tail-of-the-tape battle. Used as the first attempt's ratio; a loss still automatically tries a different lean for the second attempt before giving up on the stage for today." />
+                        <FlowPane hgap="14" vgap="8" alignment="CENTER_LEFT">
+                            <VBox spacing="4" prefWidth="120">
+                                <Label styleClass="task-field-label" text="Infantry %" />
+                                <TextField fx:id="tfResearchInf" promptText="50" />
+                            </VBox>
+                            <VBox spacing="4" prefWidth="120">
+                                <Label styleClass="task-field-label" text="Lancer %" />
+                                <TextField fx:id="tfResearchLan" promptText="20" />
+                            </VBox>
+                            <VBox spacing="4" prefWidth="120">
+                                <Label styleClass="task-field-label" text="Marksman %" />
+                                <TextField fx:id="tfResearchMrk" promptText="30" />
+                            </VBox>
+                        </FlowPane>
+                        <Label fx:id="labelResearchRatioHint" wrapText="true"
+                               style="-fx-font-size: 11px; -fx-text-fill: #b9770e;" text="" />
+                    </VBox>
+                </VBox>
+
+                <!-- Gear Forge default ratio card -->
+                <VBox styleClass="content-card">
+                    <HBox maxWidth="Infinity" styleClass="header-yellow">
+                        <Label style="-fx-font-size: 15px; -fx-font-weight: bold;"
+                               text="Gear Forge — Default Troop Ratio" />
+                    </HBox>
+                    <VBox spacing="12" styleClass="task-section-inner">
+                        <Label styleClass="task-card-description" wrapText="true"
+                               text="Same Challenge tail-of-the-tape battle as Research Center, one composition. First attempt's ratio; a loss still automatically tries a different lean for the second attempt before giving up on the stage for today." />
+                        <FlowPane hgap="14" vgap="8" alignment="CENTER_LEFT">
+                            <VBox spacing="4" prefWidth="120">
+                                <Label styleClass="task-field-label" text="Infantry %" />
+                                <TextField fx:id="tfGearForgeInf" promptText="60" />
+                            </VBox>
+                            <VBox spacing="4" prefWidth="120">
+                                <Label styleClass="task-field-label" text="Lancer %" />
+                                <TextField fx:id="tfGearForgeLan" promptText="10" />
+                            </VBox>
+                            <VBox spacing="4" prefWidth="120">
+                                <Label styleClass="task-field-label" text="Marksman %" />
+                                <TextField fx:id="tfGearForgeMrk" promptText="30" />
+                            </VBox>
+                        </FlowPane>
+                        <Label fx:id="labelGearForgeRatioHint" wrapText="true"
                                style="-fx-font-size: 11px; -fx-text-fill: #b9770e;" text="" />
                     </VBox>
                 </VBox>

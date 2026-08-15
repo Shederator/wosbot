@@ -5,6 +5,7 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.PointData;
@@ -211,6 +212,48 @@ public class LabyrinthRaidRoutine extends DelayedTask {
         };
     }
 
+    /**
+     * matt/2026-08-15: "add the research center in the gear forge... where we can start entering
+     * true default troop ratios" -- reads the zone's configured default {Infantry%, Lancer%,
+     * Marksman%} instead of the fixed preset table, used for the FIRST Challenge attempt. Returns
+     * {@code null} for any zone without matching config keys (falls back to the old OCR-driven
+     * behaviour rather than guessing).
+     */
+    private int[] configuredDefaultFor(String zoneName) {
+        ConfigurationKeyEnum infKey, lanKey, mrkKey;
+        switch (zoneName) {
+            case "Research Center" -> {
+                infKey = ConfigurationKeyEnum.LABYRINTH_RESEARCH_INFANTRY_INT;
+                lanKey = ConfigurationKeyEnum.LABYRINTH_RESEARCH_LANCER_INT;
+                mrkKey = ConfigurationKeyEnum.LABYRINTH_RESEARCH_MARKSMAN_INT;
+            }
+            case "Gear Forge" -> {
+                infKey = ConfigurationKeyEnum.LABYRINTH_GEARFORGE_INFANTRY_INT;
+                lanKey = ConfigurationKeyEnum.LABYRINTH_GEARFORGE_LANCER_INT;
+                mrkKey = ConfigurationKeyEnum.LABYRINTH_GEARFORGE_MARKSMAN_INT;
+            }
+            default -> {
+                return null;
+            }
+        }
+        Integer inf = profile.getConfig(infKey, Integer.class);
+        Integer lan = profile.getConfig(lanKey, Integer.class);
+        Integer mrk = profile.getConfig(mrkKey, Integer.class);
+        if (inf == null || lan == null || mrk == null) {
+            return null;
+        }
+        return new int[] { inf, lan, mrk };
+    }
+
+    /** Which troop type a preset leans into -- the highest of the three percentages. Used so the
+     *  escalation-on-loss step (attempt 2) genuinely tries a different composition than matt's
+     *  configured default, not just a different composition than the OCR-derived guess. */
+    private static TroopType leanOf(int[] preset) {
+        if (preset[0] >= preset[1] && preset[0] >= preset[2]) return TroopType.INFANTRY;
+        if (preset[1] >= preset[2]) return TroopType.LANCER;
+        return TroopType.MARKSMAN;
+    }
+
     /** Reads the "N,NNN/M,MMM" army total cap so preset percentages can be turned into exact counts. */
     private Integer readArmyCap() {
         String raw = readStringValue(ARMY_TOTAL_TL, ARMY_TOTAL_BR, ARMY_TOTAL_OCR_SETTINGS);
@@ -340,6 +383,13 @@ public class LabyrinthRaidRoutine extends DelayedTask {
      * Capped at {@value #MAX_CHALLENGE_ATTEMPTS_PER_ZONE_PER_DAY} real attempts per zone per pass
      * regardless of how many the account has left, so a genuinely bad matchup can never burn the
      * whole daily pool on its own.
+     *
+     * <p>matt/2026-08-15: attempt 1 now uses {@link #configuredDefaultFor}'s Research Center /
+     * Gear Forge default ratio (the UI field he can tune) instead of the OCR-derived guess this
+     * used to make on its own. The OCR read of the stat comparison still runs first -- an
+     * unreadable screen is still a hard stop, and it still supplies the fallback lean when no
+     * config default exists for a zone. A loss still falls back to the live-tested escalate-to-a-
+     * different-lean table for attempt 2.
      */
     private void challengeZone(String zoneName) {
         tapWithJitter(ZONE_ACTION_BUTTON);
@@ -368,13 +418,22 @@ public class LabyrinthRaidRoutine extends DelayedTask {
             return;
         }
 
-        TroopType[] triedOrder = orderedLeanCandidates(primaryLean);
+        int[] configuredDefault = configuredDefaultFor(zoneName);
+        TroopType baseLean = configuredDefault != null ? leanOf(configuredDefault) : primaryLean;
+        if (configuredDefault != null) {
+            logInfo(logLine(zoneName + ": using your configured default ratio (" + configuredDefault[0]
+                    + "/" + configuredDefault[1] + "/" + configuredDefault[2] + ") for attempt 1."));
+        }
+
+        TroopType[] triedOrder = orderedLeanCandidates(baseLean);
         for (int attempt = 0; attempt < Math.min(triedOrder.length, MAX_CHALLENGE_ATTEMPTS_PER_ZONE_PER_DAY);
                 attempt++) {
             TroopType lean = triedOrder[attempt];
-            int[] preset = presetFor(lean);
+            boolean usingConfiguredDefault = attempt == 0 && configuredDefault != null;
+            int[] preset = usingConfiguredDefault ? configuredDefault : presetFor(lean);
             logInfo(logLine(zoneName + ": attempt " + (attempt + 1) + "/"
-                    + MAX_CHALLENGE_ATTEMPTS_PER_ZONE_PER_DAY + " -- leaning " + lean + " ("
+                    + MAX_CHALLENGE_ATTEMPTS_PER_ZONE_PER_DAY + " -- "
+                    + (usingConfiguredDefault ? "your configured default" : "leaning " + lean) + " ("
                     + preset[0] + "/" + preset[1] + "/" + preset[2] + ")."));
 
             if (!setTroopRatio(armyCap, preset)) {

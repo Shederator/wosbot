@@ -155,6 +155,20 @@ public enum ConfigurationKeyEnum {
     LABYRINTH_CHARM_SQUAD2_INFANTRY_INT ("60",      Integer.class,  ConfigCategory.DAILIES),
     LABYRINTH_CHARM_SQUAD2_LANCER_INT   ("20",      Integer.class,  ConfigCategory.DAILIES),
     LABYRINTH_CHARM_SQUAD2_MARKSMAN_INT ("20",      Integer.class,  ConfigCategory.DAILIES),
+    // matt/2026-08-15: "add the research center in the gear forge... where we can start entering
+    // true default troop ratios" -- Research Center and Gear Forge are single-troop-composition
+    // Challenge fights (no Squad1/Squad2 split like the other zones), so one Infantry/Lancer/Marksman
+    // % triple each. LabyrinthRaidRoutine.challengeZone() uses this as the FIRST attempt's preset,
+    // replacing the OCR-derived guess it used to make on its own; a Defeat still falls back to the
+    // existing live-tested "escalate to a different lean" safety net for the second attempt. Defaults
+    // match the same alliance-mate recommendation the other zones were seeded from: Research Center
+    // 50/20/30, Gear Forge 60/10/30.
+    LABYRINTH_RESEARCH_INFANTRY_INT     ("50",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_RESEARCH_LANCER_INT       ("20",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_RESEARCH_MARKSMAN_INT     ("30",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_GEARFORGE_INFANTRY_INT    ("60",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_GEARFORGE_LANCER_INT      ("10",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_GEARFORGE_MARKSMAN_INT    ("30",      Integer.class,  ConfigCategory.DAILIES),
     DAILY_MISSION_AUTO_SCHEDULE_BOOL    ("false",   Boolean.class,  ConfigCategory.DAILIES),
     DAILY_MISSION_BOOL                  ("false",   Boolean.class,  ConfigCategory.DAILIES),
     DAILY_MISSION_OFFSET_INT            ("60",      Integer.class,  ConfigCategory.DAILIES),
