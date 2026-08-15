@@ -32,9 +32,9 @@
                     </HBox>
 
                     <!-- Timeframe picker — drives both sections below. matt/2026-08-15: "a
-                         dropdown where I can pick easy things -- last night, last 24 hours,
+                         dropdown where I can pick easy things: last night, last 24 hours,
                          last week, this month" (a custom range is explicitly out of scope for
-                         now). ComboBox instead of the old button row -- easier to scan and
+                         now). ComboBox instead of the old button row: easier to scan and
                          room to grow without the row wrapping. -->
                     <HBox spacing="8" alignment="CENTER_LEFT" style="-fx-padding: 4 4 0 4;">
                         <Label styleClass="task-field-label" text="Timeframe" />

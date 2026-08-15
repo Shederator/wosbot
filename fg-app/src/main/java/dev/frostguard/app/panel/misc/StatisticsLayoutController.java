@@ -285,6 +285,13 @@ public class StatisticsLayoutController extends AbstractProfileController {
         colAvgImg.setCellValueFactory(cellData -> new SimpleStringProperty(String.format("%.2f", cellData.getValue().getAverageTemplateFailures())));
         colLastRun.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getLastRunTime()));
 
+        // matt/2026-08-15: "stats page is just blank now" -- the old button row never fired
+        // anything until clicked, so showActiveWindow() only ever ran after onProfileLoad() had
+        // set currentProfile and reloaded telemetry. Selecting a ComboBox value fires its
+        // valueProperty listener immediately, so wiring the listener BEFORE this initial select
+        // made showActiveWindow() run during initialize() itself -- before the real profile/data
+        // exists. Listener attaches AFTER the initial select so it stays silent here and only
+        // fires on an actual user pick, matching the old button-row timing exactly.
         comboReportWindow.getItems().setAll(WINDOW_LABELS.keySet());
         comboReportWindow.getSelectionModel().select("All time");
         comboReportWindow.valueProperty().addListener((obs, oldV, newV) -> {

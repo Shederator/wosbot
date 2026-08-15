@@ -5,7 +5,7 @@
 
 <!-- General Shop — matt/2026-08-13: split out of the old combined "Shop" page. This is
      everything that is NOT the top-right cart-icon panel (that's now the separate "Gem
-     Shop" page) -- Nomadic Merchant and Mystery Shop. -->
+     Shop" page): Nomadic Merchant and Mystery Shop. -->
 <StackPane maxHeight="Infinity" maxWidth="Infinity"
            HBox.hgrow="ALWAYS" VBox.vgrow="ALWAYS"
            xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1">
