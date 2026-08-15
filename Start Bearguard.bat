@@ -27,7 +27,7 @@ if not exist "%JDK%\bin\javaw.exe" (
     exit /b 1
 )
 
-if not exist "fg-app\target\frostguard-2.1.0.jar" (
+if not exist "fg-app\target\frostguard-2.1.1.jar" (
     echo [ERROR] Bearguard is not built yet.
     echo Run a Maven package first, then start again.
     pause
@@ -35,5 +35,5 @@ if not exist "fg-app\target\frostguard-2.1.0.jar" (
 )
 
 start "" "%JDK%\bin\javaw.exe" --enable-native-access=ALL-UNNAMED ^
-    -cp "fg-app\target\frostguard-2.1.0.jar;fg-app\target\lib\*" ^
+    -cp "fg-app\target\frostguard-2.1.1.jar;fg-app\target\lib\*" ^
     dev.frostguard.app.bootstrap.Main

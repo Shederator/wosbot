@@ -9,6 +9,7 @@ import java.util.function.Function;
 import dev.frostguard.vision.ocr.TesseractOcrProvider;
 import dev.frostguard.api.configs.GameVersionEnum;
 import dev.frostguard.engine.error.ADBConnectionException;
+import dev.frostguard.engine.input.TapJitterPolicy;
 import dev.frostguard.api.domain.*;
 import com.android.ddmlib.*;
 import net.sourceforge.tess4j.TesseractException;
@@ -271,16 +272,28 @@ public abstract class EmulatorInstance {
     public boolean touchArea(String idx, PointData a, PointData b)                    { return tap(idx, a, b, 1, 0); }
     public boolean touchArea(String idx, PointData a, PointData b, int n, int delMs) { return tap(idx, a, b, n, delMs); }
 
+    // matt/2026-08-14: coordinate sampling and delay timing now go through
+    // dev.frostguard.engine.input.TapJitterPolicy (ported from Frostguard
+    // v3.0.0's centralized tap-input work, PR #42) instead of the flat
+    // Random.nextInt() this used to do. This is the single choke point both
+    // DelayedTask.tapPoint() and tapRandomPoint() ultimately funnel through
+    // (via touchPoint()/touchArea() below), so every existing call site in
+    // the codebase gets the upgrade with zero signature changes:
+    //   - coordinates are center-weighted (Bates n=2) instead of flat
+    //     uniform, with a 15% edge margin, so taps cluster toward the
+    //     middle of a control like a real human tap instead of landing
+    //     anywhere including the rim;
+    //   - the inter-tap delay gets bounded upward-only jitter (+0-15%,
+    //     capped 120ms) instead of being byte-identical on every repeat.
     protected boolean tap(String idx, PointData c1, PointData c2, int reps, int delMs) {
         return withRetries(idx, dev -> {
-            Random rng = new Random();
-            int x0 = Math.min(c1.getX(), c2.getX()), x1 = Math.max(c1.getX(), c2.getX());
-            int y0 = Math.min(c1.getY(), c2.getY()), y1 = Math.max(c1.getY(), c2.getY());
+            AreaData area = new AreaData(c1, c2);
             for (int t = 0; t < reps; t++) {
-                int tx = x0 + rng.nextInt(Math.max(1, x1 - x0 + 1));
-                int ty = y0 + rng.nextInt(Math.max(1, y1 - y0 + 1));
-                try { dev.executeShellCommand("input tap " + tx + " " + ty, new NullOutputReceiver()); Thread.sleep(delMs); }
-                catch (Exception e) { throw new RuntimeException(e); }
+                PointData p = TapJitterPolicy.sampleInside(area);
+                try {
+                    dev.executeShellCommand("input tap " + p.getX() + " " + p.getY(), new NullOutputReceiver());
+                    Thread.sleep(TapJitterPolicy.sampleDelay(delMs));
+                } catch (Exception e) { throw new RuntimeException(e); }
             }
             return Boolean.TRUE;
         }, "tap");

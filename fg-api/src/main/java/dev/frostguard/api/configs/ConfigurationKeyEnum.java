@@ -125,30 +125,36 @@ public enum ConfigurationKeyEnum {
     LABYRINTH_DAILY_START_TIME_STRING   ("12:00",   String.class,   ConfigCategory.DAILIES),
     /** Labyrinth generation the account is playing (matt is Gen 1). Informational + future tuning. */
     LABYRINTH_GENERATION_STRING         ("Gen 1",   String.class,   ConfigCategory.DAILIES),
-    /** Land-of-Heroes per-squad troop ratios (Infantry/Lancer/Marksman), driven from the Labyrinth tab. */
-    LABYRINTH_SQUAD1_INFANTRY_INT       ("60",      Integer.class,  ConfigCategory.DAILIES),
-    LABYRINTH_SQUAD1_LANCER_INT         ("40",      Integer.class,  ConfigCategory.DAILIES),
-    LABYRINTH_SQUAD1_MARKSMAN_INT       ("0",       Integer.class,  ConfigCategory.DAILIES),
+    /** Land-of-Heroes per-squad troop ratios (Infantry/Lancer/Marksman), driven from the Labyrinth tab.
+     *  matt/2026-08-14: defaults set to an alliance-mate's posted recommendation ("For the best results
+     *  in the labyrinth ... this will allow you to get the farthest you can") -- Land of Heroes 50/20/30,
+     *  applied to both squads since the post gave one ratio per zone. */
+    LABYRINTH_SQUAD1_INFANTRY_INT       ("50",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_SQUAD1_LANCER_INT         ("20",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_SQUAD1_MARKSMAN_INT       ("30",      Integer.class,  ConfigCategory.DAILIES),
     LABYRINTH_SQUAD2_INFANTRY_INT       ("50",      Integer.class,  ConfigCategory.DAILIES),
-    LABYRINTH_SQUAD2_LANCER_INT         ("0",       Integer.class,  ConfigCategory.DAILIES),
-    LABYRINTH_SQUAD2_MARKSMAN_INT       ("50",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_SQUAD2_LANCER_INT         ("20",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_SQUAD2_MARKSMAN_INT       ("30",      Integer.class,  ConfigCategory.DAILIES),
     // matt/2026-08-13: "we're up to like three now" -- extended the same per-squad troop-ratio
     // formation-setup to Cave of Monsters and Charm Mine (Labyrinth zones 2 & 3). Each zone's own
     // in-game rule ("Only the stats of Pets/Chief Charms take effect here") means troop stats don't
     // score the fight directly, but composition still affects tanking/positioning -- matt's explicit
-    // call to build the ratio controls for these anyway. Same defaults as Land of Heroes.
-    LABYRINTH_CAVE_SQUAD1_INFANTRY_INT  ("60",      Integer.class,  ConfigCategory.DAILIES),
-    LABYRINTH_CAVE_SQUAD1_LANCER_INT    ("40",      Integer.class,  ConfigCategory.DAILIES),
-    LABYRINTH_CAVE_SQUAD1_MARKSMAN_INT  ("0",       Integer.class,  ConfigCategory.DAILIES),
+    // call to build the ratio controls for these anyway.
+    // matt/2026-08-14: defaults updated to match the same alliance-mate recommendation --
+    // Cave of Monsters 50/10/40, Charm Mine 60/20/20. Cave/Charm are single-squad zones
+    // (see ZoneFormation.singleSquad -- only squad1Keys is actually read), squad2 kept in sync anyway.
+    LABYRINTH_CAVE_SQUAD1_INFANTRY_INT  ("50",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CAVE_SQUAD1_LANCER_INT    ("10",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CAVE_SQUAD1_MARKSMAN_INT  ("40",      Integer.class,  ConfigCategory.DAILIES),
     LABYRINTH_CAVE_SQUAD2_INFANTRY_INT  ("50",      Integer.class,  ConfigCategory.DAILIES),
-    LABYRINTH_CAVE_SQUAD2_LANCER_INT    ("0",       Integer.class,  ConfigCategory.DAILIES),
-    LABYRINTH_CAVE_SQUAD2_MARKSMAN_INT  ("50",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CAVE_SQUAD2_LANCER_INT    ("10",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CAVE_SQUAD2_MARKSMAN_INT  ("40",      Integer.class,  ConfigCategory.DAILIES),
     LABYRINTH_CHARM_SQUAD1_INFANTRY_INT ("60",      Integer.class,  ConfigCategory.DAILIES),
-    LABYRINTH_CHARM_SQUAD1_LANCER_INT   ("40",      Integer.class,  ConfigCategory.DAILIES),
-    LABYRINTH_CHARM_SQUAD1_MARKSMAN_INT ("0",       Integer.class,  ConfigCategory.DAILIES),
-    LABYRINTH_CHARM_SQUAD2_INFANTRY_INT ("50",      Integer.class,  ConfigCategory.DAILIES),
-    LABYRINTH_CHARM_SQUAD2_LANCER_INT   ("0",       Integer.class,  ConfigCategory.DAILIES),
-    LABYRINTH_CHARM_SQUAD2_MARKSMAN_INT ("50",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CHARM_SQUAD1_LANCER_INT   ("20",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CHARM_SQUAD1_MARKSMAN_INT ("20",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CHARM_SQUAD2_INFANTRY_INT ("60",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CHARM_SQUAD2_LANCER_INT   ("20",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CHARM_SQUAD2_MARKSMAN_INT ("20",      Integer.class,  ConfigCategory.DAILIES),
     DAILY_MISSION_AUTO_SCHEDULE_BOOL    ("false",   Boolean.class,  ConfigCategory.DAILIES),
     DAILY_MISSION_BOOL                  ("false",   Boolean.class,  ConfigCategory.DAILIES),
     DAILY_MISSION_OFFSET_INT            ("60",      Integer.class,  ConfigCategory.DAILIES),
