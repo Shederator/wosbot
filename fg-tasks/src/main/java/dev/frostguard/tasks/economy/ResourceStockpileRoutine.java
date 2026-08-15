@@ -298,6 +298,17 @@ public class ResourceStockpileRoutine extends DelayedTask {
      * cached for the same field, returning null (config keeps its last known-good value, and
      * GatherRoutine/bg_telemetry both fall back the same way they do on any other unreadable
      * cycle) instead of overwriting a good cached value with a likely-wrong one.
+     *
+     * <p>matt/2026-08-15: live testing found this ISN'T random noise for Meat/Wood -- a live capture
+     * showed a crisp, unambiguous "87.4M" in the crop, but OCR reliably read it as "874M" both times
+     * (Coal "9.8M" and Iron "1.8M", one digit before the point, read correctly both times; Meat/Wood
+     * always have two). Tesseract is dropping the decimal point itself when there are two leading
+     * digits -- a specific, well-understood failure mode, not an arbitrary misread -- so a pure
+     * reject would leave these two fields permanently stale (every future real reading would also
+     * come out 10x high and get rejected forever). Before rejecting, check whether dividing by 10
+     * repairs it back into the plausible band; if so that confirms the dropped-decimal pattern and
+     * the corrected value is used. This is a narrow, specific correction for one identified failure
+     * mode, not an open-ended guess -- anything that doesn't fit even after /10 still gets rejected.
      */
     private Long sanityCheckAgainstCached(String field, Long candidate, ConfigurationKeyEnum cacheKey) {
         if (candidate == null) {
@@ -312,14 +323,26 @@ public class ResourceStockpileRoutine extends DelayedTask {
         if (cached == null || cached <= 0L) {
             return candidate;
         }
-        double ratio = (double) candidate / (double) cached;
-        if (ratio > SANITY_BAND_MAX_RATIO || ratio < SANITY_BAND_MIN_RATIO) {
-            logWarning("ResourceStockpileRoutine | " + field + " reading " + candidate + " is implausibly "
-                    + "far from the last cached " + cached + " (ratio " + String.format("%.2f", ratio)
-                    + ") -- rejecting as a likely OCR misread, keeping the last known-good value.");
-            return null;
+        if (inBand(candidate, cached)) {
+            return candidate;
         }
-        return candidate;
+        long corrected = candidate / 10L;
+        if (inBand(corrected, cached)) {
+            logWarning("ResourceStockpileRoutine | " + field + " reading " + candidate + " is implausibly "
+                    + "far from the last cached " + cached + ", but /10 (" + corrected + ") fits -- this is "
+                    + "the known dropped-decimal-point misread, using the corrected value.");
+            return corrected;
+        }
+        logWarning("ResourceStockpileRoutine | " + field + " reading " + candidate + " is implausibly "
+                + "far from the last cached " + cached + " (ratio " + String.format("%.2f", (double) candidate / cached)
+                + ", /10 correction didn't fit either) -- rejecting as a likely OCR misread, keeping the "
+                + "last known-good value.");
+        return null;
+    }
+
+    private static boolean inBand(long candidate, long cached) {
+        double ratio = (double) candidate / (double) cached;
+        return ratio <= SANITY_BAND_MAX_RATIO && ratio >= SANITY_BAND_MIN_RATIO;
     }
 
     private Long readOwned(PointData tl, PointData br) {
