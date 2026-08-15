@@ -21,6 +21,7 @@ import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.schedule.TaskQueue;
 import dev.frostguard.engine.schedule.TroopSlotPolicy;
+import dev.frostguard.engine.service.ConfigService;
 import dev.frostguard.engine.service.StaminaService;
 import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.engine.service.TaskManagementService;
@@ -170,6 +171,21 @@ private static final int MAX_CONSECUTIVE_NO_PROGRESS_CYCLES = 3;
 private int consecutiveBeastDeploymentFailures;
 private boolean beastStuckThisRun;
 private static final int MAX_CONSECUTIVE_BEAST_DEPLOYMENT_FAILURES = 2;
+
+// matt/2026-08-15: "it's reaching a beast that's too hard to defeat, and it's just looping...
+// then it's gonna run in another fifteen minutes and do the same thing." consecutiveBeastDeploymentFailures
+// and beastStuckThisRun above are plain instance fields -- they correctly stop this RUN from
+// re-attacking a certain-to-fail beast, but DelayedTaskRegistry.create() hands out a fresh
+// IntelligenceRoutine instance every scheduled execution, so that memory is gone by the very
+// next run. Confirmed live: the same still-there beast got re-attacked, failed twice, and
+// stopped again every ~15 minutes, forever. INTEL_BEAST_SKIP_UNTIL_LONG persists the give-up
+// state across runs; this is deliberately shorter than a full board refresh (matt's own past
+// call on a DIFFERENT no-progress case -- "why not until next refresh") because a beast spawn
+// can rotate mid-board, and 60 minutes was picked as a middle ground between "stop spamming
+// the same fight" and "don't miss a beast that gets weaker/replaced partway through the board's
+// multi-hour cycle." Survivor Camps/Explorations are never affected by this -- only the
+// beast/fire-beast scan itself is skipped while the timestamp is in the future.
+private static final int BEAST_STUCK_BACKOFF_MINUTES = 60;
 
 private int maxIntelMarches;
 
@@ -1337,6 +1353,10 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 	// first and Fire Beast goes last, exactly as matt asked -- a Fire Beast that's too strong
 	// can no longer crowd out a beatable regular Beast.
 	private boolean handleBeastIntel() {
+		if (isBeastSkipActive()) {
+			return false;
+		}
+
 		intelScreenHelper.ensureOnIntelScreen();
 		boolean beastFound = false;
 
@@ -1378,6 +1398,25 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 		}
 
 		return beastFound;
+	}
+
+	/** True while a persisted beast-skip is active (see INTEL_BEAST_SKIP_UNTIL_LONG's header
+	 *  comment) -- this run should not scan for or attack Beast/Fire Beast at all, but Survivor
+	 *  Camps/Explorations still run normally. */
+	private boolean isBeastSkipActive() {
+		Long skipUntilMillis = profile.getConfig(ConfigurationKeyEnum.INTEL_BEAST_SKIP_UNTIL_LONG, Long.class);
+		if (skipUntilMillis == null || skipUntilMillis <= 0) {
+			return false;
+		}
+		LocalDateTime skipUntil = LocalDateTime.ofInstant(
+				java.time.Instant.ofEpochMilli(skipUntilMillis), java.time.ZoneId.systemDefault());
+		if (LocalDateTime.now().isBefore(skipUntil)) {
+			logInfo(routineLogIntelligenceLine("Skipping Beast/Fire Beast scan -- a previous run found the "
+					+ "current beast certain-to-fail and this backoff doesn't expire until "
+					+ skipUntil.format(DATETIME_FORMATTER) + ". Survivor Camps/Explorations are unaffected."));
+			return true;
+		}
+		return false;
 	}
 
 	// matt/2026-08-14, caught live watching the app: several recovery paths in this routine press
@@ -1599,10 +1638,16 @@ private void handleBeast(ImageSearchResultData beast) {
 			consecutiveBeastDeploymentFailures++;
 			if (consecutiveBeastDeploymentFailures >= MAX_CONSECUTIVE_BEAST_DEPLOYMENT_FAILURES) {
 				beastStuckThisRun = true;
+				LocalDateTime skipUntil = LocalDateTime.now().plusMinutes(BEAST_STUCK_BACKOFF_MINUTES);
+				ConfigService.obtain().writeAccountSetting(profile, ConfigurationKeyEnum.INTEL_BEAST_SKIP_UNTIL_LONG,
+						String.valueOf(skipUntil.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()));
 				logWarning(routineLogIntelligenceLine(
 						"Deployment certain to fail " + consecutiveBeastDeploymentFailures + " times in a row -- "
 								+ "this beast is too strong for current troops. Not attempting any more beasts "
-								+ "for the rest of this run so Survivor Camps/Explorations are never blocked."));
+								+ "for the rest of this run so Survivor Camps/Explorations are never blocked. "
+								+ "Persisting a beast-skip until " + skipUntil.format(DATETIME_FORMATTER)
+								+ " so the NEXT run (15 minutes from now) doesn't just re-attack the same beast "
+								+ "and fail the same way again."));
 			} else {
 				logWarning(routineLogIntelligenceLine(
 						"Deployment still certain to fail at max troops. Aborting — no march sent, no stamina spent. "
