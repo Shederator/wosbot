@@ -204,7 +204,10 @@ public class ResourceStockpileRoutine extends DelayedTask {
             tapPoint(BACKPACK_NAV);
             sleepTask(1600);
             tapPoint(SUMMARY_CHART_BUTTON);
-            sleepTask(1400);
+            // matt/2026-08-15: first live pass at 1400ms caught the popup slide-in mid-animation and
+            // OCR'd a garbled "117MK" for Steel (correctly rejected as unparseable, but still a wasted
+            // cycle) -- the manual calibration pass that measured the crop used ~2s and read cleanly.
+            sleepTask(2200);
 
             // Lands on "Resources" by default -- read Steel here before switching tabs.
             String steelRaw = readStringValue(STEEL_TL, STEEL_BR, STEEL_TEXT_SETTINGS);
