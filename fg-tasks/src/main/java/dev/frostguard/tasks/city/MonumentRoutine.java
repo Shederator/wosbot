@@ -523,7 +523,21 @@ public class MonumentRoutine extends DelayedTask {
     private static final int BACKPACK_BADGE_HALF_HEIGHT = 18;
     private static final int BACKPACK_MAX_TOTAL_OPENS = 40;
 
+    // matt/2026-08-14, caught live: findAnyOwnedPackIcon() false-positived on candidate (360,587) --
+    // the OCR "owned count" read at that offset actually landed on the unrelated Labyrinth hub's own
+    // milestone-chest track digits, not a real pack. The bot tapped it, tapped where Enable should be,
+    // tapped where a reward-reveal close should be -- all blind, all on the wrong screen -- and ended
+    // up stuck on a completely different "Rewards ... Tap anywhere to exit" chest-reveal screen (a
+    // different UI skin REWARD_REVEAL_TAP_ANYWHERE doesn't clear) for 7+ minutes until matt manually
+    // quit. Two real fixes: (1) a hard wall-clock time budget on the whole pass, so an unrecognized
+    // screen can never again silently eat minutes; (2) active recovery (repeated back-presses, which
+    // already carry the quit-game-dialog safety net) instead of one blind close-tap that assumes
+    // we're still on the screen it expects.
+    private static final long BACKPACK_PASS_TIME_BUDGET_MS = 90_000;
+
     private void processFragmentBackpack() {
+        long deadline = System.currentTimeMillis() + BACKPACK_PASS_TIME_BUDGET_MS;
+
         tapPoint(ALBUMS_FRAGMENT_BACKPACK_BTN);
         sleepTask(PANEL_SETTLE_MS);
 
@@ -540,15 +554,26 @@ public class MonumentRoutine extends DelayedTask {
                     + ALBUMS_FRAGMENT_BACKPACK_BTN + " (read: '" + panelTitle
                     + "') -- skipping the backpack pass this run rather than guessing blindly on the "
                     + "wrong screen."));
+            recoverTowardHome();
             return;
         }
 
         int opened = 0;
         while (opened < BACKPACK_MAX_TOTAL_OPENS) {
+            if (System.currentTimeMillis() > deadline) {
+                logWarning(logLine("Fragment Backpack pass exceeded its " + (BACKPACK_PASS_TIME_BUDGET_MS / 1000)
+                        + "s time budget -- something is stuck on a screen this code doesn't recognize. "
+                        + "Aborting and recovering rather than hanging. Opened " + opened + " total."));
+                recoverTowardHome();
+                return;
+            }
+
             if (!waitForFragmentBackpackPanel()) {
                 logWarning(logLine("Fragment Backpack panel didn't come back after the last pack open "
-                        + "-- stopping rather than reading a stale screen. Opened " + opened + " total."));
-                break;
+                        + "-- likely tapped something that wasn't actually a pack. Recovering instead of "
+                        + "assuming the normal close tap still applies. Opened " + opened + " total."));
+                recoverTowardHome();
+                return;
             }
 
             PointData target = findAnyOwnedPackIcon();
@@ -581,6 +606,17 @@ public class MonumentRoutine extends DelayedTask {
 
         tapPoint(BACKPACK_CLOSE_X);
         sleepTask(ACTION_SETTLE_MS);
+    }
+
+    /** Active recovery back toward Home when the Fragment Backpack flow lands somewhere unrecognized --
+     *  several back-presses (each carrying the shared quit-game-dialog safety net) rather than a single
+     *  blind tap at a coordinate that assumed a screen state that turned out to be wrong. */
+    private void recoverTowardHome() {
+        for (int i = 0; i < 4 && !isScreenClear(); i++) {
+            pressBack();
+            sleepTask(500);
+        }
+        navigationHelper.ensureCorrectScreenLocation(LaunchPoint.HOME);
     }
 
     /** Scans every known icon position for a real owned-count badge and returns the first one found,
