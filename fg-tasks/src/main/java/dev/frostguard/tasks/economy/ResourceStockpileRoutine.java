@@ -74,11 +74,26 @@ public class ResourceStockpileRoutine extends DelayedTask {
                     .setTextColor(new Color(61, 92, 140)) // measured digit color; being off in blue rendered ".8M" as invisible gray
                     .build();
 
-    // ── Speedups: Backpack → chart button → "Resource & Speedup Summary" → Speedup tab (verified live) ──
+    // ── Steel + Speedups: Backpack → chart button → "Resource & Speedup Summary" (verified live) ──
     private static final PointData BACKPACK_NAV = new PointData(305, 1255);       // bottom-nav Backpack
     private static final PointData SUMMARY_CHART_BUTTON = new PointData(682, 40); // chart button (NOT 712 — dead corner)
     private static final PointData SPEEDUP_TAB = new PointData(547, 355);         // "Speedup" tab in the popup
     private static final PointData SUMMARY_CLOSE_X = new PointData(697, 258);     // popup close X
+    // matt/2026-08-15 "fix all": Steel sat dormant (config key never written) because no reader was
+    // ever calibrated for it. The popup's default landing tab is "Resources" (Meat/Wood/Coal/Iron/
+    // Steel/Chief Stamina, one screen, no scroll) -- same popup the Speedup tab already reads, just
+    // read BEFORE switching tabs. "Total Resources" column crop, verified against a live capture
+    // showing "811.71K"; same text colour as the Speedup durations below (81,104,143) since it's the
+    // same popup chrome.
+    private static final PointData STEEL_TL = new PointData(498, 800);
+    private static final PointData STEEL_BR = new PointData(618, 838);
+    private static final TesseractSettingsData STEEL_TEXT_SETTINGS =
+            TesseractSettingsData.assembler()
+                    .charWhitelist("0123456789.,KMB")
+                    .pageAnalysis(PageAnalysis.SINGLE_LINE)
+                    .stripBackground(true)
+                    .setTextColor(new Color(81, 104, 143))
+                    .build();
     // "Total Speedup" duration crops (x418-672, ~90px row pitch, verified against a live capture).
     private static final PointData SPD_GENERAL_TL = new PointData(418, 456);
     private static final PointData SPD_GENERAL_BR = new PointData(672, 494);
@@ -141,14 +156,33 @@ public class ResourceStockpileRoutine extends DelayedTask {
         Map<String, Long> read = readOverviewPanel();
 
         if (read != null) {
-            profile.setConfig(ConfigurationKeyEnum.RESOURCE_STOCKPILE_MEAT_LONG, read.get("meat"));
-            profile.setConfig(ConfigurationKeyEnum.RESOURCE_STOCKPILE_WOOD_LONG, read.get("wood"));
-            profile.setConfig(ConfigurationKeyEnum.RESOURCE_STOCKPILE_COAL_LONG, read.get("coal"));
-            profile.setConfig(ConfigurationKeyEnum.RESOURCE_STOCKPILE_IRON_LONG, read.get("iron"));
+            // matt/2026-08-15: "check the last couple days" turned up meat/wood/iron swinging 10x
+            // between consecutive hourly reads (e.g. 84.9M then 849M then back) while power/coal
+            // trended smoothly the same hours -- an OCR misread of the "." in the abbreviated form
+            // (Tesseract dropping the decimal point turns "84.9M" into "849M"), not a real stockpile
+            // swing. That misread was going straight into config, which GatherRoutine's Smart
+            // Gathering also reads -- so this wasn't just corrupting the stats graph, it was
+            // corrupting live gather-priority decisions. Same "reject an implausible jump against the
+            // last known-good value" guard used in bg_telemetry for power/gems, applied here against
+            // the config value this routine itself last wrote (since this IS the writer).
+            Long meat = sanityCheckAgainstCached("meat", read.get("meat"),
+                    ConfigurationKeyEnum.RESOURCE_STOCKPILE_MEAT_LONG);
+            Long wood = sanityCheckAgainstCached("wood", read.get("wood"),
+                    ConfigurationKeyEnum.RESOURCE_STOCKPILE_WOOD_LONG);
+            Long coal = sanityCheckAgainstCached("coal", read.get("coal"),
+                    ConfigurationKeyEnum.RESOURCE_STOCKPILE_COAL_LONG);
+            Long iron = sanityCheckAgainstCached("iron", read.get("iron"),
+                    ConfigurationKeyEnum.RESOURCE_STOCKPILE_IRON_LONG);
+
+            if (meat != null) profile.setConfig(ConfigurationKeyEnum.RESOURCE_STOCKPILE_MEAT_LONG, meat);
+            if (wood != null) profile.setConfig(ConfigurationKeyEnum.RESOURCE_STOCKPILE_WOOD_LONG, wood);
+            if (coal != null) profile.setConfig(ConfigurationKeyEnum.RESOURCE_STOCKPILE_COAL_LONG, coal);
+            if (iron != null) profile.setConfig(ConfigurationKeyEnum.RESOURCE_STOCKPILE_IRON_LONG, iron);
             profile.setConfig(ConfigurationKeyEnum.RESOURCE_STOCKPILE_LAST_READ_STRING,
                     LocalDateTime.now().toString());
             setShouldUpdateConfig(true);
-            logInfo("ResourceStockpileRoutine | Stockpiles cached: " + read);
+            logInfo("ResourceStockpileRoutine | Stockpiles cached: meat=" + meat + " wood=" + wood
+                    + " coal=" + coal + " iron=" + iron + " (raw OCR: " + read + ")");
         } else {
             logWarning("ResourceStockpileRoutine | Overview panel unreadable this cycle. Leaving the "
                     + "last cached stockpile values in place (GatherRoutine falls back to blind rotation).");
@@ -163,13 +197,26 @@ public class ResourceStockpileRoutine extends DelayedTask {
         reschedule(LocalDateTime.now().plus(interval));
     }
 
-    /** Opens Backpack → Resource &amp; Speedup Summary → Speedup tab, OCRs the five totals to minutes. */
+    /** Opens Backpack → Resource &amp; Speedup Summary, OCRs Steel on the default "Resources" tab,
+     *  then switches to the Speedup tab and OCRs the five speedup totals to minutes. */
     private void readAndCacheSpeedups() {
         try {
             tapPoint(BACKPACK_NAV);
             sleepTask(1600);
             tapPoint(SUMMARY_CHART_BUTTON);
             sleepTask(1400);
+
+            // Lands on "Resources" by default -- read Steel here before switching tabs.
+            String steelRaw = readStringValue(STEEL_TL, STEEL_BR, STEEL_TEXT_SETTINGS);
+            Long steel = sanityCheckAgainstCached("steel",
+                    (steelRaw == null || steelRaw.isBlank()) ? null : parseScaled(steelRaw.trim()),
+                    ConfigurationKeyEnum.RESOURCE_STOCKPILE_STEEL_LONG);
+            if (steel != null) {
+                profile.setConfig(ConfigurationKeyEnum.RESOURCE_STOCKPILE_STEEL_LONG, steel);
+                setShouldUpdateConfig(true);
+            }
+            logInfo("ResourceStockpileRoutine | Steel cached: " + steel);
+
             tapPoint(SPEEDUP_TAB);
             sleepTask(1000);
 
@@ -234,6 +281,42 @@ public class ResourceStockpileRoutine extends DelayedTask {
         out.put("coal", coal);
         out.put("iron", iron);
         return out;
+    }
+
+    /** Fraction outside of which a new resource reading is rejected as an implausible OCR misread
+     *  rather than a real change. Same value/rationale as bg_telemetry's power/gems guard -- real
+     *  stockpile change between hourly reads is gradual; the observed misreads (a dropped decimal
+     *  point in the abbreviated form) jumped ~10x, far outside this band. */
+    private static final double SANITY_BAND_MAX_RATIO = 1.5;
+    private static final double SANITY_BAND_MIN_RATIO = 1.0 / SANITY_BAND_MAX_RATIO;
+
+    /**
+     * Rejects a candidate reading that jumps implausibly far from the value this routine last
+     * cached for the same field, returning null (config keeps its last known-good value, and
+     * GatherRoutine/bg_telemetry both fall back the same way they do on any other unreadable
+     * cycle) instead of overwriting a good cached value with a likely-wrong one.
+     */
+    private Long sanityCheckAgainstCached(String field, Long candidate, ConfigurationKeyEnum cacheKey) {
+        if (candidate == null) {
+            return null;
+        }
+        Long cached;
+        try {
+            cached = profile.getConfig(cacheKey, Long.class);
+        } catch (Exception e) {
+            cached = null;
+        }
+        if (cached == null || cached <= 0L) {
+            return candidate;
+        }
+        double ratio = (double) candidate / (double) cached;
+        if (ratio > SANITY_BAND_MAX_RATIO || ratio < SANITY_BAND_MIN_RATIO) {
+            logWarning("ResourceStockpileRoutine | " + field + " reading " + candidate + " is implausibly "
+                    + "far from the last cached " + cached + " (ratio " + String.format("%.2f", ratio)
+                    + ") -- rejecting as a likely OCR misread, keeping the last known-good value.");
+            return null;
+        }
+        return candidate;
     }
 
     private Long readOwned(PointData tl, PointData br) {
