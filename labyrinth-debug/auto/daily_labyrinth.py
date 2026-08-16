@@ -13,13 +13,21 @@ That reactive/diagnostic/persistent-memory loop lives in zone_troop_ratio.climb(
 zone_history.py. This file is just the dispatcher: scan the map, run each open+
 automated zone's climb() to its stop point, chain to the next zone, log the run.
 
-Coverage as of 2026-08-12:
+Coverage as of 2026-08-16:
 - cave_of_monsters, charm_mine: fully wired, including the known-wall-retry logic.
+- gaia_heart: wired 2026-08-16, live-calibrated against the real zone (it was actually
+  open -- a Sunday). Genuinely different mechanic from the troop-ratio zones (real
+  troops/heroes, one Deploy auto-chains many stages via the game's own "Auto-Challenge
+  Next Stage", attempts are spent per Deploy/Retry not per stage) -- see
+  zone_gaia_heart.py's module docstring for the full writeup. No reactive enemy-comp
+  counter yet (a loss gets one same-config retry, then power-wall). Only actually
+  climbable on the day it's open -- zone_scan.py only detects it when it renders on the
+  default map view, which so far has only been confirmed true while open.
 - research_center, gear_forge: mechanics unknown, zone entry point unverified (both
   locked all session) -- scanner reports them but this script will NOT auto-climb them
   until a human has scouted the zone once, per matt's own plan.
-- land_of_heroes, gaia_heart: not on the default map scroll position this rotation, not
-  covered by zone_scan.py yet.
+- land_of_heroes: not on the default map scroll position this rotation, not covered by
+  zone_scan.py yet.
 
 Every run appends one entry to labyrinth_log.json (the activity log). Per-stage "why we
 lost" detail lives separately in labyrinth_stage_history.json (zone_history.py) --
@@ -37,9 +45,11 @@ from labyrinth_common import (
 )
 import zone_scan
 import zone_troop_ratio
+import zone_gaia_heart
 import zone_history
 
 AUTOMATED_ZONES = {"cave_of_monsters", "charm_mine"}
+GAIA_HEART_ZONE = "gaia_heart"
 NEEDS_HUMAN_SCOUT_FIRST = {"research_center", "gear_forge"}
 
 
@@ -119,7 +129,7 @@ def run_daily(dry_run=False, log=print):
             run_record["zones"][key] = {"status": "skipped_needs_human_scout"}
             continue
 
-        if key not in AUTOMATED_ZONES:
+        if key != GAIA_HEART_ZONE and key not in AUTOMATED_ZONES:
             log(f"[{key}] open, but no climb module wired up yet -- skipping.")
             run_record["zones"][key] = {"status": "skipped_no_module"}
             continue
@@ -132,6 +142,20 @@ def run_daily(dry_run=False, log=print):
         log(f"[{key}] entering zone...")
         if not enter_zone(key, log=log):
             run_record["zones"][key] = {"status": "failed_to_enter"}
+            continue
+
+        if key == GAIA_HEART_ZONE:
+            result = zone_gaia_heart.climb(log=log)
+            log(f"[{key}] done: {result}")
+            run_record["zones"][key] = result
+            if not zone_gaia_heart.return_to_stage_select(log=log):
+                log(f"[{key}] couldn't confirm return to stage-select after the run -- "
+                    f"stopping here rather than guessing.")
+                break
+            if not return_to_map(log=log):
+                log(f"[{key}] couldn't confirm return to the Labyrinth map -- "
+                    f"stopping.")
+                break
             continue
 
         result = zone_troop_ratio.climb(key, log=log)

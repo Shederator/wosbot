@@ -78,6 +78,10 @@ telemetry/
 /shop-debug/
 /monument_trace/
 /labyrinth-debug/*.png
+/labyrinth-debug/auto/_frames/*.png
+
+# ── Compressed rotated logs ──
+/logs/*.gz
 
 # ── Runtime settings snapshots (regenerated hourly, machine-specific) ──
 /settings-backups/

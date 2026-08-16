@@ -77,6 +77,14 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     private static final PointData CHARM_ZONE_BANNER = new PointData(505, 550);
     private static final PointData CHARM_ZONE_LABEL_TL = new PointData(390, 595);
     private static final PointData CHARM_ZONE_LABEL_BR = new PointData(640, 655);
+
+    // matt/2026-08-16: Gaia Heart -- live-calibrated via ADB the same day (a Sunday, its actual open
+    // rotation), not guessed. Confirmed it renders on the DEFAULT unscrolled map view (no scroll
+    // needed) at the bottom of the frame, at least while open -- unconfirmed whether it still renders
+    // here on a day it's closed.
+    private static final PointData GAIA_ZONE_BANNER = new PointData(300, 1030);
+    private static final PointData GAIA_ZONE_LABEL_TL = new PointData(140, 1005);
+    private static final PointData GAIA_ZONE_LABEL_BR = new PointData(460, 1080);
     /** White label text over the map/banner. */
     private static final TesseractSettingsData ZONE_LABEL_SETTINGS =
             TesseractSettingsData.assembler()
@@ -131,6 +139,47 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     /** LIVE-TUNE: Marksman % box. */
     private static final PointData LOH_MRK_PCT_TL = new PointData(558, 798);
     private static final PointData LOH_MRK_PCT_BR = new PointData(632, 842);
+
+    // ===================================================================
+    // Gaia Heart formation flow (matt/2026-08-16)
+    // ===================================================================
+    // Live-calibrated the same day Gaia Heart was actually open (a Sunday). Genuinely two-squad, same
+    // shape as Land of Heroes -- BUT the commit mechanism is DIFFERENT and was verified live: the
+    // troop-detail screen's own bottom-right "Edit Formation" button commits the ratio DIRECTLY and
+    // returns to Squad Config -- no back-arrow, no "save the formation first?" dialog, no separate
+    // Save-and-Exit tap. Confirmed by round-trip: set 60/40/0, tapped this button, backed all the way
+    // out to The Labyrinth map and fully re-entered the zone -- the ratio was still 60/40/0. That's why
+    // Gaia gets its own setup method (setupGaiaZone) instead of reusing driveBalanceAndSave, which
+    // assumes Land of Heroes' back-arrow+dialog commit.
+    //
+    // Also: the Balance popup's row Y positions read slightly different from Land of Heroes/Cave/Charm
+    // (530/655/800 here vs. 530/675/820 there) -- same popup component, just enough vertical offset
+    // that reusing the LOH constants would tap the wrong row. Confirmed live: floor+fill against these
+    // Y values landed exactly on target (60/40/0) with zero correction-pass nudges needed.
+    private static final PointData GAIA_QUICK_DEPLOY_BTN = new PointData(197, 1193);
+    private static final PointData[] GAIA_SQUAD_EDIT_BTNS = new PointData[] {
+            new PointData(360, 357),   // Squad 1
+            new PointData(360, 700),   // Squad 2
+            // Squad 3 unlocks at Stage 15-10 -- not live-verified (still locked on matt's account as
+            // of 2026-08-16), so no coordinate here yet. setupGaiaZone() only ever processes 2 squads
+            // until this is added AND verified against the real unlocked screen.
+    };
+    private static final PointData GAIA_BALANCE_BTN = new PointData(330, 1195);
+    /** Commits the ratio directly (no dialog) and returns to Squad Config -- see class-level note above. */
+    private static final PointData GAIA_EDIT_FORMATION_COMMIT_BTN = new PointData(548, 1213);
+    private static final int GAIA_INFANTRY_ROW_Y = 530;
+    private static final int GAIA_LANCER_ROW_Y = 655;
+    private static final int GAIA_MARKSMAN_ROW_Y = 800;
+    // ESTIMATED from the same relative offset as the LOH pct boxes -- NOT live-verified against Gaia's
+    // actual popup (the live test that confirmed 60/40/0 landed exactly via open-loop tap counts alone,
+    // so the correction pass these boxes feed never had to fire). Safe either way: readPercent()
+    // already treats an OCR miss as "leave as-is" rather than guessing a correction.
+    private static final PointData GAIA_INF_PCT_TL = new PointData(558, 508);
+    private static final PointData GAIA_INF_PCT_BR = new PointData(632, 552);
+    private static final PointData GAIA_LAN_PCT_TL = new PointData(558, 633);
+    private static final PointData GAIA_LAN_PCT_BR = new PointData(632, 677);
+    private static final PointData GAIA_MRK_PCT_TL = new PointData(558, 778);
+    private static final PointData GAIA_MRK_PCT_BR = new PointData(632, 822);
 
     // Per-squad target troop ratios {Infantry, Lancer, Marksman} are read from config at run time
     // (set on the Labyrinth tab). These are the fallback defaults if config is missing/unreadable:
@@ -566,6 +615,15 @@ public class DailyLabyrinthRoutine extends DelayedTask {
                         ConfigurationKeyEnum.LABYRINTH_CHARM_SQUAD1_LANCER_INT, ConfigurationKeyEnum.LABYRINTH_CHARM_SQUAD1_MARKSMAN_INT },
                 new ConfigurationKeyEnum[] { ConfigurationKeyEnum.LABYRINTH_CHARM_SQUAD2_INFANTRY_INT,
                         ConfigurationKeyEnum.LABYRINTH_CHARM_SQUAD2_LANCER_INT, ConfigurationKeyEnum.LABYRINTH_CHARM_SQUAD2_MARKSMAN_INT }),
+        // matt/2026-08-16: Gaia Heart -- two-squad like Land of Heroes, but dispatched to its own
+        // setupGaiaZone() (see the "Gaia Heart formation flow" constants above) because its commit
+        // mechanism genuinely differs (direct-commit button, no back-arrow/dialog). The `singleSquad`
+        // flag here is unused for Gaia -- routing happens by name in setupZoneFormation() below.
+        new ZoneFormation("Gaia Heart", GAIA_ZONE_BANNER, GAIA_ZONE_LABEL_TL, GAIA_ZONE_LABEL_BR, false,
+                new ConfigurationKeyEnum[] { ConfigurationKeyEnum.LABYRINTH_GAIA_SQUAD1_INFANTRY_INT,
+                        ConfigurationKeyEnum.LABYRINTH_GAIA_SQUAD1_LANCER_INT, ConfigurationKeyEnum.LABYRINTH_GAIA_SQUAD1_MARKSMAN_INT },
+                new ConfigurationKeyEnum[] { ConfigurationKeyEnum.LABYRINTH_GAIA_SQUAD2_INFANTRY_INT,
+                        ConfigurationKeyEnum.LABYRINTH_GAIA_SQUAD2_LANCER_INT, ConfigurationKeyEnum.LABYRINTH_GAIA_SQUAD2_MARKSMAN_INT }),
     };
 
     /**
@@ -617,6 +675,11 @@ public class DailyLabyrinthRoutine extends DelayedTask {
 
         if (zone.singleSquad()) {
             setupSingleSquadZone(zone, tag);
+            return;
+        }
+
+        if ("Gaia Heart".equals(zone.zoneName())) {
+            setupGaiaZone(zone, tag);
             return;
         }
 
@@ -678,6 +741,108 @@ public class DailyLabyrinthRoutine extends DelayedTask {
             return;
         }
         logInfo(tag + ": configured. STOPPING before Deploy (no battle attempt spent).");
+    }
+
+    /**
+     * matt/2026-08-16: Gaia Heart's real flow, proven live via ADB. Two squads like Land of Heroes
+     * (Challenge -> Squad Config -> Quick Deploy -> per-squad Edit Formation -> Balance), but the
+     * troop-detail screen's OWN "Edit Formation" button commits the ratio directly and returns to
+     * Squad Config -- confirmed live that this alone (no back-arrow, no Save-and-Exit dialog) is
+     * enough to persist the ratio across a full exit-to-map-and-back-in. Only squads 1-2 are driven;
+     * Squad 3 (locked until Stage 15-10) has no live-verified coordinates yet -- see
+     * GAIA_SQUAD_EDIT_BTNS's note.
+     */
+    private void setupGaiaZone(ZoneFormation zone, String tag) {
+        // Challenge -> Squad Config (same anchor as Land of Heroes).
+        if (!navStep(LOH_CHALLENGE_BTN, SQUAD_ANCHOR_TL, SQUAD_ANCHOR_BR, SQUAD_ANCHOR_TEXT,
+                tag + " Challenge->SquadConfig")) {
+            logWarning(tag + ": never reached Squad Config; aborting.");
+            return;
+        }
+        saveLabyrinthFrame("gaia_squad", 0);
+
+        // Quick Deploy fills both squads with REAL troops/heroes in place (not normalized, unlike
+        // every other zone) -- idempotent, safe even if squads are already populated from a prior run.
+        logInfo(tag + ": tapping Quick Deploy (fills squads with real troops/heroes in place).");
+        tapPoint(GAIA_QUICK_DEPLOY_BTN);
+        sleepTask(LABYRINTH_LOAD_DELAY);
+        saveLabyrinthFrame("gaia_squad_filled", 0);
+
+        int[][] squadRatios = readSquadRatiosFromConfig(zone);
+        for (int i = 0; i < GAIA_SQUAD_EDIT_BTNS.length; i++) {
+            if (i > 0) {
+                logInfo(tag + ": re-entering Squad Config for squad " + (i + 1) + ".");
+                if (!navStep(LOH_CHALLENGE_BTN, SQUAD_ANCHOR_TL, SQUAD_ANCHOR_BR, SQUAD_ANCHOR_TEXT,
+                        tag + " Challenge->SquadConfig(sq" + (i + 1) + ")")) {
+                    logWarning(tag + ": could not re-enter Squad Config for squad " + (i + 1)
+                            + "; aborting remaining squads.");
+                    return;
+                }
+            }
+            if (!driveGaiaBalanceAndSave(tag, "sq" + (i + 1), GAIA_SQUAD_EDIT_BTNS[i], squadRatios[i])) {
+                logWarning(tag + ": squad " + (i + 1) + " setup failed; aborting remaining squads.");
+                return;
+            }
+        }
+
+        logInfo(tag + ": squads 1-2 configured. Squad 3 not driven (locked until Stage 15-10, no "
+                + "live-verified coordinates yet). STOPPING before Deploy (no battle attempt spent).");
+    }
+
+    /**
+     * Gaia Heart's squad-ratio commit: Edit Formation -> troop-detail -> Balance -> drive the three
+     * sliders (Gaia's own row Y positions) -> Confirm -> the screen's OWN "Edit Formation" button,
+     * which commits directly (verified live -- no back-arrow, no dialog, unlike Land of Heroes).
+     */
+    private boolean driveGaiaBalanceAndSave(String tag, String label, PointData editFormationBtn, int[] ratio) {
+        logInfo(tag + ": configuring " + label + " -> " + ratio[0] + "/" + ratio[1] + "/" + ratio[2]
+                + " (Inf/Lan/Mrk).");
+
+        if (!navStep(editFormationBtn, TROOP_ANCHOR_TL, TROOP_ANCHOR_BR, "gaia heart",
+                tag + " EditFormation->troop(" + label + ")")) {
+            logWarning(tag + ": " + label + " -- never reached troop-detail.");
+            return false;
+        }
+        saveLabyrinthFrame("gaia_troop", 0);
+
+        if (!navStep(GAIA_BALANCE_BTN, BALANCE_ANCHOR_TL, BALANCE_ANCHOR_BR, BALANCE_ANCHOR_TEXT,
+                tag + " Balance->popup(" + label + ")")) {
+            logWarning(tag + ": " + label + " -- never reached the Balance popup.");
+            return false;
+        }
+        saveLabyrinthFrame("gaia_balance_popup", 0);
+
+        floorRowToZero("Infantry", GAIA_INFANTRY_ROW_Y);
+        floorRowToZero("Lancer",   GAIA_LANCER_ROW_Y);
+        floorRowToZero("Marksman", GAIA_MARKSMAN_ROW_Y);
+        fillRowToTarget("Infantry", GAIA_INFANTRY_ROW_Y, GAIA_INF_PCT_TL, GAIA_INF_PCT_BR, ratio[0]);
+        fillRowToTarget("Lancer",   GAIA_LANCER_ROW_Y,   GAIA_LAN_PCT_TL, GAIA_LAN_PCT_BR, ratio[1]);
+        fillRowToTarget("Marksman", GAIA_MARKSMAN_ROW_Y, GAIA_MRK_PCT_TL, GAIA_MRK_PCT_BR, ratio[2]);
+
+        Integer vi = readPercent(GAIA_INF_PCT_TL, GAIA_INF_PCT_BR);
+        Integer vl = readPercent(GAIA_LAN_PCT_TL, GAIA_LAN_PCT_BR);
+        Integer vm = readPercent(GAIA_MRK_PCT_TL, GAIA_MRK_PCT_BR);
+        logInfo(tag + ": " + label + " post-set readback = "
+                + vi + "/" + vl + "/" + vm + " (target " + ratio[0] + "/" + ratio[1] + "/" + ratio[2] + ").");
+        saveLabyrinthFrame("gaia_balance_set", 0);
+
+        // Confirm the popup -> back on troop-detail with the new ratio showing.
+        if (!navStep(LOH_CONFIRM_BTN, TROOP_ANCHOR_TL, TROOP_ANCHOR_BR, "gaia heart",
+                tag + " Confirm->troop(" + label + ")")) {
+            logWarning(tag + ": " + label + " -- Confirm didn't return to troop-detail "
+                    + "(continuing to the commit step anyway).");
+        }
+
+        // Gaia's own "Edit Formation" button commits directly and returns to Squad Config -- no
+        // dialog to wait for, just confirm we're back (poll for "Squad Config").
+        tapPoint(GAIA_EDIT_FORMATION_COMMIT_BTN);
+        if (!waitForScreen(SQUAD_ANCHOR_TL, SQUAD_ANCHOR_BR, SQUAD_ANCHOR_TEXT)) {
+            logWarning(tag + ": " + label + " -- commit tap didn't visibly return to Squad Config; "
+                    + "ratio may not have persisted.");
+            return false;
+        }
+        logInfo(tag + ": " + label + " ratio committed.");
+        return true;
     }
 
     /** Reads the per-squad {Inf,Lan,Mrk} ratios from the zone's config keys, falling back to

@@ -169,6 +169,30 @@ public enum ConfigurationKeyEnum {
     LABYRINTH_GEARFORGE_INFANTRY_INT    ("60",      Integer.class,  ConfigCategory.DAILIES),
     LABYRINTH_GEARFORGE_LANCER_INT      ("10",      Integer.class,  ConfigCategory.DAILIES),
     LABYRINTH_GEARFORGE_MARKSMAN_INT    ("30",      Integer.class,  ConfigCategory.DAILIES),
+    // matt/2026-08-16: "once you add Gaia [Heart], I should be able to put in both formation
+    // percentages, and you'll automatically be able to adjust those in the game." Live-calibrated the
+    // same day (a Sunday, Gaia Heart's real open day) -- it's a genuine two-squad zone (Squad Config,
+    // Quick Deploy, per-squad Edit Formation/Balance), same shape as Land of Heroes, NOT single-squad
+    // like Cave of Monsters/Charm Mine. Deploys real troops/heroes, not normalized ones, but the
+    // Infantry/Lancer/Marksman comp lever works the same way. Squad 3 unlocks at Stage 15-10 (confirmed
+    // live -- "Clear Gaia Heart Stage 15-10 to unlock" shown on the still-locked 3rd slot); scaffolded
+    // now so the config/UI/automation are all ready the moment matt's account unlocks it, rather than
+    // needing a second round-trip later. Defaults for all 3 squads come from community guides
+    // (topuplive.com's Whiteout Survival troops guide + corroborating community writeups, 2026-08-16
+    // research pass) recommending exactly a 3-army split of 60/40/0, 50/0/50, 50/20/30 for Gaia Heart
+    // -- happens to match the Land of Heroes "mirrored fix" ratio for squads 1-2 plus a third balanced
+    // comp for squad 3. Tune from real loss reports once matt has enough data.
+    LABYRINTH_GAIA_SQUAD1_INFANTRY_INT  ("60",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_GAIA_SQUAD1_LANCER_INT    ("40",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_GAIA_SQUAD1_MARKSMAN_INT  ("0",       Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_GAIA_SQUAD2_INFANTRY_INT  ("50",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_GAIA_SQUAD2_LANCER_INT    ("0",       Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_GAIA_SQUAD2_MARKSMAN_INT  ("50",      Integer.class,  ConfigCategory.DAILIES),
+    // Squad 3 -- locked until Gaia Heart Stage 15-10. Not yet reachable/testable live, so this ratio
+    // is 100% community-sourced (see note above), unverified against the real Squad 3 UI.
+    LABYRINTH_GAIA_SQUAD3_INFANTRY_INT  ("50",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_GAIA_SQUAD3_LANCER_INT    ("20",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_GAIA_SQUAD3_MARKSMAN_INT  ("30",      Integer.class,  ConfigCategory.DAILIES),
     DAILY_MISSION_AUTO_SCHEDULE_BOOL    ("false",   Boolean.class,  ConfigCategory.DAILIES),
     DAILY_MISSION_BOOL                  ("false",   Boolean.class,  ConfigCategory.DAILIES),
     DAILY_MISSION_OFFSET_INT            ("60",      Integer.class,  ConfigCategory.DAILIES),

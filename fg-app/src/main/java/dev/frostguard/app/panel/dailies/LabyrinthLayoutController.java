@@ -58,6 +58,21 @@ public class LabyrinthLayoutController extends AbstractProfileController {
     @FXML private TextField tfGearForgeMrk;
     @FXML private Label labelGearForgeRatioHint;
 
+    // matt/2026-08-16: "once you add Gaia, I should be able to put in both formation percentages" --
+    // Gaia Heart is a real two-squad zone (Squad Config, same shape as Land of Heroes), not a
+    // single-composition Challenge fight like Research Center/Gear Forge. Squad 3 scaffolded too
+    // (locked until Stage 15-10 on matt's account) -- ready the moment it unlocks.
+    @FXML private TextField tfGaiaSquad1Inf;
+    @FXML private TextField tfGaiaSquad1Lan;
+    @FXML private TextField tfGaiaSquad1Mrk;
+    @FXML private TextField tfGaiaSquad2Inf;
+    @FXML private TextField tfGaiaSquad2Lan;
+    @FXML private TextField tfGaiaSquad2Mrk;
+    @FXML private TextField tfGaiaSquad3Inf;
+    @FXML private TextField tfGaiaSquad3Lan;
+    @FXML private TextField tfGaiaSquad3Mrk;
+    @FXML private Label labelGaiaRatioHint;
+
     @FXML
     private void initialize() {
         comboBoxGeneration.getItems().setAll("Gen 1", "Gen 2", "Gen 3", "Gen 4", "Gen 5", "Gen 6");
@@ -96,12 +111,25 @@ public class LabyrinthLayoutController extends AbstractProfileController {
         textFieldMappings.put(tfGearForgeLan, ConfigurationKeyEnum.LABYRINTH_GEARFORGE_LANCER_INT);
         textFieldMappings.put(tfGearForgeMrk, ConfigurationKeyEnum.LABYRINTH_GEARFORGE_MARKSMAN_INT);
 
+        textFieldMappings.put(tfGaiaSquad1Inf, ConfigurationKeyEnum.LABYRINTH_GAIA_SQUAD1_INFANTRY_INT);
+        textFieldMappings.put(tfGaiaSquad1Lan, ConfigurationKeyEnum.LABYRINTH_GAIA_SQUAD1_LANCER_INT);
+        textFieldMappings.put(tfGaiaSquad1Mrk, ConfigurationKeyEnum.LABYRINTH_GAIA_SQUAD1_MARKSMAN_INT);
+        textFieldMappings.put(tfGaiaSquad2Inf, ConfigurationKeyEnum.LABYRINTH_GAIA_SQUAD2_INFANTRY_INT);
+        textFieldMappings.put(tfGaiaSquad2Lan, ConfigurationKeyEnum.LABYRINTH_GAIA_SQUAD2_LANCER_INT);
+        textFieldMappings.put(tfGaiaSquad2Mrk, ConfigurationKeyEnum.LABYRINTH_GAIA_SQUAD2_MARKSMAN_INT);
+        textFieldMappings.put(tfGaiaSquad3Inf, ConfigurationKeyEnum.LABYRINTH_GAIA_SQUAD3_INFANTRY_INT);
+        textFieldMappings.put(tfGaiaSquad3Lan, ConfigurationKeyEnum.LABYRINTH_GAIA_SQUAD3_LANCER_INT);
+        textFieldMappings.put(tfGaiaSquad3Mrk, ConfigurationKeyEnum.LABYRINTH_GAIA_SQUAD3_MARKSMAN_INT);
+
         initializeChangeEvents();
         installRatioHint(labelRatioHint, tfSquad1Inf, tfSquad1Lan, tfSquad1Mrk, tfSquad2Inf, tfSquad2Lan, tfSquad2Mrk);
         installRatioHint(labelCaveRatioHint, tfCaveSquad1Inf, tfCaveSquad1Lan, tfCaveSquad1Mrk,
                 tfCaveSquad2Inf, tfCaveSquad2Lan, tfCaveSquad2Mrk);
         installRatioHint(labelCharmRatioHint, tfCharmSquad1Inf, tfCharmSquad1Lan, tfCharmSquad1Mrk,
                 tfCharmSquad2Inf, tfCharmSquad2Lan, tfCharmSquad2Mrk);
+        installGaiaRatioHint(labelGaiaRatioHint, tfGaiaSquad1Inf, tfGaiaSquad1Lan, tfGaiaSquad1Mrk,
+                tfGaiaSquad2Inf, tfGaiaSquad2Lan, tfGaiaSquad2Mrk,
+                tfGaiaSquad3Inf, tfGaiaSquad3Lan, tfGaiaSquad3Mrk);
         installSingleRowRatioHint(labelResearchRatioHint, tfResearchInf, tfResearchLan, tfResearchMrk);
         installSingleRowRatioHint(labelGearForgeRatioHint, tfGearForgeInf, tfGearForgeLan, tfGearForgeMrk);
     }
@@ -132,6 +160,27 @@ public class LabyrinthLayoutController extends AbstractProfileController {
             StringBuilder sb = new StringBuilder();
             if (s1 != null && s1 != 100) sb.append("Squad 1 totals ").append(s1).append("% (should be 100). ");
             if (s2 != null && s2 != 100) sb.append("Squad 2 totals ").append(s2).append("% (should be 100).");
+            if (hintLabel != null) hintLabel.setText(sb.toString());
+        };
+        for (TextField tf : all) {
+            tf.textProperty().addListener((obs, oldV, newV) -> update.run());
+        }
+        update.run();
+    }
+
+    /** Same as {@link #installRatioHint} but for Gaia Heart's 3 squads (2 live, 1 scaffolded/locked). */
+    private void installGaiaRatioHint(Label hintLabel, TextField sq1Inf, TextField sq1Lan, TextField sq1Mrk,
+                                       TextField sq2Inf, TextField sq2Lan, TextField sq2Mrk,
+                                       TextField sq3Inf, TextField sq3Lan, TextField sq3Mrk) {
+        TextField[] all = { sq1Inf, sq1Lan, sq1Mrk, sq2Inf, sq2Lan, sq2Mrk, sq3Inf, sq3Lan, sq3Mrk };
+        Runnable update = () -> {
+            Integer s1 = sum(sq1Inf, sq1Lan, sq1Mrk);
+            Integer s2 = sum(sq2Inf, sq2Lan, sq2Mrk);
+            Integer s3 = sum(sq3Inf, sq3Lan, sq3Mrk);
+            StringBuilder sb = new StringBuilder();
+            if (s1 != null && s1 != 100) sb.append("Squad 1 totals ").append(s1).append("% (should be 100). ");
+            if (s2 != null && s2 != 100) sb.append("Squad 2 totals ").append(s2).append("% (should be 100). ");
+            if (s3 != null && s3 != 100) sb.append("Squad 3 totals ").append(s3).append("% (should be 100).");
             if (hintLabel != null) hintLabel.setText(sb.toString());
         };
         for (TextField tf : all) {
