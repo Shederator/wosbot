@@ -104,11 +104,6 @@ public class TelegramLayoutController {
 
         refreshStatusLabel();
         refreshStartupLabel();
-
-        // Sync toggle state to current registration status
-        if (checkBoxAutoStart != null) {
-            checkBoxAutoStart.setSelected(Files.exists(startupFolder().resolve(SHORTCUT_NAME)));
-        }
     }
 
     @FXML
@@ -365,6 +360,17 @@ public class TelegramLayoutController {
     }
 
     private void refreshStartupLabel() {
+        if (!dev.frostguard.api.platform.PlatformPaths.isWindows()) {
+            if (checkBoxAutoStart != null) {
+                checkBoxAutoStart.setSelected(false);
+                checkBoxAutoStart.setDisable(true);
+            }
+            if (labelStartupStatus != null) {
+                labelStartupStatus.setText("Auto-start: unavailable on this OS");
+                labelStartupStatus.setStyle("-fx-text-fill: #9e9e9e;");
+            }
+            return;
+        }
         boolean registered = Files.exists(startupFolder().resolve(SHORTCUT_NAME));
         if (checkBoxAutoStart != null) checkBoxAutoStart.setSelected(registered);
         if (labelStartupStatus == null) return;
@@ -378,7 +384,11 @@ public class TelegramLayoutController {
     }
 
     private static Path startupFolder() {
-        return Paths.get(System.getenv("APPDATA"),
+        String appData = System.getenv("APPDATA");
+        if (appData == null || appData.isBlank()) {
+            throw new IllegalStateException("Windows Startup folder requires APPDATA");
+        }
+        return Paths.get(appData,
                 "Microsoft", "Windows", "Start Menu", "Programs", "Startup");
     }
 
