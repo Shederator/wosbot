@@ -12,7 +12,7 @@ import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
-import dev.frostguard.api.domain.TesseractSettingsData;
+import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.nav.SearchConfigConstants;
@@ -568,7 +568,7 @@ public class BankRoutine extends DelayedTask {
 				TIME_OCR_BOTTOM_RIGHT,
 				MAX_OCR_RETRIES,
 				OCR_RETRY_DELAY_MS,
-				TesseractSettingsData.assembler()
+				OcrSettingsData.assembler()
                         .stripBackground(true)
                         .setTextColor(new Color(255, 255, 255))
                         .charWhitelist("0123456789:d")

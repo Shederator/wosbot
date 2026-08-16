@@ -10,7 +10,7 @@ import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.vision.logging.ProfileContextLogger;
-import net.sourceforge.tess4j.TesseractException;
+import dev.frostguard.vision.ocr.OcrException;
 
 import java.io.IOException;
 import java.util.function.BooleanSupplier;
@@ -90,7 +90,7 @@ public class IntelScreenHelper {
         try {
             String txt = emu.readText(dev, new PointData(85, 15), new PointData(171, 62));
             return txt != null && txt.toLowerCase().contains("intel");
-        } catch (IOException | TesseractException e) {
+        } catch (IOException | OcrException e) {
             log.warn("OCR check failed: " + e.getMessage());
             return false;
         }

@@ -15,7 +15,7 @@ import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.vision.convert.GameTimeUtils;
-import dev.frostguard.vision.ocr.TesseractOcrProvider;
+import dev.frostguard.vision.ocr.OcrEngine;
 
 class IntelCooldownOcrFrameTest {
 
@@ -39,7 +39,7 @@ class IntelCooldownOcrFrameTest {
         BufferedImage image = ImageIO.read(Objects.requireNonNull(getClass().getResourceAsStream(resource)));
         RawImageData frame = rgbaFrame(image);
 
-        String text = TesseractOcrProvider.recognizeText(
+        String text = OcrEngine.recognizeText(
                 frame,
                 area.topLeft(),
                 area.bottomRight(),

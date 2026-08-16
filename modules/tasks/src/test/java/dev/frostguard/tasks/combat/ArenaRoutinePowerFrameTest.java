@@ -4,7 +4,7 @@ import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.vision.color.GameColors;
 import dev.frostguard.vision.color.PixelStats;
-import dev.frostguard.vision.ocr.TesseractOcrProvider;
+import dev.frostguard.vision.ocr.OcrEngine;
 import org.junit.jupiter.api.Test;
 
 import javax.imageio.ImageIO;
@@ -68,7 +68,7 @@ class ArenaRoutinePowerFrameTest {
 
     private Double readPower(RawImageData frame, int opponentNumber) throws Exception {
         AreaData area = ArenaRoutine.serverPowerTextArea(opponentY(opponentNumber));
-        String text = TesseractOcrProvider.recognizeText(
+        String text = OcrEngine.recognizeText(
                 frame, area.topLeft(), area.bottomRight(), ArenaRoutine.powerOcrSettings());
         return ArenaRoutine.parsePowerValue(text);
     }

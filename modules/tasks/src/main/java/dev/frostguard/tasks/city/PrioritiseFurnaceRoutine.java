@@ -5,7 +5,7 @@ import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
-import dev.frostguard.api.domain.TesseractSettingsData;
+import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -120,7 +120,7 @@ public PrioritiseFurnaceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDai
                         try {
                             emuManager.captureScreen(EMULATOR_NUMBER);
 
-                            TesseractSettingsData[] settingsToTry = {
+                            OcrSettingsData[] settingsToTry = {
                                     WHITE_SETTINGS,
                                     WHITE_NUMBERS,
                                     RED_SETTINGS,
@@ -130,12 +130,13 @@ public PrioritiseFurnaceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDai
                             AreaData timeArea = new AreaData(new PointData(490, 1209), new PointData(605, 1239));
                             boolean timeFound = false;
 
-                            for (TesseractSettingsData ocrPreset : settingsToTry) {
+                            for (OcrSettingsData ocrPreset : settingsToTry) {
                                 String ocrText = emuManager.readText(
                                         EMULATOR_NUMBER,
                                         timeArea.topLeft(),
                                         timeArea.bottomRight(),
-                                        ocrPreset).trim();
+                                        ocrPreset,
+                                        true).trim();
 
                                 logDebug(routineLogPrioritiseFurnaceLine("OCR result with ocrPreset " + ocrPreset.getClass().getSimpleName() + ": '"
                                         + ocrText + "'"));
@@ -247,7 +248,7 @@ public PrioritiseFurnaceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDai
                 try {
                     emuManager.captureScreen(EMULATOR_NUMBER);
 
-                    TesseractSettingsData[] settingsToTry = {
+                    OcrSettingsData[] settingsToTry = {
                             WHITE_SETTINGS,
                             WHITE_NUMBERS,
                             RED_SETTINGS,
@@ -257,12 +258,13 @@ public PrioritiseFurnaceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDai
                     AreaData timeArea = new AreaData(new PointData(480, 1045), new PointData(596, 1070));
                     boolean timeFound = false;
 
-                    for (TesseractSettingsData ocrPreset : settingsToTry) {
+                    for (OcrSettingsData ocrPreset : settingsToTry) {
                         String ocrText = emuManager.readText(
                                 EMULATOR_NUMBER,
                                 timeArea.topLeft(),
                                 timeArea.bottomRight(),
-                                ocrPreset).trim();
+                                ocrPreset,
+                                true).trim();
 
                         logDebug(routineLogPrioritiseFurnaceLine("OCR result with ocrPreset " + ocrPreset.getClass().getSimpleName() + ": '" + ocrText
                                 + "'"));
@@ -552,19 +554,20 @@ private QueueSnapshot inspectQueueState(AreaData queueArea) {
         try {
 
 
-            TesseractSettingsData[] settingsToTry = {
+            OcrSettingsData[] settingsToTry = {
                     WHITE_SETTINGS,
                     WHITE_NUMBERS,
                     RED_SETTINGS,
                     ORANGE_SETTINGS,
             };
 
-            for (TesseractSettingsData ocrPreset : settingsToTry) {
+            for (OcrSettingsData ocrPreset : settingsToTry) {
                 String ocrText = emuManager.readText(
                         EMULATOR_NUMBER,
                         queueArea.topLeft(),
                         queueArea.bottomRight(),
-                        ocrPreset).trim();
+                        ocrPreset,
+                        true).trim();
 
                 logDebug(routineLogPrioritiseFurnaceLine("OCR result with ocrPreset " + ocrPreset.getClass().getSimpleName() + ": '" + ocrText + "'"));
 

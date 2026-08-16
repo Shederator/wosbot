@@ -5,7 +5,7 @@ import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
-import dev.frostguard.api.domain.TesseractSettingsData;
+import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -46,9 +46,9 @@ private static final int RETRY_DELAY_MINUTES_MS = 5;
 
 private static final int ADDITIONAL_SHARDS_DELAY_HOURS_MS = 2;
 
-private static final TesseractSettingsData SHARDS_OCR_SETTINGS_VALUE = TesseractSettingsData.assembler()
-            .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
-            .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
+private static final OcrSettingsData SHARDS_OCR_SETTINGS_VALUE = OcrSettingsData.assembler()
+            .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
+
             .charWhitelist("0123456789")
             .build();
 

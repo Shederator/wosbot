@@ -13,7 +13,7 @@ import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.schedule.preempt.ManualRallyJoinPreemptionRule;
 import dev.frostguard.vision.color.PixelStats;
-import dev.frostguard.vision.ocr.TesseractOcrProvider;
+import dev.frostguard.vision.ocr.OcrEngine;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.time.LocalDateTime;
@@ -249,7 +249,7 @@ private TemplatesEnum resolveTargetTemplateFlow(String key) {
 private boolean hasJoinButtonGreen(PointData center) {
         try {
             RawImageData rawImage = emuManager.captureScreen(EMULATOR_NUMBER);
-            BufferedImage img = TesseractOcrProvider.toBufferedImage(rawImage);
+            BufferedImage img = dev.frostguard.vision.convert.ImageConverter.toBufferedImage(rawImage);
 
             AreaData joinButton = new AreaData(
                     new PointData(center.getX() - 20, center.getY() - 10),

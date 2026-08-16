@@ -7,7 +7,7 @@ import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
-import dev.frostguard.api.domain.TesseractSettingsData;
+import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -277,9 +277,9 @@ private int scanRefreshCooldownFromMission(PointData bonusLocation) {
         sleepTask(500);
 
 
-        TesseractSettingsData timeSettings = TesseractSettingsData.assembler()
-                .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
-                .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
+        OcrSettingsData timeSettings = OcrSettingsData.assembler()
+                .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
+
                 .stripBackground(true)
                 .setTextColor(new Color(158, 14, 14))
                 .charWhitelist("0123456789d:")
@@ -1148,9 +1148,9 @@ private TaskPassResult handle200PercentTask(
     }
 
 private int scanTimerFromRegion(PointData topLeft, PointData bottomRight, String timerName) {
-        TesseractSettingsData timeSettings = TesseractSettingsData.assembler()
-                .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
-                .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
+        OcrSettingsData timeSettings = OcrSettingsData.assembler()
+                .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
+
                 .charWhitelist("0123456789d:")
                 .build();
 

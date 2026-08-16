@@ -20,7 +20,7 @@ import dev.frostguard.vision.color.PixelStats;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.logging.ProfileContextLogger;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
-import dev.frostguard.vision.ocr.TesseractOcrProvider;
+import dev.frostguard.vision.ocr.OcrEngine;
 
 import java.awt.image.BufferedImage;
 import java.time.Duration;
@@ -109,7 +109,7 @@ public class MarchHelper {
     public List<MarchSlotState> readVisibleMarchQueue() {
         try {
             RawImageData frame = emu.captureScreen(device);
-            BufferedImage image = TesseractOcrProvider.toBufferedImage(frame);
+            BufferedImage image = dev.frostguard.vision.convert.ImageConverter.toBufferedImage(frame);
 
             List<MarchSlotState> slots = new ArrayList<>(SLOT_COUNT);
             for (int index = 0; index < SLOT_COUNT; index++) {
@@ -250,7 +250,7 @@ public class MarchHelper {
     private FormationFrame captureFormationFrame(int flagNumber) {
         try {
             RawImageData raw = emu.captureScreen(device);
-            return new FormationFrame(raw, TesseractOcrProvider.toBufferedImage(raw));
+            return new FormationFrame(raw, dev.frostguard.vision.convert.ImageConverter.toBufferedImage(raw));
         } catch (Exception ex) {
             log.warn("Could not inspect formation #" + flagNumber + ": " + ex.getMessage());
             return null;

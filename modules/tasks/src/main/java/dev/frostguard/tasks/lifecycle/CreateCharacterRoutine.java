@@ -9,7 +9,7 @@ import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
-import dev.frostguard.api.domain.TesseractSettingsData;
+import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.service.ScheduleService;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -42,16 +42,16 @@ public class CreateCharacterRoutine extends DelayedTask {
     private static final PointData CROSS_BUTTON = new PointData(631, 158);// FIXXX ITTT <----------
 
     // --- OCR ---
-    private static final TesseractSettingsData TIPS_OCR_SETTINGS = TesseractSettingsData.assembler()
-            .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
-            .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
+    private static final OcrSettingsData TIPS_OCR_SETTINGS = OcrSettingsData.assembler()
+            .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
+
             .charWhitelist("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
             .stripBackground(true)
             .build();
 
-    private static final TesseractSettingsData AGE_OCR_SETTINGS = TesseractSettingsData.assembler()
-            .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
-            .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
+    private static final OcrSettingsData AGE_OCR_SETTINGS = OcrSettingsData.assembler()
+            .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
+
             .charWhitelist("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789() ")
             .stripBackground(true)
             .build();

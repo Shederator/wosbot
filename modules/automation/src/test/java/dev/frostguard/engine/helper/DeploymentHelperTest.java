@@ -9,7 +9,7 @@ import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
 import dev.frostguard.api.domain.AccountDescriptor;
-import dev.frostguard.api.domain.TesseractSettingsData.PageAnalysis;
+import dev.frostguard.api.domain.OcrSettingsData.TextLayout;
 import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
 
@@ -24,7 +24,7 @@ class DeploymentHelperTest {
         assertEquals(36, read.travelTimeSeconds());
         assertEquals(9, read.staminaCost());
         assertFalse(read.staminaCostFallback());
-        assertEquals(PageAnalysis.SINGLE_WORD, CommonOCRSettings.SPENT_STAMINA_SETTINGS.pageAnalysis());
+        assertEquals(TextLayout.SINGLE_WORD, CommonOCRSettings.SPENT_STAMINA_SETTINGS.textLayout());
     }
 
     @Test

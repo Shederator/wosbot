@@ -2,14 +2,14 @@ package dev.frostguard.vision.ocr;
 
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.PointData;
-import dev.frostguard.api.domain.TesseractSettingsData;
+import dev.frostguard.api.domain.OcrSettingsData;
 
 import java.io.IOException;
 import java.util.Objects;
 import java.util.concurrent.CancellationException;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import net.sourceforge.tess4j.TesseractException;
+import dev.frostguard.vision.ocr.OcrException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,10 +41,10 @@ public class ResilientOcrExecutor<R> {
          * @param bottomRight lower-right corner
          * @return recognized text, never null
          * @throws IOException        if capture fails
-         * @throws TesseractException if recognition fails
+         * @throws OcrException if recognition fails
          */
-        String extractText(TesseractSettingsData config, PointData topLeft, PointData bottomRight)
-                throws IOException, TesseractException;
+        String extractText(OcrSettingsData config, PointData topLeft, PointData bottomRight)
+                throws IOException, OcrException;
     }
 
     private final TextExtractor textExtractor;
@@ -74,7 +74,7 @@ public class ResilientOcrExecutor<R> {
                                 PointData lowerRight,
                                 int maxAttempts,
                                 long pauseMillis,
-                                TesseractSettingsData config,
+                                OcrSettingsData config,
                                 Predicate<String> acceptor,
                                 Function<String, R> transformer) {
 
@@ -100,7 +100,7 @@ public class ResilientOcrExecutor<R> {
                 }
             } catch (CancellationException exception) {
                 throw exception;
-            } catch (IOException | TesseractException | RuntimeException ex) {
+            } catch (IOException | OcrException | RuntimeException ex) {
                 log.warn("OCR trial {} failed: {}", trial + 1, ex.getMessage());
             }
 
@@ -129,7 +129,7 @@ public class ResilientOcrExecutor<R> {
     public R attemptRecognition(AreaData area,
                                 int maxAttempts,
                                 long pauseMillis,
-                                TesseractSettingsData config,
+                                OcrSettingsData config,
                                 Predicate<String> acceptor,
                                 Function<String, R> transformer) {
         return attemptRecognition(

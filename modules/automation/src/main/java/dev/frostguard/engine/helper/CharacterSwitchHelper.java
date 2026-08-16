@@ -9,7 +9,7 @@ import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
-import dev.frostguard.api.domain.TesseractSettingsData;
+import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.nav.CommonGameAreas;
@@ -177,7 +177,7 @@ public class CharacterSwitchHelper {
         return Pattern.compile(Pattern.quote(b), Pattern.CASE_INSENSITIVE).matcher(a).find();
     }
 
-    private String ocrRead(AreaData area, TesseractSettingsData cfg) {
+    private String ocrRead(AreaData area, OcrSettingsData cfg) {
         return ocr.attemptRecognition(area, 3, 300L, cfg, t -> t != null && !t.trim().isEmpty(), String::trim);
     }
 
@@ -192,19 +192,18 @@ public class CharacterSwitchHelper {
         if (src != null) dst.addAll(src);
     }
 
-    private TesseractSettingsData idOcrCfg() {
-        return TesseractSettingsData.builder()
-                .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
-                .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
-                .allowedGlyphs("0123456789").isolateForeground(true).build();
+    private OcrSettingsData idOcrCfg() {
+        return OcrSettingsData.builder()
+                .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
+                .setAllowedChars("0123456789")
+                .setRemoveBackground(true).build();
     }
 
-    private TesseractSettingsData nameOcrCfg() {
-        return TesseractSettingsData.builder()
-                .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
-                .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
-                .allowedGlyphs("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ")
-                .isolateForeground(true).build();
+    private OcrSettingsData nameOcrCfg() {
+        return OcrSettingsData.builder()
+                .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
+                .setAllowedChars("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ")
+                .setRemoveBackground(true).build();
     }
 
     private void sleep(long ms) {

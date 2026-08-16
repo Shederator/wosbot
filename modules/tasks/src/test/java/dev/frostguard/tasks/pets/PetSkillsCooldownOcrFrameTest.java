@@ -16,7 +16,7 @@ import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.vision.convert.GameTimeUtils;
-import dev.frostguard.vision.ocr.TesseractOcrProvider;
+import dev.frostguard.vision.ocr.OcrEngine;
 
 class PetSkillsCooldownOcrFrameTest {
 
@@ -24,7 +24,7 @@ class PetSkillsCooldownOcrFrameTest {
     void readsSingleLineStaminaCooldown() throws Exception {
         BufferedImage image = loadFrame();
 
-        String clock = TesseractOcrProvider.recognizeText(
+        String clock = OcrEngine.recognizeText(
                 rgbaFrame(image),
                 PetSkillsRoutine.STAMINA_COOLDOWN_OCR_AREA.topLeft(),
                 PetSkillsRoutine.STAMINA_COOLDOWN_OCR_AREA.bottomRight(),
@@ -40,7 +40,7 @@ class PetSkillsCooldownOcrFrameTest {
         BufferedImage image = loadFrame();
 
         RawImageData frame = rgbaFrame(image);
-        String timer = TesseractOcrProvider.recognizeText(
+        String timer = OcrEngine.recognizeText(
                 frame,
                 PetSkillsRoutine.GATHERING_COOLDOWN_OCR_AREA.topLeft(),
                 PetSkillsRoutine.GATHERING_COOLDOWN_OCR_AREA.bottomRight(),

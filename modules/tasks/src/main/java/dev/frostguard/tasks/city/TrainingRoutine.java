@@ -354,7 +354,7 @@ private void capturePromotionCompletionTimeFlow() {
                     PROMOTION_TIME_BOTTOM_RIGHT_MS,
                     3,
                     200L,
-                    TesseractSettingsData.assembler()
+                    OcrSettingsData.assembler()
                             .charWhitelist("0123456789")
                             .build(),
                     GameTimeUtils::isAcceptedFormat,
@@ -388,7 +388,7 @@ private LocalDateTime extractTrainingCompletionTimeFlow() {
                     TRAIN_TIME_STARTED_BOTTOM_RIGHT_MS,
                     3,
                     200L,
-                    TesseractSettingsData.assembler()
+                    OcrSettingsData.assembler()
                             .charWhitelist("0123456789")
                             .build(),
                     GameTimeUtils::isAcceptedFormat,
@@ -526,7 +526,7 @@ private void scanAndUpdateAppointmentTime() {
                 MINISTRY_TIME_BOTTOM_RIGHT_MS,
                 5,
                 200L,
-                TesseractSettingsData.assembler()
+                OcrSettingsData.assembler()
                         .stripBackground(true)
                         .setTextColor(new Color(121, 136, 155))
                         .charWhitelist("0123456789:d")
@@ -634,7 +634,7 @@ private Duration extractMaxTrainingTimeFlow() {
                 TRAIN_TIME_BOTTOM_RIGHT_MS,
                 3,
                 200L,
-                TesseractSettingsData.assembler()
+                OcrSettingsData.assembler()
                         .charWhitelist("0123456789")
                         .stripBackground(true)
                         .setTextColor(new Color(254, 254, 254))
@@ -767,7 +767,7 @@ private Integer extractMaxTroopCountFlow() {
                 TROOP_COUNT_INPUT_MAX_VALUE,
                 5,
                 200L,
-                TesseractSettingsData.assembler()
+                OcrSettingsData.assembler()
                         .charWhitelist("0123456789")
                         .stripBackground(true)
                         .setTextColor(new Color(254, 254, 254))
@@ -921,11 +921,13 @@ private void logUnresolvedQueuesFlow(List<Integer> unknownIndices) {
 private QueueSlot inspectForStateKeywords(
             AreaData queueArea,
             TroopTypeShape troopType,
-            TesseractSettingsData[] settingsToTry) {
+            OcrSettingsData[] settingsToTry) {
 
-        for (TesseractSettingsData ocrPreset : settingsToTry) {
+        ResilientOcrExecutor<String> frameReader =
+                new ResilientOcrExecutor<>(provider.reusingLastFrame());
+        for (OcrSettingsData ocrPreset : settingsToTry) {
             try {
-                String text = stringHelper.attemptRecognition(
+                String text = frameReader.attemptRecognition(
                         queueArea.topLeft(),
                         queueArea.bottomRight(),
                         1,
@@ -1116,11 +1118,13 @@ private void manageNoQueuesSelected() {
 private QueueSlot inspectForTrainingTime(
             AreaData queueArea,
             TroopTypeShape troopType,
-            TesseractSettingsData[] settingsToTry) {
+            OcrSettingsData[] settingsToTry) {
 
-        for (TesseractSettingsData ocrPreset : settingsToTry) {
+        ResilientOcrExecutor<LocalDateTime> frameReader =
+                new ResilientOcrExecutor<>(provider.reusingLastFrame());
+        for (OcrSettingsData ocrPreset : settingsToTry) {
             try {
-                LocalDateTime readyAt = trainingTimeHelper.attemptRecognition(
+                LocalDateTime readyAt = frameReader.attemptRecognition(
                         queueArea,
                         3,
                         10,
@@ -1371,7 +1375,7 @@ private boolean pressEventsButton() {
     }
 
 private QueueSlot inspectQueueState(AreaData queueArea, TroopTypeShape troopType) {
-        TesseractSettingsData[] settingsToTry = {
+        OcrSettingsData[] settingsToTry = {
                 WHITE_SETTINGS,
                 WHITE_NUMBERS,
                 ORANGE_SETTINGS,

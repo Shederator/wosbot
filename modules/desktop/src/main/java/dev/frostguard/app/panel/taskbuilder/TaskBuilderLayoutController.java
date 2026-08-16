@@ -1,6 +1,6 @@
 package dev.frostguard.app.panel.taskbuilder;
 
-import dev.frostguard.vision.ocr.TesseractOcrProvider;
+import dev.frostguard.vision.ocr.OcrEngine;
 import dev.frostguard.api.configs.FlowStepKind;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.engine.emulator.EmulatorController;
@@ -446,7 +446,7 @@ public class TaskBuilderLayoutController {
             if (sel == null) return;
             RawImageData raw = EmulatorController.getInstance().captureScreen(sel.getEmulatorNumber());
             if (raw != null) {
-                BufferedImage bi = TesseractOcrProvider.toBufferedImage(raw);
+                BufferedImage bi = dev.frostguard.vision.convert.ImageConverter.toBufferedImage(raw);
                 Image fx = toFxImage(bi);
                 Platform.runLater(() -> { previewImageView.setImage(fx); previewHint.setVisible(false); hasPreviewImage=true; setStatus("📷 Preview updated"); });
             } else { Platform.runLater(() -> setStatus("❌ Capture failed")); }

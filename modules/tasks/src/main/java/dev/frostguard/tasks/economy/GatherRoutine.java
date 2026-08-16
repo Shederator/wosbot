@@ -34,7 +34,7 @@ import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
-import dev.frostguard.api.domain.TesseractSettingsData;
+import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.runtime.WorkspacePaths;
 import dev.frostguard.engine.helper.MarchSlotAvailabilityEstimator;
@@ -44,7 +44,6 @@ import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.schedule.TaskQueue;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.service.StatisticsService;
-import dev.frostguard.vision.ocr.TesseractOcrProvider;
 
 import javax.imageio.ImageIO;
 
@@ -630,7 +629,7 @@ public class GatherRoutine extends DelayedTask {
             Path output = outputDirectory.resolve(
                     "gather-recall-controls-missing-" + safeProfileName + "-latest.png");
             RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
-            BufferedImage image = TesseractOcrProvider.toBufferedImage(frame);
+            BufferedImage image = dev.frostguard.vision.convert.ImageConverter.toBufferedImage(frame);
             if (!ImageIO.write(image, "png", output.toFile())) {
                 throw new IOException("PNG writer unavailable");
             }
@@ -822,7 +821,7 @@ public class GatherRoutine extends DelayedTask {
     // ================= HELPERS (UI/OCR) =================
 
     private Integer readLevel() {
-        TesseractSettingsData s = TesseractSettingsData.assembler().charWhitelist("0123456789")
+        OcrSettingsData s = OcrSettingsData.assembler().charWhitelist("0123456789")
                 .stripBackground(true).setTextColor(new Color(255, 255, 255)).build();
         return readNumberValue(LEVEL_DISPLAY_TL, LEVEL_DISPLAY_BR, s);
     }

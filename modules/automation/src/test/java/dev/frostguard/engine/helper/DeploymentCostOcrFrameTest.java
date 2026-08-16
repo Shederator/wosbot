@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.CommonOCRSettings;
-import dev.frostguard.vision.ocr.TesseractOcrProvider;
+import dev.frostguard.vision.ocr.OcrEngine;
 
 class DeploymentCostOcrFrameTest {
 
@@ -22,7 +22,7 @@ class DeploymentCostOcrFrameTest {
                 .getResourceAsStream("/deployment/polar-after-equalize-20260709.png")));
         RawImageData frame = rgbaFrame(image);
 
-        String text = TesseractOcrProvider.recognizeText(
+        String text = OcrEngine.recognizeText(
                 frame,
                 CommonGameAreas.SPENT_STAMINA_OCR_AREA.topLeft(),
                 CommonGameAreas.SPENT_STAMINA_OCR_AREA.bottomRight(),

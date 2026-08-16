@@ -16,7 +16,7 @@ import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.schedule.QueuedEmulatorTask;
 import dev.frostguard.engine.service.ConfigService;
 import dev.frostguard.engine.service.ProfileService;
-import net.sourceforge.tess4j.TesseractException;
+import dev.frostguard.vision.ocr.OcrException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -176,12 +176,16 @@ public class EmulatorController {
 
     // --- OCR ---
 
-    public String readText(String idx, PointData a, PointData b) throws IOException, TesseractException {
+    public String readText(String idx, PointData a, PointData b) throws IOException, OcrException {
         requireBackend(); return backend.readText(idx, a, b);
     }
-    public String readText(String idx, PointData a, PointData b, TesseractSettingsData c)
-            throws IOException, TesseractException {
+    public String readText(String idx, PointData a, PointData b, OcrSettingsData c)
+            throws IOException, OcrException {
         requireBackend(); return backend.readText(idx, a, b, c);
+    }
+    public String readText(String idx, PointData a, PointData b, OcrSettingsData c, boolean reuseFrame)
+            throws IOException, OcrException {
+        requireBackend(); return backend.readText(idx, a, b, c, reuseFrame);
     }
 
     // --- template matching ---

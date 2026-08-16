@@ -10,7 +10,7 @@ import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.PriorityItemData;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.domain.ResearchBadgeData;
-import dev.frostguard.api.domain.TesseractSettingsData;
+import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.config.PriorityConfigResolver;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.nav.SearchConfigConstants;
@@ -21,13 +21,13 @@ import dev.frostguard.tasks.city.ResearchNodeSelectionPolicy.ResearchNode;
 import dev.frostguard.tasks.city.ResearchNodeSelectionPolicy.ResearchRow;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.ocr.ResearchBadgeReader;
-import dev.frostguard.vision.ocr.TesseractOcrProvider;
+import dev.frostguard.vision.ocr.OcrEngine;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import net.sourceforge.tess4j.TesseractException;
+import dev.frostguard.vision.ocr.OcrException;
 
 public class ResearchRoutine extends DelayedTask {
 
@@ -86,9 +86,9 @@ private static final SearchConfig REPLENISH_BUTTON_RECHECK = SearchConfig.builde
         .withCoordinates(new PointData(180, 1070), new PointData(535, 1195))
         .build();
 
-private static final TesseractSettingsData RESEARCH_TITLE_OCR = TesseractSettingsData.assembler()
-        .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
-        .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
+private static final OcrSettingsData RESEARCH_TITLE_OCR = OcrSettingsData.assembler()
+        .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
+
         .build();
 
 private static final PointData REPLENISH_CONFIRM_POINT = new PointData(511, 1056);
@@ -175,7 +175,7 @@ public ResearchRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
                 }
                 return;
             }
-        } catch (IOException | TesseractException | RuntimeException e) {
+        } catch (IOException | OcrException | RuntimeException e) {
             logError(routineLogResearchLine("Issue while research status OCR: " + e.getMessage()));
             this.reschedule(LocalDateTime.now().plusHours(1));
             return;
@@ -409,7 +409,7 @@ private boolean isResearchTreeVisible() {
                 if (title.toLowerCase().contains("research")) {
                     return true;
                 }
-            } catch (IOException | TesseractException | RuntimeException e) {
+            } catch (IOException | OcrException | RuntimeException e) {
                 logDebug(routineLogResearchLine("Research tree title OCR attempt "
                         + attempt + " failed: " + e.getMessage()));
             }
@@ -607,10 +607,10 @@ private ResearchDialogInspection inspectResearchDialog() {
                 RESEARCH_GO_TOP_LEFT, RESEARCH_GO_BOTTOM_RIGHT, 85.0, 4).size();
         String requirements = "";
         try {
-            requirements = TesseractOcrProvider.recognizeText(
+            requirements = OcrEngine.recognizeText(
                     screenshot, RESEARCH_REQUIREMENTS_TOP_LEFT, RESEARCH_REQUIREMENTS_BOTTOM_RIGHT,
-                    TesseractSettingsData.forTextBlock());
-        } catch (TesseractException | RuntimeException exception) {
+                    OcrSettingsData.forTextBlock());
+        } catch (OcrException | RuntimeException exception) {
             logWarning(routineLogResearchLine("Research requirement OCR failed: " + exception.getMessage()));
         }
         ResearchDialogState state = ResearchDialogClassifier.classify(

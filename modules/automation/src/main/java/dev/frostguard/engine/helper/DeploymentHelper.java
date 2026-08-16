@@ -15,7 +15,7 @@ import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.logging.ProfileContextLogger;
 import dev.frostguard.vision.convert.RegexNumberParser;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
-import dev.frostguard.vision.ocr.TesseractOcrProvider;
+import dev.frostguard.vision.ocr.OcrEngine;
 
 import java.awt.image.BufferedImage;
 import java.time.Duration;
@@ -201,7 +201,7 @@ public class DeploymentHelper {
 
     private BufferedImage captureImage() {
         RawImageData frame = emu.captureScreen(device);
-        return TesseractOcrProvider.toBufferedImage(frame);
+        return dev.frostguard.vision.convert.ImageConverter.toBufferedImage(frame);
     }
 
     private static TemplateSearchHelper.SearchConfig search(

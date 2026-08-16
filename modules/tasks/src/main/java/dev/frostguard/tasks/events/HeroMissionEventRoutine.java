@@ -15,7 +15,7 @@ import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
-import dev.frostguard.api.domain.TesseractSettingsData;
+import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.service.TaskManagementService;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -286,8 +286,8 @@ public class HeroMissionEventRoutine extends DelayedTask {
     }
 
     private ReaperAvailabilityResult reapersAvailable() {
-        TesseractSettingsData settingsRallied = TesseractSettingsData.assembler()
-                .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
+        OcrSettingsData settingsRallied = OcrSettingsData.assembler()
+
                 .stripBackground(true)
                 .setTextColor(new Color(254, 254, 254)) // White text
                 .charWhitelist("0123456789") // Only allow digits

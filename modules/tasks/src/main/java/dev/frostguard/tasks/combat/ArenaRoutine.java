@@ -24,7 +24,7 @@ import dev.frostguard.api.domain.ConfigData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.RawImageData;
-import dev.frostguard.api.domain.TesseractSettingsData;
+import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -32,7 +32,7 @@ import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.vision.color.GameColors;
 import dev.frostguard.vision.color.PixelStats;
 import dev.frostguard.vision.convert.GameTimeUtils;
-import dev.frostguard.vision.ocr.TesseractOcrProvider;
+import dev.frostguard.vision.ocr.OcrEngine;
 
 /**
  * Task responsible for managing arena challenges.
@@ -341,7 +341,7 @@ public class ArenaRoutine extends DelayedTask {
     private boolean detectFirstRun() {
         logDebug("Checking if this is first arena run");
 
-        TesseractSettingsData configMap = TesseractSettingsData.assembler()
+        OcrSettingsData configMap = OcrSettingsData.assembler()
                 .stripBackground(true)
                 .setTextColor(new Color(255, 255, 255))
                 .charWhitelist("0123456789")
@@ -388,9 +388,9 @@ public class ArenaRoutine extends DelayedTask {
     private boolean readInitialAttempts() {
         logDebug("Reading initial challenge attempts");
 
-        TesseractSettingsData strictSettings = TesseractSettingsData.assembler()
-                .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
-                .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
+        OcrSettingsData strictSettings = OcrSettingsData.assembler()
+                .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
+
                 .stripBackground(true)
                 .setTextColor(new Color(91, 112, 147))
                 .charWhitelist("0123456789")
@@ -404,9 +404,9 @@ public class ArenaRoutine extends DelayedTask {
         if (attemptsRead == null) {
             logDebug("Attempt count strict OCR did not produce a value. Retrying with relaxed settings.");
 
-            TesseractSettingsData relaxedSettings = TesseractSettingsData.assembler()
-                    .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
-                    .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
+            OcrSettingsData relaxedSettings = OcrSettingsData.assembler()
+                    .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
+
                     .stripBackground(true)
                     .charWhitelist("0123456789")
                     .build();
@@ -703,7 +703,7 @@ public class ArenaRoutine extends DelayedTask {
         PointData topLeft = powerArea.topLeft();
         PointData bottomRight = powerArea.bottomRight();
 
-        TesseractSettingsData powerSettings = powerOcrSettings();
+        OcrSettingsData powerSettings = powerOcrSettings();
 
         String text = stringHelper.attemptRecognition(
                 topLeft,
@@ -724,10 +724,9 @@ public class ArenaRoutine extends DelayedTask {
         return new PowerRead(colorRead.relation(), powerValue, text);
     }
 
-    static TesseractSettingsData powerOcrSettings() {
-        return TesseractSettingsData.assembler()
-                .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
-                .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
+    static OcrSettingsData powerOcrSettings() {
+        return OcrSettingsData.assembler()
+                .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
                 .stripBackground(true)
                 .setTextColor(ARENA_POWER_GREEN_TEXT)
                 .charWhitelist("0123456789.,KMBkmb")
@@ -907,9 +906,9 @@ public class ArenaRoutine extends DelayedTask {
 
     private String readOpponentText(PointData topLeft, PointData bottomRight, String whitelist, Color textColor,
                                     String label, int opponentNumber) {
-        TesseractSettingsData settings = TesseractSettingsData.assembler()
-                .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
-                .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
+        OcrSettingsData settings = OcrSettingsData.assembler()
+                .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
+
                 .stripBackground(true)
                 .setTextColor(textColor)
                 .charWhitelist(whitelist)
@@ -924,7 +923,7 @@ public class ArenaRoutine extends DelayedTask {
     private BufferedImage captureFrameForPixelScan(String context) {
         try {
             RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
-            return TesseractOcrProvider.toBufferedImage(frame);
+            return dev.frostguard.vision.convert.ImageConverter.toBufferedImage(frame);
         } catch (Exception ex) {
             logError(String.format("%s color analysis failed: %s", context, ex.getMessage()));
             return null;
@@ -1163,7 +1162,7 @@ public class ArenaRoutine extends DelayedTask {
     private int detectCurrentAttemptPosition() {
         logDebug("Detecting current attempt position via price");
 
-        TesseractSettingsData configMap = TesseractSettingsData.assembler()
+        OcrSettingsData configMap = OcrSettingsData.assembler()
                 .stripBackground(true)
                 .setTextColor(new Color(255, 255, 255))
                 .charWhitelist("0123456789")

@@ -1,6 +1,6 @@
 package dev.frostguard.engine.service;
 
-import dev.frostguard.vision.ocr.TesseractOcrProvider;
+import dev.frostguard.vision.ocr.OcrEngine;
 import dev.frostguard.api.configs.FlowStepKind;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.engine.emulator.EmulatorController;
@@ -171,7 +171,7 @@ public class TaskBuilderService {
         try {
             RawImageData rawImage = emuManager.captureScreen(activeEmulatorNumber);
             if (rawImage != null) {
-                return TesseractOcrProvider.toBufferedImage(rawImage);
+                return dev.frostguard.vision.convert.ImageConverter.toBufferedImage(rawImage);
             }
         } catch (Exception e) {
             logger.error("Failed to capture screenshot for task builder", e);
@@ -346,7 +346,7 @@ public class TaskBuilderService {
                 node.setLastOcrResult("[no screenshot]");
                 return false;
             }
-            String ocrText = TesseractOcrProvider.recognizeText(rawImage,
+            String ocrText = OcrEngine.recognizeText(rawImage,
                     new PointData(tlX, tlY), new PointData(brX, brY), "eng");
             node.setLastOcrResult(ocrText != null ? ocrText.trim() : "");
             logger.info("OCR result: '{}'", node.getLastOcrResult());

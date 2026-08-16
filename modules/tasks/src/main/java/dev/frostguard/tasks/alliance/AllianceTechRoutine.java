@@ -7,7 +7,7 @@ import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
-import dev.frostguard.api.domain.TesseractSettingsData;
+import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.helper.NavigationHelper;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.nav.SearchConfigConstants;
@@ -57,9 +57,9 @@ private static final int DEFAULT_OFFSET_MINUTES_VALUE = Integer.parseInt(
 
 private static final int ERROR_RETRY_MINUTES_VALUE = 10;
 
-private static final TesseractSettingsData COIN_COUNT_OCR_SETTINGS_VALUE = TesseractSettingsData.assembler()
+private static final OcrSettingsData COIN_COUNT_OCR_SETTINGS_VALUE = OcrSettingsData.assembler()
 			.charWhitelist("0123456789")
-			.pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
+			.textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
 			.build();
 
 private int offsetMinutes;

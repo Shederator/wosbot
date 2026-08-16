@@ -7,16 +7,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.domain.ResearchBadgeData;
-import dev.frostguard.api.domain.TesseractSettingsData;
+import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.vision.match.OpenCvPatternLocator;
 import dev.frostguard.vision.ocr.ResearchBadgeReader;
-import dev.frostguard.vision.ocr.TesseractOcrProvider;
+import dev.frostguard.vision.ocr.OcrEngine;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
 import javax.imageio.ImageIO;
-import net.sourceforge.tess4j.TesseractException;
+import dev.frostguard.vision.ocr.OcrException;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -32,7 +32,7 @@ class ResearchBadgeReaderFrameTest {
     }
 
     @Test
-    void readsProgressFromARealResearchBadge() throws IOException, TesseractException {
+    void readsProgressFromARealResearchBadge() throws IOException, OcrException {
         BufferedImage image = ImageIO.read(Objects.requireNonNull(getClass()
                 .getResourceAsStream("/research/resource-shortfall-20260717.png")));
 
@@ -45,7 +45,7 @@ class ResearchBadgeReaderFrameTest {
     }
 
     @Test
-    void readsEveryIncompleteBadgeFromARealBattleTree() throws IOException, TesseractException {
+    void readsEveryIncompleteBadgeFromARealBattleTree() throws IOException, OcrException {
         BufferedImage image = ImageIO.read(Objects.requireNonNull(getClass()
                 .getResourceAsStream("/research/battle-progress-badges-20260718.png")));
 
@@ -66,7 +66,7 @@ class ResearchBadgeReaderFrameTest {
     }
 
     @Test
-    void readsOneOfThreeBadgesAfterCompletedResearch() throws IOException, TesseractException {
+    void readsOneOfThreeBadgesAfterCompletedResearch() throws IOException, OcrException {
         var badges = readTreeFrame("/research/help-completed-20260716.png");
 
         assertEquals(3, badges.size());
@@ -79,7 +79,7 @@ class ResearchBadgeReaderFrameTest {
     }
 
     @Test
-    void readsMixedBadgesWhileResearchHelpIsVisible() throws IOException, TesseractException {
+    void readsMixedBadgesWhileResearchHelpIsVisible() throws IOException, OcrException {
         var badges = readTreeFrame("/research/help-short-20260716.png");
 
         assertEquals(3, badges.size());
@@ -93,7 +93,7 @@ class ResearchBadgeReaderFrameTest {
 
     @Test
     void recoversEveryOneOfFiveBadgeFromTheLiveBattleTree()
-            throws IOException, TesseractException {
+            throws IOException, OcrException {
         var badges = readTreeFrame("/research/battle-progress-badges-5-20260718.png");
 
         assertEquals(4, badges.size());
@@ -107,7 +107,7 @@ class ResearchBadgeReaderFrameTest {
 
     @Test
     void readsEverySixLevelBadgeFromTheLiveBattleTree()
-            throws IOException, TesseractException {
+            throws IOException, OcrException {
         var badges = readTreeFrame("/research/battle-progress-badges-6-20260720.png");
 
         assertEquals(7, badges.size());
@@ -124,7 +124,7 @@ class ResearchBadgeReaderFrameTest {
 
     @Test
     void doesNotInventResearchBadgesOnAnUnrelatedGameScreen()
-            throws IOException, TesseractException {
+            throws IOException, OcrException {
         var badges = readTreeFrame("/dailymission/selected-daily-claims-20260716.png");
 
         assertTrue(badges.isEmpty());
@@ -132,10 +132,9 @@ class ResearchBadgeReaderFrameTest {
 
     @Test
     void researchTitleOcrVerifiesTheTreeAndRejectsAnUnrelatedScreen()
-            throws IOException, TesseractException {
-        TesseractSettingsData settings = TesseractSettingsData.assembler()
-                .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
-                .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
+            throws IOException, OcrException {
+        OcrSettingsData settings = OcrSettingsData.assembler()
+                .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
                 .build();
 
         String researchTitle = readTitle("/research/battle-progress-badges-6-20260720.png", settings);
@@ -147,16 +146,16 @@ class ResearchBadgeReaderFrameTest {
                 "An unrelated screen must not pass the Research tree gate: " + unrelatedTitle);
     }
 
-    private static String readTitle(String resource, TesseractSettingsData settings)
-            throws IOException, TesseractException {
+    private static String readTitle(String resource, OcrSettingsData settings)
+            throws IOException, OcrException {
         BufferedImage image = ImageIO.read(Objects.requireNonNull(
                 ResearchBadgeReaderFrameTest.class.getResourceAsStream(resource)));
-        return TesseractOcrProvider.recognizeText(
+        return OcrEngine.recognizeText(
                 rgbaFrame(image), new PointData(80, 0), new PointData(360, 80), settings).trim();
     }
 
     private static List<ResearchBadgeData> readTreeFrame(
-            String resource) throws IOException, TesseractException {
+            String resource) throws IOException, OcrException {
         BufferedImage image = ImageIO.read(Objects.requireNonNull(
                 ResearchBadgeReaderFrameTest.class.getResourceAsStream(resource)));
         return ResearchBadgeReader.read(

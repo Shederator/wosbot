@@ -15,7 +15,8 @@ import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
-import dev.frostguard.api.domain.TesseractSettingsData;
+import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
@@ -24,7 +25,6 @@ import dev.frostguard.engine.service.StaminaService;
 import dev.frostguard.vision.color.PixelStats;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.convert.RegexNumberParser;
-import dev.frostguard.vision.ocr.TesseractOcrProvider;
 
 /**
  * Unified Pet Skills task that processes all enabled pet skills in a single
@@ -115,18 +115,16 @@ public class PetSkillsRoutine extends DelayedTask {
     private static final int STAMINA_PER_LEVEL = 5;
     private static final int STAMINA_FALLBACK_VALUE = 35; // Level 1 equivalent
 
-    // ========== OCR Settings ==========
-    private static final TesseractSettingsData COOLDOWN_OCR_SETTINGS =
-            CommonOCRSettings.RED_DURATION_SETTINGS;
+    private static final OcrSettingsData COOLDOWN_OCR_SETTINGS = CommonOCRSettings.RED_DURATION_SETTINGS;
 
-    private static final TesseractSettingsData SKILL_LEVEL_OCR_SETTINGS = TesseractSettingsData.assembler()
+    private static final OcrSettingsData SKILL_LEVEL_OCR_SETTINGS = OcrSettingsData.assembler()
             .charWhitelist("0123456789")
-            .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
+            .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
             .stripBackground(true)
             .setTextColor(new Color(69, 88, 110))
             .build();
 
-    private static final TesseractSettingsData GATHERING_SKILL_OCR_SETTINGS = TesseractSettingsData.assembler()
+    private static final OcrSettingsData GATHERING_SKILL_OCR_SETTINGS = OcrSettingsData.assembler()
             .charWhitelist("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
             .stripBackground(true)
             .setTextColor(new Color(0, 187, 0))
@@ -486,7 +484,7 @@ public class PetSkillsRoutine extends DelayedTask {
 
     private boolean isSkillPresent(PetSkill skill) {
         try {
-            BufferedImage image = TesseractOcrProvider.toBufferedImage(
+            BufferedImage image = dev.frostguard.vision.convert.ImageConverter.toBufferedImage(
                     emuManager.captureScreen(EMULATOR_NUMBER));
             return hasDistinctiveSkillTilePixels(image, skill.area);
         } catch (Exception ex) {
@@ -655,7 +653,7 @@ public class PetSkillsRoutine extends DelayedTask {
         return readSkillCooldown(area, COOLDOWN_OCR_SETTINGS);
     }
 
-    private Duration readSkillCooldown(AreaData area, TesseractSettingsData settings) {
+    private Duration readSkillCooldown(AreaData area, OcrSettingsData settings) {
         return durationHelper.attemptRecognition(
                 area.topLeft(),
                 area.bottomRight(),
@@ -1127,7 +1125,7 @@ public class PetSkillsRoutine extends DelayedTask {
                 new PointData(78, 991),
                 new PointData(474, 1028));
 
-        TesseractSettingsData configs = TesseractSettingsData.assembler()
+        OcrSettingsData configs = OcrSettingsData.assembler()
                 .charWhitelist("0123456789")
                 .stripBackground(true)
                 .setTextColor(new Color(255, 255, 255))

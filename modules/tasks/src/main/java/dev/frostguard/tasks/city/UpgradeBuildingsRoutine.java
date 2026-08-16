@@ -422,7 +422,8 @@ private String readSelectedBuildingName() {
                     EMULATOR_NUMBER,
                     BUILDING_NAME_AREA_VALUE.topLeft(),
                     BUILDING_NAME_AREA_VALUE.bottomRight(),
-                    WHITE_SETTINGS).trim();
+                    WHITE_SETTINGS,
+                    true).trim();
             logInfo(routineLogUpgradeBuildingsLine("Selected building name OCR: '" + text + "'"));
             return text;
         } catch (Exception e) {
@@ -648,7 +649,8 @@ private boolean isBuildButtonVisible() {
                     EMULATOR_NUMBER,
                     BUILDING_ACTION_BUTTON_AREA_VALUE.topLeft(),
                     BUILDING_ACTION_BUTTON_AREA_VALUE.bottomRight(),
-                    WHITE_SETTINGS);
+                    WHITE_SETTINGS,
+                    true);
             String normalized = buttonText == null ? "" : buttonText.toLowerCase().replaceAll("[^a-z]", "");
             logDebug(routineLogUpgradeBuildingsLine("Build button OCR result: '" + buttonText + "'"));
             boolean detected = normalized.contains("build") || normalized.contains("bui");
@@ -686,19 +688,20 @@ private UpgradeBuildingsRoutine.QueueSnapshot inspectQueueState(AreaData queueAr
         try {
 
 
-            TesseractSettingsData[] settingsToTry = {
+            OcrSettingsData[] settingsToTry = {
                     WHITE_SETTINGS,
                     WHITE_NUMBERS,
                     RED_SETTINGS,
                     ORANGE_SETTINGS,
             };
 
-            for (TesseractSettingsData ocrPreset : settingsToTry) {
+            for (OcrSettingsData ocrPreset : settingsToTry) {
                 String ocrText = emuManager.readText(
                         EMULATOR_NUMBER,
                         queueArea.topLeft(),
                         queueArea.bottomRight(),
-                        ocrPreset).trim();
+                        ocrPreset,
+                        true).trim();
 
                 logDebug(routineLogUpgradeBuildingsLine("OCR result with ocrPreset " + ocrPreset.getClass().getSimpleName() + ": '" + ocrText + "'"));
 

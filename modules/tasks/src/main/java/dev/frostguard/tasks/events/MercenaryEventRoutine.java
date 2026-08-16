@@ -10,7 +10,7 @@ import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
-import dev.frostguard.api.domain.TesseractSettingsData;
+import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.service.TaskManagementService;
 import dev.frostguard.engine.service.StaminaService;
 import dev.frostguard.engine.schedule.DelayedTask;
@@ -122,9 +122,9 @@ public class MercenaryEventRoutine extends DelayedTask {
     }
 
     private Integer checkMercenaryLevel() {
-        TesseractSettingsData configs = TesseractSettingsData.assembler()
-                .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
-                .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
+        OcrSettingsData configs = OcrSettingsData.assembler()
+                .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
+
                 .stripBackground(true)
                 .setTextColor(new Color(255, 255, 255)) // White text
                 .charWhitelist("0123456789") // Only allow digits and '/'

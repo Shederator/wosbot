@@ -315,7 +315,7 @@ private Integer scanAvailableQuantity(int cardIndex, AllianceShopItemEnum shopIt
                 RETRIES_OCR_VALUE,
                 1000L,
 
-                TesseractSettingsData.assembler()
+                OcrSettingsData.assembler()
                         .charWhitelist("0123456789")
                         .setTextColor(Color.white)
                         .stripBackground(true)
@@ -512,9 +512,9 @@ private Integer scanCurrentCoins() {
                 RETRIES_OCR_VALUE,
                 200L,
 
-                TesseractSettingsData.assembler()
+                OcrSettingsData.assembler()
                         .charWhitelist("0123456789")
-                        .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
+                        .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
                         .build(),
                 text -> RegexNumberParser.conformsTo(text, Pattern.compile(".*?(\\d+).*")),
                 text -> RegexNumberParser.extractByPattern(text, Pattern.compile(".*?(\\d+).*")));
@@ -702,7 +702,7 @@ private Integer scanItemPrice(int cardIndex, AllianceShopItemEnum shopItem) {
                 RETRIES_OCR_VALUE,
                 1000L,
 
-                TesseractSettingsData.assembler()
+                OcrSettingsData.assembler()
                         .charWhitelist("0123456789")
                         .build(),
                 text -> RegexNumberParser.conformsTo(text, Pattern.compile(".*?(\\d+).*")),

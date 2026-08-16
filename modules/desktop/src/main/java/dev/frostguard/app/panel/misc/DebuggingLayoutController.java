@@ -12,7 +12,7 @@ import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.engine.service.ProfileService;
-import dev.frostguard.vision.ocr.TesseractOcrProvider;
+import dev.frostguard.vision.ocr.OcrEngine;
 
 import javafx.collections.FXCollections;
 import javafx.event.ActionEvent;
@@ -654,7 +654,7 @@ public class DebuggingLayoutController {
                 imgEndX, imgEndY));
 
         try {
-            String result = dev.frostguard.vision.ocr.TesseractOcrProvider.readFromFile(currentScreenshotFile, imgStartX, imgStartY,
+            String result = OcrEngine.readFromFile(currentScreenshotFile, imgStartX, imgStartY,
                     width, height, "eng");
             log("OCR Output:\n" + result);
         } catch (Exception e) {
@@ -693,7 +693,7 @@ public class DebuggingLayoutController {
                         .captureScreen(selected.getEmulatorNumber());
 
                 if (rawImage != null) {
-                    java.awt.image.BufferedImage bImg = TesseractOcrProvider.toBufferedImage(rawImage);
+                    java.awt.image.BufferedImage bImg = dev.frostguard.vision.convert.ImageConverter.toBufferedImage(rawImage);
 
                     File tempFile = File.createTempFile("adb_screenshot", ".png");
                     javax.imageio.ImageIO.write(bImg, "png", tempFile);

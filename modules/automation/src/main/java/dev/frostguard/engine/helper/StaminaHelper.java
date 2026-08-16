@@ -196,7 +196,7 @@ public class StaminaHelper {
     }
 
     private Integer readDialogNumber(dev.frostguard.api.domain.AreaData area,
-                                     dev.frostguard.api.domain.TesseractSettingsData settings, String label) {
+                                     dev.frostguard.api.domain.OcrSettingsData settings, String label) {
         Integer value = numberReader.attemptRecognition(area.topLeft(), area.bottomRight(), 3, 100L, settings,
                 txt -> RegexNumberParser.conformsTo(txt, CommonOCRSettings.NUMBER_PATTERN),
                 txt -> RegexNumberParser.extractByPattern(txt, CommonOCRSettings.NUMBER_PATTERN));

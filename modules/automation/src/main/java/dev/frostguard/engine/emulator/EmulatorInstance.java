@@ -6,13 +6,14 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
-import dev.frostguard.vision.ocr.TesseractOcrProvider;
+import dev.frostguard.vision.ocr.OcrEngine;
 import dev.frostguard.api.configs.GameVersionEnum;
 import dev.frostguard.engine.error.ADBConnectionException;
 import dev.frostguard.api.domain.*;
 import com.android.ddmlib.*;
-import net.sourceforge.tess4j.TesseractException;
+import dev.frostguard.vision.ocr.OcrException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -408,17 +409,28 @@ public abstract class EmulatorInstance {
 
     // --- OCR ---
 
-    public String readText(String idx, PointData a, PointData b) throws IOException, TesseractException {
-        RawImageData scr = captureScreenshot(idx);
-        if (scr == null) throw new IOException("Capture null");
-        String lang = (EmulatorController.GAME == GameVersionEnum.CHINA) ? "eng+chi_sim" : "eng";
-        return TesseractOcrProvider.recognizeText(scr, a, b, lang);
+    public String readText(String idx, PointData a, PointData b) throws IOException, OcrException {
+        return readText(idx, a, b, null, false);
     }
 
-    public String readText(String idx, PointData a, PointData b, TesseractSettingsData cfg) throws IOException, TesseractException {
-        RawImageData scr = (cfg != null && cfg.isReuseLastImage()) ? lastFrame.getOrDefault(idx, captureScreenshot(idx)) : captureScreenshot(idx);
+    public String readText(String idx, PointData a, PointData b, OcrSettingsData cfg) throws IOException, OcrException {
+        return readText(idx, a, b, cfg, false);
+    }
+
+    public String readText(String idx, PointData a, PointData b, OcrSettingsData cfg, boolean reuseFrame) throws IOException, OcrException {
+        RawImageData scr = selectFrame(lastFrame, idx, reuseFrame, () -> captureScreenshot(idx));
         if (scr == null) throw new IOException("Capture null");
-        return TesseractOcrProvider.recognizeText(scr, a, b, cfg);
+        String lang = (EmulatorController.GAME == GameVersionEnum.CHINA) ? "eng+chi_sim" : "eng";
+        if (cfg == null) {
+            return OcrEngine.recognizeText(scr, a, b, lang);
+        }
+        return OcrEngine.recognizeText(scr, a, b, cfg);
+    }
+
+    static RawImageData selectFrame(Map<String, RawImageData> frames, String idx,
+            boolean reuseFrame, Supplier<RawImageData> capture) {
+        RawImageData cached = reuseFrame ? frames.get(idx) : null;
+        return cached != null ? cached : capture.get();
     }
 
     protected int getColorComponent(RawImage img, int base, int bit) {

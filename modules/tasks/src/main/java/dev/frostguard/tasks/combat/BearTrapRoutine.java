@@ -7,7 +7,7 @@ import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.FormationSlots;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
-import dev.frostguard.api.domain.TesseractSettingsData;
+import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.helper.BearTrapHelper;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.schedule.DelayedTask;
@@ -161,11 +161,10 @@ private LocalDateTime referenceTrapTime;
 
 private boolean isVisuallyTriggered = false;
 
-private static final TesseractSettingsData FREE_MARCHES_OCR_SETTINGS_VALUE = TesseractSettingsData.assembler()
+private static final OcrSettingsData FREE_MARCHES_OCR_SETTINGS_VALUE = OcrSettingsData.assembler()
             .charWhitelist("0123456789/")
             .stripBackground(true)
             .setTextColor(new Color(253, 253, 253))
-            .setReuseLastImage(true)
             .build();
 
 public BearTrapRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
@@ -688,8 +687,10 @@ private int inspectFreeMarches() {
         checkPreemption();
 
         emuManager.captureScreen(EMULATOR_NUMBER);
+        ResilientOcrExecutor<Integer> frameReader =
+                new ResilientOcrExecutor<>(provider.reusingLastFrame());
 
-        Integer used = integerHelper.attemptRecognition(
+        Integer used = frameReader.attemptRecognition(
                 FREE_MARCHES_OCR_TL_VALUE,
                 FREE_MARCHES_OCR_BR_VALUE,
                 5,
@@ -701,7 +702,7 @@ private int inspectFreeMarches() {
         checkPreemption();
 
 
-        Integer total = integerHelper.attemptRecognition(
+        Integer total = frameReader.attemptRecognition(
                 FREE_MARCHES_OCR_TL_VALUE,
                 FREE_MARCHES_OCR_BR_VALUE,
                 5,

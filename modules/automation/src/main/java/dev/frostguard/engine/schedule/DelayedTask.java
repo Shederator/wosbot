@@ -13,7 +13,7 @@ import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
-import dev.frostguard.api.domain.TesseractSettingsData;
+import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.input.TapJitterPolicy;
 import dev.frostguard.engine.service.LoggingService;
@@ -290,7 +290,7 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
 
     // ── OCR convenience ─────────────────────────────────────────────
 
-    protected Integer readNumberValue(PointData tl, PointData br, TesseractSettingsData cfg) {
+    protected Integer readNumberValue(PointData tl, PointData br, OcrSettingsData cfg) {
         Integer val = integerHelper.attemptRecognition(tl, br, 5, 200L, cfg,
                 text -> RegexNumberParser.conformsTo(text, CommonOCRSettings.NUMBER_PATTERN),
                 text -> RegexNumberParser.extractByPattern(text, CommonOCRSettings.NUMBER_PATTERN));
@@ -298,7 +298,7 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
         return val;
     }
 
-    protected String readStringValue(PointData tl, PointData br, TesseractSettingsData cfg) {
+    protected String readStringValue(PointData tl, PointData br, OcrSettingsData cfg) {
         String val = stringHelper.attemptRecognition(tl, br, 5, 200L, cfg,
                 Objects::nonNull, text -> text);
         logDebug("String OCR result: " + (val != null ? val : "null"));

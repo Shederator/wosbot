@@ -17,7 +17,7 @@ import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
-import dev.frostguard.api.domain.TesseractSettingsData;
+import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.service.StaminaService;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -74,12 +74,12 @@ public class StorehouseChestRoutine extends DelayedTask {
     private static final int SCROLL_REPEAT_DELAY = 300;
 
     // ========== OCR Settings ==========
-    private static final TesseractSettingsData STAMINA_OCR_SETTINGS = TesseractSettingsData.assembler()
+    private static final OcrSettingsData STAMINA_OCR_SETTINGS = OcrSettingsData.assembler()
             .setTextColor(new Color(248, 247, 234))
             .stripBackground(true)
             .charWhitelist("0123456789")
-            .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
-            .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
+            .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
+
             .build();
 
     // ========== Configuration (loaded in loadConfiguration()) ==========
@@ -228,9 +228,9 @@ public class StorehouseChestRoutine extends DelayedTask {
     private LocalDateTime readChestTimer() {
         logDebug("Reading chest timer via OCR");
 
-        TesseractSettingsData configs = TesseractSettingsData.assembler()
-                .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
-                .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
+        OcrSettingsData configs = OcrSettingsData.assembler()
+                .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
+
                 .stripBackground(true)
                 .setTextColor(new Color(255, 95, 95))
                 .charWhitelist("0123456789:")
@@ -403,9 +403,9 @@ public class StorehouseChestRoutine extends DelayedTask {
     private LocalDateTime readFallbackTimer() {
         logDebug("Attempting fallback timer reading.");
 
-        TesseractSettingsData configs = TesseractSettingsData.assembler()
-                .pageAnalysis(TesseractSettingsData.PageAnalysis.SINGLE_LINE)
-                .recognitionEngine(TesseractSettingsData.RecognitionEngine.LSTM_ONLY)
+        OcrSettingsData configs = OcrSettingsData.assembler()
+                .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
+
                 .stripBackground(true)
                 .setTextColor(new Color(255, 255, 255))
                 .charWhitelist("0123456789:")
