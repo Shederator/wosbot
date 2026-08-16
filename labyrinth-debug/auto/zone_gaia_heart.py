@@ -40,14 +40,20 @@ other zone in this folder:
 - Back arrow (40, 40) from Defeat returns to the zone's stage-select screen (validated
   live). From there, the normal BACK_ARROW pattern returns to The Labyrinth map.
 
-Retry/power-wall policy (matches the spirit of zone_troop_ratio's, simplified): no
-reactive enemy-comp counter here yet (Gaia Heart's post-loss report layout hasn't been
-mapped) -- so a loss gets exactly ONE same-config retry (RNG/timing can differ even
-with an identical squad). Losing twice on the same stage = power wall, logged to
-zone_history same as every other zone, and the run stops rather than burning through
-the small daily attempt pool blindly. A future pass can add the reactive counter once
-Gaia Heart's Battle Report shape is mapped (see read_enemy_comp_from_loss_report in
-zone_troop_ratio.py for the pattern to port).
+Two climb functions here, deliberately kept separate:
+- climb(): the original, simple version -- a loss gets exactly ONE same-config retry,
+  no adjustment. Kept as a plain fallback.
+- climb_with_autotune(): matt's 2026-08-16 ask ("blow attempt in gaia to test
+  different formation and build in the tale of the tape for harder battles and auto
+  adjust formation") -- reads each loss's trade efficiency from the Battle Report
+  (gaia_ratio_tuner.py, pixel-fill-based since composition OCR isn't possible here --
+  see that module's docstring for the full writeup) and reconfigures both squads to
+  the next candidate formation before retrying, instead of blindly repeating the same
+  squad. This is what daily_labyrinth.py actually calls.
+
+Either way, losing MAX_ATTEMPTS_SAME_STAGE times on the same stage = power wall,
+logged to zone_history same as every other zone, and the run stops rather than
+burning through the small daily attempt pool blindly.
 """
 
 import re
@@ -59,6 +65,7 @@ from labyrinth_common import (
     get_current_stage_label, BACK_ARROW,
 )
 import zone_history
+import gaia_ratio_tuner
 
 # ---------------------------------------------------------------------------
 # UI coordinates -- calibrated live 2026-08-16 against the real Gaia Heart zone.
@@ -68,6 +75,24 @@ CHALLENGE_BTN = (360, 1215)          # on the stage-select screen
 QUICK_DEPLOY_BTN = (197, 1193)       # Squad Config -- fills both squads w/ real troops
 DEPLOY_BTN = (522, 1195)             # Squad Config -- starts the chain
 RETRY_BTN = (522, 1002)              # on the Defeat screen
+VIEW_BATTLE_REPORT_BTN = (200, 1000) # on the Defeat screen
+
+# Squad Config -- Edit Formation buttons (index-aligned: squad 1, squad 2).
+SQUAD_EDIT_BTNS = [(360, 357), (360, 700)]
+# Troop-detail screen -- Balance popup + commit. Live-verified 2026-08-16: Balance
+# opens the ratio popup at (330, 1195) -- NOT the other zones' 1183, Gaia's screen has
+# enough clearance that the original coordinate works here. The bottom-right "Edit
+# Formation" button commits the ratio DIRECTLY (confirmed via a full exit-and-re-entry
+# round trip) -- no back-arrow, no Save-and-Exit dialog like Land of Heroes.
+BALANCE_BTN = (330, 1195)
+EDIT_FORMATION_COMMIT_BTN = (548, 1213)
+CONFIRM_BTN = (360, 978)
+BAL_MINUS_X, BAL_PLUS_X = 202, 511
+# Row Y positions differ from the troop-ratio zones' shared 530/675/820 -- confirmed
+# live (see module docstring).
+BAL_ROW_Y = {"inf": 530, "lan": 655, "mrk": 800}
+FLOOR_TAPS = 105
+DET_TAP_DELAY = 0.09
 
 TITLE_ANCHOR_BOX = (30, 20, 400, 60)
 RESULT_BUTTON_ROW_BOX = (0, 850, 720, 1010)
@@ -93,6 +118,12 @@ def is_gaia_defeat_screen(img):
     return "remaining attempts" in text
 
 
+def is_gaia_troop_detail_screen(img):
+    """The per-squad troop-detail screen (reached via Squad Config's Edit Formation)
+    titles itself "Gaia Heart" -- distinct from "Squad Config"."""
+    return "gaia heart" in ocr_text(img, TITLE_ANCHOR_BOX, psm=7).lower()
+
+
 ATTEMPTS_LEFT_BOX = (150, 915, 570, 950)
 
 
@@ -111,6 +142,89 @@ def enter_squad_config(log=print):
         log("[gaia_heart] never reached Squad Config after Challenge -- aborting.")
         return False
     return True
+
+
+def _raw_tap(x, y):
+    from labyrinth_common import adb
+    adb("shell", "input", "tap", str(x), str(y))
+    time.sleep(DET_TAP_DELAY)
+
+
+def set_ratio_deterministic(inf_pct, lan_pct, mrk_pct):
+    """Assumes the Balance popup is already open. Zeros all three rows then fills each
+    to target -- live-verified 2026-08-16: landed exactly 60/40/0 and 50/0/50 with zero
+    correction taps needed, using Gaia's own row Y positions (BAL_ROW_Y)."""
+    for row in BAL_ROW_Y.values():
+        for _ in range(FLOOR_TAPS):
+            _raw_tap(BAL_MINUS_X, row)
+    for key, pct in {"inf": inf_pct, "lan": lan_pct, "mrk": mrk_pct}.items():
+        row = BAL_ROW_Y[key]
+        for _ in range(pct):
+            _raw_tap(BAL_PLUS_X, row)
+    time.sleep(0.6)
+
+
+def apply_formation(formation, log=print):
+    """Assumes Squad Config is showing. Applies formation['squad1']/['squad2'] ratios
+    via Edit Formation -> Balance -> set -> Confirm -> the screen's own commit button
+    (verified live: persists without any back-arrow/dialog step, see module docstring).
+    Re-enters Squad Config between squads (Gaia's commit lands back there directly).
+    Returns True if both squads were set and confirmed, False on any navigation miss
+    (caller should not assume a partial application -- treat False as "state unknown,
+    stop rather than guess")."""
+    for i, squad_key in enumerate(("squad1", "squad2")):
+        ratio = formation[squad_key]
+        if i > 0:
+            if not enter_squad_config(log=log):
+                log(f"[gaia_heart] apply_formation: couldn't re-enter Squad Config "
+                    f"for squad {i + 1}.")
+                return False
+        tap(*SQUAD_EDIT_BTNS[i])
+        img = wait_for_screen(is_gaia_troop_detail_screen,
+                               label=f"gaia_troop_detail_sq{i + 1}")
+        if img is None:
+            log(f"[gaia_heart] apply_formation: never reached squad {i + 1}'s "
+                f"troop-detail screen.")
+            return False
+
+        tap(*BALANCE_BTN)
+        time.sleep(1.0)
+        set_ratio_deterministic(*ratio)
+        tap(*CONFIRM_BTN)
+        time.sleep(1.0)
+
+        tap(*EDIT_FORMATION_COMMIT_BTN)
+        img = wait_for_screen(is_squad_config_screen, label=f"gaia_commit_sq{i + 1}")
+        if img is None:
+            log(f"[gaia_heart] apply_formation: commit for squad {i + 1} didn't "
+                f"visibly return to Squad Config -- ratio may not have persisted.")
+            return False
+        log(f"[gaia_heart] applied squad {i + 1} -> "
+            f"{ratio[0]}/{ratio[1]}/{ratio[2]} (Inf/Lan/Mrk).")
+    return True
+
+
+def read_battle_report_efficiency(log=print):
+    """Assumes we're on the Defeat screen. Opens View Battle Report -> the top (most
+    recent) stage's details, reads all visible rounds' trade efficiency via
+    gaia_ratio_tuner, then backs out to the stage-select screen. Returns
+    (efficiency_or_None, backed_out_cleanly)."""
+    tap(*VIEW_BATTLE_REPORT_BTN)
+    time.sleep(1.5)
+    tap(360, 335)  # top (most recent) stage card in the report list
+    time.sleep(1.5)
+    img = screenshot("gaia_battle_details")
+    rounds = gaia_ratio_tuner.read_all_visible_rounds(img, log=log)
+    efficiency = gaia_ratio_tuner.trade_efficiency_for_run(rounds)
+
+    tap(*BACK_ARROW)  # details -> report list
+    time.sleep(1.0)
+    tap(*BACK_ARROW)  # report list -> stage-select
+    ok = wait_for_screen(is_stage_screen, label="gaia_after_report", timeout=5.0) is not None
+    if not ok:
+        log("[gaia_heart] didn't confirm return to stage-select after reading the "
+            "Battle Report -- caller should re-check state.")
+    return efficiency, ok
 
 
 def wait_for_chain_end(log=print):
@@ -231,3 +345,104 @@ def return_to_stage_select(log=print):
     tap(*BACK_ARROW)
     img = wait_for_screen(is_stage_screen, label="gaia_return_to_stage_select")
     return img is not None
+
+
+def climb_with_autotune(max_attempts_today=None, log=print):
+    """matt/2026-08-16: "blow attempt in gaia to test different formation and build in
+    the tale of the tape for harder battles and auto adjust formation." Same overall
+    shape as climb(), but on a loss it reads the Battle Report's trade efficiency
+    (gaia_ratio_tuner -- see that module's docstring for why this is outcome-driven
+    empirical tuning rather than a Cave/Charm-style comp counter, which the UI here
+    doesn't expose data for), records it, and RECONFIGURES both squads to the next
+    candidate formation before the next attempt -- rather than blindly retrying the
+    identical squad like climb() does.
+
+    HONESTY NOTE (see module docstring): the individual pieces here are each
+    live-verified; this exact composed retry-with-reconfigure path has not been
+    round-tripped live end-to-end. Watch the first real run closely.
+
+    Returns the same result-dict shape as climb(), plus 'formations_tried': [labels].
+    """
+    zone_name = "gaia_heart"
+    attempts_used = 0
+    formations_tried = []
+
+    img = wait_for_screen(is_stage_screen, label="gaia_start", timeout=4.0)
+    if img is None:
+        log("[gaia_heart] not on a stage screen at start -- aborting rather than "
+            "guessing where we are.")
+        return {"zone": zone_name, "stopped_reason": "not_on_stage_screen",
+                "final_stage": None, "attempts_used": 0, "formations_tried": []}
+
+    stage_label = get_current_stage_label(img)
+    log(f"[gaia_heart] current wall stage: {stage_label}")
+
+    # Tale of the tape -- free (no attempt spent), logged for the record. No decision
+    # is driven from it (confirmed live: no composition data here), matching the other
+    # zones' "scout every stage as a sanity read" spirit.
+    gaia_ratio_tuner.scout_tale_of_the_tape(stage_label or "unknown", log=log)
+
+    same_stage_attempts = 0
+    while True:
+        formation = gaia_ratio_tuner.next_formation_to_try(stage_label or "unknown",
+                                                             log=log)
+        formations_tried.append(formation["label"])
+
+        if not enter_squad_config(log=log):
+            return {"zone": zone_name, "stopped_reason": "failed_to_reach_squad_config",
+                    "final_stage": stage_label, "attempts_used": attempts_used,
+                    "formations_tried": formations_tried}
+        if not apply_formation(formation, log=log):
+            log("[gaia_heart] formation application failed partway -- stopping rather "
+                "than deploying with an unknown/half-set comp.")
+            return {"zone": zone_name, "stopped_reason": "formation_apply_failed",
+                    "final_stage": stage_label, "attempts_used": attempts_used,
+                    "formations_tried": formations_tried}
+
+        result, img = deploy_and_wait_for_chain_end(log=log)
+        attempts_used += 1
+        same_stage_attempts += 1
+
+        if result == "timeout":
+            return {"zone": zone_name, "stopped_reason": "chain_poll_timeout",
+                    "final_stage": stage_label, "attempts_used": attempts_used,
+                    "formations_tried": formations_tried}
+
+        attempts_left = read_attempts_remaining(img) if img is not None else None
+        log(f"[gaia_heart] chain ended in defeat with formation "
+            f"'{formation['label']}' (attempt {same_stage_attempts} on this stage). "
+            f"Attempts remaining today: {attempts_left}.")
+
+        efficiency, backed_out = read_battle_report_efficiency(log=log)
+        gaia_ratio_tuner.record_ratio_outcome(stage_label or "unknown",
+                                               formation["label"], efficiency, log=log)
+        if not backed_out:
+            log("[gaia_heart] lost track of screen state after reading the Battle "
+                "Report -- stopping rather than guessing where we are.")
+            return {"zone": zone_name, "stopped_reason": "lost_screen_after_report",
+                    "final_stage": stage_label, "attempts_used": attempts_used,
+                    "formations_tried": formations_tried}
+
+        if same_stage_attempts >= MAX_ATTEMPTS_SAME_STAGE:
+            log(f"[gaia_heart] tried {same_stage_attempts} formation(s) on this stage "
+                f"-- stopping rather than burning the rest of today's attempts. "
+                f"Formations tried: {formations_tried}.")
+            zone_history.record_stage_result(
+                zone_name, stage_label or "unknown", "power_wall",
+                datetime.now().strftime("%Y-%m-%d"),
+                note=f"{same_stage_attempts} loss(es) this run across formations "
+                     f"{formations_tried} -- see gaia_ratio_history.json for the "
+                     f"per-formation efficiency scores.")
+            break
+
+        if attempts_left is not None and attempts_left <= 0:
+            log("[gaia_heart] out of attempts for today -- stopping.")
+            break
+
+    final_img = wait_for_screen(is_stage_screen, label="gaia_final_stage_check",
+                                 timeout=6.0)
+    final_stage = get_current_stage_label(final_img) if final_img is not None else None
+
+    return {"zone": zone_name, "stopped_reason": "power_wall_or_out_of_attempts",
+            "final_stage": final_stage or stage_label, "attempts_used": attempts_used,
+            "formations_tried": formations_tried}

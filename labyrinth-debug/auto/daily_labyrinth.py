@@ -145,7 +145,7 @@ def run_daily(dry_run=False, log=print):
             continue
 
         if key == GAIA_HEART_ZONE:
-            result = zone_gaia_heart.climb(log=log)
+            result = zone_gaia_heart.climb_with_autotune(log=log)
             log(f"[{key}] done: {result}")
             run_record["zones"][key] = result
             if not zone_gaia_heart.return_to_stage_select(log=log):
