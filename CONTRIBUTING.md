@@ -62,13 +62,38 @@ tests, full verification, and local startup. Shared engineering and verification
 rules live in [AGENTS.md](AGENTS.md); follow the technical documents it routes
 for the affected area.
 
+## Developer Certificate of Origin
+
+Frostguard is licensed under `AGPL-3.0-only`. Contributors retain copyright in
+their contributions and certify that they have the right to submit each change
+under that license by signing off every commit under the
+[Developer Certificate of Origin 1.1](DCO).
+
+Add the sign-off with Git's `-s` option:
+
+```sh
+git commit -s
+```
+
+This adds a trailer using the identity configured in Git:
+
+```text
+Signed-off-by: Your Name <your.email@example.com>
+```
+
+The sign-off is a legal certification, not a GPG or SSH signature. Use your own
+name and an email address matching the commit author. By signing off, you agree
+to the certification in [DCO](DCO). Pull requests cannot be merged until every
+commit has a valid sign-off.
+
 ## Submit a code or documentation change
 
 1. Create a focused feature, fix, or documentation branch from `main`.
 2. Follow `AGENTS.md` and the relevant technical guidance.
-3. Add tests or saved-frame fixtures where they preserve the changed behavior.
-4. Run at least the affected checks and record their actual results.
-5. Open a pull request using the repository template as an adaptable review
+3. Sign off every commit with `git commit -s`.
+4. Add tests or saved-frame fixtures where they preserve the changed behavior.
+5. Run at least the affected checks and record their actual results.
+6. Open a pull request using the repository template as an adaptable review
    guide.
 
 Make the complete behavior change, motivation, validation, and remaining risk

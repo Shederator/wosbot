@@ -118,6 +118,9 @@ intentional and documented. Keep commits reviewable and do not commit
 credentials, profile databases, emulator-specific paths, private logs, runtime
 artifacts, or generated output.
 
+Sign off every commit under the Developer Certificate of Origin 1.1 with
+`git commit -s`. The `Signed-off-by` identity must match the commit author.
+
 Prefer a short native GitHub PR stack when substantial work has ordered,
 dependent units that are independently reviewable and testable; do not stack
 unrelated work or split mechanically. Use the official `gh stack` extension:

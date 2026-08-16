@@ -9,6 +9,13 @@
 	<version>${revision}</version>
 	<packaging>pom</packaging>
 	<name>Frostguard Automation Platform</name>
+	<licenses>
+		<license>
+			<name>GNU Affero General Public License v3.0 only</name>
+			<url>https://www.gnu.org/licenses/agpl-3.0.html</url>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
 
 	<!-- ──────────────────────────────────────────────
 	     Build-wide property declarations

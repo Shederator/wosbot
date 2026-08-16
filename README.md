@@ -166,6 +166,16 @@ data with installed Stable or Nightly builds.
 Read the **[developer setup](docs/development.md)** for tool installation,
 module-focused examples, development workspaces, and native Windows packaging.
 
+## License
+
+Frostguard is licensed under the
+[GNU Affero General Public License version 3 only](LICENSE) (`AGPL-3.0-only`).
+Each contributor retains copyright in their own contributions.
+
+Contributions are accepted under the same license and require a
+[Developer Certificate of Origin](DCO) sign-off. See
+[Contributing](CONTRIBUTING.md#developer-certificate-of-origin) for details.
+
 ## Documentation
 
 | I want to… | Read… |
