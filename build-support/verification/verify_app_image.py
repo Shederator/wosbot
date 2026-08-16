@@ -12,7 +12,7 @@ import zipfile
 from pathlib import Path
 
 MINIMUM_RUNTIME_JARS = 50
-STATIC_REQUIRED_FILES = (
+WINDOWS_STATIC_REQUIRED_FILES = (
     "runtime/bin/server/jvm.dll",
     "app/lib/adb/adb.exe",
     "app/lib/adb/AdbWinApi.dll",
@@ -21,6 +21,16 @@ STATIC_REQUIRED_FILES = (
     "app/lib/tesseract/osd.traineddata",
     "app/lib/tesseract/chi_sim.traineddata",
 )
+MACOS_STATIC_REQUIRED_FILES = (
+    "Contents/runtime/Contents/Home/lib/server/libjvm.dylib",
+    "Contents/app/lib/adb/adb",
+    "Contents/app/lib/tesseract/eng.traineddata",
+    "Contents/app/lib/tesseract/osd.traineddata",
+    "Contents/app/lib/tesseract/chi_sim.traineddata",
+    "Contents/app/lib/tesseract/native/libtesseract.dylib",
+)
+# Back-compat for tests that still import the Windows constant name.
+STATIC_REQUIRED_FILES = WINDOWS_STATIC_REQUIRED_FILES
 FORBIDDEN_NAMES = {
     "frostguard-workspace.json",
     "frostguard.db",
@@ -51,10 +61,13 @@ def inspect_image(
         image: Path, channel: str = "stable", product_name: str = "Frostguard",
         expected_desktop_launcher_sha256: str = "",
         expected_watcher_launcher_sha256: str = "",
+        platform: str = "windows",
 ) -> list[str]:
     problems: list[str] = []
     if not image.is_dir():
         return [f"Application image does not exist: {image}"]
+    if platform not in {"windows", "macos"}:
+        return [f"Unsupported platform: {platform}"]
 
     files = {
         path.relative_to(image).as_posix(): path
@@ -62,20 +75,71 @@ def inspect_image(
         if path.is_file()
     }
     watcher_name = "FrostguardNightlyWatcher" if channel == "nightly" else "FrostguardWatcher"
+    if platform == "macos":
+        static_required = MACOS_STATIC_REQUIRED_FILES
+        desktop_launcher = f"Contents/MacOS/{product_name}"
+        watcher_launcher = f"Contents/MacOS/{watcher_name}"
+        desktop_cfg = f"Contents/app/{product_name}.cfg"
+        watcher_cfg = f"Contents/app/{watcher_name}.cfg"
+        jar_prefix = "Contents/app/"
+        javafx_pattern = r"^Contents/app/lib/javafx-graphics-[^/]+-mac-aarch64\.jar$"
+        watcher_launcher_option = (
+            f"java-options=-Dfrostguard.watcher.launcher=$APPDIR/../MacOS/{watcher_name}"
+        )
+        desktop_launcher_option = (
+            f"java-options=-Dfrostguard.launcher=$APPDIR/../MacOS/{product_name}"
+        )
+        jar_patterns = (
+            (rf"^{jar_prefix}frostguard-desktop-[^/]+\.jar$", "desktop JAR"),
+            (rf"^{jar_prefix}frostguard-watcher-[^/]+\.jar$", "watcher JAR"),
+            (rf"^{jar_prefix}lib/frostguard-update-[^/]+\.jar$", "update module"),
+            (rf"^{jar_prefix}lib/opencv-[^/]+\.jar$", "OpenCV runtime"),
+            (rf"^{jar_prefix}lib/tess4j-[^/]+\.jar$", "Tess4J runtime"),
+            (javafx_pattern, "macOS aarch64 JavaFX runtime"),
+            (rf"^{jar_prefix}templates/.+\.png$", "template browser assets"),
+            (rf"^{jar_prefix}custom_tasks/.+$", "custom task examples"),
+        )
+        runtime_jar_re = rf"^{jar_prefix}lib/[^/]+\.jar$"
+    else:
+        static_required = WINDOWS_STATIC_REQUIRED_FILES
+        desktop_launcher = f"{product_name}.exe"
+        watcher_launcher = f"{watcher_name}.exe"
+        desktop_cfg = f"app/{product_name}.cfg"
+        watcher_cfg = f"app/{watcher_name}.cfg"
+        jar_prefix = "app/"
+        javafx_pattern = r"^app/lib/javafx-graphics-[^/]+-win\.jar$"
+        watcher_launcher_option = (
+            f"java-options=-Dfrostguard.watcher.launcher=$APPDIR/../{watcher_name}.exe"
+        )
+        desktop_launcher_option = (
+            f"java-options=-Dfrostguard.launcher=$APPDIR/../{product_name}.exe"
+        )
+        jar_patterns = (
+            (r"^app/frostguard-desktop-[^/]+\.jar$", "desktop JAR"),
+            (r"^app/frostguard-watcher-[^/]+\.jar$", "watcher JAR"),
+            (r"^app/lib/frostguard-update-[^/]+\.jar$", "update module"),
+            (r"^app/lib/opencv-[^/]+\.jar$", "OpenCV runtime"),
+            (r"^app/lib/tess4j-[^/]+\.jar$", "Tess4J runtime"),
+            (javafx_pattern, "Windows JavaFX runtime"),
+            (r"^app/templates/.+\.png$", "template browser assets"),
+            (r"^app/custom_tasks/.+$", "custom task examples"),
+        )
+        runtime_jar_re = r"^app/lib/[^/]+\.jar$"
+
     required_files = (
-        *STATIC_REQUIRED_FILES,
-        f"{product_name}.exe",
-        f"{watcher_name}.exe",
-        f"app/{product_name}.cfg",
-        f"app/{watcher_name}.cfg",
+        *static_required,
+        desktop_launcher,
+        watcher_launcher,
+        desktop_cfg,
+        watcher_cfg,
     )
     for required in required_files:
         if required not in files:
             problems.append(f"Application image is missing {required}")
 
     for relative, expected_hash in (
-        (f"{product_name}.exe", expected_desktop_launcher_sha256),
-        (f"{watcher_name}.exe", expected_watcher_launcher_sha256),
+        (desktop_launcher, expected_desktop_launcher_sha256),
+        (watcher_launcher, expected_watcher_launcher_sha256),
     ):
         if not expected_hash or relative not in files:
             continue
@@ -85,22 +149,13 @@ def inspect_image(
                 f"{relative} SHA-256 changed: expected {expected_hash}, got {actual_hash}"
             )
 
-    runtime_jars = [name for name in files if re.match(r"^app/lib/[^/]+\.jar$", name)]
+    runtime_jars = [name for name in files if re.match(runtime_jar_re, name)]
     if len(runtime_jars) < MINIMUM_RUNTIME_JARS:
         problems.append(
             f"Only {len(runtime_jars)} runtime JARs found; expected at least "
             f"{MINIMUM_RUNTIME_JARS}"
         )
-    for pattern, description in (
-        (r"^app/frostguard-desktop-[^/]+\.jar$", "desktop JAR"),
-        (r"^app/frostguard-watcher-[^/]+\.jar$", "watcher JAR"),
-        (r"^app/lib/frostguard-update-[^/]+\.jar$", "update module"),
-        (r"^app/lib/opencv-[^/]+\.jar$", "OpenCV runtime"),
-        (r"^app/lib/tess4j-[^/]+\.jar$", "Tess4J runtime"),
-        (r"^app/lib/javafx-graphics-[^/]+-win\.jar$", "Windows JavaFX runtime"),
-        (r"^app/templates/.+\.png$", "template browser assets"),
-        (r"^app/custom_tasks/.+$", "custom task examples"),
-    ):
+    for pattern, description in jar_patterns:
         if not any(re.match(pattern, name) for name in files):
             problems.append(f"Application image has no {description}")
 
@@ -108,18 +163,18 @@ def inspect_image(
         f"java-options=-Dfrostguard.channel={channel}",
         f"java-options=-Dfrostguard.application.id=dev.frostguard.desktop{'.nightly' if channel == 'nightly' else ''}",
         "java-options=-Duser.dir=$APPDIR",
-        f"java-options=-Dfrostguard.watcher.launcher=$APPDIR/../{watcher_name}.exe",
+        watcher_launcher_option,
     )
     config_settings = {
-        f"app/{product_name}.cfg": (
+        desktop_cfg: (
             "app.mainclass=dev.frostguard.app.bootstrap.Main",
             "java-options=-Dfrostguard.update.manifest.stable=",
             "java-options=-Dfrostguard.update.manifest.nightly=",
             *common_java_options,
         ),
-        f"app/{watcher_name}.cfg": (
+        watcher_cfg: (
             "app.mainclass=dev.frostguard.watcher.TelegramWatcher",
-            f"java-options=-Dfrostguard.launcher=$APPDIR/../{product_name}.exe",
+            desktop_launcher_option,
             *common_java_options,
         ),
     }
@@ -143,7 +198,7 @@ def inspect_image(
 
     desktop_jars = [
         path for name, path in files.items()
-        if re.match(r"^app/frostguard-desktop-[^/]+\.jar$", name)
+        if re.match(rf"^{jar_prefix}frostguard-desktop-[^/]+\.jar$", name)
     ]
     if len(desktop_jars) == 1:
         try:
@@ -171,7 +226,7 @@ def inspect_image(
 
     update_jars = [
         path for name, path in files.items()
-        if re.match(r"^app/lib/frostguard-update-[^/]+\.jar$", name)
+        if re.match(rf"^{jar_prefix}lib/frostguard-update-[^/]+\.jar$", name)
     ]
     if len(update_jars) == 1:
         try:
@@ -211,6 +266,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("image", type=Path)
     parser.add_argument("--channel", choices=("stable", "nightly"), default="stable")
     parser.add_argument("--product-name", default="Frostguard")
+    parser.add_argument("--platform", choices=("windows", "macos"), default="windows")
     parser.add_argument("--expected-desktop-launcher-sha256", default="")
     parser.add_argument("--expected-watcher-launcher-sha256", default="")
     args = parser.parse_args(argv)
@@ -220,6 +276,7 @@ def main(argv: list[str] | None = None) -> int:
         args.product_name,
         args.expected_desktop_launcher_sha256,
         args.expected_watcher_launcher_sha256,
+        args.platform,
     )
     if problems:
         for problem in problems:

@@ -22,6 +22,7 @@
         <!-- Keep the unchanged bootstrap byte-identical while releases are
              project-signed but do not yet have an Authenticode publisher. -->
         <frostguard.windows.launcher-version>2.1.0</frostguard.windows.launcher-version>
+        <frostguard.macos.app-version>${project.version}</frostguard.macos.app-version>
         <frostguard.product.name>Frostguard</frostguard.product.name>
         <frostguard.product.identifier>dev.frostguard.desktop</frostguard.product.identifier>
         <frostguard.product.description>Frostguard automation desktop application</frostguard.product.description>
@@ -110,6 +111,11 @@
                                 <resource>
                                     <directory>${project.parent.basedir}/tools/adb</directory>
                                     <filtering>false</filtering>
+                                    <includes>
+                                        <include>adb.exe</include>
+                                        <include>AdbWinApi.dll</include>
+                                        <include>AdbWinUsbApi.dll</include>
+                                    </includes>
                                 </resource>
                             </resources>
                         </configuration>
@@ -179,6 +185,27 @@
                                     <includes>
                                         <include>Frostguard-Watcher.properties</include>
                                         <include>main.wxs</include>
+                                    </includes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>prepare-jpackage-macos-launchers</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/jpackage/macos</outputDirectory>
+                            <encoding>UTF-8</encoding>
+                            <propertiesEncoding>UTF-8</propertiesEncoding>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/src/main/macos</directory>
+                                    <filtering>true</filtering>
+                                    <includes>
+                                        <include>Frostguard-Watcher.properties</include>
                                     </includes>
                                 </resource>
                             </resources>
@@ -386,6 +413,183 @@
                 <frostguard.watcher.name>FrostguardNightlyWatcher</frostguard.watcher.name>
                 <frostguard.product.upgrade-uuid>51ac745d-78e4-4d89-a36d-1c38b87598b3</frostguard.product.upgrade-uuid>
             </properties>
+        </profile>
+
+        <profile>
+            <id>macos-app-image</id>
+            <activation>
+                <property>
+                    <name>macos.app.image</name>
+                </property>
+            </activation>
+            <properties>
+                <javafx.platform>mac-aarch64</javafx.platform>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-resources-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>stage-adb-runtime-macos</id>
+                                <phase>prepare-package</phase>
+                                <goals>
+                                    <goal>copy-resources</goal>
+                                </goals>
+                                <configuration>
+                                    <outputDirectory>${project.build.directory}/input/lib/adb</outputDirectory>
+                                    <resources>
+                                        <resource>
+                                            <directory>${project.parent.basedir}/tools/adb/mac</directory>
+                                            <filtering>false</filtering>
+                                            <includes>
+                                                <include>adb</include>
+                                            </includes>
+                                        </resource>
+                                    </resources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>stage-macos-tesseract-natives</id>
+                                <phase>prepare-package</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <target>
+                                        <exec executable="bash" failonerror="true">
+                                            <arg value="${maven.multiModuleProjectDirectory}/build-support/packaging/stage_macos_tesseract_natives.sh" />
+                                            <arg path="${project.build.directory}/input/lib/tesseract/native" />
+                                        </exec>
+                                        <delete>
+                                            <fileset dir="${project.build.directory}/input/lib/adb"
+                                                    includes="adb.exe,AdbWinApi.dll,AdbWinUsbApi.dll" />
+                                        </delete>
+                                    </target>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>build-macos-app-image</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <target>
+                                        <property name="jpackage.executable" value="${java.home}/bin/jpackage" />
+                                        <delete dir="${project.build.directory}/app-image/${frostguard.product.name}.app" />
+                                        <mkdir dir="${project.build.directory}/app-image" />
+                                        <exec executable="${jpackage.executable}" failonerror="true">
+                                            <arg value="--type" />
+                                            <arg value="app-image" />
+                                            <arg value="--dest" />
+                                            <arg path="${project.build.directory}/app-image" />
+                                            <arg value="--input" />
+                                            <arg path="${project.build.directory}/input" />
+                                            <arg value="--name" />
+                                            <arg value="${frostguard.product.name}" />
+                                            <arg value="--app-version" />
+                                            <arg value="${frostguard.macos.app-version}" />
+                                            <arg value="--vendor" />
+                                            <arg value="Frostguard" />
+                                            <arg value="--description" />
+                                            <arg value="${frostguard.product.description}" />
+                                            <arg value="--mac-package-identifier" />
+                                            <arg value="${frostguard.product.identifier}" />
+                                            <arg value="--main-jar" />
+                                            <arg value="frostguard-desktop-${project.version}.jar" />
+                                            <arg value="--main-class" />
+                                            <arg value="dev.frostguard.app.bootstrap.Main" />
+                                            <arg value="--java-options" />
+                                            <arg value="--enable-native-access=ALL-UNNAMED" />
+                                            <arg value="--java-options" />
+                                            <arg value="-Dfrostguard.channel=${frostguard.release.channel}" />
+                                            <arg value="--java-options" />
+                                            <arg value="-Dfrostguard.application.id=${frostguard.product.identifier}" />
+                                            <arg value="--java-options" />
+                                            <arg value="-Dfrostguard.update.pullRequestBuild=${frostguard.pull-request-build}" />
+                                            <arg value="--java-options" />
+                                            <arg value="-Dfrostguard.update.manifest.stable=${frostguard.update.manifest.stable}" />
+                                            <arg value="--java-options" />
+                                            <arg value="-Dfrostguard.update.manifest.nightly=${frostguard.update.manifest.nightly}" />
+                                            <arg value="--java-options" />
+                                            <arg value="-Dfrostguard.channel.page.stable=${frostguard.channel.page.stable}" />
+                                            <arg value="--java-options" />
+                                            <arg value="-Dfrostguard.channel.page.nightly=${frostguard.channel.page.nightly}" />
+                                            <arg value="--java-options" />
+                                            <arg value="-Duser.dir=$APPDIR" />
+                                            <arg value="--java-options" />
+                                            <arg value="-Dfrostguard.watcher.launcher=$APPDIR/../MacOS/${frostguard.watcher.name}" />
+                                            <arg value="--java-options" />
+                                            <arg value="-Djna.library.path=$APPDIR/lib/tesseract/native" />
+                                            <arg value="--add-launcher" />
+                                            <arg value="${frostguard.watcher.name}=${project.build.directory}/jpackage/macos/Frostguard-Watcher.properties" />
+                                        </exec>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>macos-pkg</id>
+            <activation>
+                <property>
+                    <name>macos.pkg</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>build-macos-pkg</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <target>
+                                        <property name="jpackage.executable" value="${java.home}/bin/jpackage" />
+                                        <mkdir dir="${project.build.directory}/installers/${frostguard.release.channel}" />
+                                        <exec executable="${jpackage.executable}" failonerror="true">
+                                            <arg value="--verbose" />
+                                            <arg value="--type" />
+                                            <arg value="pkg" />
+                                            <arg value="--dest" />
+                                            <arg path="${project.build.directory}/installers/${frostguard.release.channel}" />
+                                            <arg value="--name" />
+                                            <arg value="${frostguard.product.name}" />
+                                            <arg value="--app-version" />
+                                            <arg value="${frostguard.macos.app-version}" />
+                                            <arg value="--vendor" />
+                                            <arg value="Frostguard" />
+                                            <arg value="--description" />
+                                            <arg value="${frostguard.product.description}" />
+                                            <arg value="--app-image" />
+                                            <arg path="${project.build.directory}/app-image/${frostguard.product.name}.app" />
+                                            <arg value="--mac-package-identifier" />
+                                            <arg value="${frostguard.product.identifier}" />
+                                        </exec>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
 </project>
