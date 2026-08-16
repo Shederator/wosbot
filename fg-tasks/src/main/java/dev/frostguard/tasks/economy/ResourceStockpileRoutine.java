@@ -303,11 +303,33 @@ public class ResourceStockpileRoutine extends DelayedTask {
     private static final double SANITY_BAND_MAX_RATIO = 1.5;
     private static final double SANITY_BAND_MIN_RATIO = 1.0 / SANITY_BAND_MAX_RATIO;
 
+    /** matt/2026-08-16: "this is wrong" -- root-caused live against real telemetry history:
+     *  meat froze at exactly 87,700,000 for 4 straight hourly cycles (6+ hours) while the real
+     *  in-game HUD showed 5.7M. Unlike bg_telemetry's power/gems check (which compares against
+     *  the PREVIOUS SAMPLE and self-heals after one skipped write, since a rejection writes null
+     *  and breaks the chain), this routine only ever writes the CACHED CONFIG VALUE on accept --
+     *  so once one reading locks in, every future correct reading that's far from it (whether a
+     *  fixed misread finally correcting itself, or a real large legitimate change: a big Furnace
+     *  upgrade spend, a big claim) gets rejected FOREVER, with no way to ever recover. A single
+     *  old cached number was being trusted over an unlimited run of newer, mutually-consistent
+     *  readings.
+     *
+     *  Fix: track how many CONSECUTIVE rejected readings agree with EACH OTHER (not with the
+     *  stale cache). Several independent reads clustering together is stronger evidence than one
+     *  old cached number, whatever caused the original divergence -- once REJECT_STREAK_TO_TRUST
+     *  is reached, trust the new streak and let the cache catch up. In-memory (resets if
+     *  Bearguard restarts) -- that only costs one extra recovery cycle, not a lasting bug. */
+    private static final int REJECT_STREAK_TO_TRUST = 3;
+    private final Map<String, Long> rejectStreakAnchor = new java.util.HashMap<>();
+    private final Map<String, Integer> rejectStreakCount = new java.util.HashMap<>();
+
     /**
      * Rejects a candidate reading that jumps implausibly far from the value this routine last
      * cached for the same field, returning null (config keeps its last known-good value, and
      * GatherRoutine/bg_telemetry both fall back the same way they do on any other unreadable
-     * cycle) instead of overwriting a good cached value with a likely-wrong one.
+     * cycle) instead of overwriting a good cached value with a likely-wrong one -- UNLESS the
+     * candidate is the latest in a streak of mutually-consistent rejected readings (see field
+     * doc above), in which case the streak wins over the stale cache.
      *
      * <p>matt/2026-08-15: live testing found this ISN'T random noise for Meat/Wood -- a live capture
      * showed a crisp, unambiguous "87.4M" in the crop, but OCR reliably read it as "874M" both times
@@ -318,7 +340,8 @@ public class ResourceStockpileRoutine extends DelayedTask {
      * come out 10x high and get rejected forever). Before rejecting, check whether dividing by 10
      * repairs it back into the plausible band; if so that confirms the dropped-decimal pattern and
      * the corrected value is used. This is a narrow, specific correction for one identified failure
-     * mode, not an open-ended guess -- anything that doesn't fit even after /10 still gets rejected.
+     * mode, not an open-ended guess -- anything that doesn't fit even after /10 still gets rejected
+     * (and falls through to the streak-based recovery instead).
      */
     private Long sanityCheckAgainstCached(String field, Long candidate, ConfigurationKeyEnum cacheKey) {
         if (candidate == null) {
@@ -331,9 +354,13 @@ public class ResourceStockpileRoutine extends DelayedTask {
             cached = null;
         }
         if (cached == null || cached <= 0L) {
+            rejectStreakCount.remove(field);
+            rejectStreakAnchor.remove(field);
             return candidate;
         }
         if (inBand(candidate, cached)) {
+            rejectStreakCount.remove(field);
+            rejectStreakAnchor.remove(field);
             return candidate;
         }
         long corrected = candidate / 10L;
@@ -341,12 +368,29 @@ public class ResourceStockpileRoutine extends DelayedTask {
             logWarning("ResourceStockpileRoutine | " + field + " reading " + candidate + " is implausibly "
                     + "far from the last cached " + cached + ", but /10 (" + corrected + ") fits -- this is "
                     + "the known dropped-decimal-point misread, using the corrected value.");
+            rejectStreakCount.remove(field);
+            rejectStreakAnchor.remove(field);
             return corrected;
         }
+
+        Long anchor = rejectStreakAnchor.get(field);
+        int streak = (anchor != null && inBand(candidate, anchor)) ? rejectStreakCount.getOrDefault(field, 0) + 1 : 1;
+        rejectStreakAnchor.put(field, candidate);
+        rejectStreakCount.put(field, streak);
+
+        if (streak >= REJECT_STREAK_TO_TRUST) {
+            logWarning("ResourceStockpileRoutine | " + field + " has now read consistently near "
+                    + candidate + " for " + streak + " consecutive cycles while cached stays at "
+                    + cached + " -- trusting the consistent new readings over the stale cache.");
+            rejectStreakCount.remove(field);
+            rejectStreakAnchor.remove(field);
+            return candidate;
+        }
+
         logWarning("ResourceStockpileRoutine | " + field + " reading " + candidate + " is implausibly "
                 + "far from the last cached " + cached + " (ratio " + String.format("%.2f", (double) candidate / cached)
-                + ", /10 correction didn't fit either) -- rejecting as a likely OCR misread, keeping the "
-                + "last known-good value.");
+                + ", /10 correction didn't fit either) -- rejecting for now, keeping the last known-good "
+                + "value (streak toward trusting a consistent new reading: " + streak + "/" + REJECT_STREAK_TO_TRUST + ").");
         return null;
     }
 
