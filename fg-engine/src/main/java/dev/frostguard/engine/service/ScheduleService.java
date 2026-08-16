@@ -333,6 +333,65 @@ public class ScheduleService {
 		}
 	}
 
+	/**
+	 * matt/2026-08-16: "if I click a box, like, that task won't come up... it doesn't just
+	 * automatically enable it" -- {@link #prepareQueue} only ever reads each task's enabled-bool
+	 * config ONCE, at engine launch, so toggling a checkbox mid-session persisted the new value
+	 * to the DB (via AbstractProfileController -&gt; notifyProfileChange -&gt; saveProfile) but never
+	 * touched the already-running {@link TaskQueue} -- a restart was genuinely the only thing that
+	 * picked it up. Custom tasks already solve this exact problem live (see
+	 * CustomTasksLayoutController.scheduleTask/unscheduleTask calling
+	 * {@link #scheduleCustomTask} / {@link #evictTask}); this generalizes the same pattern to the
+	 * standard {@link ConfigurationKeyEnum}-bool-gated daily tasks (Labyrinth, City Events, etc.)
+	 * so every settings checkbox applies live the moment it's toggled, no restart, no separate
+	 * "Apply" button needed -- these panels already auto-save per-toggle (see
+	 * AbstractProfileController.setupCheckBoxListener), so the same call site just needs to also
+	 * poke the running queue. Intended caller: ProfileManagerLayoutController.notifyProfileChange,
+	 * right after saveProfile succeeds.
+	 *
+	 * <p>No-op (logged, not an error) if the bot isn't currently running for this profile -- the
+	 * DB write alone is correct in that case; the next launch's {@link #prepareQueue} picks it up
+	 * naturally, same as always.
+	 */
+	public void applyEnabledTaskChange(AccountDescriptor account, ConfigurationKeyEnum configKey, boolean nowEnabled) {
+		if (account == null || configKey == null) {
+			return;
+		}
+		TaskQueue queue = dispatcher.getQueue(account.getId());
+		if (queue == null) {
+			log(TpMessageSeverityEnum.INFO, "ScheduleService", account.getName(),
+					"Config " + configKey.name() + " changed to " + nowEnabled
+							+ ", but the bot isn't running for this profile -- will apply on next launch.");
+			return;
+		}
+
+		List<TpDailyTaskEnum> matchingTypes = Stream.of(TpDailyTaskEnum.values())
+				.filter(type -> configKey.equals(type.getConfigKey()))
+				.collect(Collectors.toList());
+		if (matchingTypes.isEmpty()) {
+			return; // this config key isn't a task-activation toggle (e.g. a formation-ratio field)
+		}
+
+		if (!nowEnabled) {
+			matchingTypes.forEach(type -> evictTask(account.getId(), type));
+			return;
+		}
+
+		Map<Integer, DailyTaskStatusData> progressByType = safeProgress(account.getId()).stream()
+				.filter(row -> row != null)
+				.collect(Collectors.toMap(DailyTaskStatusData::getIdTpDailyTask, row -> row, (first, ignored) -> first));
+
+		matchingTypes.forEach(type -> {
+			if (queue.isTaskQueued(type)) {
+				return; // already running/scheduled -- toggling on again is a no-op, not a duplicate
+			}
+			DelayedTask task = DelayedTaskRegistry.create(type, account);
+			enqueuePlannedTask(account, queue, task, progressByType, false);
+			log(TpMessageSeverityEnum.INFO, "ScheduleService", account.getName(),
+					"Live-enabled " + type.getName() + " (config toggled on, bot already running).");
+		});
+	}
+
 	public void persistEmulatorPath(String settingIdentifier, String path) {
 		Config row = findGlobalRow(settingIdentifier);
 		if (row == null) {
