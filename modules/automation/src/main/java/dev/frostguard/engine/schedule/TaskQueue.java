@@ -890,6 +890,10 @@ public class TaskQueue {
     }
 
     private void triggerPcSleep(LocalDateTime wakeAt) {
+        if (!dev.frostguard.api.platform.PlatformPaths.isWindows()) {
+            emitError("PC sleep idle policy is only supported on Windows");
+            return;
+        }
         try {
             deviceBridge.closeEmulator(profile.getEmulatorNumber());
             deviceBridge.releaseEmulatorSlot(profile);

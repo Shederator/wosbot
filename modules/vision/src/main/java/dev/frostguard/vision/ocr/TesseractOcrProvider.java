@@ -11,6 +11,7 @@ import java.util.List;
 
 import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.api.domain.OcrSettingsData.TextLayout;
+import dev.frostguard.api.platform.PlatformPaths;
 import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
 import org.slf4j.Logger;
@@ -139,6 +140,7 @@ public final class TesseractOcrProvider implements OcrProvider {
      * contains at least one {@code .traineddata} file.
      */
     private static String locateTessdata() {
+        configureNativeLookup();
         if (resolvedTessdataDir != null) return resolvedTessdataDir;
         synchronized (TesseractOcrProvider.class) {
             if (resolvedTessdataDir != null) return resolvedTessdataDir;
@@ -153,6 +155,10 @@ public final class TesseractOcrProvider implements OcrProvider {
             throw new IllegalStateException(
                     "No tessdata directory found — expected .traineddata files under lib/tesseract.");
         }
+    }
+
+    private static void configureNativeLookup() {
+        PlatformPaths.configureMacJnaLibraryPath();
     }
 
     private static List<Path> candidatePaths() {

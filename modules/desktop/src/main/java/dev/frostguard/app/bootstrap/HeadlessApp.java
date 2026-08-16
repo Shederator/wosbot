@@ -86,6 +86,9 @@ public class HeadlessApp {
 		if (savedActiveEmulator != null && !savedActiveEmulator.isEmpty()) {
 			try {
 				activeEmulator = EmulatorType.valueOf(savedActiveEmulator);
+				if (!activeEmulator.isSupportedOnCurrentPlatform()) {
+					activeEmulator = null;
+				}
 			} catch (IllegalArgumentException e) {
 				// Ignore Invalid Enum constant
 			}
@@ -94,7 +97,9 @@ public class HeadlessApp {
 
 		if (activeEmulator != null) {
 			String activePath = globalConfig.get(activeEmulator.getConfigKey());
-			if (activePath != null && new File(activePath).exists()) {
+			if (activeEmulator.isConfiguredPathValid(activePath)
+					|| (activeEmulator.isAdbOnlyProvider()
+					&& activeEmulator.isConfiguredPathValid(activeEmulator.resolveConfiguredDirectory()))) {
 				activeEmulatorValid = true;
 			} else {
 				ScheduleService.obtain().persistEmulatorPath(activeEmulator.getConfigKey(), null);

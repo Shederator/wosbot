@@ -1,5 +1,6 @@
 package dev.frostguard.engine.service;
 
+import dev.frostguard.api.platform.PlatformPaths;
 import dev.frostguard.api.runtime.WorkspacePaths;
 
 import java.io.File;
@@ -10,6 +11,7 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.StandardOpenOption;
+import java.util.Locale;
 import java.util.Properties;
 
 import org.slf4j.Logger;
@@ -31,10 +33,17 @@ public class TelegramWatcherLauncher {
 
         if (launcher != null && launcher.exists()) {
             try {
-                ProcessBuilder pb = isNativeLauncher(launcher)
-                        ? new ProcessBuilder(launcher.getAbsolutePath())
-                        : new ProcessBuilder("cmd", "/c", "start", "\"FG-TG-Watcher\"", "/b", launcher.getName());
-                pb.directory(launcher.getParentFile());
+                ProcessBuilder pb;
+                if (isNativeLauncher(launcher)) {
+                    pb = new ProcessBuilder(launcher.getAbsolutePath());
+                    pb.directory(launcher.getParentFile());
+                } else if (PlatformPaths.isWindows()) {
+                    pb = new ProcessBuilder("cmd", "/c", "start", "\"FG-TG-Watcher\"", "/b", launcher.getName());
+                    pb.directory(launcher.getParentFile());
+                } else {
+                    pb = new ProcessBuilder(launcher.getAbsolutePath());
+                    pb.directory(launcher.getParentFile());
+                }
                 pb.environment().put("FROSTGUARD_WORKSPACE", WorkspacePaths.current().root().toString());
                 pb.environment().put("FROSTGUARD_CHANNEL",
                         WorkspacePaths.current().channel().directoryName());
@@ -74,7 +83,19 @@ public class TelegramWatcherLauncher {
                 return launcher;
             }
         }
-        // Try to load the jar path from the active workspace.
+
+        String[] relativeNames = PlatformPaths.isWindows()
+                ? new String[]{
+                        "fg-watcher.bat",
+                        "packaging/desktop/src/main/windows/Start-Frostguard-Watcher.bat"
+                }
+                : new String[]{
+                        "Frostguard Watcher",
+                        "Frostguard Nightly Watcher",
+                        "Start Frostguard Watcher.app/Contents/MacOS/Start Frostguard Watcher",
+                        "fg-watcher.command"
+                };
+
         try {
             Path cfg = WorkspacePaths.current().watcherConfig();
             if (Files.exists(cfg)) {
@@ -84,34 +105,36 @@ public class TelegramWatcherLauncher {
                 }
                 String jarPath = props.getProperty("botJarPath", "");
                 if (!jarPath.isBlank()) {
-                    File dir = new File(jarPath).getParentFile();
-                    for (int i = 0; i < 5 && dir != null; i++) {
-                        File bat = new File(dir, "fg-watcher.bat");
-                        if (bat.exists()) return bat;
-                        File sourceLauncher = new File(dir,
-                                "packaging/desktop/src/main/windows/Start-Frostguard-Watcher.bat");
-                        if (sourceLauncher.exists()) return sourceLauncher;
-                        dir = dir.getParentFile();
+                    File found = findLauncherNear(new File(jarPath).getParentFile(), relativeNames);
+                    if (found != null) {
+                        return found;
                     }
                 }
             }
-        } catch (Exception ignored) {}
-
-        // Fallback: walk up from current working dir
-        File dir = new File(System.getProperty("user.dir"));
-        for (int i = 0; i < 5 && dir != null; i++) {
-            File bat = new File(dir, "fg-watcher.bat");
-            if (bat.exists()) return bat;
-            File sourceLauncher = new File(dir,
-                    "packaging/desktop/src/main/windows/Start-Frostguard-Watcher.bat");
-            if (sourceLauncher.exists()) return sourceLauncher;
-            dir = dir.getParentFile();
+        } catch (Exception ignored) {
         }
 
+        return findLauncherNear(new File(System.getProperty("user.dir")), relativeNames);
+    }
+
+    private static File findLauncherNear(File startDir, String[] relativeNames) {
+        File dir = startDir;
+        for (int i = 0; i < 5 && dir != null; i++) {
+            for (String name : relativeNames) {
+                File candidate = new File(dir, name);
+                if (candidate.exists()) {
+                    return candidate;
+                }
+            }
+            dir = dir.getParentFile();
+        }
         return null;
     }
 
     private static boolean isNativeLauncher(File launcher) {
-        return launcher.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".exe");
+        String name = launcher.getName().toLowerCase(Locale.ROOT);
+        return name.endsWith(".exe")
+                || (!name.endsWith(".bat") && !name.endsWith(".cmd") && !name.endsWith(".command")
+                        && launcher.canExecute());
     }
 }

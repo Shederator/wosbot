@@ -284,6 +284,11 @@ public class TelegramLayoutController {
     }
 
     private void registerStartup() {
+        if (!dev.frostguard.api.platform.PlatformPaths.isWindows()) {
+            showError("Telegram watcher auto-start registration is only supported on Windows in this release.");
+            checkBoxAutoStart.setSelected(false);
+            return;
+        }
         File watcherLauncher = resolveWatcherLauncher();
         if (watcherLauncher == null) {
             showError("Cannot locate the Telegram Watcher launcher.");

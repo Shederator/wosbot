@@ -78,6 +78,7 @@ import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.layout.*;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
+import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import javafx.animation.*;
@@ -347,6 +348,11 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         if (savedActiveEmulator != null && !savedActiveEmulator.isEmpty()) {
             try {
                 activeEmulator = EmulatorType.valueOf(savedActiveEmulator);
+                if (!activeEmulator.isSupportedOnCurrentPlatform()) {
+                    activeEmulator = null;
+                    ScheduleService.obtain().persistEmulatorPath(
+                            ConfigurationKeyEnum.CURRENT_EMULATOR_STRING.name(), null);
+                }
             } catch (IllegalArgumentException e) {
                 // Ignore Invalid Enum constant
             }
@@ -355,7 +361,13 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
         if (null != activeEmulator) {
             String activePath = globalConfig.get(activeEmulator.getConfigKey());
-            if (activePath != null && new File(activePath).exists()) {
+            if (activeEmulator.isConfiguredPathValid(activePath)
+                    || (activeEmulator.isAdbOnlyProvider()
+                    && activeEmulator.isConfiguredPathValid(activeEmulator.resolveConfiguredDirectory()))) {
+                if (activePath == null || activePath.isBlank()) {
+                    ScheduleService.obtain().persistEmulatorPath(
+                            activeEmulator.getConfigKey(), activeEmulator.resolveConfiguredDirectory());
+                }
                 activeEmulatorValid = true;
             } else {
                 ScheduleService.obtain().persistEmulatorPath(activeEmulator.getConfigKey(), null);
@@ -363,17 +375,25 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         }
 
         List<EmulatorType> foundEmulators = new ArrayList<>();
-        for (EmulatorType emulator : EmulatorType.values()) {
+        for (EmulatorType emulator : EmulatorType.valuesForCurrentPlatform()) {
             if (activeEmulator == emulator)
                 continue;
 
             String emulatorPath = globalConfig.get(emulator.getConfigKey());
-            if (emulatorPath != null && new File(emulatorPath).exists()) {
+            if (emulator.isConfiguredPathValid(emulatorPath)) {
+                foundEmulators.add(emulator);
+            } else if (emulator.isAdbOnlyProvider()
+                    && emulator.isConfiguredPathValid(emulator.resolveConfiguredDirectory())) {
+                ScheduleService.obtain().persistEmulatorPath(
+                        emulator.getConfigKey(), emulator.resolveConfiguredDirectory());
                 foundEmulators.add(emulator);
             } else {
                 File emulatorFile = new File(emulator.getDefaultPath());
                 if (emulatorFile.exists()) {
-                    ScheduleService.obtain().persistEmulatorPath(emulator.getConfigKey(), emulatorFile.getParent());
+                    String persisted = emulator.isAdbOnlyProvider()
+                            ? emulatorFile.getAbsolutePath()
+                            : emulatorFile.getParent();
+                    ScheduleService.obtain().persistEmulatorPath(emulator.getConfigKey(), persisted);
                     foundEmulators.add(emulator);
                 }
             }
@@ -411,7 +431,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         Map<ButtonType, EmulatorType> buttonMap = new HashMap<>();
 
         // Add found emulators first
-        for (EmulatorType emulator : EmulatorType.values()) {
+        for (EmulatorType emulator : EmulatorType.valuesForCurrentPlatform()) {
             if (foundEmulators.contains(emulator)) {
                 ButtonType btnType = new ButtonType(emulator.getDisplayName(), ButtonBar.ButtonData.OK_DONE);
                 buttons.add(btnType);
@@ -419,8 +439,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
             }
         }
 
-        // Add not found emulators next
-        for (EmulatorType emulator : EmulatorType.values()) {
+        for (EmulatorType emulator : EmulatorType.valuesForCurrentPlatform()) {
             if (!foundEmulators.contains(emulator)) {
                 ButtonType btnType = new ButtonType(emulator.getDisplayName(), ButtonBar.ButtonData.OK_DONE);
                 buttons.add(btnType);
@@ -455,6 +474,21 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     }
 
     private void selectEmulatorManually(EmulatorType selectedEmulator) { /* internal */
+        if (selectedEmulator.isAdbOnlyProvider()) {
+            DirectoryChooser directoryChooser = new DirectoryChooser();
+            directoryChooser.setTitle("Select " + selectedEmulator.getDisplayName() + " app bundle");
+            directoryChooser.setInitialDirectory(new File(System.getProperty("user.home")));
+            File selectedDir = directoryChooser.showDialog(stage);
+            if (selectedDir != null && selectedEmulator.isConfiguredPathValid(selectedDir.getAbsolutePath())) {
+                ScheduleService.obtain().persistEmulatorPath(selectedEmulator.getConfigKey(), selectedDir.getAbsolutePath());
+                ScheduleService.obtain().persistEmulatorPath(ConfigurationKeyEnum.CURRENT_EMULATOR_STRING.name(),
+                        selectedEmulator.name());
+                return;
+            }
+            showErrorAndExit("Invalid BlueStacks app bundle selected. The application will close.");
+            return;
+        }
+
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Select Emulator Executable for " + selectedEmulator.getDisplayName());
 

@@ -281,6 +281,9 @@ public enum ConfigurationKeyEnum {
     // Changed by pernerch | Date: 2026-07-04 | Why: separate Telegram stop behavior from local GUI stop behavior.
     STOP_BEHAVIOR_TELEGRAM_STRING       ("DO_NOTHING",  String.class,   ConfigCategory.SYSTEM),
     LDPLAYER_PATH_STRING                ("",            String.class,   ConfigCategory.SYSTEM),
+    BLUESTACKS_AIR_PATH_STRING          ("/Applications/BlueStacks.app", String.class, ConfigCategory.SYSTEM),
+    BLUESTACKS_AIR_ADB_HOST_STRING      ("127.0.0.1",   String.class,   ConfigCategory.SYSTEM),
+    BLUESTACKS_AIR_ADB_PORT_INT         ("5555",        Integer.class,  ConfigCategory.SYSTEM),
     MAX_IDLE_TIME_INT                   ("15",          Integer.class,  ConfigCategory.SYSTEM),
     MAX_RUNNING_EMULATORS_INT           ("1",           Integer.class,  ConfigCategory.SYSTEM),
     // Added by Shederator | Why: serialize concurrent emulator boots to avoid host freezes when
