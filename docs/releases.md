@@ -98,6 +98,14 @@ releases, and unrelated tags never match this retention policy. A failed or
 unpromoted Nightly does not run retention, and a cleanup failure fails the
 release job visibly.
 
+GitHub release publication can be eventually consistent. Before promoting the
+rolling feed, the workflow therefore waits until the immutable Nightly is
+visible as a public prerelease with exactly its signed manifest and installer.
+Once that public state has been confirmed, later failure cleanup must never
+delete the release or tag, even if a subsequent API read temporarily reports
+stale draft metadata. Retention separately retries its release-history read
+before failing closed.
+
 ### Unpublished Stable release candidates
 
 Before promoting a new Stable major or minor version, manually run **CI —

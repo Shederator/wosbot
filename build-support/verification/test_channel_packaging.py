@@ -172,11 +172,15 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertIn('"download_url=$publicInstallerUrl"', workflow)
         self.assertNotIn("$asset.browser_download_url", workflow)
         self.assertNotIn("updates-nightly", workflow)
-        self.assertNotIn("releases/tags/$($env:TAG)", workflow)
         self.assertGreaterEqual(
             workflow.count("Where-Object { $_.tag_name -ceq $env:TAG }"), 2)
         self.assertIn("gh release upload nightly $env:MANIFEST", workflow)
         self.assertIn("releases/download/nightly/frostguard-nightly-manifest.json", workflow)
+        self.assertIn("Nightly immutable release did not become publicly visible", workflow)
+        self.assertIn("Stable immutable release did not become publicly visible", workflow)
+        self.assertIn('"immutable_published=true"', workflow)
+        self.assertIn("$manifestAssets.Count -eq 1", workflow)
+        self.assertIn("$installerAssets.Count -eq 1", workflow)
         self.assertIn('          $tag = "v$($env:VERSION)"', workflow)
         self.assertIn("next_nightly_version.py", workflow)
         self.assertIn("Update the maintained Nightly Discord message", workflow)
@@ -187,6 +191,8 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertIn("--current-tag $env:TAG --keep 2", workflow)
         self.assertIn("gh release delete $tag", workflow)
         self.assertIn("--cleanup-tag --yes", workflow)
+        self.assertGreaterEqual(
+            workflow.count("for ($attempt = 1; $attempt -le 6; $attempt++)"), 2)
         self.assertIn("--changes-unchanged", workflow)
         self.assertIn("fetch-depth: 0", workflow)
         self.assertIn("Remove an abandoned draft release", workflow)
@@ -229,7 +235,10 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertIn('"tag_created=true"', workflow)
         self.assertIn("TAG_CREATED: ${{ steps.draft.outputs.tag_created }}", workflow)
         self.assertIn(
-            "if ($env:TAG_CREATED -eq 'true' -and -not $publishedReleaseExists)",
+            "IMMUTABLE_PUBLISHED: ${{ steps.publish.outputs.immutable_published }}",
+            workflow)
+        self.assertIn(
+            "if ($env:TAG_CREATED -eq 'true' -and -not $immutablePublished -and",
             workflow)
         self.assertGreaterEqual(
             workflow.count(
