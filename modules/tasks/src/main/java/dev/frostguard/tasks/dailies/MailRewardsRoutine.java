@@ -13,18 +13,20 @@ import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import java.time.LocalDateTime;
+import java.util.List;
+
+import static dev.frostguard.tasks.dailies.MailClaimPassPolicy.Decision;
+import static dev.frostguard.tasks.dailies.MailClaimPassPolicy.Evidence;
 
 public class MailRewardsRoutine extends DelayedTask {
 
-private static final int MAX_MAIL_SEARCH_ATTEMPTS_LIMIT = 100;
+private static final int MAX_MAIL_CLAIM_PASSES = 3;
 
 private static final int MAIL_MENU_SEARCH_RETRIES_VALUE = 5;
 
 private static final int MAIL_MENU_OPEN_VERIFICATION_RETRIES_VALUE = 5;
 
 private static final int UNCLAIMED_REWARDS_SEARCH_RETRIES_VALUE = 3;
-
-private static final int SWIPES_PER_PAGE_VALUE = 10;
 
 private static final int MAIL_TAB_COUNT_VALUE = 3;
 
@@ -41,6 +43,10 @@ private static final PointData MAIL_MENU_OPEN_TOP_LEFT_VALUE = new PointData(75,
 
 private static final PointData MAIL_MENU_OPEN_BOTTOM_RIGHT_VALUE = new PointData(175, 60);
 
+private static final PointData MAIL_LIST_INDICATORS_TOP_LEFT_VALUE = new PointData(625, 175);
+
+private static final PointData MAIL_LIST_INDICATORS_BOTTOM_RIGHT_VALUE = new PointData(715, 1160);
+
 private static final PointData CLAIM_BUTTON_TOP_LEFT_VALUE = new PointData(420, 1227);
 
 private static final PointData CLAIM_BUTTON_BOTTOM_RIGHT_VALUE = new PointData(450, 1250);
@@ -48,10 +54,6 @@ private static final PointData CLAIM_BUTTON_BOTTOM_RIGHT_VALUE = new PointData(4
 private static final int CLAIM_BUTTON_TAP_COUNT_VALUE = 4;
 
 private static final int CLAIM_BUTTON_TAP_DELAY_MS = 500;
-
-private static final PointData SCROLL_START_POINT_VALUE = new PointData(40, 913);
-
-private static final PointData SCROLL_END_POINT_VALUE = new PointData(40, 400);
 
 private static final PointData TAB_ALLIANCE_VALUE = new PointData(230, 120);
 
@@ -118,54 +120,57 @@ private void redeemAllVisibleRewards() {
                 CLAIM_BUTTON_TAP_COUNT_VALUE,
                 CLAIM_BUTTON_TAP_DELAY_MS);
         sleepTask(500);
-
-        StatisticsService.obtain().addToCounter(profile, "Mail Rewards Claimed", 1);
     }
 
-private boolean hasUnclaimedRewardsFlow() {
-        ImageSearchResultData unclaimedRewards = templateSearchHelper.locatePattern(
+private Evidence findUnreadMailEvidence() {
+        List<ImageSearchResultData> unreadMarkers = templateSearchHelper.locateAllPatterns(
                 TemplatesEnum.MAIL_UNCLAIMED_REWARDS,
                 SearchConfig.builder()
+                        .withArea(new AreaData(
+                                MAIL_LIST_INDICATORS_TOP_LEFT_VALUE,
+                                MAIL_LIST_INDICATORS_BOTTOM_RIGHT_VALUE))
                         .withMaxAttempts(UNCLAIMED_REWARDS_SEARCH_RETRIES_VALUE)
                         .withDelay(100L)
+                        .withMaxResults(20)
                         .build());
 
-        return unclaimedRewards.isFound();
+        return Evidence.fromMatches(unreadMarkers);
     }
 
-private void scrollDownMailListFlow() {
-        for (int i = 0; i < SWIPES_PER_PAGE_VALUE; i++) {
-
-
-            swipe(SCROLL_START_POINT_VALUE, SCROLL_END_POINT_VALUE);
-            sleepTask(250);
-
-        }
-    }
-
-private void handleOverflowRewards() {
-        int searchAttempts = 0;
-
-        while (hasUnclaimedRewardsFlow()) {
-            if (searchAttempts > 0) {
-                logInfo(routineLogMailRewardsLine("Overflow rewards detected. Scrolling to reveal more mail."));
-                scrollDownMailListFlow();
-            }
-
+private void claimMailRewards(String tabName) {
+        Evidence before = findUnreadMailEvidence();
+        for (int completedPasses = 1; completedPasses <= MAX_MAIL_CLAIM_PASSES; completedPasses++) {
             redeemAllVisibleRewards();
+            Evidence after = findUnreadMailEvidence();
+            Decision decision = MailClaimPassPolicy.decide(
+                    before, after, completedPasses, MAX_MAIL_CLAIM_PASSES);
 
-            searchAttempts++;
-            if (searchAttempts >= MAX_MAIL_SEARCH_ATTEMPTS_LIMIT) {
-                logError(routineLogMailRewardsLine("There is absolutely no way this condition should ever be hit in a normal scenario. " +
-                        "Something is broken. Either you have not checked your mail in DAYS, " +
-                        "or we are stuck somewhere you shouldn't be. " +
-                        "Please report to the devs which menu this was stuck on if you see this message."));
-                break;
+            if (!before.isEmpty() && !before.sameVisualStateAs(after)) {
+                StatisticsService.obtain().addToCounter(profile, "Mail Rewards Claimed", 1);
             }
-        }
 
-        if (searchAttempts > 0) {
-            logDebug(routineLogMailRewardsLine("Processed " + searchAttempts + " overflow reward cycle(s)."));
+            if (decision == Decision.COMPLETE) {
+                logDebug(routineLogMailRewardsLine(tabName + " tab claim pass completed; unread markers "
+                        + before.count() + " -> 0."));
+                return;
+            }
+            if (decision == Decision.STOP_NO_PROGRESS) {
+                logWarning(routineLogMailRewardsLine(tabName + " tab still has " + after.count()
+                        + " unread marker(s) after claim pass " + completedPasses
+                        + "; no claim progress detected, continuing with the next tab."));
+                return;
+            }
+            if (decision == Decision.STOP_BUDGET_EXHAUSTED) {
+                logWarning(routineLogMailRewardsLine(tabName + " tab still has " + after.count()
+                        + " unread marker(s) after the bounded " + MAX_MAIL_CLAIM_PASSES
+                        + " claim passes; continuing with the next tab."));
+                return;
+            }
+
+            logInfo(routineLogMailRewardsLine(tabName + " tab claim progress detected; unread markers "
+                    + before.count() + " -> " + after.count() + ", retrying within pass budget "
+                    + completedPasses + "/" + MAX_MAIL_CLAIM_PASSES + "."));
+            before = after;
         }
     }
 
@@ -203,7 +208,7 @@ private void handleAllMailTabs() {
             String tabName = MAIL_TAB_NAMES[i];
 
             logInfo(routineLogMailRewardsLine("Processing " + tabName + " tab."));
-            handleMailTab(tabButton);
+            handleMailTab(tabButton, tabName);
         }
     }
 
@@ -243,14 +248,9 @@ private boolean openUpMailMenu() {
         return confirmMailMenuOpened();
     }
 
-private void handleMailTab(PointData tabButton) {
+private void handleMailTab(PointData tabButton, String tabName) {
         switchToTabFlow(tabButton);
-
-
-        redeemAllVisibleRewards();
-
-
-        handleOverflowRewards();
+        claimMailRewards(tabName);
     }
 
 private void queueNextRun() {
