@@ -586,7 +586,7 @@ private void recallGatherTroopsFlow() {
 	// tab-open cycle so a found recall button can be acted on immediately without UI drift.
 	private TabRecallResult inspectAndRecallForTabFlow(boolean cityTab, SearchConfig searchConfig) {
 		int tapped = 0;
-		marchHelper.openLeftMenuCitySection(cityTab);
+		marchHelper.openLeftMenuSection(cityTab);
 		sleepTask(350);
 		try {
 			ImageSearchResultData returningArrow = locatePatternWithMonoFallback(
@@ -698,102 +698,98 @@ private List<GatherMarchCandidate> collectVisibleGatherRowsForRecallFlow() {
 
 private int recallDuplicateGatherMarchesForSmartProcessingFlow() {
 		int recalled = 0;
-		int idleMarches = countIdleMarchesFlow();
 
-		while (idleMarches < SMART_PROCESSING_MIN_IDLE_MARCHES_FOR_INTEL) {
-			GatherMarchCandidate candidate = findLongestDuplicateGatherMarchFlow();
-			if (candidate == null) {
-				break;
+		while (recalled < MARCH_QUEUE_REGIONS.length) {
+			marchHelper.openLeftMenuSection(false);
+			try {
+				List<MarchSlotState> slots = marchHelper.readVisibleMarchQueue();
+				if (countIdleMarchesFlow(slots) >= SMART_PROCESSING_MIN_IDLE_MARCHES_FOR_INTEL) {
+					break;
+				}
+
+				GatherMarchCandidate candidate = findLongestDuplicateGatherMarchFlow(slots);
+				if (candidate == null || !recallGatherMarchByQueueFromOpenPanelFlow(candidate.queueIndex())) {
+					break;
+				}
+				recalled++;
+			} finally {
+				marchHelper.closeLeftMenu();
 			}
-
-			if (!recallGatherMarchByQueueFlow(candidate.queueIndex())) {
-				break;
-			}
-
-			recalled++;
 			sleepTask(250);
-			idleMarches = countIdleMarchesFlow();
 		}
 
 		return recalled;
 	}
 
-private GatherMarchCandidate findLongestDuplicateGatherMarchFlow() {
-		marchHelper.openLeftMenuCitySection(false);
-		try {
-			Map<MarchResourceType, List<GatherMarchCandidate>> groupedByType = marchHelper.readVisibleMarchQueue()
-					.stream()
-					.filter(MarchSlotState::isGather)
-					.map(this::gatherCandidateFromSlot)
-					.filter(java.util.Objects::nonNull)
-					.collect(java.util.stream.Collectors.groupingBy(GatherMarchCandidate::type));
+private GatherMarchCandidate findLongestDuplicateGatherMarchFlow(List<MarchSlotState> slots) {
+		Map<MarchResourceType, List<GatherMarchCandidate>> groupedByType = slots
+				.stream()
+				.filter(MarchSlotState::isGather)
+				.map(this::gatherCandidateFromSlot)
+				.filter(java.util.Objects::nonNull)
+				.collect(java.util.stream.Collectors.groupingBy(GatherMarchCandidate::type));
 
-			List<GatherMarchCandidate> duplicates = new ArrayList<>();
-			for (List<GatherMarchCandidate> candidates : groupedByType.values()) {
-				if (candidates.size() >= 2) {
-					duplicates.addAll(candidates);
-				}
+		List<GatherMarchCandidate> duplicates = new ArrayList<>();
+		for (List<GatherMarchCandidate> candidates : groupedByType.values()) {
+			if (candidates.size() >= 2) {
+				duplicates.addAll(candidates);
 			}
-
-			if (duplicates.isEmpty()) {
-				logInfo(routineLogIntelligenceLine("Smart processing found no duplicate gather marches to recall."));
-				return null;
-			}
-
-			GatherMarchCandidate selected = duplicates.stream()
-					.max(Comparator.comparing(GatherMarchCandidate::returnAt))
-					.orElse(null);
-
-			if (selected != null) {
-				logInfo(routineLogIntelligenceLine("Smart processing selected duplicate "
-						+ selected.type().name().toLowerCase()
-						+ " gather march on queue #" + (selected.queueIndex() + 1)
-						+ " with longest return time for recall."));
-			}
-
-			return selected;
-		} finally {
-			marchHelper.closeLeftMenu();
 		}
+
+		if (duplicates.isEmpty()) {
+			logInfo(routineLogIntelligenceLine("Smart processing found no duplicate gather marches to recall."));
+			return null;
+		}
+
+		GatherMarchCandidate selected = duplicates.stream()
+				.max(Comparator.comparing(GatherMarchCandidate::returnAt))
+				.orElse(null);
+
+		if (selected != null) {
+			logInfo(routineLogIntelligenceLine("Smart processing selected duplicate "
+					+ selected.type().name().toLowerCase()
+					+ " gather march on queue #" + (selected.queueIndex() + 1)
+					+ " with longest return time for recall."));
+		}
+
+		return selected;
 	}
 
-private boolean recallGatherMarchByQueueFlow(int queueIndex) {
-		marchHelper.openLeftMenuCitySection(false);
-		try {
-			List<ImageSearchResultData> recallButtons = templateSearchHelper.locateAllPatterns(
-					TemplatesEnum.MARCHES_AREA_RECALL_BUTTON,
-					SearchConfig.builder()
-							.withArea(new AreaData(MARCH_QUEUE_REGIONS[0].topLeft(), MARCH_QUEUE_REGIONS[MARCH_QUEUE_REGIONS.length - 1].bottomRight()))
-							.withMaxAttempts(3)
-							.withDelay(3)
-							.withMaxResults(MARCH_QUEUE_REGIONS.length)
-							.build());
+private boolean recallGatherMarchByQueueFromOpenPanelFlow(int queueIndex) {
+		List<ImageSearchResultData> recallButtons = templateSearchHelper.locateAllPatterns(
+				TemplatesEnum.MARCHES_AREA_RECALL_BUTTON,
+				SearchConfig.builder()
+						.withArea(new AreaData(MARCH_QUEUE_REGIONS[0].topLeft(), MARCH_QUEUE_REGIONS[MARCH_QUEUE_REGIONS.length - 1].bottomRight()))
+						.withMaxAttempts(3)
+						.withDelay(3)
+						.withMaxResults(MARCH_QUEUE_REGIONS.length)
+						.build());
 
-			if (recallButtons.isEmpty()) {
-				return false;
-			}
-
-			int targetRowCenterY = (MARCH_QUEUE_REGIONS[queueIndex].topLeft().getY() + MARCH_QUEUE_REGIONS[queueIndex].bottomRight().getY()) / 2;
-			ImageSearchResultData bestRowButton = recallButtons.stream()
-					.min(Comparator.comparingInt(button -> Math.abs(button.getPoint().getY() - targetRowCenterY)))
-					.orElse(null);
-
-			if (bestRowButton == null) {
-				return false;
-			}
-
-			tapInside(bestRowButton.getPoint(), bestRowButton.getPoint(), 1, 200);
-			tapInside(MARCH_RECALL_CONFIRM_TOP_LEFT, MARCH_RECALL_CONFIRM_BOTTOM_RIGHT, 1, 200);
-			logInfo(routineLogIntelligenceLine("Recalled gather march from queue #" + (queueIndex + 1)
-					+ " for smart Intel prioritization."));
-			return true;
-		} finally {
-			marchHelper.closeLeftMenu();
+		if (recallButtons.isEmpty()) {
+			return false;
 		}
+
+		int targetRowCenterY = (MARCH_QUEUE_REGIONS[queueIndex].topLeft().getY() + MARCH_QUEUE_REGIONS[queueIndex].bottomRight().getY()) / 2;
+		ImageSearchResultData bestRowButton = recallButtons.stream()
+				.min(Comparator.comparingInt(button -> Math.abs(button.getPoint().getY() - targetRowCenterY)))
+				.orElse(null);
+
+		if (bestRowButton == null) {
+			return false;
+		}
+
+		tapInside(bestRowButton.getPoint(), bestRowButton.getPoint(), 1, 200);
+		tapInside(MARCH_RECALL_CONFIRM_TOP_LEFT, MARCH_RECALL_CONFIRM_BOTTOM_RIGHT, 1, 200);
+		logInfo(routineLogIntelligenceLine("Recalled gather march from queue #" + (queueIndex + 1)
+				+ " for smart Intel prioritization."));
+		return true;
 	}
 
 private int countIdleMarchesFlow() {
-		List<MarchSlotState> slots = marchHelper.readMarchQueue();
+		return countIdleMarchesFlow(marchHelper.readMarchQueue());
+}
+
+private int countIdleMarchesFlow(List<MarchSlotState> slots) {
 		if (slots.isEmpty()) {
 			logWarning(routineLogIntelligenceLine("Could not classify march slots while counting idle capacity."));
 			return 0;

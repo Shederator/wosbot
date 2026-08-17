@@ -16,6 +16,11 @@ exists in the supplied open-panel frames. That tap is allowed only while a Home 
 anchor is present, is issued once, and must produce a classified selected tab. Section taps,
 scrolls, and close taps likewise require the expected panel state.
 
+Queue inspection opens or reuses its verified City or Wilderness section without changing the
+scroll position. This avoids unconditional reset gestures and allows one logical operation to
+inspect and act on the same frame. Callers that scan destination rows still request a known top
+origin explicitly; only those calls perform the bounded three-swipe reset.
+
 Daily destination icons provide row identity. The identical Go arrows do not. The navigator
 therefore finds the destination icon and derives the Go area from the detected row geometry.
 It resets the section to the top with a bounded gesture count, uses a destination-specific

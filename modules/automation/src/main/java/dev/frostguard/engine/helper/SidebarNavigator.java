@@ -45,35 +45,7 @@ public final class SidebarNavigator {
     }
 
     public boolean openSection(SidebarSection target) {
-        Optional<SidebarSection> current = selectedSection();
-        if (current.isEmpty()) {
-            if (!isRootScreen()) {
-                log.warn("Refusing to tap the sidebar trigger without a Home or World anchor");
-                return false;
-            }
-            log.debug("Sidebar closed; opening it once before selecting " + target);
-            taps.tapInside(CommonGameAreas.LEFT_MENU_TRIGGER, 1, SECTION_SETTLE_MS);
-            current = selectedSection();
-            if (current.isEmpty()) {
-                log.warn("Sidebar did not open after one verified trigger tap");
-                return false;
-            }
-        }
-
-        if (current.get() == target) {
-            log.debug("Sidebar section already selected: " + target);
-            return true;
-        }
-
-        taps.tapInside(CommonGameAreas.sidebarTab(target), 1, SECTION_SETTLE_MS);
-        Optional<SidebarSection> selected = selectedSection();
-        if (selected.orElse(null) != target) {
-            log.warn("Sidebar section selection failed: requested=" + target
-                    + " observed=" + selected.map(Enum::name).orElse("closed/unknown"));
-            return false;
-        }
-        log.debug("Sidebar section selected: " + target);
-        return true;
+        return openSection(target, false);
     }
 
     public boolean navigateTo(SidebarDestination destination) {
@@ -123,7 +95,67 @@ public final class SidebarNavigator {
     }
 
     public boolean openSectionAtTop(SidebarSection section) {
-        return openSection(section) && resetToTop(section);
+        return openSection(section, true);
+    }
+
+    static NextOpenAction nextOpenAction(Optional<SidebarSection> current, SidebarSection target,
+                                         boolean resetRequested, boolean resetComplete) {
+        if (current.isEmpty()) {
+            return NextOpenAction.OPEN_PANEL;
+        }
+        if (current.get() != target) {
+            return NextOpenAction.SELECT_SECTION;
+        }
+        if (resetRequested && !resetComplete) {
+            return NextOpenAction.RESET_TO_TOP;
+        }
+        return NextOpenAction.DONE;
+    }
+
+    private boolean openSection(SidebarSection target, boolean resetRequested) {
+        Optional<SidebarSection> current = selectedSection();
+        boolean resetComplete = false;
+
+        while (true) {
+            NextOpenAction action = nextOpenAction(current, target, resetRequested, resetComplete);
+            switch (action) {
+                case OPEN_PANEL -> {
+                    if (!isRootScreen()) {
+                        log.warn("Refusing to tap the sidebar trigger without a Home or World anchor");
+                        return false;
+                    }
+                    log.debug("Sidebar closed; opening it once before selecting " + target);
+                    taps.tapInside(CommonGameAreas.LEFT_MENU_TRIGGER, 1, SECTION_SETTLE_MS);
+                    current = selectedSection();
+                    if (current.isEmpty()) {
+                        log.warn("Sidebar did not open after one verified trigger tap");
+                        return false;
+                    }
+                }
+                case SELECT_SECTION -> {
+                    taps.tapInside(CommonGameAreas.sidebarTab(target), 1, SECTION_SETTLE_MS);
+                    current = selectedSection();
+                    if (current.orElse(null) != target) {
+                        log.warn("Sidebar section selection failed: requested=" + target
+                                + " observed=" + current.map(Enum::name).orElse("closed/unknown"));
+                        return false;
+                    }
+                    log.debug("Sidebar section selected: " + target);
+                }
+                case RESET_TO_TOP -> {
+                    if (!resetToTop(target)) {
+                        return false;
+                    }
+                    resetComplete = true;
+                    current = Optional.of(target);
+                }
+                case DONE -> {
+                    log.debug("Sidebar section ready: " + target
+                            + (resetRequested ? " at top" : " without scroll reset"));
+                    return true;
+                }
+            }
+        }
     }
 
     static AreaData goButtonFor(ImageSearchResultData rowIcon) {
@@ -178,5 +210,12 @@ public final class SidebarNavigator {
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    enum NextOpenAction {
+        OPEN_PANEL,
+        SELECT_SECTION,
+        RESET_TO_TOP,
+        DONE
     }
 }

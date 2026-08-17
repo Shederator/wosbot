@@ -577,7 +577,7 @@ public class GatherRoutine extends DelayedTask {
     private RecallAttempt recallGatherMarchByQueueFlow(ActiveGatherMarchCandidate candidate, RecallReason reason) {
         navigationHelper.ensureCorrectScreenLocation(LaunchPoint.WORLD);
         sleepTask(250);
-        marchHelper.openLeftMenuCitySectionOnce(false);
+        marchHelper.openLeftMenuSection(false);
         try {
             RecallAttempt attempt = recallGatherMarchFromOpenPanelFlow(candidate, reason);
             if (attempt == RecallAttempt.CONTROLS_NOT_FOUND) {

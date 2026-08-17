@@ -207,7 +207,6 @@ protected void loadConfiguration() {
 
         logInfo(routineLogTrainingLine("Verifying final queue states via sidebar."));
         navigationHelper.ensureCorrectScreenLocation(LaunchPoint.HOME);
-        marchHelper.openLeftMenuCitySection(true);
         List<QueueSlot> verifiedQueues = inspectAllQueues();
         allCompletionTimes.clear();
         allCompletionTimes.addAll(extractExistingCompletionTimesFlow(verifiedQueues));
@@ -1439,22 +1438,24 @@ private boolean performPromotion(TemplatesEnum template, ImageSearchResultData p
     }
 
 private List<QueueSlot> inspectAllQueues() {
-        marchHelper.openLeftMenuCitySection(true);
-        List<QueueSlot> result = new ArrayList<>();
+        marchHelper.openLeftMenuSection(true);
+        try {
+            List<QueueSlot> result = new ArrayList<>();
 
-        emuManager.captureScreen(EMULATOR_NUMBER);
+            emuManager.captureScreen(EMULATOR_NUMBER);
 
-        for (int i = 0; i < queuesToCheck.size(); i++) {
-            AreaData queueArea = queuesToCheck.get(i);
-            TroopTypeShape troopType = enabledTroopTypes.get(i);
+            for (int i = 0; i < queuesToCheck.size(); i++) {
+                AreaData queueArea = queuesToCheck.get(i);
+                TroopTypeShape troopType = enabledTroopTypes.get(i);
 
-            logInfo(routineLogTrainingLine("Analyzing queue for " + troopType.name()));
-            QueueSlot queueInfo = inspectQueueState(queueArea, troopType);
-            result.add(queueInfo);
+                logInfo(routineLogTrainingLine("Analyzing queue for " + troopType.name()));
+                QueueSlot queueInfo = inspectQueueState(queueArea, troopType);
+                result.add(queueInfo);
+            }
+
+            return retryUnknownQueuesFlow(result);
+        } finally {
+            marchHelper.closeLeftMenu();
         }
-
-        result = retryUnknownQueuesFlow(result);
-        marchHelper.closeLeftMenu();
-        return result;
     }
 }
