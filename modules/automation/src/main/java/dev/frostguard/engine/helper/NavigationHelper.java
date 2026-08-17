@@ -11,6 +11,7 @@ import dev.frostguard.engine.error.HomeNotFoundException;
 import dev.frostguard.engine.error.ProfileInReconnectStateException;
 import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.nav.ButtonConstants;
+import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.service.LoggingService;
@@ -29,6 +30,16 @@ public class NavigationHelper {
     private static final int EVENT_TAB_RESET_SWIPES = 3;
     private static final int EVENT_TAB_SCAN_SWIPES = 7;
     private static final long EVENT_TAB_SETTLE_MS = 1000L;
+    private static final PointData LEFT_MENU_SCROLL_FROM = new PointData(400, 800);
+    private static final PointData LEFT_MENU_SCROLL_TO = new PointData(400, 100);
+    private static final AreaData LABYRINTH_LEADERBOARD = area(646, 185, 704, 264);
+    private static final AreaData LABYRINTH_CATEGORY = area(90, 190, 320, 450);
+    private static final AreaData ALLIANCE_POWER_RANKINGS = area(80, 1035, 290, 1100);
+    private static final PointData RANKING_SCROLL_FROM = new PointData(360, 900);
+    private static final PointData RANKING_SCROLL_TO = new PointData(360, 620);
+    private static final int ALLIANCE_POWER_RANKING_SCROLLS = 23;
+    private static final int ALLIANCE_POWER_RANKING_SCROLL_DURATION_MS = 250;
+    private static final long ALLIANCE_POWER_ROW_LOAD_MS = 500;
 
     private final TemplateSearchHelper searcher;
     private final EmulatorController emu;
@@ -68,6 +79,70 @@ public class NavigationHelper {
         if (!hit.isFound()) return false;
         taps.tapInside(hit, 1, 1000);
         return true;
+    }
+
+    public boolean navigateToLabyrinth() {
+        ensureCorrectScreenLocation(LaunchPoint.HOME);
+        taps.tapInside(CommonGameAreas.LEFT_MENU_TRIGGER, 1, 500);
+        taps.tapInside(CommonGameAreas.LEFT_MENU_CITY_TAB, 1, 400);
+        emu.swipeScreen(device, LEFT_MENU_SCROLL_FROM, LEFT_MENU_SCROLL_TO, 500);
+        interruptibleWait(1_300);
+        ImageSearchResultData labyrinth = searcher.locatePattern(
+                TemplatesEnum.LEFT_MENU_LABYRINTH_BUTTON, SearchConfigConstants.SINGLE_WITH_RETRIES);
+        if (!labyrinth.isFound()) {
+            return false;
+        }
+        taps.tapInside(labyrinth, 1, 2_500);
+        return true;
+    }
+
+    public void navigateToLabyrinthRanking() {
+        if (!navigateToLabyrinth()) {
+            throw new IllegalStateException("Labyrinth entry was not found in the city menu");
+        }
+        taps.tapInside(LABYRINTH_LEADERBOARD, 1, 2_500);
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            taps.tapInside(LABYRINTH_CATEGORY, 1, 1_500);
+            if (headerContains("THE LABYRINTH")) {
+                return;
+            }
+        }
+        throw new IllegalStateException("The Labyrinth ranking did not open");
+    }
+
+    public void navigateToPowerRanking() {
+        ensureCorrectScreenLocation(LaunchPoint.HOME);
+        taps.tapInside(CommonGameAreas.BOTTOM_MENU_ALLIANCE_BUTTON, 1, 2_000);
+        ImageSearchResultData allianceAnchor = searcher.locatePattern(
+                TemplatesEnum.ALLIANCE_WAR_BUTTON, SearchConfigConstants.SINGLE_WITH_RETRIES);
+        if (!allianceAnchor.isFound()) {
+            throw new IllegalStateException("Alliance menu did not open");
+        }
+        taps.tapInside(ALLIANCE_POWER_RANKINGS, 1, 2_500);
+        if (!headerContains("ALLIANCE RANKING")) {
+            throw new IllegalStateException("Power Ranking did not open");
+        }
+        interruptibleWait(5_000);
+        for (int index = 0; index < ALLIANCE_POWER_RANKING_SCROLLS; index++) {
+            emu.swipeScreen(device, RANKING_SCROLL_FROM, RANKING_SCROLL_TO,
+                    ALLIANCE_POWER_RANKING_SCROLL_DURATION_MS);
+            interruptibleWait(ALLIANCE_POWER_ROW_LOAD_MS);
+        }
+        interruptibleWait(5_000);
+    }
+
+    private boolean headerContains(String expected) {
+        try {
+            String header = emu.readText(device, new PointData(70, 0), new PointData(500, 80));
+            return header != null && header.toUpperCase(java.util.Locale.ROOT).contains(expected);
+        } catch (Exception exception) {
+            log.warn("Could not verify screen header: " + exception.getMessage());
+            return false;
+        }
+    }
+
+    private static AreaData area(int x1, int y1, int x2, int y2) {
+        return new AreaData(new PointData(x1, y1), new PointData(x2, y2));
     }
 
     // ── event menu ───────────────────────────────────────────────────

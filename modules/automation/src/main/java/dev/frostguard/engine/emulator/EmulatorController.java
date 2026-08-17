@@ -165,6 +165,7 @@ public class EmulatorController {
 
     public void    closeEmulator(String i)                { requireBackend(); backend.closeEmulator(i); backend.invalidateAllCaches(i); }
     public void    launchApp(String i, String pkg)        { requireBackend(); backend.launchApp(i, pkg); }
+    public void    forceStopApp(String i, String pkg)     { requireBackend(); backend.forceStopApp(i, pkg); }
     public void    sendGameToBackground(String i)         { requireBackend(); backend.sendGameToBackground(i); }
     public boolean isRunning(String i)                    { requireBackend(); return backend.isRunning(i); }
     public boolean isPackageRunning(String i, String pkg) { requireBackend(); return backend.isPackageRunning(i, pkg); }

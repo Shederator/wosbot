@@ -399,6 +399,18 @@ public abstract class EmulatorInstance {
         }, "launch");
     }
 
+    public void forceStopApp(String idx, String pkg) {
+        withRetries(idx, dev -> {
+            try {
+                dev.executeShellCommand("am force-stop " + pkg, new NullOutputReceiver());
+                LOG.info("Force-stopped {} on {}", pkg, idx);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+            return Boolean.TRUE;
+        }, "force-stop");
+    }
+
     public void sendGameToBackground(String idx) {
         withRetries(idx, dev -> {
             try { dev.executeShellCommand("input keyevent KEYCODE_HOME", new NullOutputReceiver()); }

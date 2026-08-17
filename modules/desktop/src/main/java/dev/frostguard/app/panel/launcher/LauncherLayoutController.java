@@ -16,6 +16,7 @@ import java.util.Optional;
 import java.util.function.Supplier;
 import dev.frostguard.vision.match.OpenCvPatternLocator;
 import dev.frostguard.app.panel.alliance.AllianceLayoutController;
+import dev.frostguard.app.panel.analytics.GameAnalyticsLayoutController;
 import dev.frostguard.app.shared.AbstractProfileController;
 import dev.frostguard.app.panel.alliance.AllianceChampionshipLayoutController;
 import dev.frostguard.app.panel.combat.BearTrapLayoutController;
@@ -681,6 +682,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
                 new ModuleDefinition("SkipTutorialLayout",       "Skip Tutorial",        MaterialDesignS.SKIP_NEXT_OUTLINE,          SkipTutorialLayoutController::new),
                 new ModuleDefinition("CharacterLayout",          "Character",            MaterialDesignA.ACCOUNT_OUTLINE,            CharacterLayoutController::new),
+                new ModuleDefinition("GameAnalyticsLayout",      "Game Data",            MaterialDesignV.VIEW_LIST_OUTLINE,          GameAnalyticsLayoutController::new),
                 new ModuleDefinition("StatisticsLayout",         "Statistics",           MaterialDesignV.VIEW_DASHBOARD_OUTLINE,     StatisticsLayoutController::new)
         );
         //@formatter:on

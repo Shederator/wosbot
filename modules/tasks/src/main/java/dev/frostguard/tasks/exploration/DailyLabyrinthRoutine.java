@@ -26,16 +26,12 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     // =========================== CONSTANTS ===========================
 
     // Navigation points
-    private static final PointData SCROLL_START_POINT = new PointData(400, 800);
-    private static final PointData SCROLL_END_POINT = new PointData(400, 100);
     private static final PointData SKIP_BUTTON = new PointData(71, 827);
     private static final PointData RESULT_SKIP_BUTTON = new PointData(640, 175);
 
     // Timing constants
     private static final int MENU_NAVIGATION_DELAY = 1000;
     private static final int TAB_SWITCH_DELAY = 500;
-    private static final int SCROLL_DELAY = 1300;
-    private static final int LABYRINTH_LOAD_DELAY = 2000;
     private static final int BATTLE_COMPLETION_DELAY = 3000;
 
     // =========================== CONSTRUCTOR ===========================
@@ -88,26 +84,12 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     private boolean navigateToLabyrinthMenu() {
         logInfo("Navigating to the Labyrinth menu...");
 
-        // Open side menu
-        marchHelper.openLeftMenuCitySection(true);
-
-        // Scroll down to find labyrinth
-        swipe(SCROLL_START_POINT, SCROLL_END_POINT);
-        sleepTask(SCROLL_DELAY);
-
-        // Search for labyrinth in menu
-        ImageSearchResultData labyrinthResult = templateSearchHelper.locatePattern(
-                TemplatesEnum.LEFT_MENU_LABYRINTH_BUTTON,
-                SearchConfigConstants.DEFAULT_SINGLE);
-        if (labyrinthResult.isFound()) {
-            tapInside(labyrinthResult);
-            sleepTask(LABYRINTH_LOAD_DELAY);
+        if (navigationHelper.navigateToLabyrinth()) {
             logInfo("Successfully navigated to the Labyrinth menu.");
             return true;
-        } else {
-            logWarning("Labyrinth menu item not found.");
-            return false;
         }
+        logWarning("Labyrinth menu item not found.");
+        return false;
     }
 
     // =========================== CHALLENGE EXECUTION ===========================

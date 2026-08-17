@@ -18,6 +18,9 @@ import java.util.Set;
  */
 public enum TpDailyTaskEnum {
 
+    GAME_ANALYTICS_LABYRINTH(510, "Collect Alliance Labyrinth Ranking", null, RoutineCategory.ANALYTICS),
+    GAME_ANALYTICS_POWER    (511, "Collect Alliance Power Ranking",     null, RoutineCategory.ANALYTICS),
+
     /* ── alliance ── */
 
     ALLIANCE_AUTOJOIN      (40,  "Alliance Autojoin",            ConfigurationKeyEnum.ALLIANCE_AUTOJOIN_BOOL,                  RoutineCategory.ALLIANCE),
@@ -116,7 +119,7 @@ public enum TpDailyTaskEnum {
 
     /** Broad operational classification of a scheduled routine. */
     public enum RoutineCategory {
-        ALLIANCE, CHIEF_ORDER, CITY, CUSTOM, DAILY_OBJECTIVE,
+        ALLIANCE, ANALYTICS, CHIEF_ORDER, CITY, CUSTOM, DAILY_OBJECTIVE,
         EVENT, LIFECYCLE, MILITARY, PET, RESOURCE, SHOP
     }
 

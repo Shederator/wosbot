@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane maxHeight="Infinity" maxWidth="Infinity" VBox.vgrow="ALWAYS"
+            xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1">
+    <top>
+        <VBox spacing="10" style="-fx-padding: 16;">
+            <Label text="Game Data" styleClass="module-title" />
+            <Label fx:id="labelSupport" wrapText="true" />
+            <Label text="The initial collection backend supports Windows + MuMu Player only. Start the bot first, then queue one ranking as a one-shot profile task. Normal initialization and emulator coordination apply." wrapText="true" styleClass="label-muted" />
+        </VBox>
+    </top>
+    <center>
+        <TabPane fx:id="rankingTabs" style="-fx-padding: 0 16 16 16;" VBox.vgrow="ALWAYS">
+            <tabs>
+                <Tab fx:id="powerTab" text="Alliance Power Ranking" closable="false">
+                    <BorderPane>
+                        <top>
+                            <VBox spacing="8" style="-fx-padding: 12;">
+                                <HBox spacing="10" alignment="CENTER_LEFT">
+                                    <Button fx:id="buttonPower" text="Start Bot First" onAction="#handleCollectPower" styleClass="action-button-timeline" />
+                                    <Label text="History:" />
+                                    <ComboBox fx:id="comboPowerHistory" prefWidth="230" />
+                                    <Button fx:id="buttonPowerExportJson" text="Export JSON" onAction="#handleExportPowerJson" />
+                                    <Button fx:id="buttonPowerExportCsv" text="Export CSV" onAction="#handleExportPowerCsv" />
+                                </HBox>
+                                <Label text="If player details are missing, run the collection again. Newly observed names are saved in the shared player cache and applied to older snapshots when viewed." wrapText="true" styleClass="label-muted" />
+                                <Label fx:id="labelPowerStatus" wrapText="true" />
+                            </VBox>
+                        </top>
+                        <center>
+                            <TableView fx:id="tableRankings" fixedCellSize="32">
+                                <columnResizePolicy><TableView fx:constant="CONSTRAINED_RESIZE_POLICY" /></columnResizePolicy>
+                                <columns>
+                                    <TableColumn fx:id="columnRank" text="Rank" prefWidth="100" />
+                                    <TableColumn fx:id="columnPlayer" text="Player" prefWidth="240" />
+                                    <TableColumn fx:id="columnPlayerId" text="Player ID" prefWidth="170" />
+                                    <TableColumn fx:id="columnPower" text="Power" prefWidth="170" />
+                                    <TableColumn fx:id="columnPowerSource" text="Power Source" prefWidth="120" />
+                                    <TableColumn fx:id="columnPowerNameSource" text="Name Source" prefWidth="120" />
+                                </columns>
+                            </TableView>
+                        </center>
+                    </BorderPane>
+                </Tab>
+                <Tab fx:id="labyrinthTab" text="Alliance Labyrinth Ranking" closable="false">
+                    <BorderPane>
+                        <top>
+                            <VBox spacing="8" style="-fx-padding: 12;">
+                                <HBox spacing="10" alignment="CENTER_LEFT">
+                                    <Button fx:id="buttonLabyrinth" text="Start Bot First" onAction="#handleCollectLabyrinth" styleClass="action-button-timeline" />
+                                    <Label text="History:" />
+                                    <ComboBox fx:id="comboLabyrinthHistory" prefWidth="230" />
+                                    <Button fx:id="buttonLabyrinthExportJson" text="Export JSON" onAction="#handleExportLabyrinthJson" />
+                                    <Button fx:id="buttonLabyrinthExportCsv" text="Export CSV" onAction="#handleExportLabyrinthCsv" />
+                                </HBox>
+                                <Label text="Labyrinth responses do not include player names. Missing names are resolved from the shared player cache; run Alliance Power Ranking to populate it more reliably." wrapText="true" styleClass="label-muted" />
+                                <Label fx:id="labelLabyrinthStatus" wrapText="true" />
+                            </VBox>
+                        </top>
+                        <center>
+                            <TableView fx:id="tableLabyrinth" fixedCellSize="32">
+                                <columnResizePolicy><TableView fx:constant="CONSTRAINED_RESIZE_POLICY" /></columnResizePolicy>
+                                <columns>
+                                    <TableColumn fx:id="columnLabRank" text="Rank" prefWidth="100" />
+                                    <TableColumn fx:id="columnLabPlayer" text="Player" prefWidth="230" />
+                                    <TableColumn fx:id="columnLabPlayerId" text="Player ID" prefWidth="160" />
+                                    <TableColumn fx:id="columnLabScore" text="Labyrinth Score" prefWidth="160" />
+                                    <TableColumn fx:id="columnLabNameSource" text="Name Source" prefWidth="120" />
+                                </columns>
+                            </TableView>
+                        </center>
+                    </BorderPane>
+                </Tab>
+            </tabs>
+        </TabPane>
+    </center>
+</BorderPane>
