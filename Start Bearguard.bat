@@ -13,6 +13,11 @@ REM    Class-Path entries are resolved by the classloader but never appear in
 REM    the property. Custom tasks would fail to compile against DelayedTask.
 REM    Listing the dependencies explicitly puts them on java.class.path, which
 REM    is what a bundle install gets naturally by having lib\ beside the jar.
+REM
+REM matt/Claude, 2026-08-17: updated for the upstream module restructure. The old
+REM fg-app\target\frostguard-2.1.1.jar + fg-app\target\lib\ layout is gone -- run
+REM fg-build.bat first, which now packages via packaging/desktop and produces the
+REM real jar + lib\ classpath under packaging\desktop\target\input\.
 setlocal EnableExtensions
 cd /d "%~dp0"
 
@@ -27,13 +32,16 @@ if not exist "%JDK%\bin\javaw.exe" (
     exit /b 1
 )
 
-if not exist "fg-app\target\frostguard-2.1.1.jar" (
+set "APP_JAR="
+for %%F in ("packaging\desktop\target\input\frostguard-desktop-*.jar") do set "APP_JAR=%%~nxF"
+
+if not defined APP_JAR (
     echo [ERROR] Bearguard is not built yet.
-    echo Run a Maven package first, then start again.
+    echo Run fg-build.bat first, then start again.
     pause
     exit /b 1
 )
 
 start "" "%JDK%\bin\javaw.exe" --enable-native-access=ALL-UNNAMED ^
-    -cp "fg-app\target\frostguard-2.1.1.jar;fg-app\target\lib\*" ^
+    -cp "packaging\desktop\target\input\%APP_JAR%;packaging\desktop\target\input\lib\*" ^
     dev.frostguard.app.bootstrap.Main

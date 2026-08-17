@@ -3,10 +3,15 @@ REM matt, 2026-08-09: paths corrected after the toolchain moved out of OneDrive.
 REM bundled Temurin JDK both live under C:\Frostguard-tools now; the old C:\apache-maven-3.9.12
 REM path never existed on this machine, so `call mvn` below failed with "not recognized". JAVA_HOME
 REM is set explicitly too, because there is no system-wide Java install for mvn to fall back on.
+REM
+REM matt/Claude, 2026-08-17: updated for the upstream module restructure (fg-app -> modules/desktop,
+REM packaged via packaging/desktop). The old fg-app\target\frostguard-*.jar path is gone -- the real
+REM launchable jar + lib/ classpath now live under packaging\desktop\target\input\, produced by the
+REM new packaging module's dependency-copy step, not modules/desktop's own package phase.
 set "JAVA_HOME=C:\Frostguard-tools\jdk-21.0.12+8"
 set "PATH=C:\Frostguard-tools\apache-maven-3.9.9\bin;%JAVA_HOME%\bin;%PATH%"
 echo ==========================================
-echo      Frostguard Quick Recompile Script
+echo      Bearguard Quick Recompile Script
 echo ==========================================
 
 echo.
@@ -17,16 +22,16 @@ taskkill /F /IM adb.exe >nul 2>&1
 timeout /t 2 >nul
 
 echo.
-echo Building project (clean + install)...
-call mvn clean install package
+echo Building project (clean + package, packaging/desktop pulls in modules/desktop)...
+call mvn -pl packaging/desktop -am clean package -DskipTests
 if errorlevel 1 (
     echo [WARN] First build attempt failed. Applying quick cleanup for transient resource-copy issues...
-    if exist "fg-vision\target" rmdir /S /Q "fg-vision\target"
+    if exist "modules\vision\target" rmdir /S /Q "modules\vision\target"
     timeout /t 2 >nul
 
     echo.
     echo Retrying build once...
-    call mvn clean install package
+    call mvn -pl packaging/desktop -am clean package -DskipTests
     if errorlevel 1 (
         echo [ERROR] Build failed after retry!
         pause
@@ -37,10 +42,10 @@ if errorlevel 1 (
 echo.
 echo Verifying packaged app JAR integrity...
 set "APP_JAR="
-for %%F in ("fg-app\target\frostguard-*.jar") do set "APP_JAR=%%~fF"
+for %%F in ("packaging\desktop\target\input\frostguard-desktop-*.jar") do set "APP_JAR=%%~fF"
 
 if not defined APP_JAR (
-    echo [ERROR] App JAR not found in fg-app\target.
+    echo [ERROR] App JAR not found in packaging\desktop\target\input.
     pause
     exit /b 1
 )
@@ -51,16 +56,22 @@ if errorlevel 1 (
 ) else (
     jar tf "%APP_JAR%" | findstr /C:"dev/frostguard/app/panel/launcher/LauncherLayoutController.class" >nul
     if errorlevel 1 (
-        echo [WARN] LauncherLayoutController.class missing in packaged JAR. Rebuilding fg-app once...
-        call mvn -pl fg-app -am clean package -DskipTests
+        echo [WARN] LauncherLayoutController.class missing in packaged JAR. Rebuilding modules/desktop once...
+        call mvn -pl modules/desktop -am clean package -DskipTests
         if errorlevel 1 (
-            echo [ERROR] Fallback fg-app rebuild failed!
+            echo [ERROR] Fallback modules/desktop rebuild failed!
+            pause
+            exit /b %errorlevel%
+        )
+        call mvn -pl packaging/desktop clean package -DskipTests
+        if errorlevel 1 (
+            echo [ERROR] Fallback packaging/desktop rebuild failed!
             pause
             exit /b %errorlevel%
         )
 
         set "APP_JAR="
-        for %%F in ("fg-app\target\frostguard-*.jar") do set "APP_JAR=%%~fF"
+        for %%F in ("packaging\desktop\target\input\frostguard-desktop-*.jar") do set "APP_JAR=%%~fF"
         jar tf "%APP_JAR%" | findstr /C:"dev/frostguard/app/panel/launcher/LauncherLayoutController.class" >nul
         if errorlevel 1 (
             echo [ERROR] Packaged JAR is still incomplete after fallback rebuild.
@@ -76,19 +87,12 @@ echo BUILD SUCCESSFUL!
 echo ==========================================
 echo.
 
-set "OUTPUT_DIR=%CD%\fg-app\target"
-set "BUNDLE_ZIP="
-for %%F in ("fg-app\target\*desktop-bundle.zip") do set "BUNDLE_ZIP=%%~fF"
-
-if defined BUNDLE_ZIP (
-    echo Opening desktop bundle ZIP: %BUNDLE_ZIP%
-    start "" explorer /select,"%BUNDLE_ZIP%"
-) else if exist "%OUTPUT_DIR%" (
-    echo [WARN] Desktop bundle ZIP not found. Opening output directory: %OUTPUT_DIR%
+set "OUTPUT_DIR=%CD%\packaging\desktop\target\input"
+if exist "%OUTPUT_DIR%" (
+    echo Opening packaged app input directory: %OUTPUT_DIR%
     start "" explorer "%OUTPUT_DIR%"
 ) else (
     echo [WARN] Output directory not found: %OUTPUT_DIR%
 )
 
 pause
-

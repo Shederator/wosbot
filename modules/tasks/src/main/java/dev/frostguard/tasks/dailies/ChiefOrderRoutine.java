@@ -206,7 +206,7 @@ private void manageTaskFailure(String reason) {
 		}
 
 		logInfo(routineLogChiefOrderLine(chiefOrderType.getDescription() + " is available — opening it."));
-		tapNear(slot.tapPoint());
+		tapNear(slot.openPoint());
 		sleepTask(1500);
 
 		return ShelfVerdict.AVAILABLE;
@@ -231,7 +231,7 @@ private void manageTaskFailure(String reason) {
 
 	/** One position on the 2x3 Chief Order shelf. */
 	private record OrderSlot(PointData coverTopLeft, PointData coverBottomRight,
-			PointData labelTopLeft, PointData labelBottomRight, PointData tapPoint) {
+			PointData labelTopLeft, PointData labelBottomRight, PointData openPoint) {
 	}
 
 	/**
