@@ -37,4 +37,12 @@ class GiftCodeRedeemerTest {
         assertTrue(GiftCodeRedeemer.classify("SUCCESS").terminal());
         assertFalse(GiftCodeRedeemer.classify("Server busy").terminal());
     }
+
+    @Test
+    void treatsRechargeRequirementsAsTerminalFailures() {
+        var result = GiftCodeRedeemer.classify("RECHARGE_MONEY ERROR.");
+
+        assertEquals(RedeemOutcome.FAILED, result.outcome());
+        assertTrue(result.terminal());
+    }
 }
