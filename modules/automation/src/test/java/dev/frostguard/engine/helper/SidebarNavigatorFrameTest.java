@@ -38,6 +38,13 @@ class SidebarNavigatorFrameTest {
     }
 
     @Test
+    void detectsResearchCenterInTheRealCityFrame() throws IOException {
+        byte[] frame = resource("/navigation/sidebar-update-20260817/city.png");
+
+        assertDestination(frame, TemplatesEnum.GAME_HOME_SHORTCUTS_RESEARCH_CENTER, 47, 821);
+    }
+
+    @Test
     void derivesTheGoControlFromTheDetectedRowInsteadOfMatchingAnAmbiguousArrow() {
         ImageSearchResultData icon = ImageSearchResultData.hit(46, 373, 99.0, 44, 44);
 

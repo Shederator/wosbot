@@ -4,6 +4,7 @@ import dev.frostguard.api.configs.TemplatesEnum;
 
 /** Destinations whose sidebar rows have stable visual identity. */
 public enum SidebarDestination {
+    RESEARCH_CENTER(SidebarSection.CITY, TemplatesEnum.GAME_HOME_SHORTCUTS_RESEARCH_CENTER, 0),
     ARENA(SidebarSection.DAILY, TemplatesEnum.SIDEBAR_DAILY_ARENA, 1),
     LAND_OF_HEROES(SidebarSection.DAILY, TemplatesEnum.SIDEBAR_DAILY_LAND_OF_HEROES, 1),
     LIFE_ESSENCE(SidebarSection.DAILY, TemplatesEnum.SIDEBAR_DAILY_LIFE_ESSENCE, 2);
