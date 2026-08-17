@@ -448,6 +448,12 @@ public class ArenaRoutine extends DelayedTask {
                         break;
                     }
                     if (outcome == ChallengeOutcome.DEFEAT) {
+                        if (!shouldRefreshAfterDefeat(attempts)) {
+                            logInfo(String.format(
+                                    "Our attack lost to opponent %d. No attempts remain; skipping list refresh.",
+                                    opponent.number()));
+                            continue;
+                        }
                         logInfo(String.format(
                                 "Our attack lost to opponent %d. Refreshing list before using another attempt.",
                                 opponent.number()));
@@ -499,6 +505,10 @@ public class ArenaRoutine extends DelayedTask {
         } else {
             logInfo("Arena run finished after using available eligible attempts.");
         }
+    }
+
+    static boolean shouldRefreshAfterDefeat(int remainingAttempts) {
+        return remainingAttempts > 0;
     }
 
     private OpponentCandidate findEligibleOpponent() {
