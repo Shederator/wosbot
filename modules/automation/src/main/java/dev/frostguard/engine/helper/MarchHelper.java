@@ -222,30 +222,45 @@ public class MarchHelper {
     // A slot is inspected before it is tapped: padlock evidence rejects locked slots, while the
     // measured white-flag signal distinguishes a saved formation from an empty visible tile.
     public boolean selectFlag(Integer flagNumber) {
+        return selectFormation(flagNumber).successful();
+    }
+
+    /**
+     * Selects a saved formation and retains the evidence behind a rejection for callers that need
+     * to distinguish invalid configuration from a transient unreadable screen.
+     */
+    public FormationSelectionResult selectFormation(Integer flagNumber) {
         if (flagNumber == null) {
             log.debug("No formation configured - skipping selection");
-            return true;
+            return new FormationSelectionResult(FormationSelectionResult.Status.NOT_CONFIGURED,
+                    null, "No formation configured");
         }
         if (!FormationSlots.supports(flagNumber)) {
-            log.warn("Formation #" + flagNumber + " is unsupported; supported range is "
-                    + FormationSlots.MIN + "-" + FormationSlots.MAX);
-            return false;
+            String detail = "Supported range is " + FormationSlots.MIN + "-" + FormationSlots.MAX;
+            log.warn("Formation #" + flagNumber + " is unsupported; " + detail.toLowerCase());
+            return new FormationSelectionResult(FormationSelectionResult.Status.UNSUPPORTED,
+                    flagNumber, detail);
         }
         FormationFrame frame = flagNumber <= 8 ? captureFormationFrame(flagNumber) : moveToRightFormationEnd();
         if (frame == null) {
-            return false;
+            return new FormationSelectionResult(FormationSelectionResult.Status.SCREEN_UNREADABLE,
+                    flagNumber, "Formation bar could not be captured or navigated");
         }
         FormationSlotStateClassifier.State state = inspectFormationSlot(flagNumber, frame);
         if (state != FormationSlotStateClassifier.State.SAVED) {
-            log.warn("Formation #" + flagNumber + " is " + state.name().toLowerCase().replace('_', ' ')
-                    + " - not selecting it");
-            return false;
+            String detail = state.name().toLowerCase().replace('_', ' ');
+            log.warn("Formation #" + flagNumber + " is " + detail + " - not selecting it");
+            FormationSelectionResult.Status status = state == FormationSlotStateClassifier.State.LOCKED
+                    ? FormationSelectionResult.Status.LOCKED
+                    : FormationSelectionResult.Status.EMPTY_OR_MISSING;
+            return new FormationSelectionResult(status, flagNumber, detail);
         }
         log.debug("Selecting formation #" + flagNumber);
         // Flag slots are narrow fixed positions — keep the jitter tightly bounded.
         taps.tapNear(RallyFlagCoordinates.pointForFlag(flagNumber), TapJitterPolicy.DEFAULT_POINT_JITTER_RADIUS);
         interruptibleWait(300);
-        return true;
+        return new FormationSelectionResult(FormationSelectionResult.Status.SELECTED,
+                flagNumber, "Saved formation selected");
     }
 
     // Locating every padlock across the strip and mapping each to its nearest slot is immune to the
