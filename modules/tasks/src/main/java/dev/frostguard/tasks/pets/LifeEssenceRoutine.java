@@ -1,6 +1,7 @@
 package dev.frostguard.tasks.pets;
 
 import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -34,21 +35,17 @@ public class LifeEssenceRoutine extends DelayedTask {
 			new PointData(720, 1280));
 
 	// Retry limits
-	private static final int MAX_NAVIGATION_FAILURES = 5;
 	private static final int MAX_CLAIM_SEARCH_ATTEMPTS = 5;
 	private static final int MAX_CLAIM_RESULTS = 5;
 
 	// Default configuration values
 	private static final int DEFAULT_OFFSET_MINUTES = Integer.parseInt(
 			ConfigurationKeyEnum.LIFE_ESSENCE_OFFSET_INT.getDefaultValue());
-	private static final int BACKOFF_MULTIPLIER = 5;
-	private static final int MAX_BACKOFF_MINUTES = 30;
-
 	// Configuration (loaded fresh each execution)
 	private int offsetMinutes;
 	private boolean buyWeeklyScroll;
 
-	// Execution state (reset each execution)
+	// Persisted retry state loaded at the start of each execution
 	private int consecutiveFailures = 0;
 
 	public LifeEssenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDailyTask) {
@@ -61,10 +58,7 @@ public class LifeEssenceRoutine extends DelayedTask {
 		// Load configuration
 		loadConfiguration();
 
-		// Check if we should stop trying after too many failures
-		if (shouldStopRetrying()) {
-			return;
-		}
+		loadFailureState();
 
 		// Navigate to Life Essence menu
 		if (!navigateToLifeEssenceMenu()) {
@@ -123,25 +117,11 @@ public class LifeEssenceRoutine extends DelayedTask {
 				", buyWeeklyScroll=" + buyWeeklyScroll);
 	}
 
-	/**
-	 * Check if task should stop retrying after consecutive failures
-	 */
-	private boolean shouldStopRetrying() {
-		// Get consecutive failure count from profile config (persisted)
+	private void loadFailureState() {
 		Integer failures = profile.getConfig(
 				ConfigurationKeyEnum.LIFE_ESSENCE_CONSECUTIVE_FAILURES_INT,
 				Integer.class);
-
-		consecutiveFailures = (failures != null) ? failures : 0;
-
-		if (consecutiveFailures >= MAX_NAVIGATION_FAILURES) {
-			logWarning("Maximum consecutive failures (" + MAX_NAVIGATION_FAILURES +
-					") reached. Disabling task. Re-enable in configs to retry.");
-			setRecurring(false);
-			return true;
-		}
-
-		return false;
+		consecutiveFailures = failures == null ? 0 : Math.max(0, failures);
 	}
 
 	/**
@@ -330,21 +310,20 @@ public class LifeEssenceRoutine extends DelayedTask {
 	 * Handle navigation failure by incrementing failure count and rescheduling
 	 */
 	private void handleNavigationFailure() {
-		consecutiveFailures++;
+		LifeEssenceRetryPolicy.Decision decision =
+				LifeEssenceRetryPolicy.afterFailure(consecutiveFailures);
+		consecutiveFailures = decision.persistedFailures();
 
 		writeProfileSetting(ConfigurationKeyEnum.LIFE_ESSENCE_CONSECUTIVE_FAILURES_INT, consecutiveFailures);
 
-		logWarning("Navigation failed. Consecutive failures: " + consecutiveFailures +
-				"/" + MAX_NAVIGATION_FAILURES);
-
-		// Calculate backoff time: 5, 10, 15, 20, 25 minutes (max 30)
-		int backoffMinutes = Math.min(BACKOFF_MULTIPLIER * consecutiveFailures, MAX_BACKOFF_MINUTES);
-		LocalDateTime nextAttempt = LocalDateTime.now().plusMinutes(backoffMinutes);
+		Duration retryDelay = decision.retryDelay();
+		LocalDateTime nextAttempt = LocalDateTime.now().plus(retryDelay);
 
 		reschedule(nextAttempt);
 
-		logInfo("Rescheduling with " + backoffMinutes + " minute backoff. Next attempt: " +
-				GameTimeUtils.formatCountdown(nextAttempt));
+		logWarning("Navigation failed. Consecutive failures: " + consecutiveFailures
+				+ ". Task remains enabled and will retry in " + retryDelay.toMinutes()
+				+ " minutes at " + GameTimeUtils.formatCountdown(nextAttempt));
 	}
 
 	/**
