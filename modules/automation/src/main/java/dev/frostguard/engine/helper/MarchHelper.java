@@ -15,6 +15,7 @@ import dev.frostguard.engine.input.TapJitterPolicy;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.engine.nav.RallyFlagCoordinates;
+import dev.frostguard.engine.nav.SidebarSection;
 import dev.frostguard.vision.color.GameColors;
 import dev.frostguard.vision.color.PixelStats;
 import dev.frostguard.vision.convert.GameTimeUtils;
@@ -59,6 +60,7 @@ public class MarchHelper {
     private final TapInteractionService taps;
     private final ResilientOcrExecutor<String> ocrStrings;
     private final ProfileContextLogger log;
+    private final SidebarNavigator sidebar;
 
     public MarchHelper(EmulatorController emuManager, String emulatorNumber,
                        ResilientOcrExecutor<String> stringHelper, AccountDescriptor profile) {
@@ -67,6 +69,7 @@ public class MarchHelper {
         this.taps = TapInteractionService.forController(emuManager, emulatorNumber);
         this.ocrStrings = stringHelper;
         this.log = new ProfileContextLogger(MarchHelper.class, profile);
+        this.sidebar = new SidebarNavigator(emuManager, emulatorNumber, profile);
     }
 
     public boolean checkMarchesAvailable() {
@@ -309,42 +312,28 @@ public class MarchHelper {
 
     public void openLeftMenuCitySection(boolean cityTab) {
         log.debug("Left menu — " + (cityTab ? "city" : "wilderness"));
-        taps.tapInside(CommonGameAreas.LEFT_MENU_TRIGGER, 3, 400);
-        if (cityTab) {
-            taps.tapInside(CommonGameAreas.LEFT_MENU_CITY_TAB, 3, 100);
-        } else {
-            taps.tapInside(CommonGameAreas.LEFT_MENU_WILDERNESS_TAB, 3, 100);
+        if (!sidebar.openSectionAtTop(cityTab ? SidebarSection.CITY : SidebarSection.WILDERNESS)) {
+            throw new IllegalStateException("Could not open the requested sidebar section");
         }
     }
 
-    // Closes the left panel via two sequential touch points.
+    // Closes the left panel only after the selected tab proves that it is open.
     public void closeLeftMenu() {
         dismissLeftPanel();
     }
 
     /**
-     * Opens the left panel with one deliberate tap per control. Callers should use this only when
-     * they own the panel lifecycle and guarantee a matching {@link #closeLeftMenu()} in a finally
-     * block; it avoids the legacy blind multi-tap sequence toggling a responsive panel repeatedly.
+     * Compatibility entry point for flows that own the panel lifecycle and guarantee a matching
+     * {@link #closeLeftMenu()} in a finally block. State verification is identical to the normal path.
      */
     public void openLeftMenuCitySectionOnce(boolean cityTab) {
         log.debug("Left menu single-pass - " + (cityTab ? "city" : "wilderness"));
-        openLeftMenuCitySectionOnce(taps, cityTab);
-    }
-
-    static void openLeftMenuCitySectionOnce(TapInteractionService taps, boolean cityTab) {
-        taps.tapInside(CommonGameAreas.LEFT_MENU_TRIGGER, 1, 400);
-        taps.tapInside(cityTab
-                ? CommonGameAreas.LEFT_MENU_CITY_TAB
-                : CommonGameAreas.LEFT_MENU_WILDERNESS_TAB, 1, 300);
+        openLeftMenuCitySection(cityTab);
     }
 
     private void dismissLeftPanel() {
         log.debug("Closing left menu");
-        taps.tapNear(CommonGameAreas.LEFT_MENU_CLOSE_CITY, TapJitterPolicy.DEFAULT_POINT_JITTER_RADIUS);
-        interruptibleWait(500);
-        taps.tapNear(CommonGameAreas.LEFT_MENU_CLOSE_OUTSIDE, TapJitterPolicy.DEFAULT_POINT_JITTER_RADIUS);
-        interruptibleWait(500);
+        sidebar.close();
     }
 
     private void interruptibleWait(long ms) {
