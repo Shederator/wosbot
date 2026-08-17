@@ -213,7 +213,6 @@
     -fx-spacing: 16;
     -fx-alignment: CENTER_LEFT;
     -fx-min-height: 48;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.4), 10, 0, 0, -2);
 }
 
 /* Base button defaults */
