@@ -55,6 +55,11 @@ public class InitializeRoutine extends DelayedTask {
 
 	// ========== Home Screen Detection Constants ==========
 	private static final int MAX_HOME_SCREEN_ATTEMPTS = 10;
+	private static final int RESOURCE_DOWNLOAD_TIMEOUT_MINUTES = 10;
+	private static final int RESOURCE_DOWNLOAD_POLL_DELAY_MS = 5000;
+	private static final int MAX_RESOURCE_DOWNLOAD_ATTEMPTS =
+			RESOURCE_DOWNLOAD_TIMEOUT_MINUTES * 60_000 / RESOURCE_DOWNLOAD_POLL_DELAY_MS;
+	private static final int RESOURCE_DOWNLOAD_PROGRESS_LOG_INTERVAL = 12;
 
 	// ========== Instance State ==========
 	/**
@@ -226,6 +231,17 @@ public class InitializeRoutine extends DelayedTask {
 
 			checkForReconnectState();
 
+			ResourceDownloadResult downloadResult = downloadRequiredResources();
+			if (downloadResult == ResourceDownloadResult.COMPLETED) {
+				homeScreenFound = true;
+				logInfo("Home screen found after required resource download.");
+				break;
+			}
+			if (downloadResult == ResourceDownloadResult.TIMED_OUT) {
+				handleHomeScreenNotFound();
+				return false;
+			}
+
 			logWarning("Home screen not found. Waiting 5 seconds before retrying...");
 			pressBack(); // Try to dismiss any overlays
 			sleepTask(5000); // Wait before retry
@@ -259,6 +275,51 @@ public class InitializeRoutine extends DelayedTask {
 						.build());
 
 		return home.isFound() || world.isFound();
+	}
+
+	/**
+	 * Chooses the foreground download when a resource-pack prompt blocks startup,
+	 * then waits for the game to reach the home or world screen. Pressing Enter
+	 * Game would allow automation to run while required assets are still missing.
+	 *
+	 * @return the observed prompt/download outcome
+	 */
+	private ResourceDownloadResult downloadRequiredResources() {
+		ImageSearchResultData downloadNow = templateSearchHelper.locatePattern(
+				TemplatesEnum.GAME_START_DOWNLOAD_NOW,
+				SearchConfig.builder()
+						.withMaxAttempts(1)
+						.build());
+
+		if (!downloadNow.isFound()) {
+			return ResourceDownloadResult.NOT_PRESENT;
+		}
+
+		logInfo("Resource download prompt detected. Downloading required resources before entering the game.");
+		tapInside(downloadNow);
+
+		for (int attempt = 1; attempt <= MAX_RESOURCE_DOWNLOAD_ATTEMPTS; attempt++) {
+			sleepTask(RESOURCE_DOWNLOAD_POLL_DELAY_MS);
+			if (searchForHomeScreen()) {
+				logInfo("Required resource download completed.");
+				return ResourceDownloadResult.COMPLETED;
+			}
+			checkForReconnectState();
+			if (attempt % RESOURCE_DOWNLOAD_PROGRESS_LOG_INTERVAL == 0) {
+				logInfo("Required resource download still in progress ("
+						+ attempt * RESOURCE_DOWNLOAD_POLL_DELAY_MS / 1000 + " seconds elapsed).");
+			}
+		}
+
+		logError("Required resource download did not reach the home screen within "
+				+ RESOURCE_DOWNLOAD_TIMEOUT_MINUTES + " minutes.");
+		return ResourceDownloadResult.TIMED_OUT;
+	}
+
+	private enum ResourceDownloadResult {
+		NOT_PRESENT,
+		COMPLETED,
+		TIMED_OUT
 	}
 
 	/**
