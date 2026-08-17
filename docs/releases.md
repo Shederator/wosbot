@@ -31,14 +31,12 @@ European local time shown below shifts when daylight-saving time changes.
 | **PR Build — Clean Up Test Releases** | Daily at 04:43 UTC (06:43 CEST / 05:43 CET), or manually | Deletes expired `pr-test-*` releases and their tags, including builds whose selected pull requests are all closed. It never touches Nightly or permanent releases. |
 | **Release — Windows Stable or Nightly** | Daily at 03:17 UTC (05:17 CEST / 04:17 CET) | Builds and publishes the next authenticated Nightly from `main`, promotes its signed feed, and updates the maintained Nightly Discord message. |
 | **Release — Windows Stable or Nightly** | Manually from `main` with channel, version, and minimum updater version | Publishes a current 3.x Stable or an additional Nightly. This is the only current Windows release workflow. |
-| **Legacy 2.x — Build ZIP Candidate** | Manually | Builds a legacy 2.x ZIP as an Actions artifact. It does not publish a release or update Discord. |
-| **Legacy 2.x — Publish Stable ZIP** | Manually with a version and successful candidate run ID | Verifies and publishes one selected legacy 2.x candidate as Stable, then updates the maintained Stable Discord message. It rejects Frostguard 3.x. |
 | **Discord — Deploy /build-pr Worker** | Manually | Tests and deploys the Cloudflare Worker that receives Discord interactions. |
 | **Discord — Sync /build-pr Command** | Manually | Registers the guild-scoped `/build-pr` command and removes duplicate global commands. |
 | **Discord — Refresh Nightly Message** | Manually | Re-resolves the current signed Nightly release and refreshes its maintained Discord message without building or publishing a release. |
 | **Discord — Refresh Stable Message** | Manually | Re-resolves GitHub's latest Stable release and refreshes its maintained Discord message without building or publishing a release. |
 
-Manual release, legacy publication, cleanup, deployment, synchronization, and
+Manual release, cleanup, deployment, synchronization, and
 repair workflows can modify GitHub Releases or external services. Inspect their
 inputs and the relevant section below before selecting **Run workflow**.
 
@@ -122,29 +120,6 @@ The candidate's numeric MSI version must be newer than the installed Stable but
 lower than the final release, so the final `3.0.0` installer can still upgrade
 it. The application displays the prerelease version from its JAR independently
 of the numeric MSI version.
-
-## Legacy 2.x ZIP promotion
-
-The manual-only **Legacy 2.x — Build ZIP Candidate** workflow can still produce
-an Actions artifact for an intentional 2.x maintenance release. It no longer
-publishes a Nightly, has no schedule, and does not update Discord. The legacy
-Stable ZIP workflow promotes one of those successful runs from `main`; it does
-not rebuild a different tree. Run **Legacy 2.x — Publish Stable ZIP** manually
-with:
-
-- `version`: the `X.Y.Z` value declared in `pom.xml`;
-- `daily_run_id`: a successful manually triggered legacy candidate run from
-  `main` after the intended release commit.
-
-This workflow rejects Frostguard 3.x. Installed 3.x releases must use the
-authenticated channel workflow so an unsigned ZIP can never become the latest Stable
-product accidentally.
-
-The workflow pins the run's exact commit, downloads its versioned artifact,
-re-runs structural and launch verification, creates the immutable `vX.Y.Z`
-release, verifies its public download URL and then updates the maintained
-Stable download without mentioning users. Existing stable tags are never
-replaced.
 
 ## Discord `#download`
 

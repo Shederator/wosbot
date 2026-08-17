@@ -26,6 +26,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           lfs: true
 
       - name: Verify Git LFS assets are real binaries
@@ -40,6 +41,7 @@ jobs:
 
       - name: Test build and release tooling
         run: |
+          python3 build-support/release/verify_development_version.py
           python3 -m unittest discover -s build-support/verification -p "test_*.py"
           python3 -m unittest discover -s build-support/release -p "test_*.py"
           python3 -m unittest discover -s build-support/notifications -p "test_*.py"

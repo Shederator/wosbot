@@ -180,6 +180,13 @@ jobs:
           if ($env:CHANNEL -eq 'stable' -and $env:VERSION.Contains('-')) {
               throw "Stable releases must not use a prerelease version"
           }
+          if ($env:CHANNEL -eq 'stable') {
+              python build-support/release/verify_development_version.py `
+                  --expected-stable $env:VERSION
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Stable version does not match the declared Maven baseline"
+              }
+          }
           $manifestName = "frostguard-$($env:CHANNEL)-manifest.json"
           $releaseTags = @(gh release list --repo $env:GITHUB_REPOSITORY `
               --limit 1000 --json tagName --jq '.[].tagName')

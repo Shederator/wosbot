@@ -179,7 +179,7 @@ For automatic startup through scripts or Task Scheduler:
 .\mvnw.cmd "-Djavafx.args=--autostart" javafx:run
 ```
 
-Installed and extracted bundle deployments should use their supplied launcher;
+Installed releases and extracted PR-test bundles should use their supplied launcher;
 the Maven command is only for source development.
 
 ## Scheduled Automation

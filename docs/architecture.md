@@ -237,7 +237,7 @@ flowchart TD
     RootPom --> UpdateJar[modules/update jar]
     RootPom --> AppJar[modules/desktop executable jar]
 
-    ApiJar --> AppBundle[desktop bundle zip]
+    ApiJar --> AppBundle[PR-test bundle zip]
     DataJar --> AppBundle
     VisionJar --> AppBundle
     EngineJar --> AppBundle
@@ -256,7 +256,7 @@ with `./mvnw javafx:run`; its versioned JAR is not a standalone distribution.
 `packaging/desktop` consumes that artifact and the watcher artifact:
 
 - executable jar: `modules/desktop/target/frostguard-desktop-<version>.jar`
-- transitional desktop zip: `packaging/desktop/target/frostguard-<version>-desktop-bundle.zip`
+- portable PR-test zip: `packaging/desktop/target/frostguard-<version>-desktop-bundle.zip`
 - packaging inputs staged under `packaging/desktop/target/input`
 - Windows application images: `packaging/desktop/target/app-image/Frostguard`
   and `app-image/Frostguard Nightly`
@@ -270,7 +270,7 @@ The native Windows image contains the desktop and watcher launchers plus a
 `jlink` runtime. Each launcher receives its Stable or Nightly channel and
 workspace contract through packaged JVM options. The watcher and Task Scheduler launch
 the native executables when those packaged launcher paths are present, with
-the Java/JAR paths retained only as the source and transitional-ZIP fallback.
+the Java/JAR paths retained only for source and temporary PR-test bundles.
 Native packaging is opt-in through Maven profiles so the normal reactor build
 stays platform-neutral.
 
