@@ -26,6 +26,12 @@ through its detected Center Research icon. After the Go transition, the building
 Research button is preferred; the detected tutorial hand supplies a relative target only while
 the onboarding overlay occludes that button.
 
+Trek Supplies is a conditional Daily destination: it is absent after the timed reward has
+already been claimed and on accounts without Dawn Academy. The claim routine treats absence as
+unavailable rather than scanning the unrelated City queues. When present, the existing supply
+icon identifies its row; the routine then accepts either direct claim-panel entry or Dawn Academy
+entry followed by the supply counter.
+
 Saved evidence lives under
 `modules/automation/src/test/resources/navigation/sidebar-update-20260817`. It covers City,
 Wilderness, three Daily scroll positions, the active-tab classifier, Research Center, Arena, Land of Heroes,

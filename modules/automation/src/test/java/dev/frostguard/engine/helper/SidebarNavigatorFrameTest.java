@@ -1,6 +1,7 @@
 package dev.frostguard.engine.helper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -49,6 +50,19 @@ class SidebarNavigatorFrameTest {
         ImageSearchResultData icon = ImageSearchResultData.hit(46, 373, 99.0, 44, 44);
 
         assertEquals(AreaData.of(383, 348, 429, 398), SidebarNavigator.goButtonFor(icon));
+    }
+
+    @Test
+    void doesNotConfuseTrekSuppliesWithPersistentDailyRows() throws IOException {
+        for (String frameName : new String[] { "daily-top.png", "daily-middle.png", "daily-bottom.png" }) {
+            byte[] frame = resource("/navigation/sidebar-update-20260817/" + frameName);
+            ImageSearchResultData hit = OpenCvPatternLocator.locatePattern(frame,
+                    TemplatesEnum.TUNDRA_TREK_SUPPLIES,
+                    CommonGameAreas.SIDEBAR_ROW_ICON_COLUMN.topLeft(),
+                    CommonGameAreas.SIDEBAR_ROW_ICON_COLUMN.bottomRight(), 88);
+
+            assertFalse(hit.isFound(), () -> "Trek Supplies false positive in " + frameName + ": " + hit);
+        }
     }
 
     private void assertDestination(byte[] frame, TemplatesEnum template, int expectedX, int expectedY) {
