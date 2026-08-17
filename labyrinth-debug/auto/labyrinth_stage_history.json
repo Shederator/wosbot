@@ -50,5 +50,15 @@
       },
       "note": "Enemy \"Dungeon Architect\", 53/26/20. Lost with default ratio, then lost again after the script read the real enemy comp and set the exact rotated counter (26/20/53) -- confirmed Chief Charm power wall, not comp-fixable."
     }
+  },
+  "land_of_heroes": {
+    "10-5": {
+      "status": "power_wall",
+      "last_checked": "2026-08-16",
+      "losses_recorded": 1,
+      "enemy_comp": null,
+      "best_ratio_tried": null,
+      "note": "Cleared 8-10 through 10-4 in one chain (2026-08-16, hero levels grew since the 8/10 wall). Wall moved to 10-5 vs a Bramble Champion boss at enemy Lv.26 (was Lv.22 at 8-10) -- confirmed hero-gated like the rest of this zone (in-game text: only Hero/Hero Gear/Hero Exclusive Gear stats apply here). Lost twice with the same 60/40/0 / 50/0/50 formation (no comp lever available). 3 of 5 attempts saved rather than spent grinding a confirmed hero wall."
+    }
   }
 }
