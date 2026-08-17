@@ -86,6 +86,7 @@ import javafx.util.Duration;
 import dev.frostguard.app.panel.alliance.AllianceShopController;
 import dev.frostguard.app.panel.misc.TelegramLayoutController;
 import dev.frostguard.app.bootstrap.ApplicationLifecycle;
+import dev.frostguard.app.bootstrap.WindowsWindowManager;
 import dev.frostguard.app.panel.update.UpdateLayoutController;
 import dev.frostguard.engine.service.TelegramBotService;
 import org.kordamp.ikonli.javafx.FontIcon;
@@ -148,6 +149,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
     private double xOffset = 0;
     private double yOffset = 0;
+    private WindowsWindowManager windowsWindowManager;
     // Window snap state tracking
     private boolean isCustomMaximized = false;
     private double restoreX, restoreY, restoreW, restoreH;
@@ -237,6 +239,12 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         initializeQuickNav();
         initializeSearch();
         setupSocialIcons();
+        stage.maximizedProperty().addListener((observable, oldValue, maximized) -> updateMaximizeButton(maximized));
+        updateMaximizeButton(stage.isMaximized());
+    }
+
+    public void enableNativeWindowing(WindowsWindowManager windowManager) {
+        this.windowsWindowManager = Objects.requireNonNull(windowManager);
     }
 
     private void initializeUptime() { /* internal */
@@ -852,11 +860,16 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
     @FXML
     private void handleTitleBarMouseDragged(javafx.scene.input.MouseEvent event) { /* internal */
+        if (windowsWindowManager != null) {
+            return;
+        }
+
         // If currently maximized/snapped, un-snap first, then start dragging
         if (isCustomMaximized) {
             double oldW = stage.getWidth();
             isCustomMaximized = false;
             btnMaximize.setText("☐");
+            stage.setMaximized(false);
             // Reposition so the cursor stays proportionally in the restored window
             double ratio = xOffset / oldW;
             stage.setWidth(restoreW);
@@ -902,6 +915,8 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
     @FXML
     private void handleTitleBarMouseReleased(javafx.scene.input.MouseEvent event) { /* internal */
+        if (windowsWindowManager != null) return;
+
         hideSnapPreview();
         if (isCustomMaximized) return; // already snapped, don't re-snap
         double screenX = event.getScreenX();
@@ -978,19 +993,26 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
     @FXML
     private void handleTitleBarMouseClicked(javafx.scene.input.MouseEvent event) { /* internal */
-        if (event.getClickCount() == 2) {
+        if (event.getClickCount() == 2 && !isWindowControl(event.getTarget())) {
             handleMaximize(null);
         }
     }
 
+    private boolean isWindowControl(Object target) {
+        Node node = target instanceof Node ? (Node) target : null;
+        while (node != null && node != titleBar) {
+            if (node instanceof ButtonBase) {
+                return true;
+            }
+            node = node.getParent();
+        }
+        return false;
+    }
+
     /** Snap window to fill the entire visual bounds (respects taskbar). */
     private void snapToFull(javafx.geometry.Rectangle2D bounds) { /* internal */
-        stage.setX(bounds.getMinX());
-        stage.setY(bounds.getMinY());
-        stage.setWidth(bounds.getWidth());
-        stage.setHeight(bounds.getHeight());
+        stage.setMaximized(true);
         isCustomMaximized = true;
-        btnMaximize.setText("❐");
     }
 
     /** Snap window to fill the left half of the screen. */
@@ -1073,9 +1095,15 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
     @FXML
     private void handleMaximize(ActionEvent event) { /* internal */
+        if (windowsWindowManager != null) {
+            stage.setMaximized(!stage.isMaximized());
+            return;
+        }
+
         if (isCustomMaximized) {
             // Restore from snap/maximize
             isCustomMaximized = false;
+            stage.setMaximized(false);
             stage.setX(restoreX);
             stage.setY(restoreY);
             stage.setWidth(restoreW);
@@ -1092,6 +1120,12 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
                 stage.getY() + stage.getHeight() / 2
             );
             snapToFull(bounds);
+        }
+    }
+
+    private void updateMaximizeButton(boolean maximized) {
+        if (btnMaximize != null) {
+            btnMaximize.setText(maximized ? "❐" : "☐");
         }
     }
 

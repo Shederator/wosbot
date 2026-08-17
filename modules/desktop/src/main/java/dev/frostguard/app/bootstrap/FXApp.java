@@ -2,6 +2,7 @@ package dev.frostguard.app.bootstrap;
 
 import atlantafx.base.theme.PrimerDark;
 import dev.frostguard.api.runtime.WorkspacePaths;
+import dev.frostguard.app.bootstrap.WindowBoundsPolicy.WindowBounds;
 import dev.frostguard.app.panel.launcher.ILauncherConstants;
 import dev.frostguard.app.panel.launcher.LauncherLayoutController;
 import dev.frostguard.app.panel.misc.GiftCodeAutomationService;
@@ -22,6 +23,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.util.List;
 import java.util.Objects;
 import java.util.prefs.Preferences;
 
@@ -37,6 +39,7 @@ public class FXApp extends Application {
     private static final double MIN_VISIBLE_AREA = 100;
 
     private Preferences preferences;
+    private WindowBounds normalWindowBounds;
 
     public static void main(String[] args) {
         launch(args);
@@ -60,6 +63,8 @@ public class FXApp extends Application {
         stage.show();
         GiftCodeAutomationService.getInstance().start();
         restoreWindowBounds(stage);
+        trackNormalWindowBounds(stage);
+        WindowsWindowManager.install(stage).ifPresent(controller::enableNativeWindowing);
         maybeAutoStart(controller);
         stage.setOnCloseRequest(event -> shutdownFromUi(stage));
     }
@@ -99,16 +104,21 @@ public class FXApp extends Application {
         double x = preferences.getDouble(KEY_X, Double.NaN);
         double y = preferences.getDouble(KEY_Y, Double.NaN);
 
-        stage.setWidth(width);
-        stage.setHeight(height);
+        width = Double.isFinite(width) && width > 0 ? width : DEFAULT_W;
+        height = Double.isFinite(height) && height > 0 ? height : DEFAULT_H;
 
-        if (!Double.isNaN(x) && !Double.isNaN(y) && isWindowRecoverable(x, y, width, height)) {
-            stage.setX(x);
-            stage.setY(y);
+        WindowBounds saved = new WindowBounds(x, y, width, height);
+        List<Rectangle2D> screens = Screen.getScreens().stream().map(Screen::getVisualBounds).toList();
+        var recovered = WindowBoundsPolicy.recover(saved, screens, MIN_VISIBLE_AREA);
+        if (recovered.isPresent()) {
+            applyWindowBounds(stage, recovered.get());
+            persistWindowBounds(recovered.get());
             return;
         }
 
-        centerOnPrimaryScreen(stage, width, height);
+        stage.setWidth(Math.min(width, Screen.getPrimary().getVisualBounds().getWidth()));
+        stage.setHeight(Math.min(height, Screen.getPrimary().getVisualBounds().getHeight()));
+        centerOnPrimaryScreen(stage, stage.getWidth(), stage.getHeight());
     }
 
     private void maybeAutoStart(LauncherLayoutController controller) {
@@ -123,34 +133,47 @@ public class FXApp extends Application {
     }
 
     private void rememberWindowBounds(Stage stage) {
-        preferences.putDouble(KEY_X, stage.getX());
-        preferences.putDouble(KEY_Y, stage.getY());
-        preferences.putDouble(KEY_W, stage.getWidth());
-        preferences.putDouble(KEY_H, stage.getHeight());
+        captureNormalWindowBounds(stage);
+        if (normalWindowBounds != null) {
+            persistWindowBounds(normalWindowBounds);
+        }
     }
 
-    private boolean isWindowRecoverable(double x, double y, double width, double height) {
-        return Screen.getScreens().stream()
-            .map(Screen::getVisualBounds)
-            .anyMatch(bounds -> visibleArea(bounds, x, y, width, height) >= MIN_VISIBLE_AREA * MIN_VISIBLE_AREA);
+    private void trackNormalWindowBounds(Stage stage) {
+        captureNormalWindowBounds(stage);
+        stage.xProperty().addListener((observable, oldValue, newValue) -> captureNormalWindowBounds(stage));
+        stage.yProperty().addListener((observable, oldValue, newValue) -> captureNormalWindowBounds(stage));
+        stage.widthProperty().addListener((observable, oldValue, newValue) -> captureNormalWindowBounds(stage));
+        stage.heightProperty().addListener((observable, oldValue, newValue) -> captureNormalWindowBounds(stage));
     }
 
-    private double visibleArea(Rectangle2D bounds, double x, double y, double width, double height) {
-        double visibleLeft = Math.max(x, bounds.getMinX());
-        double visibleTop = Math.max(y, bounds.getMinY());
-        double visibleRight = Math.min(x + width, bounds.getMaxX());
-        double visibleBottom = Math.min(y + height, bounds.getMaxY());
-        double visibleWidth = Math.max(0, visibleRight - visibleLeft);
-        double visibleHeight = Math.max(0, visibleBottom - visibleTop);
-        return visibleWidth * visibleHeight;
+    private void captureNormalWindowBounds(Stage stage) {
+        if (!stage.isMaximized() && !stage.isIconified()) {
+            normalWindowBounds = new WindowBounds(
+                    stage.getX(), stage.getY(), stage.getWidth(), stage.getHeight());
+        }
+    }
+
+    private void applyWindowBounds(Stage stage, WindowBounds bounds) {
+        stage.setWidth(bounds.width());
+        stage.setHeight(bounds.height());
+        stage.setX(bounds.x());
+        stage.setY(bounds.y());
+    }
+
+    private void persistWindowBounds(WindowBounds bounds) {
+        preferences.putDouble(KEY_X, bounds.x());
+        preferences.putDouble(KEY_Y, bounds.y());
+        preferences.putDouble(KEY_W, bounds.width());
+        preferences.putDouble(KEY_H, bounds.height());
     }
 
     private void centerOnPrimaryScreen(Stage stage, double width, double height) {
         Rectangle2D bounds = Screen.getPrimary().getVisualBounds();
         double x = bounds.getMinX() + (bounds.getWidth() - width) / 2;
         double y = bounds.getMinY() + (bounds.getHeight() - height) / 2;
-        stage.setX(Math.max(bounds.getMinX(), Math.min(x, bounds.getMaxX() - width)));
-        stage.setY(Math.max(bounds.getMinY(), Math.min(y, bounds.getMaxY() - height)));
+        stage.setX(Math.max(bounds.getMinX(), Math.min(x, bounds.getMaxX() - stage.getWidth())));
+        stage.setY(Math.max(bounds.getMinY(), Math.min(y, bounds.getMaxY() - stage.getHeight())));
         logger.info("Window restored to the primary display");
     }
 
