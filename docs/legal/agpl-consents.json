@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "repository": "Shederator/wosbot",
+  "issue": 194,
+  "capturedAt": "2026-08-17T16:57:45Z",
+  "license": "AGPL-3.0-only",
+  "copyrightAssignment": false,
+  "purpose": "Durable snapshot of public GitHub approvals for contributions predating adoption of the project license.",
+  "approvals": [
+    {
+      "githubLogin": "ShederatorXD",
+      "githubUserId": 179044356,
+      "commentId": 5272755930,
+      "createdAt": "2026-08-12T21:01:57Z",
+      "updatedAt": "2026-08-12T21:01:57Z",
+      "permalink": "https://github.com/Shederator/wosbot/issues/194#issuecomment-5272755930",
+      "statement": "I confirm that I own or am authorized to license my contributions included in Shederator/wosbot at commit ed0171e76bf18e347b0915e49699d6453d720240, and I agree to license those contributions under the GNU Affero General Public License version 3 only (AGPL-3.0-only). I retain copyright in my contributions."
+    },
+    {
+      "githubLogin": "CodeLtDave",
+      "githubUserId": 42917573,
+      "commentId": 5272765207,
+      "createdAt": "2026-08-12T21:02:59Z",
+      "updatedAt": "2026-08-16T23:24:54Z",
+      "permalink": "https://github.com/Shederator/wosbot/issues/194#issuecomment-5272765207",
+      "statement": "I confirm that I own or am authorized to license my contributions included in Shederator/wosbot at commit 0c684e1f5eee0cffb49faeb3af867cbc0a489c88, and I agree to license those contributions under the GNU Affero General Public License version 3 only (AGPL-3.0-only). I retain copyright in my contributions."
+    },
+    {
+      "githubLogin": "bizulk",
+      "githubUserId": 6799433,
+      "commentId": 5273903421,
+      "createdAt": "2026-08-12T23:15:34Z",
+      "updatedAt": "2026-08-12T23:15:34Z",
+      "permalink": "https://github.com/Shederator/wosbot/issues/194#issuecomment-5273903421",
+      "statement": "I confirm that I own or am authorized to license my contributions included in Shederator/wosbot at commit ed0171e76bf18e347b0915e49699d6453d720240, and I agree to license those contributions under the GNU Affero General Public License version 3 only (AGPL-3.0-only). I retain copyright in my contributions."
+    },
+    {
+      "githubLogin": "Cloudbed-invi",
+      "githubUserId": 109196098,
+      "commentId": 5275042449,
+      "createdAt": "2026-08-13T02:00:55Z",
+      "updatedAt": "2026-08-13T02:00:55Z",
+      "permalink": "https://github.com/Shederator/wosbot/issues/194#issuecomment-5275042449",
+      "statement": "I confirm that I own or am authorized to license my contributions included in Shederator/wosbot at commit ed0171e76bf18e347b0915e49699d6453d720240, and I agree to license those contributions under the GNU Affero General Public License version 3 only (AGPL-3.0-only). I retain copyright in my contributions."
+    },
+    {
+      "githubLogin": "Shederator",
+      "githubUserId": 128674767,
+      "commentId": 5275841139,
+      "createdAt": "2026-08-13T04:08:49Z",
+      "updatedAt": "2026-08-13T04:08:49Z",
+      "permalink": "https://github.com/Shederator/wosbot/issues/194#issuecomment-5275841139",
+      "statement": "I confirm that I own or am authorized to license my contributions included in Shederator/wosbot at commit ed0171e, and I agree to license those contributions under the GNU Affero General Public License version 3 only (AGPL-3.0-only). I retain copyright in my contributions."
+    },
+    {
+      "githubLogin": "pernerch",
+      "githubUserId": 120588088,
+      "commentId": 5306210824,
+      "createdAt": "2026-08-16T06:55:36Z",
+      "updatedAt": "2026-08-16T06:55:36Z",
+      "permalink": "https://github.com/Shederator/wosbot/issues/194#issuecomment-5306210824",
+      "statement": "I confirm that I own or am authorized to license my contributions included in Shederator/wosbot at commit ed0171e76bf18e347b0915e49699d6453d720240, and I agree to license those contributions under the GNU Affero General Public License version 3 only (AGPL-3.0-only). I retain copyright in my contributions."
+    }
+  ]
+}

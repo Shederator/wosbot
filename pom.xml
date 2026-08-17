@@ -9,12 +9,23 @@
 	<version>${revision}</version>
 	<packaging>pom</packaging>
 	<name>Frostguard Automation Platform</name>
+	<licenses>
+		<license>
+			<name>GNU Affero General Public License v3.0 only</name>
+			<url>https://www.gnu.org/licenses/agpl-3.0.html</url>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
 
 	<!-- ──────────────────────────────────────────────
 	     Build-wide property declarations
 	     ────────────────────────────────────────────── -->
 	<properties>
 		<revision>2.1.1</revision>
+		<frostguard.pull-request-build>false</frostguard.pull-request-build>
+		<frostguard.update.manifest.stable></frostguard.update.manifest.stable>
+		<frostguard.update.manifest.nightly></frostguard.update.manifest.nightly>
+		<frostguard.update.authenticode-publisher></frostguard.update.authenticode-publisher>
 
 		<!-- JDK baseline -->
 		<java.version>21</java.version>
@@ -64,6 +75,7 @@
 
 		<!-- Testing -->
 		<junit.jupiter.version>5.10.2</junit.jupiter.version>
+		<archunit.version>1.4.1</archunit.version>
 
 		<!-- ── Managed Maven plugin versions ── -->
 		<maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
@@ -74,19 +86,22 @@
 		<maven.assembly.plugin.version>3.7.1</maven.assembly.plugin.version>
 		<maven.shade.plugin.version>3.5.1</maven.shade.plugin.version>
 		<maven.antrun.plugin.version>3.1.0</maven.antrun.plugin.version>
+		<javafx.maven.plugin.version>0.0.8</javafx.maven.plugin.version>
 	</properties>
 
 	<!-- ──────────────────────────────────────────────
 	     Reactor module order
 	     ────────────────────────────────────────────── -->
 	<modules>
-		<module>fg-api</module>
-		<module>fg-data</module>
-		<module>fg-vision</module>
-		<module>fg-engine</module>
-		<module>fg-tasks</module>
-		<module>fg-watcher</module>
-		<module>fg-app</module>
+		<module>modules/api</module>
+		<module>modules/persistence</module>
+		<module>modules/vision</module>
+		<module>modules/automation</module>
+		<module>modules/tasks</module>
+		<module>modules/watcher</module>
+		<module>modules/update</module>
+		<module>modules/desktop</module>
+		<module>packaging/desktop</module>
 	</modules>
 
 	<!-- ──────────────────────────────────────────────
@@ -108,30 +123,34 @@
 			<!-- ── Internal reactor modules ── -->
 			<dependency>
 				<groupId>dev.frostguard</groupId>
-				<artifactId>fg-api</artifactId>
+				<artifactId>frostguard-api</artifactId>
 				<version>${revision}</version>
 			</dependency>
 			<dependency>
 				<groupId>dev.frostguard</groupId>
-				<artifactId>fg-data</artifactId>
+				<artifactId>frostguard-update</artifactId>
 				<version>${revision}</version>
 			</dependency>
 			<dependency>
 				<groupId>dev.frostguard</groupId>
-				<artifactId>fg-vision</artifactId>
+				<artifactId>frostguard-persistence</artifactId>
 				<version>${revision}</version>
 			</dependency>
 			<dependency>
 				<groupId>dev.frostguard</groupId>
-				<artifactId>fg-engine</artifactId>
+				<artifactId>frostguard-vision</artifactId>
 				<version>${revision}</version>
 			</dependency>
 			<dependency>
 				<groupId>dev.frostguard</groupId>
-				<artifactId>fg-tasks</artifactId>
+				<artifactId>frostguard-automation</artifactId>
 				<version>${revision}</version>
 			</dependency>
-
+			<dependency>
+				<groupId>dev.frostguard</groupId>
+				<artifactId>frostguard-tasks</artifactId>
+				<version>${revision}</version>
+			</dependency>
 			<!-- ── JavaFX UI ── -->
 			<dependency>
 				<groupId>org.openjfx</groupId>
@@ -275,6 +294,12 @@
 				<version>${junit.jupiter.version}</version>
 				<scope>test</scope>
 			</dependency>
+			<dependency>
+				<groupId>com.tngtech.archunit</groupId>
+				<artifactId>archunit-junit5</artifactId>
+				<version>${archunit.version}</version>
+				<scope>test</scope>
+			</dependency>
 		</dependencies>
 	</dependencyManagement>
 
@@ -296,6 +321,12 @@
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-surefire-plugin</artifactId>
 					<version>${maven.surefire.plugin.version}</version>
+					<configuration>
+						<systemPropertyVariables>
+							<frostguard.channel>development</frostguard.channel>
+							<frostguard.workspace>${project.build.directory}/test-workspace</frostguard.workspace>
+						</systemPropertyVariables>
+					</configuration>
 				</plugin>
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
@@ -327,7 +358,22 @@
 					<artifactId>maven-antrun-plugin</artifactId>
 					<version>${maven.antrun.plugin.version}</version>
 				</plugin>
+				<plugin>
+					<groupId>org.openjfx</groupId>
+					<artifactId>javafx-maven-plugin</artifactId>
+					<version>${javafx.maven.plugin.version}</version>
+				</plugin>
 			</plugins>
 		</pluginManagement>
+		<plugins>
+			<plugin>
+				<groupId>org.openjfx</groupId>
+				<artifactId>javafx-maven-plugin</artifactId>
+				<configuration>
+					<skip>true</skip>
+					<mainClass>dev.frostguard.app.bootstrap.Main</mainClass>
+				</configuration>
+			</plugin>
+		</plugins>
 	</build>
 </project>

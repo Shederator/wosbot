@@ -1,23 +1,144 @@
 # Releases
 
-Frostguard publishes three distinct Windows bundle types. Do not mix their
-notifications or download locations.
+Frostguard publishes project-authenticated installed releases for Stable and
+Nightly plus temporary ZIP builds for pull-request testing. Public channel links
+are permanent even though the versioned installers behind them change.
 
-| Type | Audience | Lifetime | Discord notification |
+| Type | Permanent entry | Versioned tag | Lifetime |
 |---|---|---|---|
-| Stable `vX.Y.Z` | Regular users | Permanent | Update the maintained Stable message |
-| Daily `nightly` | Testers | Replaced daily | Update the daily download, no mass mention |
-| PR test `pr-test-*` | Requester/testers | Temporary | Reply only to the requester |
+| Stable | [`releases/latest`](https://github.com/Shederator/wosbot/releases/latest) | `vX.Y.Z` | Permanent |
+| Nightly | [`releases/tag/nightly`](https://github.com/Shederator/wosbot/releases/tag/nightly) | `vX.Y.Z-nightly.YYYYMMDD.N` | Two newest immutable prereleases plus rolling channel |
+| PR test | Discord `/build-pr` | `pr-test-*` | Temporary |
 
-## Stable promotion
+Do not add a separate `stable` rolling release. GitHub's built-in `latest`
+redirect already resolves the newest non-prerelease Stable without duplicating
+it in the release list. The mutable `nightly` release is different: GitHub has
+no built-in latest-prerelease URL, so it provides both the permanent landing
+page and the stable signed-manifest URL required by installed Nightly clients.
 
-Stable releases promote an already successful `Daily Windows Bundle` run from
-`main`; they do not rebuild a different tree. Run **Stable Windows Release**
-manually with:
+## GitHub Actions quick reference
+
+Workflow names use purpose prefixes so related entries stay together in the
+alphabetical Actions sidebar. GitHub schedules always use UTC; the Central
+European local time shown below shifts when daylight-saving time changes.
+
+| Workflow | Runs | Purpose and side effects |
+|---|---|---|
+| **CI — Java Build and Tests** | Automatically for every pull request and every push to `main` | Builds and tests the complete reactor on Linux. It publishes only short-lived test-report artifacts, never a release. |
+| **CI — Windows Installers** | Automatically for pull requests that touch packaging-related paths | Builds and smoke-tests the Stable and Nightly MSI packages. It uploads short-lived Actions artifacts, never a GitHub Release. |
+| **CI — Windows Installers** | Manually with prerelease application and numeric MSI versions | Produces an unpublished Stable release candidate for upgrade testing. It does not change `releases/latest`. |
+| **PR Build — Create Test Release** | Manually in Actions or dispatched through Discord `/build-pr` | Combines selected open pull requests and publishes a temporary `pr-test-*` prerelease. A Discord-originated request receives the result in Discord. |
+| **PR Build — Clean Up Test Releases** | Daily at 04:43 UTC (06:43 CEST / 05:43 CET), or manually | Deletes expired `pr-test-*` releases and their tags, including builds whose selected pull requests are all closed. It never touches Nightly or permanent releases. |
+| **Release — Windows Stable or Nightly** | Daily at 03:17 UTC (05:17 CEST / 04:17 CET) | Builds and publishes the next authenticated Nightly from `main`, promotes its signed feed, and updates the maintained Nightly Discord message. |
+| **Release — Windows Stable or Nightly** | Manually from `main` with channel, version, and minimum updater version | Publishes a current 3.x Stable or an additional Nightly. This is the only current Windows release workflow. |
+| **Legacy 2.x — Build ZIP Candidate** | Manually | Builds a legacy 2.x ZIP as an Actions artifact. It does not publish a release or update Discord. |
+| **Legacy 2.x — Publish Stable ZIP** | Manually with a version and successful candidate run ID | Verifies and publishes one selected legacy 2.x candidate as Stable, then updates the maintained Stable Discord message. It rejects Frostguard 3.x. |
+| **Discord — Deploy /build-pr Worker** | Manually | Tests and deploys the Cloudflare Worker that receives Discord interactions. |
+| **Discord — Sync /build-pr Command** | Manually | Registers the guild-scoped `/build-pr` command and removes duplicate global commands. |
+| **Discord — Refresh Nightly Message** | Manually | Re-resolves the current signed Nightly release and refreshes its maintained Discord message without building or publishing a release. |
+| **Discord — Refresh Stable Message** | Manually | Re-resolves GitHub's latest Stable release and refreshes its maintained Discord message without building or publishing a release. |
+
+Manual release, legacy publication, cleanup, deployment, synchronization, and
+repair workflows can modify GitHub Releases or external services. Inspect their
+inputs and the relevant section below before selecting **Run workflow**.
+
+## Authenticated installed releases
+
+**Release — Windows Stable or Nightly** runs Nightly automatically once per day
+from `main`. It reads the previous signed feed and derives the next version,
+resetting the sequence to 1 on a new UTC date. A maintainer can also run it
+manually for Stable or an additional Nightly. Stable versions use `X.Y.Z`;
+Nightly versions use an immutable prerelease such as
+`3.1.0-nightly.20260811.1`.
+
+Windows Installer compares only three numeric version fields. Stable maps
+directly to `X.Y.Z`. Nightly derives an independent, monotonically increasing
+Windows identity from `YYYYMMDD.N`; for example, the Nightly above uses
+`26.8.11001`. Use the current date and a sequence from 1 through 999, increasing
+the sequence for additional Nightlies on the same day.
+
+The workflow always requires
+`FROSTGUARD_UPDATE_SIGNING_PRIVATE_KEY_BASE64`: the Base64-encoded PKCS#8
+Ed25519 private key matching the public key committed in
+`modules/update/src/main/resources/dev/frostguard/update/project-update-key.properties`.
+Keep a second, access-controlled backup of the private key because GitHub
+Actions secrets cannot be exported again.
+
+Authenticode is optional. Configure all three of
+`FROSTGUARD_WINDOWS_SIGNING_CERTIFICATE_BASE64`,
+`FROSTGUARD_WINDOWS_SIGNING_CERTIFICATE_PASSWORD`, and
+`FROSTGUARD_AUTHENTICODE_PUBLISHER`, or leave all three unset. A partial
+configuration fails the release.
+
+Stable and Nightly use different application IDs, upgrade UUIDs, install
+directories, shortcuts, workspaces, and feeds. The workflow builds and smokes
+the selected identity, optionally Authenticode-signs the installer, uploads and
+re-downloads the immutable installer, derives its final size and SHA-256,
+project-signs the manifest, verifies it, and publishes it last. Stable exposes
+its manifest through the latest immutable release. Nightly stores the installer
+in an immutable `v<version>` release and updates the manifest asset on the
+rolling `nightly` release only after that installer is public and verified.
+
+A failure before publication removes the abandoned draft release and tag so the
+same immutable version can be retried. If a Nightly release becomes public but
+promotion of the rolling `nightly` manifest fails afterward, leave the
+immutable release intact and keep the previous rolling manifest active. Recover
+by verifying and promoting the manifest asset from that immutable release; do
+not rebuild or replace its installer.
+
+Nightly builds embed only the permanent `nightly` endpoint. The temporary feed
+used by pre-release development builds has been retired and must not be
+recreated.
+
+After a new Nightly is public, its rolling manifest is promoted, and its
+changelog is collected, the release workflow retains the two newest public
+immutable Nightly releases and deletes older matching releases together with
+their tags. The permanent `nightly` release, Stable releases, drafts, PR-test
+releases, and unrelated tags never match this retention policy. A failed or
+unpromoted Nightly does not run retention, and a cleanup failure fails the
+release job visibly.
+
+GitHub release publication can be eventually consistent. Before promoting the
+rolling feed, the workflow therefore waits until the immutable Nightly is
+visible as a public prerelease with exactly its signed manifest and installer.
+Once that public state has been confirmed, later failure cleanup must never
+delete the release or tag, even if a subsequent API read temporarily reports
+stale draft metadata. Retention separately retries its release-history read
+before failing closed.
+
+### Unpublished Stable release candidates
+
+Before promoting a new Stable major or minor version, manually run **CI —
+Windows Installers** with a prerelease application version such as
+`3.0.0-rc.1` and a numeric Windows Installer version below the final release,
+such as `2.99.1`.
+The workflow validates that ordering, builds with release updates disabled,
+verifies the pinned Stable launcher hashes, smoke-tests the image, and uploads
+the MSI only as a short-lived Actions artifact. It does not create a GitHub
+Release or change `releases/latest`.
+
+Use the artifact to prove a real upgrade from the current Stable installation.
+The candidate's numeric MSI version must be newer than the installed Stable but
+lower than the final release, so the final `3.0.0` installer can still upgrade
+it. The application displays the prerelease version from its JAR independently
+of the numeric MSI version.
+
+## Legacy 2.x ZIP promotion
+
+The manual-only **Legacy 2.x — Build ZIP Candidate** workflow can still produce
+an Actions artifact for an intentional 2.x maintenance release. It no longer
+publishes a Nightly, has no schedule, and does not update Discord. The legacy
+Stable ZIP workflow promotes one of those successful runs from `main`; it does
+not rebuild a different tree. Run **Legacy 2.x — Publish Stable ZIP** manually
+with:
 
 - `version`: the `X.Y.Z` value declared in `pom.xml`;
-- `daily_run_id`: a successful scheduled or manually triggered daily run from
+- `daily_run_id`: a successful manually triggered legacy candidate run from
   `main` after the intended release commit.
+
+This workflow rejects Frostguard 3.x. Installed 3.x releases must use the
+authenticated channel workflow so an unsigned ZIP can never become the latest Stable
+product accidentally.
 
 The workflow pins the run's exact commit, downloads its versioned artifact,
 re-runs structural and launch verification, creates the immutable `vX.Y.Z`
@@ -36,25 +157,25 @@ in place; GitHub Releases remains the permanent release history.
 ```text
 📥 Frostguard Downloads
 
-Stable — versioned
-A tested build that changes only when a new Stable is published:
-https://github.com/Shederator/wosbot/releases/latest/download/frostguard-windows-desktop-bundle.zip
+Stable — versioned installer
+A tested, self-contained Windows build that changes only with a Stable release:
+https://github.com/Shederator/wosbot/releases/latest
 
-Nightly — testing
-The newest automated development build. It may contain unfinished changes:
-https://github.com/Shederator/wosbot/releases/download/nightly/frostguard-windows-desktop-bundle.zip
+Nightly — authenticated previews
+The current immutable preview with its own app and settings:
+https://github.com/Shederator/wosbot/releases/tag/nightly
 
-Extract the complete archive and use the included Frostguard launcher.
-Java 21 or newer is required.
+Download the Windows x64 MSI from the selected release. The installer includes
+Java. A Windows Unknown publisher or SmartScreen warning is currently expected.
 ```
 
-The Stable URL is deliberately a direct, version-independent asset URL. GitHub
-redirects it to the asset on the latest non-prerelease release. Store the
-webhook-owned card ID in `DISCORD_STABLE_MESSAGE_ID`. A Stable promotion updates
-the card automatically; `Refresh Stable Discord Message` repairs it manually
-from GitHub's Latest release when necessary.
+The Stable guide links to GitHub's Latest release because the immutable MSI
+filename contains its version. Store the webhook-owned card ID in
+`DISCORD_STABLE_MESSAGE_ID`. Run **Discord — Refresh Stable Message** after a
+Stable promotion; it resolves and verifies the exact versioned MSI from Latest
+before updating the maintained card.
 
-### Nightly message
+### Maintained Nightly message
 
 ```text
 Latest Nightly — Frostguard <version>
@@ -64,20 +185,18 @@ changes.
 
 Download Frostguard <version> for Windows
 
-Changes since the previous Nightly
-- <linked PR title or direct commit subject>
+Run the self-contained per-user MSI installer. A separate Java installation is
+not required.
 
-Extract the complete archive and use the included Frostguard launcher.
-Java 21 or newer is required.
+Release notes · Latest Nightly
 ```
 
-The URL is deliberately version-independent. Do not post a new Discord message
-for every daily build. Store the webhook-owned message ID in the repository
-variable `DISCORD_DAILY_MESSAGE_ID`; successful builds edit that message. Show
-at most five linked first-parent changes since the previous Nightly and collapse
-older entries into a count.
-Build failures remain visible in Actions and do not replace the last working
-public download.
+Do not post a new Discord message for every daily build. Store the webhook-owned
+message ID in the repository variable `DISCORD_DAILY_MESSAGE_ID`; successful
+native Nightly publications edit that message with the immutable MSI URL and
+permanent channel URL. Build failures link to Actions and do not replace the
+last working public download. Run **Discord — Refresh Nightly Message** to repair
+the card from the current project-signed feed without building another MSI.
 
 ## Migration
 
@@ -85,4 +204,141 @@ public download.
 2. Publish the first real Stable release before presenting the Stable download.
 3. Store both maintained webhook message IDs as repository variables.
 4. Move `/build-pr` results to `#request-a-build`.
-5. Archive redundant legacy release channels after their links are replaced.
+
+## Native installer update contract
+
+The Frostguard 3.0 updater uses one project-signed manifest envelope per
+channel. Do not publish an envelope until its installer has been built,
+uploaded to an immutable HTTPS URL, and smoke-tested. The public verification
+key is part of the application; the private signing key remains outside the
+repository.
+
+Windows release artifacts are direct MSI packages. Do not switch the feed back
+to jpackage's EXE bootstrap wrapper: installed Frostguard invokes Windows
+Installer directly, and existing schema-1 clients can use an MSI artifact
+without a manifest-format migration. Authenticode signing remains additive and
+can be applied to the final MSI later.
+
+### Signed envelope 1
+
+```json
+{
+  "envelopeVersion": 1,
+  "algorithm": "Ed25519",
+  "keyId": "frostguard-update-2026-01",
+  "payload": "<Base64 of the exact UTF-8 schema-1 manifest bytes>",
+  "signature": "<Base64 Ed25519 signature over those exact bytes>"
+}
+```
+
+The updater rejects an unsigned raw manifest, an unknown envelope field,
+algorithm, or key ID, invalid Base64, and any payload whose signature does not
+verify against the embedded project key. It parses and selects an artifact only
+after signature verification.
+
+### Manifest schema 1
+
+```json
+{
+  "schemaVersion": 1,
+  "channel": "stable",
+  "version": "3.0.1",
+  "publishedAt": "2026-08-10T04:00:00Z",
+  "minimumUpdaterVersion": "3.0.0",
+  "releaseNotesUrl": "https://example.invalid/releases/3.0.1",
+  "artifacts": {
+    "windows-x64": {
+      "operatingSystem": "windows",
+      "architecture": "x64",
+      "fileName": "Frostguard-3.0.1-windows-x64.msi",
+      "url": "https://example.invalid/releases/3.0.1/Frostguard-3.0.1-windows-x64.msi",
+      "sha256": "<64 lowercase hexadecimal characters>",
+      "size": 123456789
+    }
+  }
+}
+```
+
+Unknown fields, unsupported schemas, mutable filenames, and insecure URLs are
+rejected. If Authenticode is configured, the artifact additionally carries a
+`signature` object with type `authenticode` and the exact certificate subject.
+Calculate the hash and size after optional Authenticode signing because signing
+changes the file.
+
+### Build inputs
+
+Embed the Stable endpoint at packaging time. The project verification key is a
+versioned source resource and is always included in release builds:
+
+```powershell
+.\mvnw.cmd -Dfrostguard.update.manifest.stable=https://updates.example.invalid/stable.json `
+  "-Pwindows-app-image,windows-installer" package
+```
+
+Nightly adds its separate packaging identity and embeds both public endpoints:
+
+```powershell
+.\mvnw.cmd -Dfrostguard.update.manifest.stable=https://example.invalid/stable.json `
+  -Dfrostguard.update.manifest.nightly=https://example.invalid/nightly.json `
+  "-Pwindows-app-image,windows-installer,windows-nightly" package
+```
+
+The checked-in endpoint defaults are empty, so ordinary local builds cannot
+contact a release feed accidentally. PR packaging also embeds
+`frostguard.update.pullRequestBuild=true`. Development and PR builds cannot
+update even if someone supplies a manifest URL manually. Release builds trust
+only envelopes signed by the project key embedded in their update module. If a
+build also pins an Authenticode publisher, the manifest and downloaded
+installer must match it exactly.
+
+### Publication order
+
+1. Build and smoke-test the native application image.
+2. Build the channel-specific installer with its stable upgrade identity.
+3. Optionally Authenticode-sign the final installer and verify its exact subject.
+4. Calculate the final byte size and SHA-256.
+5. Upload and re-download the installer at its immutable versioned HTTPS URL.
+6. Generate the schema-1 payload from that verified file.
+7. Ed25519-sign the exact payload and verify the resulting envelope.
+8. Publish the signed envelope atomically as the final step.
+
+Never publish a PR artifact, unsigned manifest payload, mutable installer
+filename, or envelope whose artifact has not completed the same verification
+sequence.
+
+### Key lifecycle
+
+Generate a replacement pair with
+`ProjectManifestSigner generate <private-output> <public-output>`. Restrict the
+private file to release maintainers, keep an offline backup, place its Base64
+value in the repository secret, and commit only the Base64 X.509 public key with
+a new key ID. Never commit, log, upload as an artifact, or place the private key
+in a workflow variable that is printed.
+
+Rotation is staged. First publish an old-key-signed bridge release whose
+application embeds the new public key. Keep the old private key and old bridge
+release available while supported installations move through it. Only then
+replace the repository secret and publish envelopes with the new key ID. With
+the current single-key client, installations that skip the bridge cannot trust
+the new feed and must install a current release manually. Supporting overlapping
+keys is the follow-up if seamless emergency rotation is required.
+
+If the private key is lost, restore it from the offline backup; the GitHub
+secret cannot be read back. If compromise is suspected, stop channel
+publication, remove or replace the Actions secret, preserve release evidence,
+and prepare a bridge release and manual recovery instructions before resuming.
+Adding a Windows code-signing certificate later is additive: configure the
+three Authenticode secrets above; the signed-envelope format does not change.
+
+### Runtime and recovery
+
+Downloads belong to the selected workspace under
+`cache/updates/<channel>/<version>`. Incomplete data uses a `.part` suffix and
+is never exposed as a completed installer. Completion requires an atomic rename
+after size and hash verification.
+
+The external Windows handoff receives the Frostguard PID plus a one-time token.
+Frostguard authorizes the staged waiter immediately before coordinated
+shutdown. The waiter cannot start the installer while the Frostguard PID is
+alive, and a failed shutdown deletes the token so a later unrelated application
+exit cannot launch the staged installer.

@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.Separator?>
+<?import javafx.scene.control.Slider?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.FlowPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane prefHeight="680.0" prefWidth="550.0"
+            xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="dev.frostguard.app.panel.profile.EditProfileController">
+
+    <top>
+        <VBox style="-fx-padding: 20 20 0 20;" spacing="6">
+            <Label style="-fx-font-size: 16px; -fx-font-weight: bold;" text="Edit Profile" />
+            <Separator style="-fx-opacity: 0.3;" />
+        </VBox>
+    </top>
+
+    <center>
+        <ScrollPane fitToWidth="true" style="-fx-background-color: transparent; -fx-background: transparent;">
+            <VBox spacing="14" style="-fx-padding: 16 20 16 20;">
+
+                <!-- Profile identification -->
+                <VBox spacing="10">
+                    <HBox alignment="CENTER_LEFT" spacing="14">
+                        <Label text="Name" minWidth="140" />
+                        <VBox HBox.hgrow="ALWAYS">
+                            <TextField fx:id="txtProfileName" />
+                            <Label fx:id="lblProfileNameError" wrapText="true" />
+                        </VBox>
+                    </HBox>
+                    <HBox alignment="CENTER_LEFT" spacing="14">
+                        <Label text="Emulator" minWidth="140" />
+                        <VBox HBox.hgrow="ALWAYS">
+                            <TextField fx:id="txtEmulatorNumber" />
+                            <Label fx:id="lblEmulatorNumberError" wrapText="true" />
+                        </VBox>
+                    </HBox>
+                    <HBox alignment="CENTER_LEFT" spacing="14">
+                        <Label text="Reconnect (min)" minWidth="140" />
+                        <VBox HBox.hgrow="ALWAYS">
+                            <TextField fx:id="txtReconnectionTime" />
+                            <Label fx:id="lblReconnectionTimeError" wrapText="true" />
+                        </VBox>
+                    </HBox>
+                </VBox>
+
+                <!-- Priority control -->
+                <VBox spacing="8">
+                    <HBox alignment="CENTER_LEFT" spacing="14">
+                        <Label text="Priority" minWidth="140" />
+                        <Slider fx:id="sliderPriority" majorTickUnit="25.0" minorTickCount="4"
+                                showTickLabels="true" showTickMarks="true" value="50.0"
+                                HBox.hgrow="ALWAYS" />
+                        <Label fx:id="lblPriorityValue" text="50" minWidth="36"
+                               style="-fx-alignment: CENTER_RIGHT;" />
+                    </HBox>
+                    <CheckBox fx:id="chkEnabled" mnemonicParsing="false" text="Enabled" />
+                </VBox>
+
+                <Separator style="-fx-opacity: 0.3;" />
+
+                <!-- Character data -->
+                <VBox spacing="10">
+                    <HBox alignment="CENTER_LEFT" spacing="14">
+                        <Label text="ID" minWidth="140" />
+                        <TextField fx:id="txtCharacterId" promptText="1234"
+                                   HBox.hgrow="ALWAYS" />
+                    </HBox>
+                    <HBox alignment="CENTER_LEFT" spacing="14">
+                        <Label text="Character" minWidth="140" />
+                        <TextField fx:id="txtCharacterName" promptText="John Doe"
+                                   HBox.hgrow="ALWAYS" />
+                    </HBox>
+                    <HBox alignment="CENTER_LEFT" spacing="14">
+                        <Label text="Alliance" minWidth="140" />
+                        <TextField fx:id="txtCharacterAllianceCode" promptText="ABC"
+                                   HBox.hgrow="ALWAYS" />
+                    </HBox>
+                    <HBox alignment="CENTER_LEFT" spacing="14">
+                        <Label text="Server" minWidth="140" />
+                        <TextField fx:id="txtCharacterServer" promptText="1234"
+                                   HBox.hgrow="ALWAYS" />
+                    </HBox>
+                </VBox>
+
+                <Separator style="-fx-opacity: 0.3;" />
+
+                <VBox spacing="8">
+                    <Label text="Tags" style="-fx-font-weight: bold;" />
+                    <FlowPane fx:id="tagChoicesPane" hgap="8" vgap="8" />
+                    <HBox alignment="CENTER_LEFT" spacing="8">
+                        <TextField fx:id="txtNewTag" promptText="New tag name" HBox.hgrow="ALWAYS" />
+                        <Button mnemonicParsing="false" onAction="#handleAddTag" text="Add tag" />
+                    </HBox>
+                </VBox>
+            </VBox>
+        </ScrollPane>
+    </center>
+
+    <bottom>
+        <HBox alignment="CENTER_RIGHT" spacing="10.0" style="-fx-padding: 10 20 20 20;">
+            <Button fx:id="btnCancel" mnemonicParsing="false" onAction="#handleCancel"
+                    prefWidth="84.0" style="-fx-cursor: hand;" text="Cancel" />
+            <Button fx:id="btnSave" mnemonicParsing="false" onAction="#handleSave"
+                    prefWidth="84.0" style="-fx-cursor: hand; -fx-font-weight: bold;"
+                    text="Save" />
+        </HBox>
+    </bottom>
+</BorderPane>

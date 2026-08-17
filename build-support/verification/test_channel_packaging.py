@@ -1,0 +1,287 @@
+#!/usr/bin/env python3
+"""Verify Stable/Nightly packaging and release-publication contracts."""
+
+from __future__ import annotations
+
+import unittest
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+NS = {"m": "http://maven.apache.org/POM/4.0.0"}
+
+
+def properties(element: ET.Element) -> dict[str, str]:
+    node = element.find("m:properties", NS)
+    if node is None:
+        return {}
+    return {child.tag.rsplit("}", 1)[-1]: child.text or "" for child in node}
+
+
+class ChannelPackagingTest(unittest.TestCase):
+    def test_pr_ci_native_nightly_and_legacy_bundle_are_separate_workflows(self):
+        ci = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        legacy = (REPO_ROOT / ".github/workflows/daily-windows-bundle.yml").read_text(
+            encoding="utf-8")
+        nightly = (REPO_ROOT / ".github/workflows/"
+                   "signed-windows-channel-release.yml").read_text(encoding="utf-8")
+        installers = (REPO_ROOT / ".github/workflows/windows-native-package.yml").read_text(
+            encoding="utf-8")
+
+        self.assertIn("name: CI — Java Build and Tests", ci)
+        self.assertIn("  pull_request:", ci)
+        self.assertIn("  contents: read", ci)
+        self.assertIn("Build and test Maven reactor", ci)
+        self.assertNotIn("contents: write", ci)
+
+        self.assertIn("name: Legacy 2.x — Build ZIP Candidate", legacy)
+        self.assertIn("  workflow_dispatch:", legacy)
+        self.assertNotIn("  schedule:", legacy)
+        self.assertNotIn("contents: write", legacy)
+        self.assertNotIn("gh release create nightly", legacy)
+        self.assertNotIn("Update the Nightly Discord message", legacy)
+
+        self.assertIn("name: Release — Windows Stable or Nightly", nightly)
+        self.assertIn("  schedule:", nightly)
+        self.assertIn("  workflow_dispatch:", nightly)
+        self.assertNotIn("  pull_request:", nightly)
+        self.assertNotIn("\n  push:\n", nightly)
+        self.assertIn("      contents: write", nightly)
+
+        self.assertIn("name: CI — Windows Installers", installers)
+        self.assertIn("Build and smoke-test Stable and Nightly installers", installers)
+        self.assertIn('java-version: "21.0.12+8.0"', installers)
+
+    def test_stable_and_nightly_use_distinct_durable_windows_identities(self):
+        root = ET.parse(REPO_ROOT / "packaging/desktop/pom.xml").getroot()
+        stable = properties(root)
+        nightly_profile = next(
+            profile for profile in root.findall("m:profiles/m:profile", NS)
+            if profile.find("m:id", NS).text == "windows-nightly"
+        )
+        nightly = properties(nightly_profile)
+
+        expected_stable = {
+            "frostguard.release.channel": "stable",
+            "frostguard.product.name": "Frostguard",
+            "frostguard.product.identifier": "dev.frostguard.desktop",
+            "frostguard.product.install-dir": "Frostguard",
+            "frostguard.watcher.name": "FrostguardWatcher",
+        }
+        expected_nightly = {
+            "frostguard.release.channel": "nightly",
+            "frostguard.product.name": "Frostguard Nightly",
+            "frostguard.product.identifier": "dev.frostguard.desktop.nightly",
+            "frostguard.product.install-dir": "Frostguard Nightly",
+            "frostguard.watcher.name": "FrostguardNightlyWatcher",
+        }
+        for key, value in expected_stable.items():
+            self.assertEqual(value, stable[key])
+        for key, value in expected_nightly.items():
+            self.assertEqual(value, nightly[key])
+        self.assertNotEqual(stable["frostguard.product.upgrade-uuid"],
+                            nightly["frostguard.product.upgrade-uuid"])
+        self.assertEqual("2.1.0",
+                         stable["frostguard.windows.launcher-version"])
+        self.assertEqual("26.8.12004",
+                         nightly["frostguard.windows.launcher-version"])
+
+        pom = (REPO_ROOT / "packaging/desktop/pom.xml").read_text(encoding="utf-8")
+        for contract in (
+            "-Dfrostguard.application.id=${frostguard.product.identifier}",
+            "-Dfrostguard.channel=${frostguard.release.channel}",
+            "-Dfrostguard.update.manifest.stable=${frostguard.update.manifest.stable}",
+            "-Dfrostguard.update.manifest.nightly=${frostguard.update.manifest.nightly}",
+            "${project.build.directory}/installers/${frostguard.release.channel}",
+            "${frostguard.watcher.name}=",
+            "--win-shortcut-prompt",
+            "--resource-dir",
+        ):
+            self.assertIn(contract, pom)
+
+        installer_arguments = [
+            argument.attrib["value"]
+            for argument in root.findall(
+                ".//m:profile[m:id='windows-installer']//m:arg[@value]", NS)
+        ]
+        self.assertIn("msi", installer_arguments)
+        self.assertNotIn("exe", installer_arguments)
+        self.assertIn("--win-shortcut", installer_arguments)
+
+        app_image_arguments = [
+            argument.attrib["value"]
+            for argument in root.findall(
+                ".//m:profile[m:id='windows-app-image']//m:arg[@value]", NS)
+        ]
+        self.assertIn("${frostguard.windows.launcher-version}", app_image_arguments)
+        self.assertIn("${frostguard.windows.app-version}", installer_arguments)
+
+    def test_installer_exposes_only_product_shortcuts_and_guards_running_apps(self):
+        watcher = (REPO_ROOT / "packaging/desktop/src/main/windows/"
+                   "Frostguard-Watcher.properties").read_text(encoding="utf-8")
+        self.assertIn("win-menu=false", watcher)
+        self.assertIn("win-shortcut=false", watcher)
+
+        installer = (REPO_ROOT / "packaging/desktop/src/main/windows/main.wxs").read_text(
+            encoding="utf-8")
+        for contract in (
+            'WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1"',
+            "Launch $(var.JpAppName)",
+            "JpSetLaunchTarget",
+            "JpLaunchApplication",
+            "JpDetectRunningApplication",
+            "JP_FROSTGUARD_RUNNING",
+            "NOT JP_FROSTGUARD_RUNNING",
+            "JpStopWatcher",
+            'Before="InstallValidate"',
+            "Installed OR JP_UPGRADABLE_FOUND OR JP_DOWNGRADABLE_FOUND",
+            '<Custom Action="WixCloseApplications" Before="LaunchConditions">1</Custom>',
+        ):
+            self.assertIn(contract, installer)
+
+    def test_release_publishes_project_signed_manifest_after_installer_verification(self):
+        workflow = (REPO_ROOT / ".github/workflows/signed-windows-channel-release.yml").read_text(
+            encoding="utf-8")
+        installers = (REPO_ROOT / ".github/workflows/windows-native-package.yml").read_text(
+            encoding="utf-8")
+        ordered_steps = (
+            "Prepare immutable installer and verify optional Authenticode",
+            "Create draft release and verify uploaded installer",
+            "Generate and project-sign update manifest",
+            "Publish immutable release and channel manifest last",
+        )
+        positions = [workflow.index(step) for step in ordered_steps]
+        self.assertEqual(sorted(positions), positions)
+        self.assertIn("FROSTGUARD_UPDATE_SIGNING_PRIVATE_KEY_BASE64", workflow)
+        self.assertIn("ProjectManifestSigner", workflow)
+        self.assertIn("FROSTGUARD_WINDOWS_SIGNING_CERTIFICATE_BASE64", workflow)
+        self.assertIn("Configure optional Authenticode certificate", workflow)
+        self.assertIn("Get-AuthenticodeSignature", workflow)
+        self.assertIn('installer_name = "$assetPrefix-$($env:VERSION)-windows-x64.msi"', workflow)
+        self.assertIn("-Filter '*.msi' -File", workflow)
+        self.assertIn("windows_installer_version.py", workflow)
+        self.assertIn("gh release list --repo $env:GITHUB_REPOSITORY", workflow)
+        self.assertIn("if ($releaseTags -contains $tag)", workflow)
+        self.assertNotIn("if (gh release view", workflow)
+        self.assertIn("Where-Object { $_.name -ceq $assetName }", workflow)
+        self.assertNotIn('--jq ".assets[]', workflow)
+        self.assertIn(
+            '"https://github.com/$($env:GITHUB_REPOSITORY)" +', workflow)
+        self.assertIn(
+            '"/releases/download/$($env:TAG)/$assetName"', workflow)
+        self.assertIn('"download_url=$publicInstallerUrl"', workflow)
+        self.assertNotIn("$asset.browser_download_url", workflow)
+        self.assertNotIn("updates-nightly", workflow)
+        self.assertGreaterEqual(
+            workflow.count("Where-Object { $_.tag_name -ceq $env:TAG }"), 2)
+        self.assertIn("gh release upload nightly $env:MANIFEST", workflow)
+        self.assertIn("releases/download/nightly/frostguard-nightly-manifest.json", workflow)
+        self.assertIn("Nightly immutable release did not become publicly visible", workflow)
+        self.assertIn("Stable immutable release did not become publicly visible", workflow)
+        self.assertIn('"immutable_published=true"', workflow)
+        self.assertIn("$manifestAssets.Count -eq 1", workflow)
+        self.assertIn("$installerAssets.Count -eq 1", workflow)
+        self.assertIn('          $tag = "v$($env:VERSION)"', workflow)
+        self.assertIn("next_nightly_version.py", workflow)
+        self.assertIn("Update the maintained Nightly Discord message", workflow)
+        self.assertIn("Collect changes between Nightly builds", workflow)
+        self.assertIn("build-support/release/nightly_changes.py", workflow)
+        self.assertIn("Retain the two newest immutable Nightly releases", workflow)
+        self.assertIn("build-support/release/nightly_retention.py", workflow)
+        self.assertIn("--current-tag $env:TAG --keep 2", workflow)
+        self.assertIn("gh release delete $tag", workflow)
+        self.assertIn("--cleanup-tag --yes", workflow)
+        self.assertGreaterEqual(
+            workflow.count("for ($attempt = 1; $attempt -le 6; $attempt++)"), 2)
+        self.assertIn("--changes-unchanged", workflow)
+        self.assertIn("fetch-depth: 0", workflow)
+        self.assertIn("Remove an abandoned draft release", workflow)
+        self.assertIn('java-version: "21.0.12+8.0"', workflow)
+        for launcher_hash in (
+            "06610c6684f6323edf915a713d6a29cbc488d49f044685b80eabcfb1f7ca0a53",
+            "ed6a92c9e42bf4b205c669771bef4cbcd9e4d8674678f89cf944f965922f714e",
+            "5c728d3662d64c428d003874f6d62b798bbbe329f595b2b15a2ab5ab1fd1faa9",
+            "9c7452d890f39c7f4fdb2e5519993514c84f071deef222fe49784acfd459c209",
+        ):
+            self.assertIn(launcher_hash, installers)
+            self.assertIn(launcher_hash, workflow)
+        self.assertIn("stable_candidate_version", installers)
+        self.assertIn("stable_candidate_windows_version", installers)
+        self.assertIn("--candidate-windows-version", installers)
+        stable_upload = installers.index("Upload Stable installer")
+        packaging_reset = installers.index("Reset packaging output before Nightly build")
+        nightly_build = installers.index("Build Nightly application image and installer")
+        self.assertLess(stable_upload, packaging_reset)
+        self.assertLess(packaging_reset, nightly_build)
+        self.assertIn("-pl packaging/desktop clean", installers)
+        self.assertIn('gh api --method DELETE `', workflow)
+        self.assertIn('releases/$($release.id)', workflow)
+        immutable_tag_create = workflow.index(
+            '"repos/$($env:GITHUB_REPOSITORY)/git/refs"')
+        draft_release_create = workflow.index("gh release create $env:TAG")
+        manifest_upload = workflow.index("gh release upload $env:TAG $env:MANIFEST")
+        immutable_release_publish = workflow.index("gh release edit $env:TAG")
+        self.assertLess(immutable_tag_create, draft_release_create)
+        self.assertLess(draft_release_create, manifest_upload)
+        self.assertLess(manifest_upload, immutable_release_publish)
+        changelog = workflow.index("Collect changes between Nightly builds")
+        retention = workflow.index(
+            "Retain the two newest immutable Nightly releases")
+        notification = workflow.index(
+            "Update the maintained Nightly Discord message")
+        self.assertLess(immutable_release_publish, changelog)
+        self.assertLess(changelog, retention)
+        self.assertLess(retention, notification)
+        self.assertIn('"tag_created=true"', workflow)
+        self.assertIn("TAG_CREATED: ${{ steps.draft.outputs.tag_created }}", workflow)
+        self.assertIn(
+            "IMMUTABLE_PUBLISHED: ${{ steps.publish.outputs.immutable_published }}",
+            workflow)
+        self.assertIn(
+            "if ($env:TAG_CREATED -eq 'true' -and -not $immutablePublished -and",
+            workflow)
+        self.assertGreaterEqual(
+            workflow.count(
+                '"repos/$($env:GITHUB_REPOSITORY)/git/refs/tags/$($env:TAG)"'),
+            2)
+        self.assertIn("$tagRef.object.sha -cne $env:GITHUB_SHA", workflow)
+        legacy_stable = (REPO_ROOT / ".github/workflows/stable-windows-release.yml").read_text(
+            encoding="utf-8")
+        self.assertIn(
+            "Frostguard 3.x must use Release — Windows Stable or Nightly",
+            legacy_stable)
+
+    def test_stable_discord_refresh_resolves_the_versioned_msi(self):
+        workflow = (REPO_ROOT / ".github/workflows/refresh-stable-discord.yml").read_text(
+            encoding="utf-8")
+
+        self.assertIn('asset="Frostguard-${version}-windows-x64.msi"', workflow)
+        self.assertIn(".browser_download_url", workflow)
+        self.assertIn("does not contain exactly one ${asset}", workflow)
+        self.assertIn("Stable installer URL returned HTTP", workflow)
+        self.assertNotIn("frostguard-windows-desktop-bundle.zip", workflow)
+
+    def test_nightly_discord_refresh_uses_the_verified_permanent_feed(self):
+        workflow = (REPO_ROOT / ".github/workflows/refresh-nightly-discord.yml").read_text(
+            encoding="utf-8")
+
+        self.assertIn("name: Discord — Refresh Nightly Message", workflow)
+        self.assertIn("  workflow_dispatch:", workflow)
+        self.assertIn("  contents: read", workflow)
+        self.assertNotIn("contents: write", workflow)
+        self.assertIn('java-version: "21"', workflow)
+        self.assertIn('channel_tag="nightly"', workflow)
+        self.assertIn("ProjectManifestSigner verify", workflow)
+        self.assertIn('if [[ "$(jq -r \'.channel\' <<< "${payload}")" != "nightly" ]]',
+                      workflow)
+        self.assertIn("does not match exactly one public installer asset", workflow)
+        self.assertIn("Nightly installer URL returned HTTP", workflow)
+        self.assertIn("build-support/notifications/discord_notify.py", workflow)
+        self.assertIn("build-support/release/nightly_changes.py", workflow)
+        self.assertIn("--changes-unchanged", workflow)
+        self.assertIn("fetch-depth: 0", workflow)
+        self.assertNotIn("gh release create", workflow)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

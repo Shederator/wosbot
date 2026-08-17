@@ -1,4 +1,4 @@
-name: Stable Windows Release
+name: Legacy 2.x — Publish Stable ZIP
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       daily_run_id:
-        description: "Successful Daily Windows Bundle run ID from main"
+        description: "Successful Legacy 2.x — Build ZIP Candidate run ID from main"
         required: true
         type: string
 
@@ -55,7 +55,7 @@ jobs:
             exit 1
           fi
           if [[ "${workflow}" != ".github/workflows/daily-windows-bundle.yml" ]]; then
-            echo "::error::Selected run does not belong to Daily Windows Bundle."
+            echo "::error::Selected run does not belong to Legacy 2.x — Build ZIP Candidate."
             exit 1
           fi
           echo "sha=${sha}" >> "${GITHUB_OUTPUT}"
@@ -83,7 +83,11 @@ jobs:
             echo "::error::version must use X.Y.Z format."
             exit 1
           fi
-          project_version="$(mvn -B --no-transfer-progress -q help:evaluate -Dexpression=project.version -DforceStdout)"
+          if (( ${VERSION%%.*} >= 3 )); then
+            echo "::error::Frostguard 3.x must use Release — Windows Stable or Nightly; the legacy ZIP workflow cannot publish an installed Stable identity."
+            exit 1
+          fi
+          project_version="$(./mvnw -B --no-transfer-progress -q help:evaluate -Dexpression=project.version -DforceStdout)"
           if [[ "${VERSION}" != "${project_version}" ]]; then
             echo "::error::Requested ${VERSION}, but pom.xml declares ${project_version}."
             exit 1
@@ -92,8 +96,9 @@ jobs:
             echo "::error::Missing curated release notes for v${VERSION}."
             exit 1
           fi
-          python3 ci/test_verify_bundle.py
-          python3 ci/test_stable_release_notify.py
+          python3 build-support/verification/test_project_layout.py
+          python3 build-support/verification/test_verify_bundle.py
+          python3 build-support/notifications/test_stable_release_notify.py
 
       - name: Download the selected daily artifact
         env:
@@ -116,8 +121,8 @@ jobs:
             echo "::error::The selected run has no desktop bundle artifact."
             exit 1
           fi
-          python3 ci/verify_bundle.py "${path}" --platform win
-          ci/smoke_test_bundle.sh "${path}"
+          python3 build-support/verification/verify_bundle.py "${path}" --platform win
+          build-support/verification/smoke_test_bundle.sh "${path}"
           echo "path=${path}" >> "${GITHUB_OUTPUT}"
 
       - name: Publish immutable stable release
@@ -175,7 +180,7 @@ jobs:
           ARCHIVE_URL: https://github.com/${{ github.repository }}/releases
           DISCORD_STABLE_MESSAGE_ID: ${{ vars.DISCORD_STABLE_MESSAGE_ID }}
         run: |
-          python3 ci/stable_release_notify.py \
+          python3 build-support/notifications/stable_release_notify.py \
             --version "${VERSION}" \
             --download-url "${DOWNLOAD_URL}" \
             --release-url "${RELEASE_URL}" \

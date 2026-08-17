@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>dev.frostguard</groupId>
+		<artifactId>frostguard</artifactId>
+		<version>${revision}</version>
+		<relativePath>../../pom.xml</relativePath>
+	</parent>
+
+	<artifactId>frostguard-desktop</artifactId>
+	<name>Frostguard Desktop Application</name>
+	<description>JavaFX desktop shell, controller layer, and packaged runtime assets</description>
+
+	<!-- ─── Module-scoped properties (dependency/plugin versions managed by parent) ─── -->
+	<!-- ─── Compile and runtime dependencies ─── -->
+	<dependencies>
+		<!-- JavaFX core -->
+		<dependency>
+			<groupId>org.openjfx</groupId>
+			<artifactId>javafx-controls</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.openjfx</groupId>
+			<artifactId>javafx-fxml</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.openjfx</groupId>
+			<artifactId>javafx-swing</artifactId>
+			<version>${javafx.version}</version>
+		</dependency>
+
+		<!-- AtlantaFX theme -->
+		<dependency>
+			<groupId>io.github.mkpaz</groupId>
+			<artifactId>atlantafx-base</artifactId>
+		</dependency>
+
+		<!-- Extended JavaFX controls -->
+		<dependency>
+			<groupId>org.controlsfx</groupId>
+			<artifactId>controlsfx</artifactId>
+		</dependency>
+
+		<!-- Icon packs -->
+		<dependency>
+			<groupId>org.kordamp.ikonli</groupId>
+			<artifactId>ikonli-javafx</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.kordamp.ikonli</groupId>
+			<artifactId>ikonli-materialdesign2-pack</artifactId>
+		</dependency>
+
+		<!-- JNA for native OS calls -->
+		<dependency>
+			<groupId>net.java.dev.jna</groupId>
+			<artifactId>jna-platform</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>net.java.dev.jna</groupId>
+			<artifactId>jna</artifactId>
+		</dependency>
+
+		<!-- Static-analysis annotations (compile-time only) -->
+		<dependency>
+			<groupId>org.jetbrains</groupId>
+			<artifactId>annotations</artifactId>
+			<scope>provided</scope>
+		</dependency>
+
+		<!-- Internal modules -->
+		<dependency>
+			<groupId>dev.frostguard</groupId>
+			<artifactId>frostguard-api</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>dev.frostguard</groupId>
+			<artifactId>frostguard-automation</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>dev.frostguard</groupId>
+			<artifactId>frostguard-persistence</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>dev.frostguard</groupId>
+			<artifactId>frostguard-tasks</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>dev.frostguard</groupId>
+			<artifactId>frostguard-vision</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>dev.frostguard</groupId>
+			<artifactId>frostguard-update</artifactId>
+		</dependency>
+
+		<!-- Logging -->
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-api</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>ch.qos.logback</groupId>
+			<artifactId>logback-classic</artifactId>
+			<scope>compile</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>com.tngtech.archunit</groupId>
+			<artifactId>archunit-junit5</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<!-- ─── Build configuration ─── -->
+	<build>
+		<resources>
+			<resource>
+				<directory>src/main/resources</directory>
+				<filtering>false</filtering>
+				<excludes>
+					<exclude>dev/frostguard/app/frostguard-build.properties</exclude>
+				</excludes>
+			</resource>
+			<resource>
+				<directory>src/main/resources</directory>
+				<filtering>true</filtering>
+				<includes>
+					<include>dev/frostguard/app/frostguard-build.properties</include>
+				</includes>
+			</resource>
+		</resources>
+		<plugins>
+			<!-- Root-level javafx:run skips every reactor module except this one. -->
+			<plugin>
+				<groupId>org.openjfx</groupId>
+				<artifactId>javafx-maven-plugin</artifactId>
+				<configuration>
+					<skip>false</skip>
+					<mainClass>dev.frostguard.app.bootstrap.Main</mainClass>
+					<runtimePathOption>CLASSPATH</runtimePathOption>
+					<options>
+						<option>--enable-native-access=ALL-UNNAMED</option>
+						<option>-Dfrostguard.channel=development</option>
+						<option>-Dfrostguard.workspace=${maven.multiModuleProjectDirectory}/.frostguard-dev</option>
+					</options>
+				</configuration>
+			</plugin>
+
+			<!-- Executable JAR manifest -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<configuration>
+					<archive>
+						<manifest>
+							<mainClass>dev.frostguard.app.bootstrap.Main</mainClass>
+							<addClasspath>true</addClasspath>
+							<classpathPrefix>lib/</classpathPrefix>
+							<addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+							<addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
+						</manifest>
+						<manifestEntries>
+							<Implementation-Title>${project.name}</Implementation-Title>
+							<Implementation-Version>${project.version}</Implementation-Version>
+							<Implementation-Vendor-Id>${project.groupId}</Implementation-Vendor-Id>
+							<Built-By>${user.name}</Built-By>
+							<Build-Jdk>${java.version}</Build-Jdk>
+							<Build-Time>${maven.build.timestamp}</Build-Time>
+							<Enable-Native-Access>ALL-UNNAMED</Enable-Native-Access>
+						</manifestEntries>
+					</archive>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+</project>

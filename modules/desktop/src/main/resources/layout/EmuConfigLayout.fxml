@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<ScrollPane fitToWidth="true" fitToHeight="true" styleClass="edge-to-edge"
+            xmlns="http://javafx.com/javafx/17.0.12" xmlns:fx="http://javafx.com/fxml/1">
+    <content>
+        <VBox maxHeight="Infinity" maxWidth="Infinity"
+              spacing="16" styleClass="task-page-root">
+           <children>
+
+              <!-- Emulators Table -->
+              <TableView fx:id="tableviewEmulators" VBox.vgrow="ALWAYS"
+                         prefHeight="240.0" minHeight="180.0"
+                         maxHeight="Infinity" maxWidth="Infinity">
+         <columns>
+            <TableColumn fx:id="tableColumnActive" maxWidth="80.0" minWidth="80.0" text="ACTIVE" />
+            <TableColumn fx:id="tableColumnEmulatorName" maxWidth="100.0" minWidth="100.0"
+                         prefWidth="100.0" text="EMULATOR" />
+            <TableColumn fx:id="tableColumnEmulatorPath" maxWidth="Infinity"
+                         prefWidth="300.0" text="PATH" />
+            <TableColumn fx:id="tableColumnEmulatorAction" maxWidth="80.0" minWidth="80.0"
+                         text="ACTION" />
+         </columns>
+         <columnResizePolicy>
+            <TableView fx:constant="CONSTRAINED_RESIZE_POLICY" />
+         </columnResizePolicy>
+      </TableView>
+
+      <VBox spacing="16" VBox.vgrow="NEVER">
+          <children>
+              <!-- Instance Settings (full width) -->
+              <VBox styleClass="content-card" VBox.vgrow="NEVER">
+                  <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
+                       <children><Label text="Instance Settings" /></children>
+                   </HBox>
+                  <GridPane hgap="16" vgap="12" styleClass="content-card-inner">
+                      <columnConstraints>
+                          <ColumnConstraints percentWidth="50.0" hgrow="ALWAYS" />
+                          <ColumnConstraints percentWidth="50.0" hgrow="ALWAYS" />
+                      </columnConstraints>
+                      <children>
+                          <!-- Row 1 -->
+                          <HBox alignment="CENTER_LEFT" spacing="10" GridPane.columnIndex="0" GridPane.rowIndex="0">
+                              <Label text="Idle Behavior" />
+                              <Region HBox.hgrow="ALWAYS" />
+                              <ComboBox fx:id="comboboxInactivityPolicy" maxWidth="Infinity" prefWidth="180.0" />
+                          </HBox>
+                          <HBox alignment="CENTER_LEFT" spacing="10" GridPane.columnIndex="1" GridPane.rowIndex="0">
+                              <Label text="Max Concurrent Instances" />
+                              <Region HBox.hgrow="ALWAYS" />
+                              <VBox alignment="CENTER_RIGHT" minWidth="190.0" prefWidth="190.0" maxWidth="190.0">
+                                  <TextField fx:id="textfieldMaxConcurrentInstances" maxWidth="100.0" minWidth="70.0" prefWidth="80.0" />
+                                  <Label fx:id="labelMaxConcurrentInstancesError" maxWidth="220.0" wrapText="true" />
+                              </VBox>
+                          </HBox>
+
+                          <!-- Row 2 -->
+                          <HBox alignment="CENTER_LEFT" spacing="10" GridPane.columnIndex="0" GridPane.rowIndex="1">
+                              <Label text="Max Idle Time (minutes)" />
+                              <Region HBox.hgrow="ALWAYS" />
+                              <VBox alignment="CENTER_RIGHT" minWidth="190.0" prefWidth="190.0" maxWidth="190.0">
+                                  <TextField fx:id="textfieldMaxIdleTime" maxWidth="100.0" minWidth="70.0" prefWidth="80.0" />
+                                  <Label fx:id="labelMaxIdleTimeError" maxWidth="220.0" wrapText="true" />
+                              </VBox>
+                          </HBox>
+                          <GridPane hgap="8" vgap="4" GridPane.columnIndex="1" GridPane.rowIndex="1">
+                              <columnConstraints>
+                                  <ColumnConstraints hgrow="ALWAYS" />
+                                  <ColumnConstraints minWidth="70.0" prefWidth="100.0" />
+                                  <ColumnConstraints minWidth="28.0" />
+                              </columnConstraints>
+                              <CheckBox fx:id="checkboxProfileMaxActiveTimeEnabled" text="Limit Profile Active Time"
+                                        GridPane.columnIndex="0" GridPane.rowIndex="0" />
+                              <TextField fx:id="textfieldProfileMaxActiveTimeMinutes" maxWidth="100.0"
+                                         minWidth="70.0" prefWidth="80.0" GridPane.columnIndex="1" GridPane.rowIndex="0" />
+                              <Label text="min" GridPane.columnIndex="2" GridPane.rowIndex="0" />
+                              <Label fx:id="labelProfileMaxActiveTimeError" maxWidth="Infinity" wrapText="true"
+                                     GridPane.columnIndex="1" GridPane.columnSpan="2" GridPane.rowIndex="1" />
+                          </GridPane>
+
+                          <!-- Row 3 -->
+                          <HBox alignment="CENTER_LEFT" spacing="10" GridPane.columnIndex="0" GridPane.rowIndex="2">
+                              <Label text="Stop Behavior" />
+                              <Region HBox.hgrow="ALWAYS" />
+                              <ComboBox fx:id="comboboxStopBehavior" maxWidth="Infinity" prefWidth="180.0" />
+                          </HBox>
+                          <HBox alignment="CENTER_LEFT" spacing="10" GridPane.columnIndex="1" GridPane.rowIndex="2">
+                              <CheckBox fx:id="checkboxAutoStart" text="Auto start all Profiles after module load" />
+                          </HBox>
+
+                          <!-- Row 4 -->
+                          <HBox alignment="CENTER_LEFT" spacing="10" GridPane.columnIndex="0" GridPane.rowIndex="3">
+                              <Label text="Stop Behavior Telegram" />
+                              <Region HBox.hgrow="ALWAYS" />
+                              <ComboBox fx:id="comboboxStopBehaviorTelegram" maxWidth="Infinity" prefWidth="180.0" />
+                          </HBox>
+                          <GridPane hgap="8" vgap="4" GridPane.columnIndex="1" GridPane.rowIndex="3">
+                              <Label text="Delay:" GridPane.columnIndex="0" GridPane.rowIndex="0" />
+                              <TextField fx:id="textfieldAutoStartMinutes" maxWidth="70.0" minWidth="50.0"
+                                         prefWidth="60.0" GridPane.columnIndex="1" GridPane.rowIndex="0" />
+                              <Label text="min" GridPane.columnIndex="2" GridPane.rowIndex="0" />
+                              <Label text="Mode:" GridPane.columnIndex="3" GridPane.rowIndex="0" />
+                              <ComboBox fx:id="comboboxAutoStartMode" maxWidth="Infinity" prefWidth="150.0"
+                                        GridPane.columnIndex="4" GridPane.rowIndex="0" />
+                              <Label fx:id="labelAutoStartMinutesError" maxWidth="Infinity" wrapText="true"
+                                     GridPane.columnIndex="1" GridPane.columnSpan="4" GridPane.rowIndex="1" />
+                          </GridPane>
+                      </children>
+                  </GridPane>
+              </VBox>
+
+              <!-- Game Settings (full width, single line) -->
+              <VBox styleClass="content-card" VBox.vgrow="NEVER">
+                  <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
+                       <children><Label text="Game Settings" /></children>
+                   </HBox>
+                  <HBox alignment="CENTER_LEFT" spacing="10" styleClass="content-card-inner">
+                      <!-- Game Version -->
+                      <Label text="Game Version" disable="true" />
+                      <Region HBox.hgrow="ALWAYS" />
+                      <ComboBox fx:id="comboboxGameRegion" disable="true" maxWidth="Infinity" prefWidth="180.0" />
+                  </HBox>
+              </VBox>
+          </children>
+      </VBox>
+
+      <!-- Analytics Settings -->
+      <HBox spacing="16" VBox.vgrow="NEVER">
+          <children>
+              <VBox styleClass="content-card" HBox.hgrow="ALWAYS">
+                  <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
+                       <children><Label text="Analytics" /></children>
+                   </HBox>
+                  <VBox spacing="10" styleClass="content-card-inner">
+                      <CheckBox fx:id="checkboxAnalyticsEnabled" text="Share anonymous usage data (helps improve Frostguard)" />
+                      <CheckBox fx:id="checkboxHideAnalyticsLogs" text="Hide analytics and statistics logs from console output" />
+                      <Label text="No personal data, game accounts, or file paths are collected." styleClass="description-label" style="-fx-text-fill: #8b949e; -fx-font-size: 11;" />
+                  </VBox>
+              </VBox>
+          </children>
+      </HBox>
+
+   </children>
+</VBox>
+    </content>
+</ScrollPane>

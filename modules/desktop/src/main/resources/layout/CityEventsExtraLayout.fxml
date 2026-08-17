@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<AnchorPane maxHeight="Infinity" maxWidth="Infinity"
+            HBox.hgrow="ALWAYS" VBox.vgrow="ALWAYS"
+            xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1">
+
+    <ScrollPane fitToWidth="true" hbarPolicy="NEVER" vbarPolicy="AS_NEEDED"
+                styleClass="task-page-scroll"
+                AnchorPane.topAnchor="0" AnchorPane.bottomAnchor="0"
+                AnchorPane.leftAnchor="0" AnchorPane.rightAnchor="0">
+        <VBox maxWidth="Infinity" spacing="14" styleClass="task-page-root">
+
+            <VBox maxWidth="Infinity" styleClass="content-card">
+                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
+                    <Label style="-fx-font-weight: bold; -fx-text-fill: -fg-bg-app; -fx-font-size: 13px;"
+                           text="Extra City Events" />
+                </HBox>
+
+                <TabPane maxWidth="Infinity" styleClass="horizontal-tab-pane" tabClosingPolicy="UNAVAILABLE">
+                    <Tab text="Arena">
+                        <VBox maxWidth="Infinity" spacing="14" styleClass="task-section-inner">
+                            <Label styleClass="task-card-description"
+                                   text="Arena target filters use the selected profile's Character Information: Alliance and Server."
+                                   wrapText="true" />
+
+                            <Separator style="-fx-opacity: 0.25;" />
+
+                            <GridPane hgap="14" maxWidth="Infinity" vgap="12">
+                                <columnConstraints>
+                                    <ColumnConstraints halignment="LEFT" maxWidth="170.0" minWidth="140.0" prefWidth="155.0" />
+                                    <ColumnConstraints hgrow="ALWAYS" minWidth="220.0" />
+                                </columnConstraints>
+
+                                <Label styleClass="task-field-label" text="Status" GridPane.columnIndex="0" GridPane.rowIndex="0" />
+                                <CheckBox fx:id="checkBoxArena" mnemonicParsing="false" text="Enable arena"
+                                          GridPane.columnIndex="1" GridPane.rowIndex="0" />
+
+                                <Label styleClass="task-field-label" text="Activation time (UTC)" GridPane.columnIndex="0" GridPane.rowIndex="1" />
+                                <TextField fx:id="textFieldArenaActivationHour" maxWidth="100.0" prefWidth="90.0"
+                                           promptText="HH:mm" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+                                <Label fx:id="labelDateTimeError" maxWidth="Infinity" wrapText="true"
+                                       GridPane.columnIndex="0" GridPane.columnSpan="2" GridPane.rowIndex="2" />
+
+                                <Label styleClass="task-field-label" text="Extra attempts" GridPane.columnIndex="0" GridPane.rowIndex="3" />
+                                <ComboBox fx:id="comboBoxArenaExtraAttempts" maxWidth="100.0" prefWidth="90.0"
+                                          promptText="0" GridPane.columnIndex="1" GridPane.rowIndex="3" />
+
+                                <Label styleClass="task-field-label" text="List refresh" GridPane.columnIndex="0" GridPane.rowIndex="4" />
+                                <CheckBox fx:id="checkBoxArenaRefreshWithGems" mnemonicParsing="false"
+                                          text="Allow paid list refreshes"
+                                          GridPane.columnIndex="1" GridPane.rowIndex="4" />
+
+                                <Label styleClass="task-field-label" text="Attack formation" GridPane.columnIndex="0" GridPane.rowIndex="5" />
+                                <CheckBox fx:id="checkBoxArenaAttackQuickDeploy" mnemonicParsing="false"
+                                          text="Use Quick Deploy for attacks"
+                                          GridPane.columnIndex="1" GridPane.rowIndex="5" />
+                            </GridPane>
+
+                            <Separator style="-fx-opacity: 0.15;" />
+
+                            <VBox maxWidth="Infinity" spacing="10">
+                                <Label fx:id="labelArenaTargetingHint" styleClass="task-card-description"
+                                       text="Target filters use the selected profile's Character Information: Alliance and Server."
+                                       wrapText="true" />
+
+                                <GridPane hgap="14" maxWidth="Infinity" vgap="12">
+                                    <columnConstraints>
+                                        <ColumnConstraints halignment="LEFT" maxWidth="170.0" minWidth="140.0" prefWidth="155.0" />
+                                        <ColumnConstraints hgrow="ALWAYS" minWidth="220.0" />
+                                    </columnConstraints>
+
+                                    <Label styleClass="task-field-label" text="Profile alliance" GridPane.columnIndex="0" GridPane.rowIndex="0" />
+                                    <Label fx:id="labelArenaProfileAlliance" maxWidth="Infinity" text="Not set" wrapText="true"
+                                           GridPane.columnIndex="1" GridPane.rowIndex="0" />
+
+                                    <Label styleClass="task-field-label" text="Alliance filter" GridPane.columnIndex="0" GridPane.rowIndex="1" />
+                                    <ComboBox fx:id="comboBoxArenaAlliancePolicy" maxWidth="260.0" prefWidth="220.0"
+                                              promptText="Any alliance" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+
+                                    <Label styleClass="task-field-label" text="Profile server" GridPane.columnIndex="0" GridPane.rowIndex="2" />
+                                    <Label fx:id="labelArenaProfileServer" maxWidth="Infinity" text="Not set" wrapText="true"
+                                           GridPane.columnIndex="1" GridPane.rowIndex="2" />
+
+                                    <Label styleClass="task-field-label" text="Server policy" GridPane.columnIndex="0" GridPane.rowIndex="3" />
+                                    <ComboBox fx:id="comboBoxArenaServerPolicy" maxWidth="260.0" prefWidth="220.0"
+                                              promptText="Any server" GridPane.columnIndex="1" GridPane.rowIndex="3" />
+                                </GridPane>
+                            </VBox>
+
+                        </VBox>
+                    </Tab>
+
+                    <Tab text="Other Tasks">
+                        <VBox maxWidth="Infinity" spacing="12" styleClass="task-section-inner">
+                            <Label styleClass="task-card-description"
+                                   text="Additional daily operations and tasks"
+                                   wrapText="true" />
+
+                            <Separator style="-fx-opacity: 0.25;" />
+
+                            <CheckBox fx:id="checkBoxDailyVipRewards" text="Claim daily vip rewards" />
+
+                            <Separator style="-fx-opacity: 0.15;" />
+
+                            <CheckBox fx:id="checkBoxStorehouseChest"
+                                      text="Claim storehouse chests + stamina" />
+
+                            <Separator style="-fx-opacity: 0.15;" />
+
+                            <CheckBox fx:id="checkBoxHeroRecruitment"
+                                      text="Open recruitment hero chests" />
+
+                            <Separator style="-fx-opacity: 0.15;" />
+
+                            <FlowPane alignment="CENTER_LEFT" hgap="20" vgap="10">
+                                <CheckBox fx:id="checkBoxDailyLabyrinth"
+                                          text="Complete daily labyrinth" />
+                                <CheckBox fx:id="checkBoxBuyMonthlyVip"
+                                          text="Buy monthly vip (10k gems)" />
+                            </FlowPane>
+
+                            <Separator style="-fx-opacity: 0.15;" />
+
+                            <FlowPane alignment="CENTER_LEFT" hgap="20" vgap="10">
+                                <CheckBox fx:id="checkBoxTrekSupplies" text="Claim Trek Supplies" />
+                                <CheckBox fx:id="checkBoxTrekAutomation"
+                                          text="Tundra Trek Automation" />
+                            </FlowPane>
+                        </VBox>
+                    </Tab>
+                </TabPane>
+            </VBox>
+
+        </VBox>
+    </ScrollPane>
+</AnchorPane>

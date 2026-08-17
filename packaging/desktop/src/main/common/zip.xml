@@ -1,0 +1,15 @@
+<assembly xmlns="http://maven.apache.org/ASSEMBLY/2.1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/ASSEMBLY/2.1.1 https://maven.apache.org/xsd/assembly-2.1.1.xsd">
+    <id>desktop-bundle</id>
+    <includeBaseDirectory>false</includeBaseDirectory>
+    <formats><format>zip</format></formats>
+    <files>
+        <file><source>${project.parent.basedir}/README.md</source><outputDirectory>docs</outputDirectory><destName>README.md</destName><filtered>false</filtered></file>
+        <file><source>${project.parent.basedir}/PRIVACY.md</source><outputDirectory>docs</outputDirectory><destName>PRIVACY.md</destName><filtered>false</filtered></file>
+        <file><source>${project.basedir}/src/main/windows/Start-Frostguard-Watcher.bat</source><outputDirectory>.</outputDirectory><destName>fg-watcher.bat</destName><filtered>false</filtered></file>
+        <file><source>${project.basedir}/src/main/windows/Start-Frostguard.bat</source><outputDirectory>.</outputDirectory><destName>Start Frostguard.bat</destName><filtered>false</filtered></file>
+    </files>
+    <fileSets>
+        <fileSet><directory>${project.build.directory}/input</directory><outputDirectory>.</outputDirectory><useDefaultExcludes>true</useDefaultExcludes><fileMode>0644</fileMode><directoryMode>0755</directoryMode><includes><include>**/*</include></includes><excludes><exclude>**/*.lastUpdated</exclude><exclude>**/_remote.repositories</exclude><exclude>lib/adb/**</exclude></excludes></fileSet>
+        <fileSet><directory>${project.build.directory}/input/lib/adb</directory><outputDirectory>lib/adb</outputDirectory><useDefaultExcludes>true</useDefaultExcludes><fileMode>0755</fileMode><directoryMode>0755</directoryMode><includes><include>**/*</include></includes><excludes><exclude>**/*.tmp</exclude></excludes></fileSet>
+    </fileSets>
+</assembly>

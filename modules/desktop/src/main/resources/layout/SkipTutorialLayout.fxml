@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<VBox maxHeight="Infinity" maxWidth="Infinity"
+      HBox.hgrow="ALWAYS" VBox.vgrow="ALWAYS"
+      xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1">
+    <children>
+        <ScrollPane fitToWidth="true" hbarPolicy="NEVER" styleClass="task-page-scroll"
+                    vbarPolicy="AS_NEEDED" VBox.vgrow="ALWAYS">
+            <content>
+                <VBox styleClass="task-page-root" maxHeight="Infinity"
+                      maxWidth="Infinity">
+                    <children>
+
+                        <!-- Skip Tutorial Card -->
+                        <VBox styleClass="content-card">
+                            <children>
+                                <HBox alignment="CENTER_LEFT" maxWidth="Infinity"
+                                      styleClass="header-yellow">
+                                    <children>
+                                        <Label text="Skip Tutorial Settings" />
+                                    </children>
+                                </HBox>
+                                <VBox styleClass="task-section-inner">
+                                    <children>
+                                        <Label styleClass="task-card-description"
+                                               style="-fx-font-style: italic;"
+                                               text="This task will attempt to skip the initial tutorial. Use with caution on new accounts."
+                                               wrapText="true" />
+
+                                        <Separator style="-fx-opacity: 0.25;" />
+
+                                        <HBox alignment="CENTER_LEFT" spacing="12">
+                                            <children>
+                                                <Label styleClass="task-field-label" text="Enable Skip Tutorial:" />
+                                                <CheckBox fx:id="checkBoxEnableSkipTutorial" mnemonicParsing="false" />
+                                            </children>
+                                        </HBox>
+                                        <Label styleClass="label-muted"
+                                               text="Saved immediately. Takes effect the next time the bot starts."
+                                               wrapText="true" />
+                                    </children>
+                                </VBox>
+                            </children>
+                        </VBox>
+
+                    </children>
+                </VBox>
+            </content>
+        </ScrollPane>
+    </children>
+</VBox>

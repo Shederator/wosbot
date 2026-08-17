@@ -1,0 +1,68 @@
+name: CI — Java Build and Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MAVEN_ARGS: "-B --no-transfer-progress -Dstyle.color=never"
+
+jobs:
+  test:
+    name: Build and test on Linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Verify Git LFS assets are real binaries
+        run: build-support/verification/check_lfs_assets.sh
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Test build and release tooling
+        run: |
+          python3 -m unittest discover -s build-support/verification -p "test_*.py"
+          python3 -m unittest discover -s build-support/release -p "test_*.py"
+          python3 -m unittest discover -s build-support/notifications -p "test_*.py"
+          python3 build-support/verification/check_workflow_python.py
+
+      # Saved-frame OCR tests bind the host Tesseract libraries through tess4j.
+      # JavaFX controller tests need a virtual display on the headless runner.
+      - name: Install Linux test runtimes
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            tesseract-ocr libtesseract-dev libleptonica-dev xvfb
+
+      - name: Build and test Maven reactor
+        run: |
+          read -r -a maven_args <<< "${MAVEN_ARGS}"
+          xvfb-run --auto-servernum ./mvnw "${maven_args[@]}" package
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-surefire-reports
+          path: "**/target/surefire-reports/*.xml"
+          if-no-files-found: ignore
+          retention-days: 7

@@ -1,0 +1,391 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>dev.frostguard</groupId>
+        <artifactId>frostguard</artifactId>
+        <version>${revision}</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>frostguard-desktop-package</artifactId>
+    <name>Frostguard Desktop Packaging</name>
+    <description>Platform packaging inputs, native application images, and installers</description>
+    <packaging>pom</packaging>
+
+    <properties>
+        <frostguard.release.channel>stable</frostguard.release.channel>
+        <frostguard.windows.app-version>${project.version}</frostguard.windows.app-version>
+        <!-- Keep the unchanged bootstrap byte-identical while releases are
+             project-signed but do not yet have an Authenticode publisher. -->
+        <frostguard.windows.launcher-version>2.1.0</frostguard.windows.launcher-version>
+        <frostguard.product.name>Frostguard</frostguard.product.name>
+        <frostguard.product.identifier>dev.frostguard.desktop</frostguard.product.identifier>
+        <frostguard.product.description>Frostguard automation desktop application</frostguard.product.description>
+        <frostguard.product.install-dir>Frostguard</frostguard.product.install-dir>
+        <frostguard.watcher.name>FrostguardWatcher</frostguard.watcher.name>
+        <frostguard.product.upgrade-uuid>fa0d66f6-1f7d-4da8-9701-88f7b4570797</frostguard.product.upgrade-uuid>
+        <frostguard.channel.page.stable>https://github.com/Shederator/wosbot/releases/latest</frostguard.channel.page.stable>
+        <frostguard.channel.page.nightly>https://github.com/Shederator/wosbot/releases/tag/nightly</frostguard.channel.page.nightly>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>dev.frostguard</groupId>
+            <artifactId>frostguard-desktop</artifactId>
+            <version>${project.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>dev.frostguard</groupId>
+            <artifactId>frostguard-watcher</artifactId>
+            <version>${project.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>stage-application-artifacts</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy</goal>
+                        </goals>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>dev.frostguard</groupId>
+                                    <artifactId>frostguard-desktop</artifactId>
+                                    <version>${project.version}</version>
+                                    <outputDirectory>${project.build.directory}/input</outputDirectory>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>dev.frostguard</groupId>
+                                    <artifactId>frostguard-watcher</artifactId>
+                                    <version>${project.version}</version>
+                                    <outputDirectory>${project.build.directory}/input</outputDirectory>
+                                </artifactItem>
+                            </artifactItems>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>stage-runtime-dependencies</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/input/lib</outputDirectory>
+                            <includeScope>runtime</includeScope>
+                            <excludeArtifactIds>frostguard-desktop,frostguard-watcher</excludeArtifactIds>
+                            <overWriteReleases>true</overWriteReleases>
+                            <overWriteSnapshots>false</overWriteSnapshots>
+                            <overWriteIfNewer>true</overWriteIfNewer>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>stage-adb-runtime</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/input/lib/adb</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.parent.basedir}/tools/adb</directory>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>stage-tesseract-runtime</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/input/lib/tesseract</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.parent.basedir}/tools/tesseract</directory>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>stage-template-browser-assets</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/input/templates</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.parent.basedir}/modules/vision/src/main/resources/templates</directory>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>stage-custom-task-examples</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/input/custom_tasks</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.parent.basedir}/examples/custom-tasks</directory>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>prepare-jpackage-launchers</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/jpackage</outputDirectory>
+                            <encoding>UTF-8</encoding>
+                            <propertiesEncoding>UTF-8</propertiesEncoding>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/src/main/windows</directory>
+                                    <filtering>true</filtering>
+                                    <includes>
+                                        <include>Frostguard-Watcher.properties</include>
+                                        <include>main.wxs</include>
+                                    </includes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>build-transitional-desktop-bundle</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                        <configuration>
+                            <finalName>frostguard-${project.version}</finalName>
+                            <descriptors>
+                                <descriptor>src/main/common/zip.xml</descriptor>
+                            </descriptors>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <profile>
+            <id>windows-app-image</id>
+            <activation>
+                <property>
+                    <name>windows.app.image</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>build-windows-app-image</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <target>
+                                        <condition property="jpackage.executable"
+                                                value="${java.home}/bin/jpackage.exe"
+                                                else="${java.home}/bin/jpackage">
+                                            <os family="windows" />
+                                        </condition>
+                                        <delete dir="${project.build.directory}/app-image/${frostguard.product.name}" />
+                                        <mkdir dir="${project.build.directory}/app-image" />
+                                        <exec executable="powershell.exe" failonerror="true">
+                                            <arg value="-NoProfile" />
+                                            <arg value="-NonInteractive" />
+                                            <arg value="-ExecutionPolicy" />
+                                            <arg value="Bypass" />
+                                            <arg value="-File" />
+                                            <arg path="${maven.multiModuleProjectDirectory}/build-support/packaging/write_windows_icon.ps1" />
+                                            <arg value="-InputPath" />
+                                            <arg path="${maven.multiModuleProjectDirectory}/modules/desktop/src/main/resources/icons/appIcon.png" />
+                                            <arg value="-OutputPath" />
+                                            <arg path="${project.build.directory}/jpackage/Frostguard.ico" />
+                                        </exec>
+                                        <exec executable="${jpackage.executable}" failonerror="true">
+                                            <arg value="--type" />
+                                            <arg value="app-image" />
+                                            <arg value="--dest" />
+                                            <arg path="${project.build.directory}/app-image" />
+                                            <arg value="--input" />
+                                            <arg path="${project.build.directory}/input" />
+                                            <arg value="--name" />
+                                            <arg value="${frostguard.product.name}" />
+                                            <arg value="--app-version" />
+                                            <arg value="${frostguard.windows.launcher-version}" />
+                                            <arg value="--vendor" />
+                                            <arg value="Frostguard" />
+                                            <arg value="--description" />
+                                            <arg value="${frostguard.product.description}" />
+                                            <arg value="--icon" />
+                                            <arg path="${project.build.directory}/jpackage/Frostguard.ico" />
+                                            <arg value="--main-jar" />
+                                            <arg value="frostguard-desktop-${project.version}.jar" />
+                                            <arg value="--main-class" />
+                                            <arg value="dev.frostguard.app.bootstrap.Main" />
+                                            <arg value="--java-options" />
+                                            <arg value="--enable-native-access=ALL-UNNAMED" />
+                                            <arg value="--java-options" />
+                                            <arg value="-Dfrostguard.channel=${frostguard.release.channel}" />
+                                            <arg value="--java-options" />
+                                            <arg value="-Dfrostguard.application.id=${frostguard.product.identifier}" />
+                                            <arg value="--java-options" />
+                                            <arg value="-Dfrostguard.update.pullRequestBuild=${frostguard.pull-request-build}" />
+                                            <arg value="--java-options" />
+                                            <arg value="-Dfrostguard.update.manifest.stable=${frostguard.update.manifest.stable}" />
+                                            <arg value="--java-options" />
+                                            <arg value="-Dfrostguard.update.manifest.nightly=${frostguard.update.manifest.nightly}" />
+                                            <arg value="--java-options" />
+                                            <arg value="-Dfrostguard.channel.page.stable=${frostguard.channel.page.stable}" />
+                                            <arg value="--java-options" />
+                                            <arg value="-Dfrostguard.channel.page.nightly=${frostguard.channel.page.nightly}" />
+                                            <arg value="--java-options" />
+                                            <arg value="-Duser.dir=$APPDIR" />
+                                            <arg value="--java-options" />
+                                            <arg value="-Dfrostguard.watcher.launcher=$APPDIR/../${frostguard.watcher.name}.exe" />
+                                            <arg value="--add-launcher" />
+                                            <arg value="${frostguard.watcher.name}=${project.build.directory}/jpackage/Frostguard-Watcher.properties" />
+                                        </exec>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>windows-installer</id>
+            <activation>
+                <property>
+                    <name>windows.installer</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>build-windows-installer</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <target>
+                                        <condition property="jpackage.executable"
+                                                value="${java.home}/bin/jpackage.exe"
+                                                else="${java.home}/bin/jpackage">
+                                            <os family="windows" />
+                                        </condition>
+                                        <delete dir="${project.build.directory}/installers/${frostguard.release.channel}" />
+                                        <mkdir dir="${project.build.directory}/installers/${frostguard.release.channel}" />
+                                        <exec executable="${jpackage.executable}" failonerror="true">
+                                            <arg value="--verbose" />
+                                            <arg value="--type" />
+                                            <arg value="msi" />
+                                            <arg value="--dest" />
+                                            <arg path="${project.build.directory}/installers/${frostguard.release.channel}" />
+                                            <arg value="--name" />
+                                            <arg value="${frostguard.product.name}" />
+                                            <arg value="--app-version" />
+                                            <arg value="${frostguard.windows.app-version}" />
+                                            <arg value="--vendor" />
+                                            <arg value="Frostguard" />
+                                            <arg value="--description" />
+                                            <arg value="${frostguard.product.description}" />
+                                            <arg value="--app-image" />
+                                            <arg path="${project.build.directory}/app-image/${frostguard.product.name}" />
+                                            <arg value="--resource-dir" />
+                                            <arg path="${project.build.directory}/jpackage" />
+                                            <!-- Nested per-user install paths can trigger inconsistent WiX
+                                                 directory validation (JDK-8226534). -->
+                                            <arg value="--install-dir" />
+                                            <arg value="${frostguard.product.install-dir}" />
+                                            <arg value="--win-per-user-install" />
+                                            <arg value="--win-dir-chooser" />
+                                            <arg value="--win-menu" />
+                                            <arg value="--win-menu-group" />
+                                            <arg value="Frostguard" />
+                                            <arg value="--win-shortcut" />
+                                            <arg value="--win-shortcut-prompt" />
+                                            <arg value="--win-upgrade-uuid" />
+                                            <arg value="${frostguard.product.upgrade-uuid}" />
+                                        </exec>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>windows-nightly</id>
+            <properties>
+                <frostguard.release.channel>nightly</frostguard.release.channel>
+                <!-- Keep the unchanged bootstrap byte-identical while releases are
+                     project-signed but do not yet have an Authenticode publisher. -->
+                <frostguard.windows.launcher-version>26.8.12004</frostguard.windows.launcher-version>
+                <frostguard.product.name>Frostguard Nightly</frostguard.product.name>
+                <frostguard.product.identifier>dev.frostguard.desktop.nightly</frostguard.product.identifier>
+                <frostguard.product.description>Frostguard Nightly automation desktop application</frostguard.product.description>
+                <frostguard.product.install-dir>Frostguard Nightly</frostguard.product.install-dir>
+                <frostguard.watcher.name>FrostguardNightlyWatcher</frostguard.watcher.name>
+                <frostguard.product.upgrade-uuid>51ac745d-78e4-4d89-a36d-1c38b87598b3</frostguard.product.upgrade-uuid>
+            </properties>
+        </profile>
+    </profiles>
+</project>

@@ -1,32 +1,89 @@
-# Installation
+# Install Frostguard on Windows
 
-This guide covers installing a verified Frostguard build, configuring the
-required emulator, and building the project from source on Windows.
+This guide is for running a published or temporary Frostguard build. Choose
+**exactly one** of the three build options below, then complete the shared
+emulator and game setup once. The options are alternatives, not consecutive
+steps.
+
+Developers who want to build, test, or run the repository should use the
+separate [developer setup](development.md).
 
 ## Choose a build
 
-| Build | Use it when | Download |
-|:------|:------------|:---------|
-| Stable | You want a tested, versioned build that changes only with a release | [Latest Stable](https://github.com/Shederator/wosbot/releases/latest/download/frostguard-windows-desktop-bundle.zip) |
-| Nightly | You want the latest `main` build, updated daily | [Latest Nightly](https://github.com/Shederator/wosbot/releases/download/nightly/frostguard-windows-desktop-bundle.zip) |
-| PR build | You want to test one or more open pull requests | Run `/build-pr` in Discord `#request-a-build` |
+| Order | Build | Use it when | Distribution |
+|:------|:------|:------------|:-------------|
+| **1 — Recommended** | Stable | You want to use Frostguard normally | Self-contained Windows x64 MSI |
+| **2 — Preview** | Nightly | You want newer changes and accept unfinished or unstable behavior | Separate self-contained Windows x64 MSI |
+| **Testing only** | PR build | You were asked to test specific open pull requests | Temporary ZIP requiring Java 21 |
 
-Stable and Nightly are public Windows desktop bundles. They require Java 21,
-but not Git, Git LFS, or Maven. Nightly may contain unfinished changes; PR
-builds additionally contain unmerged code.
+If you are unsure, install **Stable**.
 
-## Install a downloaded build
+## Option 1: Install Stable (recommended)
 
-1. Install a Java 21 JDK, such as [Eclipse Temurin](https://adoptium.net/temurin/releases/?version=21).
-2. Download the desired ZIP from the table above.
-3. Extract the complete ZIP into an empty folder. Do not run Frostguard from inside the ZIP.
-4. Double-click `Start Frostguard.bat`.
-5. Open **Configuration** and select the emulator command-line controller.
+1. Open the [latest Stable release](https://github.com/Shederator/wosbot/releases/latest).
+2. Download its Windows x64 MSI installer.
+3. Confirm that the file comes from the official `Shederator/wosbot` GitHub
+   release, then run it. A Windows **Unknown publisher** or SmartScreen warning
+   is currently expected because the project does not yet have a verified
+   Windows publisher.
+4. Choose whether to create a desktop shortcut and complete the per-user
+   installation. The final page starts **Frostguard** by default.
+5. Continue at [Configure the emulator and game](#configure-the-emulator-and-game).
 
-Keep the extracted installation together. Its launcher, application JAR,
-runtime libraries, OCR data and templates are all required.
+The installer includes the Java runtime. You do not need Git, Git LFS, Maven,
+or a separate Java installation.
 
-## Emulator Setup
+## Option 2: Install Nightly
+
+Nightly is the second choice for users who deliberately want preview changes.
+It may contain unfinished or unstable behavior.
+
+1. Open the permanent [Latest Nightly](https://github.com/Shederator/wosbot/releases/tag/nightly)
+   channel page.
+2. Download its Windows x64 MSI installer.
+3. Confirm that the file comes from the official `Shederator/wosbot` GitHub
+   release, then run it. The same **Unknown publisher** or SmartScreen warning
+   described for Stable is currently expected.
+4. Complete the installer and start **Frostguard Nightly**.
+5. Continue at [Configure the emulator and game](#configure-the-emulator-and-game).
+
+Stable and Nightly install as separate applications. They can run side by side
+and use separate workspaces, databases, profiles, schedules, Telegram settings,
+logs, caches, and locks.
+
+On the first Nightly start, Frostguard offers either a fresh configuration or a
+one-time snapshot of the matching Stable workspace. Stable and its watcher must
+be closed during the copy. Later changes are not synchronized, and Nightly data
+is never copied back into Stable automatically.
+
+The Nightly installer is also self-contained and needs no separate development
+toolchain.
+
+## Option 3: Request a PR build
+
+PR builds are for testing unmerged pull requests. They are temporary, expire
+automatically, and are not installed Stable or Nightly releases.
+
+1. Join the [Frostguard Discord](https://discord.gg/sUthSHRVvU).
+2. Open [**#request-a-build**](https://discord.com/channels/1475434539495981137/1533460326111117322).
+3. Run `/build-pr prs: <PR number>`. Add further open PR numbers when you need a
+   combined test build.
+4. Review the pinned build plan and confirm it.
+5. When the result appears in the same channel, download the ZIP, install a
+   [Java 21 JDK](https://adoptium.net/temurin/releases/?version=21) if necessary,
+   and extract the complete ZIP into an empty folder.
+6. Start `Start Frostguard.bat`, then continue at
+   [Configure the emulator and game](#configure-the-emulator-and-game).
+
+Keep the extracted PR-build folder together. The launcher, application JAR,
+libraries, OCR data, and templates are all required. Automatic Stable/Nightly
+updates are disabled in PR builds.
+
+## Configure the emulator and game
+
+The remaining setup applies once to whichever build option you chose above.
+
+### Emulator setup
 
 Supported emulators are MuMu Player, LDPlayer, and MEmu. MuMu Player is recommended.
 
@@ -40,7 +97,7 @@ Use these emulator display settings:
 
 Start the emulator once and confirm Android boots normally.
 
-## Game Setup
+### Game setup
 
 Install Whiteout Survival from Google Play inside the emulator.
 
@@ -51,7 +108,7 @@ In game settings:
 - Disable snow effects.
 - Use normal graphics and 30 FPS if available.
 
-## Configure Frostguard
+### Configure Frostguard
 
 Open the Configuration screen and select the emulator's command-line
 controller, not its graphical executable. A common MuMu path is:
@@ -60,69 +117,24 @@ controller, not its graphical executable. A common MuMu path is:
 C:\Program Files\Netease\MuMuPlayer\nx_main\MuMuManager.exe
 ```
 
-## Build from source
+Installed runs use named workspaces below
+`%USERPROFILE%\.frostguard\workspaces\<channel>\<name>\`. Each workspace owns
+its database, configuration, logs, custom tasks, cache, Telegram watcher state,
+and process lock. A workspace can be opened by only one Frostguard process at a
+time. A second normal launch reports the already-running instance instead of a
+generic JVM error. Advanced users can run another isolated instance with
+`Frostguard.exe --workspace <name>` or
+`Frostguard Nightly.exe --workspace <name>`. Source runs use the isolated
+`.frostguard-dev/` workspace described in the [developer setup](development.md).
 
-Source builds additionally require basic Git and terminal usage, Apache Maven
-3.8 or newer, and Git LFS. Install the common tools from PowerShell:
-
-```powershell
-winget install Microsoft.Git
-winget install EclipseAdoptium.Temurin.21.JDK
-winget install GitHub.GitLFS
-```
-
-Download Maven from <https://maven.apache.org/download.cgi>, add its `bin`
-directory to `PATH`, and verify the toolchain:
-
-```powershell
-java -version
-mvn -version
-git lfs version
-```
-
-### Source checkout
-
-Clone the repository and fetch LFS assets:
-
-```sh
-git clone https://github.com/Shederator/wosbot.git
-cd wosbot
-git lfs install
-git lfs pull
-```
-
-### Build
-
-Run the full build from the repository root:
-
-```sh
-mvn clean install package
-```
-
-On Windows, the helper script performs the same build with one retry for transient file-lock issues:
-
-```batch
-fg-build.bat
-```
-
-Build outputs are written under `fg-app/target`, including
-`frostguard-<version>.jar` and the desktop bundle ZIP. End users should extract
-the ZIP and launch `Start Frostguard.bat`; the `target` path is only for source
-builds.
-
-### Run a source build
-
-Run the generated application JAR from the repository root:
-
-```sh
-java -jar fg-app/target/frostguard-<version>.jar
-```
-
-Replace `<version>` with the generated version, for example `2.1.0`.
+Close Frostguard before updating or uninstalling it. The installer refuses to
+continue while the matching desktop process is running, so Windows cannot leave
+an unregistered but partially installed application behind. The channel-specific
+background watcher is stopped automatically during maintenance.
 
 ## Migrating an older installation
 
-Do not overwrite a new installation with an entire old Frostguard folder.
-Migration of legacy configuration and database files is not yet automated; keep
-a backup and copy individual `database.*` files only when intentionally carrying
-existing settings forward.
+Do not overwrite a new workspace with an entire old Frostguard folder. Frostguard
+3.0 does not migrate the legacy flat `.frostguard` watcher files or a 2.x
+database. Keep a backup and recreate settings; copy only reviewed custom-task
+source files into the new workspace.

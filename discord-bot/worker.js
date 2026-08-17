@@ -1,5 +1,5 @@
 /**
- * Frostguard /build-pr Discord command — Cloudflare Worker.
+ * Frostguard Discord commands — Cloudflare Worker.
  *
  * The Discord half of the combined-PR test build feature (issue #68). This
  * worker receives Discord interaction webhooks, validates the request, shows
@@ -32,7 +32,7 @@
 // Small pure helpers (exported for tests)
 // ---------------------------------------------------------------------------
 
-export const MAX_PRS = 6; // must match MAX_PRS_PER_REQUEST in ci/pr_build_plan.py
+export const MAX_PRS = 6; // must match MAX_PRS_PER_REQUEST in build-support/release/pr_build_plan.py
 
 export function parsePrNumbers(raw) {
   const numbers = [];
@@ -232,6 +232,39 @@ function ephemeralReply(content) {
     type: ResponseType.CHANNEL_MESSAGE,
     data: { content, flags: EPHEMERAL, allowed_mentions: { parse: [] } },
   });
+}
+
+function configuredChannel(id, fallback) {
+  return /^\d+$/.test(String(id || "")) ? `<#${id}>` : `#${fallback}`;
+}
+
+export function reportingGuidanceResponse(env) {
+  const bugs = configuredChannel(env.BUG_REPORT_CHANNEL_ID, "bug-reports");
+  const suggestions = configuredChannel(env.SUGGESTIONS_CHANNEL_ID, "suggestions");
+  return {
+    type: ResponseType.CHANNEL_MESSAGE,
+    data: {
+      embeds: [{
+        title: "Please don't make me say it again™",
+        color: 0xf1c40f,
+        description: [
+          `🐛 Found a bug? Please post it in ${bugs}.`,
+          `💡 Have an idea? Please post it in ${suggestions}.`,
+          "",
+          "And one tiny favor: tell us **why**, not only what you think",
+          "Frostguard should do. What problem are you running into? What are",
+          "you trying to achieve, and why would it help?",
+          "",
+          "That context lets us solve the actual problem — sometimes with a",
+          "better answer than the first solution that came to mind.",
+          "",
+          "Thanks for helping us keep general chat general. My remaining",
+          "sanity appreciates it. ❤️",
+        ].join("\n"),
+      }],
+      allowed_mentions: { parse: [] },
+    },
+  };
 }
 
 async function editOriginal(env, interaction, payload) {
@@ -445,7 +478,7 @@ async function handleButton(env, interaction) {
           `Building PRs ${state.order.map((n) => `#${n}`).join(", ")} with pinned heads.`,
           "",
           "The result (download link, conflict report or failure) will be",
-          "posted as a reply here when the workflow finishes. Progress: " +
+          "posted here and you will be mentioned when the workflow finishes. Progress: " +
           `<https://github.com/${env.GITHUB_REPO}/actions/workflows/pr-test-build.yml>`,
         ].join("\n"),
         footer: undefined,
@@ -462,7 +495,7 @@ async function handleButton(env, interaction) {
 export default {
   async fetch(request, env, ctx) {
     if (request.method === "GET") {
-      return new Response("frostguard /build-pr interaction endpoint", { status: 200 });
+      return new Response("frostguard Discord interaction endpoint", { status: 200 });
     }
     if (request.method !== "POST") {
       return new Response("method not allowed", { status: 405 });
@@ -483,6 +516,12 @@ export default {
 
     if (interaction.type === InteractionType.PING) {
       return json({ type: ResponseType.PONG });
+    }
+
+    if (interaction.type === InteractionType.APPLICATION_COMMAND &&
+        interaction.data &&
+        interaction.data.name === "please-dont-make-me-say-it-again") {
+      return json(reportingGuidanceResponse(env));
     }
 
     if (interaction.type === InteractionType.APPLICATION_COMMAND &&

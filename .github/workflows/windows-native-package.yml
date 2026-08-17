@@ -1,0 +1,221 @@
+name: CI — Windows Installers
+
+on:
+  pull_request:
+    paths:
+      - "**/pom.xml"
+      - "modules/**/src/**"
+      - "packaging/desktop/**"
+      - "build-support/packaging/**"
+      - "build-support/release/**"
+      - "build-support/verification/*app_image*"
+      - "build-support/verification/test_channel_packaging.py"
+      - "build-support/verification/smoke_test_app_image.ps1"
+      - "tools/**"
+      - "examples/custom-tasks/**"
+      - ".github/workflows/windows-native-package.yml"
+      - ".github/workflows/signed-windows-channel-release.yml"
+  workflow_dispatch:
+    inputs:
+      stable_candidate_version:
+        description: "Unpublished Stable application SemVer (must be a prerelease)"
+        required: true
+        default: "3.0.0-rc.1"
+        type: string
+      stable_candidate_windows_version:
+        description: "Numeric MSI version below the final Stable version"
+        required: true
+        default: "2.99.1"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-native-package-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MAVEN_ARGS: "-B --no-transfer-progress -Dstyle.color=never"
+
+jobs:
+  package:
+    name: Build and smoke-test Stable and Nightly installers
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Verify Git LFS assets are real binaries
+        shell: bash
+        run: build-support/verification/check_lfs_assets.sh
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21.0.12+8.0"
+          cache: maven
+
+      # JDK 21 jpackage invokes the WiX 3 candle/light toolchain for an MSI.
+      # Pinning the Chocolatey package prevents an incompatible WiX major from
+      # silently changing the installer build underneath this workflow.
+      - name: Install WiX Toolset 3
+        shell: pwsh
+        run: |
+          choco install wixtoolset --version=3.14.1.20250415 --no-progress -y
+          $wixBin = "${env:ProgramFiles(x86)}\WiX Toolset v3.14\bin"
+          if (-not (Test-Path -LiteralPath (Join-Path $wixBin "candle.exe"))) {
+              throw "WiX candle.exe was not installed below $wixBin"
+          }
+          $wixBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Validate optional Stable release candidate identity
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        env:
+          CANDIDATE_VERSION: ${{ inputs.stable_candidate_version }}
+          CANDIDATE_WINDOWS_VERSION: ${{ inputs.stable_candidate_windows_version }}
+        run: |
+          python build-support/release/windows_installer_version.py `
+              --channel stable --version $env:CANDIDATE_VERSION `
+              --candidate-windows-version $env:CANDIDATE_WINDOWS_VERSION
+          if ($LASTEXITCODE -ne 0) {
+              throw "Stable release candidate identity is invalid"
+          }
+
+      - name: Build Stable application image and installer
+        shell: pwsh
+        env:
+          CANDIDATE_VERSION: ${{ inputs.stable_candidate_version }}
+          CANDIDATE_WINDOWS_VERSION: ${{ inputs.stable_candidate_windows_version }}
+        run: |
+          $mavenArgs = $env:MAVEN_ARGS -split " "
+          $candidateArgs = @()
+          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
+              $candidateArgs += @(
+                  "-Drevision=$($env:CANDIDATE_VERSION)",
+                  "-Dfrostguard.windows.app-version=$($env:CANDIDATE_WINDOWS_VERSION)"
+              )
+          }
+          & .\mvnw.cmd @mavenArgs @candidateArgs "-Dfrostguard.pull-request-build=true" `
+              "-Pwindows-app-image,windows-installer" package
+
+      - name: Test the application-image verifier
+        run: |
+          python build-support/verification/test_verify_app_image.py
+          python build-support/verification/test_channel_packaging.py
+          python build-support/release/test_write_update_manifest.py
+          python build-support/release/test_windows_installer_version.py
+
+      - name: Verify Stable application image
+        run: >-
+          python build-support/verification/verify_app_image.py
+          packaging/desktop/target/app-image/Frostguard
+          --expected-desktop-launcher-sha256 06610c6684f6323edf915a713d6a29cbc488d49f044685b80eabcfb1f7ca0a53
+          --expected-watcher-launcher-sha256 ed6a92c9e42bf4b205c669771bef4cbcd9e4d8674678f89cf944f965922f714e
+
+      - name: Smoke test Stable launchers and workspace isolation
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass `
+              -File build-support/verification/smoke_test_app_image.ps1 `
+              -ImagePath packaging/desktop/target/app-image/Frostguard
+
+      - name: Verify Stable installer boundary
+        id: stable-installer
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem -LiteralPath packaging/desktop/target/installers/stable `
+              -Filter "Frostguard-*.msi" -File)
+          if ($installers.Count -ne 1) {
+              throw "Expected exactly one versioned installer, found $($installers.Count)"
+          }
+          if ($installers[0].Length -lt 1MB) {
+              throw "Installer is unexpectedly small: $($installers[0].Length) bytes"
+          }
+          "path=$($installers[0].FullName)" | Out-File `
+              -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload Stable application image
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostguard-stable-windows-app-image
+          path: packaging/desktop/target/app-image/Frostguard
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Stable installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostguard-stable-windows-installer
+          path: ${{ steps.stable-installer.outputs.path }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Reset packaging output before Nightly build
+        shell: pwsh
+        run: |
+          $mavenArgs = $env:MAVEN_ARGS -split " "
+          & .\mvnw.cmd @mavenArgs -pl packaging/desktop clean
+
+      - name: Build Nightly application image and installer
+        shell: pwsh
+        run: |
+          $mavenArgs = $env:MAVEN_ARGS -split " "
+          & .\mvnw.cmd @mavenArgs -DskipTests "-Dfrostguard.pull-request-build=true" `
+              "-Pwindows-app-image,windows-installer,windows-nightly" package
+
+      - name: Verify Nightly application image
+        run: >-
+          python build-support/verification/verify_app_image.py
+          "packaging/desktop/target/app-image/Frostguard Nightly"
+          --channel nightly
+          --product-name "Frostguard Nightly"
+          --expected-desktop-launcher-sha256 5c728d3662d64c428d003874f6d62b798bbbe329f595b2b15a2ab5ab1fd1faa9
+          --expected-watcher-launcher-sha256 9c7452d890f39c7f4fdb2e5519993514c84f071deef222fe49784acfd459c209
+
+      - name: Smoke test Nightly launchers and workspace isolation
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass `
+              -File build-support/verification/smoke_test_app_image.ps1 `
+              -ImagePath "packaging/desktop/target/app-image/Frostguard Nightly" `
+              -Channel nightly -ProductName "Frostguard Nightly"
+
+      - name: Verify Nightly installer boundary
+        id: nightly-installer
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem -LiteralPath packaging/desktop/target/installers/nightly `
+              -Filter "Frostguard Nightly-*.msi" -File)
+          if ($installers.Count -ne 1) {
+              throw "Expected exactly one versioned Nightly installer, found $($installers.Count)"
+          }
+          if ($installers[0].Length -lt 1MB) {
+              throw "Nightly installer is unexpectedly small: $($installers[0].Length) bytes"
+          }
+          "path=$($installers[0].FullName)" | Out-File `
+              -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload Nightly application image
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostguard-nightly-windows-app-image
+          path: packaging/desktop/target/app-image/Frostguard Nightly
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Nightly installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostguard-nightly-windows-installer
+          path: ${{ steps.nightly-installer.outputs.path }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

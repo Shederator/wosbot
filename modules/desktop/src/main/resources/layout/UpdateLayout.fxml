@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Hyperlink?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ProgressIndicator?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1"
+      spacing="14" style="-fx-background-color: #11141a;">
+    <padding>
+        <Insets top="20" right="24" bottom="20" left="24" />
+    </padding>
+
+    <Label text="Application Updates"
+           style="-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #e6edf3;" />
+    <Label text="Updates are selected for this product identity and verified before Frostguard exits."
+           wrapText="true" style="-fx-text-fill: #9da7b3;" />
+
+    <HBox spacing="20">
+        <Label fx:id="labelCurrentVersion" style="-fx-text-fill: #e6edf3; -fx-font-weight: bold;" />
+        <Label fx:id="labelChannel" style="-fx-text-fill: #e6edf3; -fx-font-weight: bold;" />
+    </HBox>
+
+    <HBox alignment="CENTER_LEFT" spacing="10">
+        <Button fx:id="buttonCheck" text="Check for updates" onAction="#handleCheck" />
+        <ProgressIndicator fx:id="progress" prefWidth="24" prefHeight="24" maxWidth="24" maxHeight="24" />
+        <Label fx:id="labelStatus" wrapText="true" style="-fx-text-fill: #9da7b3;" />
+    </HBox>
+
+    <VBox fx:id="availableUpdatePane" spacing="10"
+          style="-fx-background-color: #1b2028; -fx-background-radius: 6; -fx-padding: 16;">
+        <Label fx:id="labelAvailableVersion"
+               style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #e6edf3;" />
+        <Label fx:id="labelArtifactDetails" style="-fx-text-fill: #9da7b3;" />
+        <Hyperlink fx:id="linkReleaseNotes" text="Release notes" onAction="#openReleaseNotes" />
+        <Button fx:id="buttonDownloadInstall" text="Download and restart"
+                onAction="#handleDownloadInstall" />
+    </VBox>
+
+    <VBox fx:id="channelSwitchPane" spacing="10"
+          style="-fx-background-color: #1b2028; -fx-background-radius: 6; -fx-padding: 16;">
+        <Label text="Release channel" style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #e6edf3;" />
+        <Label fx:id="labelChannelSwitch" wrapText="true" style="-fx-text-fill: #9da7b3;" />
+        <Button fx:id="buttonSwitchChannel" onAction="#handleSwitchChannel" />
+    </VBox>
+</VBox>

@@ -1,0 +1,417 @@
+{
+  "title": "dead_shot",
+  "notes": "Tutorial flow for testing Task Builder template search and branching. Incomplete; not recommended for unattended automation.",
+  "initialScreen": "HOME",
+  "steps": [
+    {
+      "stepId": 1,
+      "kind": "TEMPLATE_SEARCH",
+      "attributes": {
+        "tlY": "209",
+        "nodeName": "search deal",
+        "delayMs": "300",
+        "tlX": "624",
+        "brY": "290",
+        "brX": "700",
+        "threshold": "90",
+        "templatePath": "HOME_DEALS_BUTTON",
+        "grayscale": "false",
+        "offsetX": "0",
+        "maxAttempts": "1",
+        "offsetY": "0",
+        "tapIfFound": "true"
+      },
+      "completed": false,
+      "layoutX": 259.0,
+      "layoutY": 266.0,
+      "successorId": 2,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 2,
+      "kind": "SWIPE",
+      "attributes": {
+        "nodeName": "swipe to Dead Shot",
+        "endY": "115",
+        "endX": "45",
+        "startY": "118",
+        "startX": "617"
+      },
+      "completed": false,
+      "layoutX": 638.0,
+      "layoutY": 240.0,
+      "successorId": 3,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 3,
+      "kind": "WAIT",
+      "attributes": {
+        "nodeName": "wait swipe finished",
+        "durationMs": "1500"
+      },
+      "completed": false,
+      "layoutX": 624.3774456235769,
+      "layoutY": 442.9292929292929,
+      "successorId": 4,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 4,
+      "kind": "TEMPLATE_SEARCH",
+      "attributes": {
+        "tlY": "102",
+        "nodeName": "detect dead shot",
+        "delayMs": "300",
+        "tlX": "295",
+        "brY": "162",
+        "brX": "469",
+        "threshold": "90",
+        "templatePath": "templates/deals/deadshot/event_tab.png",
+        "grayscale": "false",
+        "offsetX": "0",
+        "maxAttempts": "1",
+        "offsetY": "0",
+        "tapIfFound": "true"
+      },
+      "completed": false,
+      "layoutX": 609.6299708761022,
+      "layoutY": 643.4693784539039,
+      "successorId": 5,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 5,
+      "kind": "WAIT",
+      "attributes": {
+        "nodeName": "wait tab appear",
+        "durationMs": "200"
+      },
+      "completed": false,
+      "layoutX": 633.2166942920076,
+      "layoutY": 985.951009823606,
+      "successorId": 6,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 6,
+      "kind": "TAP_POINT",
+      "attributes": {
+        "tlY": "1095",
+        "nodeName": "tap shot to open chest screen",
+        "tlX": "241",
+        "x": "0",
+        "brY": "1171",
+        "y": "0",
+        "brX": "467"
+      },
+      "completed": false,
+      "layoutX": 607.1374962225136,
+      "layoutY": 1160.0071673848854,
+      "successorId": 21,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 7,
+      "kind": "TAP_POINT",
+      "attributes": {
+        "tlY": "701",
+        "nodeName": "tap R1C1",
+        "tlX": "83",
+        "x": "0",
+        "brY": "770",
+        "y": "0",
+        "brX": "151"
+      },
+      "completed": false,
+      "layoutX": 580.2317384210451,
+      "layoutY": 1388.3749501918471,
+      "successorId": 9,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 8,
+      "kind": "TAP_POINT",
+      "attributes": {
+        "tlY": "700",
+        "nodeName": "Tap R1C2",
+        "tlX": "241",
+        "x": "0",
+        "brY": "765",
+        "y": "0",
+        "brX": "308"
+      },
+      "completed": false,
+      "layoutX": 568.2563946858739,
+      "layoutY": 1574.193060319894,
+      "successorId": 10,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 9,
+      "kind": "WAIT",
+      "attributes": {
+        "durationMs": "2000"
+      },
+      "completed": false,
+      "layoutX": 884.5192680723928,
+      "layoutY": 1364.6313985191207,
+      "successorId": 8,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 10,
+      "kind": "WAIT",
+      "attributes": {
+        "durationMs": "2000"
+      },
+      "completed": false,
+      "layoutX": 879.6141817586006,
+      "layoutY": 1579.6355856473008,
+      "successorId": 11,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 11,
+      "kind": "TAP_POINT",
+      "attributes": {
+        "tlY": "705",
+        "nodeName": "R1C3",
+        "tlX": "402",
+        "x": "0",
+        "brY": "759",
+        "y": "0",
+        "brX": "474"
+      },
+      "completed": false,
+      "layoutX": 553.3333333333333,
+      "layoutY": 1793.3333333333337,
+      "successorId": 12,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 12,
+      "kind": "WAIT",
+      "attributes": {
+        "durationMs": "2000"
+      },
+      "completed": false,
+      "layoutX": 926.1848525698946,
+      "layoutY": 1800.4346073728527,
+      "successorId": 13,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 13,
+      "kind": "TAP_POINT",
+      "attributes": {
+        "tlY": "703",
+        "nodeName": "R1C4",
+        "tlX": "568",
+        "x": "0",
+        "brY": "774",
+        "y": "0",
+        "brX": "620"
+      },
+      "completed": false,
+      "layoutX": 545.585942489274,
+      "layoutY": 2007.7230547141226,
+      "successorId": 14,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 14,
+      "kind": "WAIT",
+      "attributes": {
+        "durationMs": "2000"
+      },
+      "completed": false,
+      "layoutX": 939.0597251006438,
+      "layoutY": 2021.2264489479617,
+      "successorId": 15,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 15,
+      "kind": "TAP_POINT",
+      "attributes": {
+        "tlY": "895",
+        "nodeName": "R2C1",
+        "tlX": "75",
+        "x": "0",
+        "brY": "960",
+        "y": "0",
+        "brX": "149"
+      },
+      "completed": false,
+      "layoutX": 520.0,
+      "layoutY": 2214.501646331604,
+      "successorId": 16,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 16,
+      "kind": "WAIT",
+      "attributes": {
+        "durationMs": "2000"
+      },
+      "completed": false,
+      "layoutX": 873.3333333333333,
+      "layoutY": 2251.6228062725645,
+      "successorId": 17,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 17,
+      "kind": "TAP_POINT",
+      "attributes": {
+        "tlY": "896",
+        "x": "0",
+        "brY": "967",
+        "tlX": "243",
+        "y": "0",
+        "brX": "308"
+      },
+      "completed": false,
+      "layoutX": 524.6184776314318,
+      "layoutY": 2443.3333333333335,
+      "successorId": 18,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 18,
+      "kind": "WAIT",
+      "attributes": {
+        "durationMs": "2000"
+      },
+      "completed": false,
+      "layoutX": 863.8554328942953,
+      "layoutY": 2465.2612048182327,
+      "successorId": 19,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 19,
+      "kind": "OCR_READ",
+      "attributes": {
+        "tlY": "1158",
+        "nodeName": "detect chest opened",
+        "tlX": "223",
+        "condition": "CONTAINS",
+        "brY": "1209",
+        "expectedValue": "Tap",
+        "brX": "290"
+      },
+      "completed": false,
+      "layoutX": 516.6666666666666,
+      "layoutY": 2620.9655479324556,
+      "successorId": 20,
+      "alternateId": 22,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 20,
+      "kind": "TAP_POINT",
+      "attributes": {
+        "tlY": "1107",
+        "nodeName": "anywhere to exit.",
+        "tlX": "19",
+        "x": "0",
+        "brY": "1234",
+        "y": "0",
+        "brX": "662"
+      },
+      "completed": false,
+      "layoutX": 868.7228112799438,
+      "layoutY": 2641.845456237708,
+      "successorId": -1,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 21,
+      "kind": "WAIT",
+      "attributes": {
+        "nodeName": "wait chest screen animation",
+        "durationMs": "5000"
+      },
+      "completed": false,
+      "layoutX": 917.6047062115761,
+      "layoutY": 1193.0663081680457,
+      "successorId": 7,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 22,
+      "kind": "BACK_BUTTON",
+      "attributes": {
+        "nodeName": "quit"
+      },
+      "completed": false,
+      "layoutX": 896.6666666666666,
+      "layoutY": 2960.0,
+      "successorId": 23,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 23,
+      "kind": "TAP_POINT",
+      "attributes": {
+        "tlY": "590",
+        "nodeName": "tap exit",
+        "tlX": "205",
+        "x": "0",
+        "brY": "676",
+        "y": "0",
+        "brX": "292"
+      },
+      "completed": false,
+      "layoutX": 1120.0,
+      "layoutY": 2993.333333333333,
+      "successorId": 24,
+      "alternateId": -1,
+      "lastReadValue": null
+    },
+    {
+      "stepId": 24,
+      "kind": "TAP_POINT",
+      "attributes": {
+        "tlY": "745",
+        "nodeName": "confirm exit",
+        "tlX": "88",
+        "x": "0",
+        "brY": "817",
+        "y": "0",
+        "brX": "319"
+      },
+      "completed": false,
+      "layoutX": 1456.7395939218018,
+      "layoutY": 2989.231297764812,
+      "successorId": -1,
+      "alternateId": -1,
+      "lastReadValue": null
+    }
+  ],
+  "createdEpochMs": 1786281333164,
+  "modifiedEpochMs": 1786285898527
+}

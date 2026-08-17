@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Separator?>
+<?import javafx.scene.control.Slider?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane prefHeight="580.0" prefWidth="550.0"
+            xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1">
+
+    <!-- Header -->
+    <top>
+        <Label style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-padding: 20 20 10 20;"
+               text="Add Profile" />
+    </top>
+
+    <!-- Form content using individual row-based layout -->
+    <center>
+        <VBox spacing="12" style="-fx-padding: 10 20 10 20;">
+
+            <!-- Account section -->
+            <Label text="Account Details"
+                   style="-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #9eaab6;" />
+
+            <HBox alignment="CENTER_LEFT" spacing="12">
+                <Label text="Name" minWidth="150" prefWidth="170" />
+                <VBox HBox.hgrow="ALWAYS">
+                    <TextField fx:id="textfieldProfileName" />
+                    <Label fx:id="labelProfileNameError" wrapText="true" />
+                </VBox>
+            </HBox>
+
+            <HBox alignment="CENTER_LEFT" spacing="12">
+                <Label text="Emulator" minWidth="150" prefWidth="170" />
+                <VBox HBox.hgrow="ALWAYS">
+                    <TextField fx:id="textfieldEmulatorNumber" />
+                    <Label fx:id="labelEmulatorNumberError" wrapText="true" />
+                </VBox>
+            </HBox>
+
+            <HBox alignment="CENTER_LEFT" spacing="12">
+                <Label text="Reconnect (min)" minWidth="150" prefWidth="170" />
+                <VBox HBox.hgrow="ALWAYS">
+                    <TextField fx:id="textfieldReconnectionTime" text="30" />
+                    <Label fx:id="labelReconnectionTimeError" wrapText="true" />
+                </VBox>
+            </HBox>
+
+            <HBox alignment="CENTER_LEFT" spacing="12">
+                <Label text="Priority" minWidth="150" prefWidth="170" />
+                <Slider fx:id="sliderPriority" majorTickUnit="25.0" minorTickCount="4"
+                        showTickLabels="true" showTickMarks="true" value="50.0"
+                        HBox.hgrow="ALWAYS" />
+                <Label fx:id="labelPriorityValue" text="50" minWidth="40" />
+            </HBox>
+
+            <CheckBox fx:id="checkboxEnabled" mnemonicParsing="false" selected="true"
+                      text="Enabled" />
+
+            <Separator style="-fx-opacity: 0.3;" />
+
+            <!-- Character info section -->
+            <Label text="Character Information"
+                   style="-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #9eaab6;" />
+
+            <HBox alignment="CENTER_LEFT" spacing="12">
+                <Label text="ID" minWidth="150" prefWidth="170" />
+                <TextField fx:id="textfieldCharacterId" promptText="1234" HBox.hgrow="ALWAYS" />
+            </HBox>
+
+            <HBox alignment="CENTER_LEFT" spacing="12">
+                <Label text="Character" minWidth="150" prefWidth="170" />
+                <TextField fx:id="textfieldCharacterName" promptText="John Doe"
+                           HBox.hgrow="ALWAYS" />
+            </HBox>
+
+            <HBox alignment="CENTER_LEFT" spacing="12">
+                <Label text="Alliance" minWidth="150" prefWidth="170" />
+                <TextField fx:id="textfieldCharacterAllianceCode" promptText="ABC"
+                           HBox.hgrow="ALWAYS" />
+            </HBox>
+
+            <HBox alignment="CENTER_LEFT" spacing="12">
+                <Label text="Server" minWidth="150" prefWidth="170" />
+                <TextField fx:id="textfieldCharacterServer" promptText="1234"
+                           HBox.hgrow="ALWAYS" />
+            </HBox>
+        </VBox>
+    </center>
+
+    <!-- Footer with save button -->
+    <bottom>
+        <HBox alignment="CENTER_RIGHT" spacing="10.0" style="-fx-padding: 10 20 20 20;">
+            <Button fx:id="buttonSaveProfile" mnemonicParsing="false"
+                    onAction="#handleSaveProfileButton" prefWidth="84.0"
+                    style="-fx-cursor: hand; -fx-font-weight: bold;" text="Save" />
+        </HBox>
+    </bottom>
+</BorderPane>
