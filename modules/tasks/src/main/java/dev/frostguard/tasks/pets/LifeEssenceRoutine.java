@@ -18,6 +18,7 @@ import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 
 public class LifeEssenceRoutine extends DelayedTask {
@@ -26,10 +27,6 @@ public class LifeEssenceRoutine extends DelayedTask {
 	// Navigation coordinates
 	private static final PointData SHOP_TAB_BUTTON = new PointData(670, 195);
 	private static final PointData EXIT_BUTTON = new PointData(40, 30);
-
-	// Scroll coordinates
-	private static final PointData MENU_SCROLL_START = new PointData(220, 845);
-	private static final PointData MENU_SCROLL_END = new PointData(220, 94);
 
 	// Search areas
 	private static final AreaData LIFE_ESSENCE_SEARCH_AREA = new AreaData(
@@ -151,52 +148,14 @@ public class LifeEssenceRoutine extends DelayedTask {
 	 * Navigate to the Life Essence menu
 	 * 
 	 * Navigation flow:
-	 * 1. Open side menu shortcut
-	 * 2. Switch to City tab
-	 * 3. Scroll down to reveal Life Essence option
-	 * 4. Tap Life Essence menu
+	 * Uses the shared sidebar navigator to select Daily, locate the Life Essence row,
+	 * and tap the Go control associated with that detected row.
 	 * 
 	 * @return true if navigation successful, false otherwise
 	 */
 	private boolean navigateToLifeEssenceMenu() {
 		logInfo("Navigating to Life Essence menu");
-
-		// Open side menu
-		marchHelper.openLeftMenuCitySection(true);
-
-		// Scroll down to reveal Life Essence menu
-		logDebug("Scrolling to reveal Life Essence menu");
-		swipe(MENU_SCROLL_START, MENU_SCROLL_END);
-		sleepTask(1000); // Wait for scroll to settle
-
-		// Search for Life Essence menu option
-		ImageSearchResultData lifeEssenceMenu = templateSearchHelper.locatePattern(
-				TemplatesEnum.LIFE_ESSENCE_MENU,
-				SearchConfig.builder().build());
-
-		// Try second swipe if not found
-		if (!lifeEssenceMenu.isFound()) {
-			logDebug("Life Essence menu not visible. Trying second swipe.");
-			swipe(MENU_SCROLL_START, MENU_SCROLL_END);
-			sleepTask(1000); // Wait for scroll
-
-			lifeEssenceMenu = templateSearchHelper.locatePattern(
-					TemplatesEnum.LIFE_ESSENCE_MENU,
-					SearchConfig.builder().build());
-		}
-
-		if (!lifeEssenceMenu.isFound()) {
-			logWarning("Life Essence menu not found after scrolling");
-			return false;
-		}
-
-		// Open Life Essence menu
-		logInfo("Life Essence menu found. Opening.");
-		tapInside(lifeEssenceMenu);
-		sleepTask(3000); // Wait for menu to fully load
-
-		logInfo("Successfully navigated to Life Essence area");
-		return true;
+		return navigationHelper.navigateToSidebarDestination(SidebarDestination.LIFE_ESSENCE);
 	}
 
 	/**

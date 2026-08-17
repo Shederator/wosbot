@@ -4,6 +4,7 @@ import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.*;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.nav.SearchConfigConstants;
+import dev.frostguard.engine.nav.SidebarSection;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.vision.convert.GameTimeUtils;
@@ -27,7 +28,6 @@ import static dev.frostguard.api.configs.TemplatesEnum.BUILDING_SURVIVOR_BUTTON_
 import static dev.frostguard.api.configs.TemplatesEnum.GAME_HOME_SHORTCUTS_HELP_REQUEST4;
 import static dev.frostguard.api.configs.TemplatesEnum.GAME_HOME_SHORTCUTS_OBTAIN;
 import static dev.frostguard.api.configs.TemplatesEnum.REPLENISH_ALL_BUTTON;
-import static dev.frostguard.engine.nav.ButtonConstants.*;
 import static dev.frostguard.engine.nav.LeftMenuTextSettings.*;
 
 public class UpgradeBuildingsRoutine extends DelayedTask {
@@ -832,9 +832,9 @@ private boolean tapAllianceHelp() {
     }
 
 private void reachCityView() {
-        tapInside(LEFT_MENU.topLeft(), LEFT_MENU.bottomRight(), 1, 1000);
-        tapInside(LEFT_MENU_CITY_TAB.topLeft(), LEFT_MENU_CITY_TAB.bottomRight(), 1,
-                1000);
+        if (!navigationHelper.openSidebarSection(SidebarSection.CITY)) {
+            throw new IllegalStateException("Could not open the City sidebar section");
+        }
     }
 
 private QueueHandlingResult handleQueue(UpgradeBuildingsRoutine.QueueReadout queueResult) {

@@ -28,6 +28,7 @@ import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.vision.color.GameColors;
 import dev.frostguard.vision.color.PixelStats;
@@ -50,7 +51,6 @@ public class ArenaRoutine extends DelayedTask {
     private static final AlliancePolicy DEFAULT_ALLIANCE_POLICY = AlliancePolicy.AVOID_PROFILE_ALLIANCE;
 
     // ========== Arena Coordinates ==========
-    private static final PointData ARENA_ICON = new PointData(702, 727);
     private static final PointData ARENA_SCORE_TOP_LEFT = new PointData(548, 1064);
     private static final PointData ARENA_SCORE_BOTTOM_RIGHT = new PointData(650, 1100);
 
@@ -316,26 +316,7 @@ public class ArenaRoutine extends DelayedTask {
     }
 
     private boolean navigateToArena() {
-        marchHelper.openLeftMenuCitySection(true);
-
-        logInfo("Searching for Marksman Camp shortcut");
-        ImageSearchResultData marksmanResult = templateSearchHelper.locatePattern(
-                TemplatesEnum.GAME_HOME_SHORTCUTS_MARKSMAN,
-                SearchConfig.builder().build());
-
-        if (!marksmanResult.isFound()) {
-            logError("Marksman camp shortcut not found.");
-            return false;
-        }
-
-        tapInside(marksmanResult);
-        sleepTask(1000);
-
-        logInfo("Entering arena");
-        tapNear(ARENA_ICON);
-        sleepTask(1000);
-
-        return true;
+        return navigationHelper.navigateToSidebarDestination(SidebarDestination.ARENA);
     }
 
     private boolean detectFirstRun() {

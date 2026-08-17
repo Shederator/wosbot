@@ -13,6 +13,8 @@ import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.nav.ButtonConstants;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.SearchConfigConstants;
+import dev.frostguard.engine.nav.SidebarDestination;
+import dev.frostguard.engine.nav.SidebarSection;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.service.LoggingService;
 import dev.frostguard.vision.logging.ProfileContextLogger;
@@ -30,8 +32,6 @@ public class NavigationHelper {
     private static final int EVENT_TAB_RESET_SWIPES = 3;
     private static final int EVENT_TAB_SCAN_SWIPES = 7;
     private static final long EVENT_TAB_SETTLE_MS = 1000L;
-    private static final PointData LEFT_MENU_SCROLL_FROM = new PointData(400, 800);
-    private static final PointData LEFT_MENU_SCROLL_TO = new PointData(400, 100);
     private static final AreaData LABYRINTH_LEADERBOARD = area(646, 185, 704, 264);
     private static final AreaData LABYRINTH_CATEGORY = area(90, 190, 320, 450);
     private static final AreaData ALLIANCE_POWER_RANKINGS = area(80, 1035, 290, 1100);
@@ -48,6 +48,7 @@ public class NavigationHelper {
     private final ProfileContextLogger log;
     private final String accountName;
     private final LoggingService logs;
+    private final SidebarNavigator sidebar;
 
     public NavigationHelper(EmulatorController emuManager, String emulatorNumber,
                             AccountDescriptor profile) {
@@ -58,6 +59,7 @@ public class NavigationHelper {
         this.log = new ProfileContextLogger(NavigationHelper.class, profile);
         this.accountName = profile.getName();
         this.logs = LoggingService.obtain();
+        this.sidebar = new SidebarNavigator(emuManager, emulatorNumber, profile);
     }
 
     // ── alliance menu ────────────────────────────────────────────────
@@ -83,22 +85,30 @@ public class NavigationHelper {
 
     public boolean navigateToLabyrinth() {
         ensureCorrectScreenLocation(LaunchPoint.HOME);
-        taps.tapInside(CommonGameAreas.LEFT_MENU_TRIGGER, 1, 500);
-        taps.tapInside(CommonGameAreas.LEFT_MENU_CITY_TAB, 1, 400);
-        emu.swipeScreen(device, LEFT_MENU_SCROLL_FROM, LEFT_MENU_SCROLL_TO, 500);
-        interruptibleWait(1_300);
-        ImageSearchResultData labyrinth = searcher.locatePattern(
-                TemplatesEnum.LEFT_MENU_LABYRINTH_BUTTON, SearchConfigConstants.SINGLE_WITH_RETRIES);
-        if (!labyrinth.isFound()) {
-            return false;
+        return navigateToSidebarDestination(SidebarDestination.LAND_OF_HEROES);
+    }
+
+    public boolean openSidebarSection(SidebarSection section) {
+        return sidebar.openSectionAtTop(section);
+    }
+
+    public boolean navigateToSidebarDestination(SidebarDestination destination) {
+        ensureCorrectScreenLocation(LaunchPoint.ANY);
+        broadcastInfo("Navigating through sidebar to " + destination);
+        boolean reached = sidebar.navigateTo(destination);
+        if (!reached) {
+            broadcastWarn("Sidebar navigation failed: " + destination);
         }
-        taps.tapInside(labyrinth, 1, 2_500);
-        return true;
+        return reached;
+    }
+
+    public boolean closeSidebar() {
+        return sidebar.close();
     }
 
     public void navigateToLabyrinthRanking() {
         if (!navigateToLabyrinth()) {
-            throw new IllegalStateException("Labyrinth entry was not found in the city menu");
+            throw new IllegalStateException("Land of Heroes entry was not found in the Daily sidebar");
         }
         taps.tapInside(LABYRINTH_LEADERBOARD, 1, 2_500);
         for (int attempt = 1; attempt <= 3; attempt++) {
