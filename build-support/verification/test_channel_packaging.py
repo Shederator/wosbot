@@ -182,6 +182,11 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertIn("Update the maintained Nightly Discord message", workflow)
         self.assertIn("Collect changes between Nightly builds", workflow)
         self.assertIn("build-support/release/nightly_changes.py", workflow)
+        self.assertIn("Retain the two newest immutable Nightly releases", workflow)
+        self.assertIn("build-support/release/nightly_retention.py", workflow)
+        self.assertIn("--current-tag $env:TAG --keep 2", workflow)
+        self.assertIn("gh release delete $tag", workflow)
+        self.assertIn("--cleanup-tag --yes", workflow)
         self.assertIn("--changes-unchanged", workflow)
         self.assertIn("fetch-depth: 0", workflow)
         self.assertIn("Remove an abandoned draft release", workflow)
@@ -213,6 +218,14 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertLess(immutable_tag_create, draft_release_create)
         self.assertLess(draft_release_create, manifest_upload)
         self.assertLess(manifest_upload, immutable_release_publish)
+        changelog = workflow.index("Collect changes between Nightly builds")
+        retention = workflow.index(
+            "Retain the two newest immutable Nightly releases")
+        notification = workflow.index(
+            "Update the maintained Nightly Discord message")
+        self.assertLess(immutable_release_publish, changelog)
+        self.assertLess(changelog, retention)
+        self.assertLess(retention, notification)
         self.assertIn('"tag_created=true"', workflow)
         self.assertIn("TAG_CREATED: ${{ steps.draft.outputs.tag_created }}", workflow)
         self.assertIn(
@@ -223,7 +236,6 @@ class ChannelPackagingTest(unittest.TestCase):
                 '"repos/$($env:GITHUB_REPOSITORY)/git/refs/tags/$($env:TAG)"'),
             2)
         self.assertIn("$tagRef.object.sha -cne $env:GITHUB_SHA", workflow)
-        self.assertNotIn("--cleanup-tag --yes", workflow)
         legacy_stable = (REPO_ROOT / ".github/workflows/stable-windows-release.yml").read_text(
             encoding="utf-8")
         self.assertIn(

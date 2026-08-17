@@ -7,7 +7,7 @@ are permanent even though the versioned installers behind them change.
 | Type | Permanent entry | Versioned tag | Lifetime |
 |---|---|---|---|
 | Stable | [`releases/latest`](https://github.com/Shederator/wosbot/releases/latest) | `vX.Y.Z` | Permanent |
-| Nightly | [`releases/tag/nightly`](https://github.com/Shederator/wosbot/releases/tag/nightly) | `vX.Y.Z-nightly.YYYYMMDD.N` | Current immutable prerelease plus rolling channel |
+| Nightly | [`releases/tag/nightly`](https://github.com/Shederator/wosbot/releases/tag/nightly) | `vX.Y.Z-nightly.YYYYMMDD.N` | Two newest immutable prereleases plus rolling channel |
 | PR test | Discord `/build-pr` | `pr-test-*` | Temporary |
 
 Do not add a separate `stable` rolling release. GitHub's built-in `latest`
@@ -89,6 +89,14 @@ not rebuild or replace its installer.
 Nightly builds embed only the permanent `nightly` endpoint. The temporary feed
 used by pre-release development builds has been retired and must not be
 recreated.
+
+After a new Nightly is public, its rolling manifest is promoted, and its
+changelog is collected, the release workflow retains the two newest public
+immutable Nightly releases and deletes older matching releases together with
+their tags. The permanent `nightly` release, Stable releases, drafts, PR-test
+releases, and unrelated tags never match this retention policy. A failed or
+unpromoted Nightly does not run retention, and a cleanup failure fails the
+release job visibly.
 
 ### Unpublished Stable release candidates
 

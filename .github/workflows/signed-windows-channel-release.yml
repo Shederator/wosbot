@@ -562,6 +562,32 @@ jobs:
               throw "Could not collect changes between Nightly builds"
           }
 
+      - name: Retain the two newest immutable Nightly releases
+        if: success() && env.CHANNEL == 'nightly'
+        shell: pwsh
+        env:
+          TAG: ${{ steps.identity.outputs.tag }}
+        run: |
+          $history = Join-Path $env:RUNNER_TEMP "nightly-retention-history.json"
+          gh api --paginate --slurp `
+              "repos/$($env:GITHUB_REPOSITORY)/releases?per_page=100" |
+              Out-File -LiteralPath $history -Encoding utf8
+          if ($LASTEXITCODE -ne 0) {
+              throw "Could not list immutable Nightly releases for retention"
+          }
+          $obsoleteTags = @(python build-support/release/nightly_retention.py `
+              --release-history $history --current-tag $env:TAG --keep 2)
+          if ($LASTEXITCODE -ne 0) {
+              throw "Could not select obsolete immutable Nightly releases"
+          }
+          foreach ($tag in $obsoleteTags) {
+              gh release delete $tag --repo $env:GITHUB_REPOSITORY `
+                  --cleanup-tag --yes
+              if ($LASTEXITCODE -ne 0) {
+                  throw "Could not delete obsolete Nightly release $tag"
+              }
+          }
+
       - name: Update the maintained Nightly Discord message
         if: always() && env.CHANNEL == 'nightly'
         continue-on-error: true
