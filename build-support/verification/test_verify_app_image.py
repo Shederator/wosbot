@@ -39,7 +39,9 @@ class VerifyAppImageTest(unittest.TestCase):
         with zipfile.ZipFile(self.image / "app/frostguard-desktop-3.0.0.jar", "w") as desktop_jar:
             desktop_jar.writestr(
                 verify_app_image.BUILD_METADATA,
-                "pullRequestBuild=false\nauthenticodePublisher=CN=Frostguard Project, O=Frostguard\n",
+                "version=3.0.0\n"
+                "pullRequestBuild=false\n"
+                "authenticodePublisher=CN=Frostguard Project, O=Frostguard\n",
             )
         with zipfile.ZipFile(self.image / "app/lib/frostguard-update-3.0.0.jar", "w") as update_jar:
             update_jar.writestr(
@@ -114,6 +116,17 @@ class VerifyAppImageTest(unittest.TestCase):
     def test_rejects_desktop_jar_without_embedded_identity(self):
         (self.image / "app/frostguard-desktop-3.0.0.jar").write_bytes(b"not a jar")
         self.assertTrue(any("no valid embedded PR-build" in item
+                            for item in verify_app_image.inspect_image(self.image)))
+
+    def test_rejects_desktop_jar_with_mismatched_embedded_version(self):
+        with zipfile.ZipFile(
+                self.image / "app/frostguard-desktop-3.0.0.jar", "w"
+        ) as desktop_jar:
+            desktop_jar.writestr(
+                verify_app_image.BUILD_METADATA,
+                "version=2.1.0\npullRequestBuild=false\nauthenticodePublisher=\n",
+            )
+        self.assertTrue(any("version does not match its filename" in item
                             for item in verify_app_image.inspect_image(self.image)))
 
     def test_rejects_update_jar_without_project_key(self):

@@ -1,7 +1,7 @@
 package dev.frostguard.app.bootstrap;
 
 import atlantafx.base.theme.PrimerDark;
-import dev.frostguard.api.runtime.WorkspacePaths;
+import dev.frostguard.app.ApplicationTitle;
 import dev.frostguard.app.bootstrap.WindowBoundsPolicy.WindowBounds;
 import dev.frostguard.app.panel.launcher.ILauncherConstants;
 import dev.frostguard.app.panel.launcher.LauncherLayoutController;
@@ -88,7 +88,7 @@ public class FXApp extends Application {
         stage.setScene(scene);
         stage.setMinWidth(680);
         stage.setMinHeight(460);
-        stage.setTitle(WorkspacePaths.current().channel().productName() + " Control Center");
+        stage.setTitle(ApplicationTitle.current());
         stage.getIcons().add(loadAppIcon());
         WindowResizer.makeResizable(stage);
     }

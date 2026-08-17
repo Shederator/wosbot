@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 
-public record BuildMetadata(boolean pullRequestBuild, String authenticodePublisher) {
+public record BuildMetadata(String version, boolean pullRequestBuild, String authenticodePublisher) {
     private static final String RESOURCE = "/dev/frostguard/app/frostguard-build.properties";
 
     public static BuildMetadata current() {
@@ -13,20 +13,28 @@ public record BuildMetadata(boolean pullRequestBuild, String authenticodePublish
 
     static BuildMetadata read(InputStream input) {
         if (input == null) {
-            return new BuildMetadata(true, "");
+            return unavailable();
         }
         Properties properties = new Properties();
         try (input) {
             properties.load(input);
         } catch (IOException exception) {
-            return new BuildMetadata(true, "");
+            return unavailable();
         }
         String value = properties.getProperty("pullRequestBuild", "").trim();
         if (!value.equals("true") && !value.equals("false")) {
-            return new BuildMetadata(true, "");
+            return unavailable();
         }
-        return new BuildMetadata(Boolean.parseBoolean(value),
+        return new BuildMetadata(normalizeVersion(properties.getProperty("version")), Boolean.parseBoolean(value),
                 properties.getProperty("authenticodePublisher", "").trim());
+    }
+
+    private static BuildMetadata unavailable() {
+        return new BuildMetadata("unknown", true, "");
+    }
+
+    private static String normalizeVersion(String value) {
+        return value == null || value.isBlank() ? "unknown" : value.trim();
     }
 
     private static final class Holder {

@@ -2,7 +2,6 @@ package dev.frostguard.app.panel.launcher;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import dev.frostguard.api.runtime.RuntimeChannel;
 import org.junit.jupiter.api.Test;
 
 class LauncherLayoutControllerTest {
@@ -19,12 +18,9 @@ class LauncherLayoutControllerTest {
     }
 
     @Test
-    void identifiesRuntimeChannelInWindowTitle() {
-        assertEquals("Frostguard v2.1.0 - Main [Stamina: 77]",
-                LauncherLayoutController.formatWindowTitle(RuntimeChannel.STABLE, "2.1.0", "Main", 77));
-        assertEquals("Frostguard Nightly v2.1.0 - Main [Stamina: 77]",
-                LauncherLayoutController.formatWindowTitle(RuntimeChannel.NIGHTLY, "2.1.0", "Main", 77));
-        assertEquals("Frostguard Development v2.1.0 - Main [Stamina: 77]",
-                LauncherLayoutController.formatWindowTitle(RuntimeChannel.DEVELOPMENT, "2.1.0", "Main", 77));
+    void addsProfileContextToApplicationTitle() {
+        assertEquals("Frostguard Development · fix/arena-refresh-budget · v3.0.0-dev - Main [Stamina: 77]",
+                LauncherLayoutController.formatWindowTitle(
+                        "Frostguard Development · fix/arena-refresh-budget · v3.0.0-dev", "Main", 77));
     }
 }

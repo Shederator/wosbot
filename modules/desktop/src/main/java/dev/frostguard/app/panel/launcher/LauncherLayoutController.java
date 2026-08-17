@@ -2,9 +2,6 @@ package dev.frostguard.app.panel.launcher;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -14,6 +11,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
+import dev.frostguard.app.ApplicationTitle;
+import dev.frostguard.app.BuildMetadata;
 import dev.frostguard.vision.match.OpenCvPatternLocator;
 import dev.frostguard.app.panel.alliance.AllianceLayoutController;
 import dev.frostguard.app.panel.analytics.GameAnalyticsLayoutController;
@@ -50,8 +49,6 @@ import dev.frostguard.app.panel.profile.IProfileObserverInjectable;
 import dev.frostguard.app.panel.profile.ProfileAux;
 import dev.frostguard.app.panel.profile.ProfileManagerLayoutController;
 import dev.frostguard.api.domain.QueueStateData;
-import dev.frostguard.api.runtime.RuntimeChannel;
-import dev.frostguard.api.runtime.WorkspacePaths;
 import dev.frostguard.engine.listener.StaminaChangeListener;
 import dev.frostguard.engine.service.ConfigService;
 import dev.frostguard.engine.service.ScheduleService;
@@ -231,6 +228,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         initializeExternalLibraries();
         initializeTelegramBot();
         showVersion();
+        updateWindowTitle();
         initializeUptime();
         buttonStartStop.setDisable(false);
         buttonPauseResume.setDisable(true);
@@ -312,36 +310,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     }
 
     private void showVersion() { /* internal */
-        String version = getVersion();
-        labelVersion.setText("Version: " + version);
-    }
-
-    private String getVersion() { /* internal */
-        Package pkg = getClass().getPackage();
-        if (pkg != null && pkg.getImplementationVersion() != null) {
-            return pkg.getImplementationVersion();
-        }
-        try {
-            Path parentPomPath = Paths.get("..", "pom.xml");
-            if (!Files.exists(parentPomPath)) {
-                parentPomPath = Paths.get("pom.xml");
-            }
-            List<String> lines = Files.readAllLines(parentPomPath);
-            String revision = null;
-            for (String line : lines) {
-                line = line.trim();
-                if (line.startsWith("<revision>") && line.endsWith("</revision>")) {
-                    revision = line.replace("<revision>", "").replace("</revision>", "").trim();
-                    break;
-                }
-            }
-            if (null != revision) {
-                return revision;
-            }
-        } catch (Exception e) {
-            // Ignore error
-        }
-        return "Unknown";
+        labelVersion.setText("Version: " + BuildMetadata.current().version());
     }
 
     private void initializeEmulatorController() { /* internal */
@@ -726,26 +695,23 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     }
 
     private void updateWindowTitle() { /* internal */
-        if (null == currentProfile) {
-            return;
+        String title = ApplicationTitle.current();
+        if (currentProfile != null) {
+            int stamina = StaminaService.getServices().getCurrentStamina(currentProfile.getId());
+            title = formatWindowTitle(title, currentProfile.getName(), stamina);
         }
-
-        String version = getVersion();
-        int stamina = StaminaService.getServices().getCurrentStamina(currentProfile.getId());
-        String title = formatWindowTitle(WorkspacePaths.current().channel(), version,
-                currentProfile.getName(), stamina);
+        String resolvedTitle = title;
 
         Platform.runLater(() -> {
-            stage.setTitle(title);
+            stage.setTitle(resolvedTitle);
             if (null != labelWindowTitle) {
-                labelWindowTitle.setText(title);
+                labelWindowTitle.setText(resolvedTitle);
             }
         });
     }
 
-    static String formatWindowTitle(RuntimeChannel channel, String version, String profileName, int stamina) {
-        return String.format("%s v%s - %s [Stamina: %d]",
-                channel.productName(), version, profileName, stamina);
+    static String formatWindowTitle(String applicationTitle, String profileName, int stamina) {
+        return String.format("%s - %s [Stamina: %d]", applicationTitle, profileName, stamina);
     }
 
     public void onEngineStateTransition(BotStateData botState) { /* bind */
