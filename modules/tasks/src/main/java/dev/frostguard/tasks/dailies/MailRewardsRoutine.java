@@ -22,6 +22,8 @@ public class MailRewardsRoutine extends DelayedTask {
 
 private static final int MAX_MAIL_CLAIM_PASSES = 3;
 
+private static final int MAX_UNREAD_REPORT_OPENS = 3;
+
 private static final int MAIL_MENU_SEARCH_RETRIES_VALUE = 5;
 
 private static final int MAIL_MENU_OPEN_VERIFICATION_RETRIES_VALUE = 5;
@@ -47,6 +49,10 @@ private static final PointData MAIL_LIST_INDICATORS_TOP_LEFT_VALUE = new PointDa
 
 private static final PointData MAIL_LIST_INDICATORS_BOTTOM_RIGHT_VALUE = new PointData(715, 1160);
 
+private static final PointData UNREAD_REPORT_SHORTCUT_TOP_LEFT_VALUE = new PointData(300, 0);
+
+private static final PointData UNREAD_REPORT_SHORTCUT_BOTTOM_RIGHT_VALUE = new PointData(420, 95);
+
 private static final PointData CLAIM_BUTTON_TOP_LEFT_VALUE = new PointData(420, 1227);
 
 private static final PointData CLAIM_BUTTON_BOTTOM_RIGHT_VALUE = new PointData(450, 1250);
@@ -54,6 +60,8 @@ private static final PointData CLAIM_BUTTON_BOTTOM_RIGHT_VALUE = new PointData(4
 private static final int CLAIM_BUTTON_TAP_COUNT_VALUE = 4;
 
 private static final int CLAIM_BUTTON_TAP_DELAY_MS = 500;
+
+private static final int UNREAD_REPORT_OPEN_DELAY_MS = 500;
 
 private static final PointData TAB_ALLIANCE_VALUE = new PointData(230, 120);
 
@@ -64,6 +72,8 @@ private static final PointData TAB_REPORTS_VALUE = new PointData(500, 120);
 private static final PointData[] MAIL_TAB_BUTTONS = { TAB_ALLIANCE_VALUE, TAB_SYSTEM_VALUE, TAB_REPORTS_VALUE };
 
 private static final String[] MAIL_TAB_NAMES = { "Alliance", "System", "Reports" };
+
+private static final int SYSTEM_TAB_INDEX = 1;
 
 private int scheduleOffsetMinutes;
 
@@ -137,7 +147,7 @@ private Evidence findUnreadMailEvidence() {
         return Evidence.fromMatches(unreadMarkers);
     }
 
-private void claimMailRewards(String tabName) {
+private MailClaimResult claimMailRewards(String tabName) {
         Evidence before = findUnreadMailEvidence();
         for (int completedPasses = 1; completedPasses <= MAX_MAIL_CLAIM_PASSES; completedPasses++) {
             redeemAllVisibleRewards();
@@ -152,24 +162,81 @@ private void claimMailRewards(String tabName) {
             if (decision == Decision.COMPLETE) {
                 logDebug(routineLogMailRewardsLine(tabName + " tab claim pass completed; unread markers "
                         + before.count() + " -> 0."));
-                return;
+                return new MailClaimResult(after, decision);
             }
             if (decision == Decision.STOP_NO_PROGRESS) {
                 logWarning(routineLogMailRewardsLine(tabName + " tab still has " + after.count()
                         + " unread marker(s) after claim pass " + completedPasses
-                        + "; no claim progress detected, continuing with the next tab."));
-                return;
+                        + "; no claim progress detected, ending claim passes."));
+                return new MailClaimResult(after, decision);
             }
             if (decision == Decision.STOP_BUDGET_EXHAUSTED) {
                 logWarning(routineLogMailRewardsLine(tabName + " tab still has " + after.count()
                         + " unread marker(s) after the bounded " + MAX_MAIL_CLAIM_PASSES
-                        + " claim passes; continuing with the next tab."));
-                return;
+                        + " claim passes; ending claim passes."));
+                return new MailClaimResult(after, decision);
             }
 
             logInfo(routineLogMailRewardsLine(tabName + " tab claim progress detected; unread markers "
                     + before.count() + " -> " + after.count() + ", retrying within pass budget "
                     + completedPasses + "/" + MAX_MAIL_CLAIM_PASSES + "."));
+            before = after;
+        }
+
+        return new MailClaimResult(before, Decision.STOP_BUDGET_EXHAUSTED);
+    }
+
+private ImageSearchResultData findUnreadReportShortcut() {
+        return templateSearchHelper.locatePattern(
+                TemplatesEnum.MAIL_UNREAD_REPORT_SHORTCUT,
+                SearchConfig.builder()
+                        .withArea(new AreaData(
+                                UNREAD_REPORT_SHORTCUT_TOP_LEFT_VALUE,
+                                UNREAD_REPORT_SHORTCUT_BOTTOM_RIGHT_VALUE))
+                        .withMaxAttempts(2)
+                        .withDelay(100L)
+                        .build());
+    }
+
+private void openUnreadSystemReports(Evidence initialEvidence) {
+        Evidence before = initialEvidence;
+        for (int completedOpens = 1; completedOpens <= MAX_UNREAD_REPORT_OPENS; completedOpens++) {
+            ImageSearchResultData shortcut = findUnreadReportShortcut();
+            if (!shortcut.isFound()) {
+                logWarning(routineLogMailRewardsLine("System tab has " + before.count()
+                        + " persistent unread marker(s), but the unread-report shortcut is not visible; "
+                        + "continuing with the next tab."));
+                return;
+            }
+
+            logInfo(routineLogMailRewardsLine("Opening unread System report " + completedOpens
+                    + "/" + MAX_UNREAD_REPORT_OPENS + " to mark it as read."));
+            tapInside(shortcut);
+            sleepTask(UNREAD_REPORT_OPEN_DELAY_MS);
+            pressBack();
+            sleepTask(UNREAD_REPORT_OPEN_DELAY_MS);
+
+            Evidence after = findUnreadMailEvidence();
+            Decision decision = MailClaimPassPolicy.decide(
+                    before, after, completedOpens, MAX_UNREAD_REPORT_OPENS);
+            if (decision == Decision.COMPLETE) {
+                logInfo(routineLogMailRewardsLine("System reports marked as read; unread markers "
+                        + before.count() + " -> 0."));
+                return;
+            }
+            if (decision == Decision.STOP_NO_PROGRESS) {
+                logWarning(routineLogMailRewardsLine("Opening the unread System report made no progress; "
+                        + after.count() + " unread marker(s) remain, continuing with the next tab."));
+                return;
+            }
+            if (decision == Decision.STOP_BUDGET_EXHAUSTED) {
+                logWarning(routineLogMailRewardsLine("System report open budget exhausted; "
+                        + after.count() + " unread marker(s) remain, continuing with the next tab."));
+                return;
+            }
+
+            logInfo(routineLogMailRewardsLine("Unread System report consumed; unread markers "
+                    + before.count() + " -> " + after.count() + "."));
             before = after;
         }
     }
@@ -208,7 +275,7 @@ private void handleAllMailTabs() {
             String tabName = MAIL_TAB_NAMES[i];
 
             logInfo(routineLogMailRewardsLine("Processing " + tabName + " tab."));
-            handleMailTab(tabButton, tabName);
+            handleMailTab(tabButton, tabName, i == SYSTEM_TAB_INDEX);
         }
     }
 
@@ -248,14 +315,22 @@ private boolean openUpMailMenu() {
         return confirmMailMenuOpened();
     }
 
-private void handleMailTab(PointData tabButton, String tabName) {
+private void handleMailTab(PointData tabButton, String tabName, boolean openUnreadReports) {
         switchToTabFlow(tabButton);
-        claimMailRewards(tabName);
+        MailClaimResult result = claimMailRewards(tabName);
+        if (openUnreadReports
+                && result.decision() == Decision.STOP_NO_PROGRESS
+                && !result.remainingEvidence().isEmpty()) {
+            openUnreadSystemReports(result.remainingEvidence());
+        }
     }
 
 private void queueNextRun() {
         LocalDateTime nextExecutionTime = computeNextExecutionTime();
         reschedule(nextExecutionTime);
         logInfo(routineLogMailRewardsLine("Mail rewards task completed. Next run at: " + nextExecutionTime.format(DATETIME_FORMATTER)));
+    }
+
+private record MailClaimResult(Evidence remainingEvidence, Decision decision) {
     }
 }
