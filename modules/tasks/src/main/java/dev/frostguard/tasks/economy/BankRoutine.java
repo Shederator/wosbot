@@ -1,11 +1,10 @@
 package dev.frostguard.tasks.economy;
 
 import java.time.LocalDateTime;
+import java.awt.Color;
 
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
-import dev.frostguard.vision.convert.GameTimeUtils;
-import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
@@ -17,7 +16,6 @@ import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.helper.TemplateSearchHelper;
-import java.awt.Color;
 
 /**
  * Task responsible for managing bank deposit operations.
@@ -74,9 +72,20 @@ public class BankRoutine extends DelayedTask {
 	/** Number of taps to close withdrawal confirmation screen */
 	private static final int CLOSE_SCREEN_TAP_COUNT = 3;
 
+	/** Maximum attempts to open and verify the bank interface. */
+	private static final int BANK_NAVIGATION_ATTEMPTS = 2;
+
+	/** Time for the deals carousel to stop moving after the final swipe. */
+	private static final long DEALS_CAROUSEL_SETTLE_MS = 1000L;
+
+	/** Time for the selected deals tab to render its bank-specific controls. */
+	private static final long BANK_INTERFACE_SETTLE_MS = 1500L;
+
 	// Navigation coordinates
 	private static final PointData SWIPE_TAB_START = new PointData(630, 143);
 	private static final PointData SWIPE_TAB_END = new PointData(2, 128);
+	private static final PointData DEALS_TAB_BAR_TOP_LEFT = new PointData(0, 80);
+	private static final PointData DEALS_TAB_BAR_BOTTOM_RIGHT = new PointData(720, 190);
 
 	// Withdrawal screen close button area
 	private static final PointData CLOSE_BUTTON_POINT = new PointData(670, 40);
@@ -186,13 +195,25 @@ public class BankRoutine extends DelayedTask {
 	private boolean navigateToBank() {
 		logInfo("Navigating to bank");
 
-		if (!findAndTapDealsButton()) {
-			return false;
+		for (int attempt = 1; attempt <= BANK_NAVIGATION_ATTEMPTS; attempt++) {
+			if (attempt > 1) {
+				logInfo("Retrying bank navigation after the previous tab did not show bank controls");
+				navigationHelper.ensureCorrectScreenLocation(LaunchPoint.HOME);
+			}
+
+			if (!findAndTapDealsButton()) {
+				logWarning("Bank navigation attempt " + attempt + "/" + BANK_NAVIGATION_ATTEMPTS
+						+ " could not open Deals");
+				continue;
+			}
+
+			swipeToRevealBankTab();
+			if (findAndTapBankOption(attempt)) {
+				return true;
+			}
 		}
 
-		swipeToRevealBankTab();
-
-		return findAndTapBankOption();
+		return false;
 	}
 
 	/**
@@ -210,7 +231,7 @@ public class BankRoutine extends DelayedTask {
 			return false;
 		}
 
-		tapInside(dealsResult.getPoint(), dealsResult.getPoint());
+		tapInside(dealsResult);
 		sleepTask(2000); // Wait for deals menu to open
 		return true;
 	}
@@ -226,10 +247,10 @@ public class BankRoutine extends DelayedTask {
 		logDebug("Swiping to reveal bank tab");
 
 		swipe(SWIPE_TAB_START, SWIPE_TAB_END);
-		sleepTask(200); // Brief pause between swipes
+		sleepTask(400); // Let the first carousel movement establish its final position.
 
 		swipe(SWIPE_TAB_START, SWIPE_TAB_END);
-		sleepTask(200); // Wait for carousel to settle
+		sleepTask(DEALS_CAROUSEL_SETTLE_MS);
 	}
 
 	/**
@@ -237,21 +258,55 @@ public class BankRoutine extends DelayedTask {
 	 * 
 	 * @return true if bank option found and tapped, false otherwise
 	 */
-	private boolean findAndTapBankOption() {
+	private boolean findAndTapBankOption(int attempt) {
 		ImageSearchResultData bankResult = templateSearchHelper.locatePattern(
 				TemplatesEnum.EVENTS_DEALS_BANK,
-				SearchConfigConstants.DEFAULT_SINGLE);
+				TemplateSearchHelper.SearchConfig.builder()
+						.withMaxAttempts(1)
+						.withThreshold(90)
+						.withDelay(300L)
+						.withCoordinates(DEALS_TAB_BAR_TOP_LEFT, DEALS_TAB_BAR_BOTTOM_RIGHT)
+						.build());
 
 		if (!bankResult.isFound()) {
-			logWarning("Bank option not found in deals menu");
+			logWarning("Bank option not found in deals menu on attempt " + attempt + "/"
+					+ BANK_NAVIGATION_ATTEMPTS);
 			return false;
 		}
 
-		tapInside(bankResult.getPoint(), bankResult.getPoint());
-		sleepTask(1000); // Wait for bank interface to load
+		tapInside(bankResult);
+		sleepTask(BANK_INTERFACE_SETTLE_MS);
 
-		logInfo("Successfully navigated to bank");
-		return true;
+		String evidence = findBankInterfaceEvidence();
+		if (evidence != null) {
+			logInfo("Successfully navigated to bank; verified by " + evidence);
+			return true;
+		}
+
+		logWarning("Tapped bank candidate at " + bankResult.getPoint() + " with score "
+				+ String.format("%.1f", bankResult.getMatchScore())
+				+ "%, but no bank-specific controls appeared on attempt " + attempt + "/"
+				+ BANK_NAVIGATION_ATTEMPTS);
+		return false;
+	}
+
+	private String findBankInterfaceEvidence() {
+		if (templateSearchHelper.locatePattern(
+				TemplatesEnum.EVENTS_DEALS_BANK_WITHDRAW,
+				SearchConfigConstants.DEFAULT_SINGLE).isFound()) {
+			return "withdraw control";
+		}
+		if (templateSearchHelper.locatePattern(
+				TemplatesEnum.EVENTS_DEALS_BANK_INDEPOSIT,
+				SearchConfigConstants.DEFAULT_SINGLE).isFound()) {
+			return "active-deposit control";
+		}
+		if (templateSearchHelper.locatePattern(
+				TemplatesEnum.EVENTS_DEALS_BANK_DEPOSIT,
+				SearchConfigConstants.DEFAULT_SINGLE).isFound()) {
+			return "deposit control";
+		}
+		return null;
 	}
 
 	// ===============================
@@ -608,13 +663,14 @@ public class BankRoutine extends DelayedTask {
 	 * Specifies the required starting screen location for this task.
 	 * 
 	 * <p>
-	 * This task can start from any screen as it performs its own navigation.
+	 * The deals shortcut is available from the home screen. Starting there also
+	 * gives a failed tab-selection attempt a deterministic recovery point.
 	 * 
-	 * @return ANY as the required start location
+	 * @return HOME as the required start location
 	 */
 	@Override
 	protected LaunchPoint getRequiredStartLocation() {
-		return LaunchPoint.ANY;
+		return LaunchPoint.HOME;
 	}
 
 	// ===============================
