@@ -56,9 +56,17 @@ class PetSkillsCooldownOcrFrameTest {
     void distinguishesLearnedSkillTilesFromEmptySlots() throws Exception {
         BufferedImage image = loadFrame();
 
+        // matt/Claude, 2026-08-17: this fixture is a real 3-tile single-row pet layout, not the
+        // 2x2 four-skill grid FOOD's original coordinates assumed. Visually confirmed: slot 1
+        // (leftmost, where FOOD was repointed on 2026-08-08) shows a highlighted "Lv. 4" tile
+        // with the same tool-icon badge as the two real cooldown tiles -- it is occupied, not
+        // blank panel space. That matches the repoint's own live observation (a different
+        // capture, same slot, holding a real cooldown) rather than contradicting it: two
+        // independent live frames now agree slot 1 is a genuine learned skill. TREASURE's
+        // coordinates were never repointed and still land on real blank space here.
         assertTrue(hasSkillTile(image, PetSkillsRoutine.PetSkill.STAMINA));
         assertTrue(hasSkillTile(image, PetSkillsRoutine.PetSkill.GATHERING));
-        assertFalse(hasSkillTile(image, PetSkillsRoutine.PetSkill.FOOD));
+        assertTrue(hasSkillTile(image, PetSkillsRoutine.PetSkill.FOOD));
         assertFalse(hasSkillTile(image, PetSkillsRoutine.PetSkill.TREASURE));
     }
 

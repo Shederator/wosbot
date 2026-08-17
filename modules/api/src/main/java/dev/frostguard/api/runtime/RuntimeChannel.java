@@ -3,9 +3,13 @@ package dev.frostguard.api.runtime;
 import java.util.Locale;
 
 public enum RuntimeChannel {
-    DEVELOPMENT("Development", "Frostguard Development", "dev.frostguard.desktop.development"),
-    NIGHTLY("Nightly", "Frostguard Nightly", "dev.frostguard.desktop.nightly"),
-    STABLE("Stable", "Frostguard", "dev.frostguard.desktop");
+    // matt/Claude, 2026-08-17: display name only -- Bearguard's own branding. applicationId is
+    // left as dev.frostguard.desktop.* on purpose: it's the Windows install/update identity,
+    // untouched by the upstream sync, and renaming it is a separate decision with real
+    // update-channel consequences, not a cosmetic one.
+    DEVELOPMENT("Development", "Bearguard Development", "dev.frostguard.desktop.development"),
+    NIGHTLY("Nightly", "Bearguard Nightly", "dev.frostguard.desktop.nightly"),
+    STABLE("Stable", "Bearguard", "dev.frostguard.desktop");
 
     private final String displayName;
     private final String productName;
