@@ -47,15 +47,19 @@ public final class SearchConfigConstants {
     public static final SearchConfig FIRE_BEAST_SEARCH =
             SearchConfig.builder().withMaxAttempts(3).withThreshold(80).withDelay(200L).build();
 
-    // matt/2026-08-18: MONUMENT_REWARD_BADGE has never once returned a HIT against this account in
-    // three sessions of live logs, at the standard 90 threshold, even on runs where the badge was
-    // plainly visible on screen (matt sent two direct screenshots proving it). Unlike FIRE_BEAST_SEARCH
-    // above, there is no known-good real match score to calibrate against yet -- this account has
-    // literally never logged a positive match to measure. Deliberately generous (65, well below any
-    // normal threshold) so the very next run either finds it -- giving a real score to tighten this
-    // back up with -- or, if it's STILL a miss even this loose, that's real evidence the problem is
-    // the template image itself (stale/wrong crop) rather than the threshold. Do not reuse for other
-    // templates; revisit this value the moment real match-score evidence exists.
+    // matt/2026-08-18: real live evidence (two logged misses at 40.7 and 50.6, different scores on
+    // a supposedly-static template) plus matt catching it live -- "the icon in the game dances back
+    // and forth" -- points at the same problem LifeEssenceRoutine already hit and documented: a
+    // claimable badge that bounces/animates never settles into one shape/position, so no single
+    // correlation score is reliable, and even that badge's own clean self-match capped at ~0.84
+    // (84). Life Essence's fix was color-blob detection; Monument doesn't need that rebuild because
+    // it already has two independent real backstops a plain low-confidence match doesn't: the
+    // Events-tab landing check, and the post-tap "is the badge still detectable" verification. Per
+    // matt's call ("what's really worse case? it gets into Monument and nothing is there to do? I
+    // don't think there's a downside") -- dropped to 30, comfortably under the lowest logged miss
+    // (40.7) so a low point in the bounce cycle still clears it, while still requiring real
+    // correlation (not near-zero) so an unrelated screen element can't match by coincidence during
+    // the full-frame scan. Do not reuse for other templates; revisit if real evidence says otherwise.
     public static final SearchConfig MONUMENT_BADGE_SEARCH =
-            SearchConfig.builder().withMaxAttempts(6).withThreshold(65).withDelay(300L).build();
+            SearchConfig.builder().withMaxAttempts(6).withThreshold(30).withDelay(300L).build();
 }
