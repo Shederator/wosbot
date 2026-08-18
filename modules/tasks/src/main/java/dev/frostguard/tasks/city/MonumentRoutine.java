@@ -441,10 +441,16 @@ public class MonumentRoutine extends DelayedTask {
     // Read the owned-count badge under each of the positions actually observed live across that
     // clear-out, tap whichever one genuinely shows a count, and rescan from scratch after every
     // single open (since everything can reflow) instead of marching through fixed rows.
+    // matt/2026-08-18: real live log evidence, not a guess -- the 3-across row below
+    // (220/360/490, 548) assumed an old side-by-side icon layout. A live screenshot showed the
+    // actual current layout is single-column (General Album stacked directly above Tundra
+    // Alliance, both centered around x=360), and the run log confirmed the failure mode exactly:
+    // OCR read a bogus "2" at the wrong (220, 548) candidate -- empty wood panel, nothing there --
+    // tapped it, and the Fragment Backpack panel never came back because nothing was actually hit.
     private static final PointData[] BACKPACK_ICON_CANDIDATES = {
-            new PointData(360, 280),  // top slot, single icon (nothing above it)
-            new PointData(220, 548), new PointData(360, 548), new PointData(490, 548), // 3-across row
-            new PointData(360, 587),  // top slot when an empty placeholder sits above it
+            new PointData(360, 280),  // row 1 icon (General Album, confirmed by live screenshot)
+            new PointData(360, 545),  // row 2 icon (Tundra Alliance, confirmed by live screenshot)
+            new PointData(360, 587),  // legacy candidate, kept for a placeholder-shifted layout
             new PointData(360, 765),  // 3rd visual row, single icon
     };
     /** Owned-count badge sits just under each candidate icon; read box is centered on that offset. */
