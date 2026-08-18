@@ -2,9 +2,10 @@ package dev.frostguard.engine.listener.task.impl;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -18,10 +19,11 @@ import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.PointData;
-import dev.frostguard.api.domain.TesseractSettingsData;
-import dev.frostguard.api.domain.TesseractSettingsData.PageAnalysis;
+import dev.frostguard.api.domain.OcrSettingsData;
+import dev.frostguard.api.domain.OcrSettingsData.TextLayout;
 import dev.frostguard.api.domain.JobMetrics;
 import dev.frostguard.api.domain.ProfilesData;
+import dev.frostguard.api.runtime.WorkspacePaths;
 import dev.frostguard.engine.schedule.CustomTaskConfigurable;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -75,10 +77,10 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
      * ("6.7M") but prints others in full ("11,914,539"), and a digits-only
      * whitelist silently turns the former into 67.
      */
-    private static final TesseractSettingsData HUD_NUMBER_SETTINGS =
-            TesseractSettingsData.assembler()
+    private static final OcrSettingsData HUD_NUMBER_SETTINGS =
+            OcrSettingsData.assembler()
                     .charWhitelist("0123456789.,KMB")
-                    .pageAnalysis(PageAnalysis.SINGLE_LINE)
+                    .textLayout(TextLayout.SINGLE_LINE)
                     .stripBackground(true)
                     .setTextColor(new java.awt.Color(255, 255, 255))
                     .build();
@@ -89,10 +91,10 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
      * the letters in the whitelist Tesseract read a clean "56,256" crop as
      * "596,256", inventing a digit. Only Coal actually abbreviates.
      */
-    private static final TesseractSettingsData HUD_FULL_NUMBER_SETTINGS =
-            TesseractSettingsData.assembler()
+    private static final OcrSettingsData HUD_FULL_NUMBER_SETTINGS =
+            OcrSettingsData.assembler()
                     .charWhitelist("0123456789,")
-                    .pageAnalysis(PageAnalysis.SINGLE_LINE)
+                    .textLayout(TextLayout.SINGLE_LINE)
                     .stripBackground(true)
                     .setTextColor(new java.awt.Color(255, 255, 255))
                     .build();
@@ -163,9 +165,15 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
         // gap in the graph, never a fake spike/drop.
         Map<String, Object> lastKnownGood = readLatestSample();
 
+        // Dave's #250 review: sanity-checking only power/gems left coal's live OCR read
+        // unvalidated even though it goes through the exact same misread-prone path. Applied to
+        // all three fields this task actually reads via OCR itself (meat/wood/iron/steel/speedups
+        // below are cached config values from a different task's scan, not read here, so there's
+        // no fresh OCR result for this check to validate against).
         Long power = sanityCheckAgainstLastKnown("power",
                 readScaledNumber(POWER_TL, POWER_BR, HUD_FULL_NUMBER_SETTINGS, "power"), lastKnownGood);
-        Long coal = readScaledNumber(COAL_TL, COAL_BR, HUD_NUMBER_SETTINGS, "coal");
+        Long coal = sanityCheckAgainstLastKnown("coal",
+                readScaledNumber(COAL_TL, COAL_BR, HUD_NUMBER_SETTINGS, "coal"), lastKnownGood);
         Long gems = sanityCheckAgainstLastKnown("gems",
                 readScaledNumber(GEMS_TL, GEMS_BR, HUD_FULL_NUMBER_SETTINGS, "gems"), lastKnownGood);
 
@@ -234,15 +242,19 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
 
     /**
      * matt, 2026-08-09: the "Last night" report needs clean bookends, so always take an inventory
-     * snapshot exactly at 23:00 (bedtime) and 08:00 (wake) local, on top of the normal interval.
+     * snapshot exactly at 23:00 (bedtime) and 08:30 (wake) local, on top of the normal interval.
      * Next run is the soonest of those two anchors or now+interval.
+     *
+     * <p>Dave's #250 review, 2026-08-18: this anchor had drifted to 08:00 while TelemetryReport's
+     * WAKE_ANCHOR_GRACE_MINUTES comment documents an observed real capture at 08:30:43 -- the two
+     * had gone out of sync. Restored to 08:30 to match the documented, actually-observed behavior.</p>
      */
     private void scheduleNext() {
         setRecurring(true);
         java.time.LocalDateTime now = java.time.LocalDateTime.now();
         java.time.LocalDateTime next = now.plus(interval);
         for (java.time.LocalTime anchor : new java.time.LocalTime[]{
-                java.time.LocalTime.of(23, 0), java.time.LocalTime.of(8, 0)}) {
+                java.time.LocalTime.of(23, 0), java.time.LocalTime.of(8, 30)}) {
             java.time.LocalDateTime a = now.with(anchor);
             if (!a.isAfter(now)) a = a.plusDays(1);
             if (a.isBefore(next)) next = a;
@@ -255,7 +267,7 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
      * rather than a guess when OCR gives nothing usable — a wrong number is
      * worse than a missing one in a history meant for graphing.
      */
-    private Long readScaledNumber(PointData tl, PointData br, TesseractSettingsData settings, String label) {
+    private Long readScaledNumber(PointData tl, PointData br, OcrSettingsData settings, String label) {
         String raw = readStringValue(tl, br, settings);
         if (raw == null || raw.isBlank()) {
             logWarning("bg_telemetry | No OCR text for " + label + ".");
@@ -303,11 +315,28 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
         return candidate;
     }
 
-    /** Reads telemetry/latest.json (the previous sample) as a flat field->value map, numbers
+    /**
+     * Dave's #250 review: telemetry was resolving off {@code user.dir} (breaks the moment this is
+     * an installed Stable/Nightly build, which resolves relative to the launch directory, not the
+     * chosen workspace) and shared one {@code latest.json}/{@code history.jsonl} across every
+     * profile (profile B's sample could satisfy profile A's sanity check, and concurrent writers
+     * on different emulators could interleave into the same file). Fixed both by resolving under
+     * {@code WorkspacePaths.current().root()} and partitioning by the profile's stable numeric ID
+     * (never its name, which is mutable) -- same layout convention as
+     * {@code GameAnalyticsHistoryService} (workspace root -> data/&lt;feature&gt;/profiles/&lt;id&gt;/).
+     * Every profile now owns its own pair of files; there is nothing left to filter or race over.
+     */
+    private Path telemetryDir() {
+        return WorkspacePaths.current().root()
+                .resolve("data").resolve("telemetry")
+                .resolve("profiles").resolve(String.valueOf(profile.getId()));
+    }
+
+    /** Reads this profile's latest.json (the previous sample) as a flat field->value map, numbers
      *  only. Hand-rolled rather than pulling in a JSON library, matching {@link #toJson} below.
      *  Returns null on any problem -- callers already treat that as "nothing to compare against". */
     private Map<String, Object> readLatestSample() {
-        Path file = Paths.get(System.getProperty("user.dir"), "telemetry", "latest.json");
+        Path file = telemetryDir().resolve("latest.json");
         try {
             if (!Files.exists(file)) {
                 return null;
@@ -406,24 +435,42 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
         }
     }
 
+    /** One lock per JVM, shared by every profile's writer -- cheap, and removes any doubt about
+     *  two runs (a slow one plus its on-time successor) interleaving the same profile's files. */
+    private static final Object WRITE_LOCK = new Object();
+
     /**
-     * Appends to a JSON Lines history and overwrites a latest-sample file.
-     * JSONL is used for the history so a run can never corrupt earlier samples
-     * by rewriting a whole document, which matters for something appending
-     * unattended overnight.
+     * Appends to a JSON Lines history and atomically replaces the latest-sample file.
+     * JSONL is used for the history so a run can never corrupt earlier samples by rewriting a
+     * whole document, which matters for something appending unattended overnight. latest.json
+     * itself is written to a temp file and moved into place (atomically where the filesystem
+     * supports it) rather than truncate-written in place, so a reader can never observe a
+     * half-written file.
      */
     private void writeSample(String json) {
-        Path dir = Paths.get(System.getProperty("user.dir"), "telemetry");
+        Path dir = telemetryDir();
+        synchronized (WRITE_LOCK) {
+            try {
+                Files.createDirectories(dir);
+                Files.write(dir.resolve("history.jsonl"),
+                        (json + System.lineSeparator()).getBytes(StandardCharsets.UTF_8),
+                        StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+                writeAtomically(dir.resolve("latest.json"), json.getBytes(StandardCharsets.UTF_8));
+            } catch (IOException e) {
+                logError("bg_telemetry | Could not write telemetry to " + dir + ": " + e.getMessage());
+            }
+        }
+    }
+
+    /** Write-to-temp-then-move, matching {@code GameAnalyticsHistoryService}'s convention --
+     *  falls back to a non-atomic replace only when the filesystem genuinely can't do better. */
+    private static void writeAtomically(Path target, byte[] content) throws IOException {
+        Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
+        Files.write(temporary, content);
         try {
-            Files.createDirectories(dir);
-            Files.write(dir.resolve("history.jsonl"),
-                    (json + System.lineSeparator()).getBytes(StandardCharsets.UTF_8),
-                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-            Files.write(dir.resolve("latest.json"),
-                    json.getBytes(StandardCharsets.UTF_8),
-                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-        } catch (IOException e) {
-            logError("bg_telemetry | Could not write telemetry to " + dir + ": " + e.getMessage());
+            Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException unsupported) {
+            Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
         }
     }
 

@@ -3,7 +3,6 @@ package dev.frostguard.app.panel.misc;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -17,16 +16,25 @@ import java.util.Map;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import dev.frostguard.api.runtime.WorkspacePaths;
+
 /**
  * Reads the telemetry history that {@code bg_telemetry} appends to
- * {@code telemetry/history.jsonl} and turns it into the "what did the bot earn"
- * reports the Statistics tab shows.
+ * {@code data/telemetry/profiles/<id>/history.jsonl} and turns it into the "what did the bot
+ * earn" reports the Statistics tab shows.
  *
  * <p>matt, 2026-08-09: he wants the Statistics page to answer real questions —
  * "how many resources did I gather overnight", "how much power / how many gems
  * did botting earn me today / this week / total" — instead of run counts. Each
  * report is a delta between the snapshot at the start of a window and the most
  * recent one, so it reads directly off the same history the bot already logs.</p>
+ *
+ * <p>Dave's #250 review, 2026-08-18: previously read {@code telemetry/history.jsonl} off
+ * {@code user.dir} and filtered by profile NAME within one shared file -- and a row with no
+ * "profile" field (or a null caller-supplied name) was accepted for every profile, not rejected.
+ * Now that {@code bg_telemetry} writes one file per profile ID under the workspace, {@link #load}
+ * just opens that profile's own file directly. There is nothing left to filter, so that bug class
+ * is gone by construction rather than patched.</p>
  */
 public final class TelemetryReport {
 
@@ -55,10 +63,20 @@ public final class TelemetryReport {
         this.samples = samples;
     }
 
-    /** Loads and sorts this profile's samples (oldest first). Never throws — returns empty on any problem. */
-    public static TelemetryReport load(String profileName) {
+    /**
+     * Loads and sorts one profile's samples (oldest first) from its own workspace-local file.
+     * Never throws — returns empty on any problem (no file yet, unreadable, all lines corrupt).
+     */
+    public static TelemetryReport load(long profileId) {
+        return load(WorkspacePaths.current().root(), profileId);
+    }
+
+    /** Overload taking an explicit workspace root, for tests that don't want a real installed
+     *  workspace on disk. */
+    public static TelemetryReport load(Path workspaceRoot, long profileId) {
         List<Sample> out = new ArrayList<>();
-        Path file = Paths.get(System.getProperty("user.dir"), "telemetry", "history.jsonl");
+        Path file = workspaceRoot.resolve("data").resolve("telemetry")
+                .resolve("profiles").resolve(String.valueOf(profileId)).resolve("history.jsonl");
         if (!Files.isReadable(file)) {
             return new TelemetryReport(out);
         }
@@ -71,10 +89,6 @@ public final class TelemetryReport {
                     node = mapper.readTree(line);
                 } catch (IOException badLine) {
                     continue; // one corrupt line never sinks the whole history
-                }
-                if (profileName != null && node.hasNonNull("profile")
-                        && !profileName.equals(node.get("profile").asText())) {
-                    continue;
                 }
                 Instant at = parseInstant(node.path("capturedAt").asText(null));
                 if (at == null) continue;
@@ -146,15 +160,27 @@ public final class TelemetryReport {
     }
 
     /**
-     * Change in every metric between the first sample at/after {@code from} and the
-     * last sample at/before {@code to}. Metrics missing at either end are skipped.
+     * Change in every metric between the first sample at/after {@code from} and the last
+     * at/before {@code to} that actually carries that metric.
+     *
+     * <p>Dave's #250 review: this used to anchor every metric's END value to the single latest
+     * overall sample, so a metric simply missing from THAT one row (a transient OCR miss, or a
+     * row written before that metric existed) vanished from the whole window even though earlier
+     * in-window samples had it. Each metric now finds its own latest carrying sample independently,
+     * matching how the start side already worked -- a transient gap in one field no longer hides
+     * every field.</p>
      */
     public List<Delta> deltaOverWindow(Instant from, Instant to) {
         List<Delta> deltas = new ArrayList<>();
-        Sample endS = latestAtOrBefore(to);
-        if (endS == null) return deltas;
         for (String metric : METRICS) {
-            Long end = endS.get(metric);
+            // Per-metric end: the latest in-window sample that actually carries this metric.
+            Long end = null;
+            Instant endAt = null;
+            for (Sample s : samples) {
+                if (s.at().isAfter(to)) break;
+                Long v = s.get(metric);
+                if (v != null) { end = v; endAt = s.at(); }
+            }
             if (end == null) continue;
             // Per-metric baseline: the earliest sample in-window that actually carries this metric.
             // Older rows predate meat/wood/iron capture, so a single global start sample would drop
@@ -162,7 +188,7 @@ public final class TelemetryReport {
             Long start = null;
             for (Sample s : samples) {
                 if (s.at().isBefore(from)) continue;
-                if (s.at().isAfter(endS.at())) break;
+                if (s.at().isAfter(endAt)) break;
                 Long v = s.get(metric);
                 if (v != null) { start = v; break; }
             }

@@ -241,12 +241,20 @@ public class StatisticsLayoutController extends AbstractProfileController {
         return fi;
     }
 
-    /** matt's sleep window for the "last night" report (11pm–8:30am local). */
+    /** matt's sleep window for the "last night" report (11pm–8:30am local).
+     *  Dave's #250 review: this had drifted to 8:00 while bg_telemetry's own wake-snapshot anchor
+     *  documents an observed real capture at 08:30:43 -- restored to match, same fix as #250. */
     private static final LocalTime SLEEP_START = LocalTime.of(23, 0);
-    private static final LocalTime WAKE_END = LocalTime.of(8, 0);
+    private static final LocalTime WAKE_END = LocalTime.of(8, 30);
+
+    // No profile is selected yet at field-init time, so there's nothing to load -- an ID no real
+    // profile will ever have resolves to a not-yet-existing file, which TelemetryReport.load()
+    // already treats as "empty" by design. refreshEarnings() replaces this the moment a profile
+    // is actually selected.
+    private static final long NO_PROFILE_SELECTED_ID = -1L;
 
     private ProfileAux currentProfile;
-    private TelemetryReport telemetry = TelemetryReport.load(null);
+    private TelemetryReport telemetry = TelemetryReport.load(NO_PROFILE_SELECTED_ID);
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /** The "what the bot did" timeframe segments. matt/2026-08-15: dropdown replaces the old
@@ -500,8 +508,12 @@ public class StatisticsLayoutController extends AbstractProfileController {
     // ========================================================================
 
     private void refreshEarnings() {
-        String profileName = currentProfile != null ? currentProfile.getName() : null;
-        telemetry = TelemetryReport.load(profileName);
+        // Dave's #250 review: loading by profile NAME let one profile's telemetry satisfy
+        // another's (names are mutable/non-unique); TelemetryReport now loads by the profile's
+        // stable numeric ID instead, from its own workspace-local file.
+        long profileId = currentProfile != null && currentProfile.getId() != null
+                ? currentProfile.getId() : NO_PROFILE_SELECTED_ID;
+        telemetry = TelemetryReport.load(profileId);
         // Reload the data but stay on whatever timeframe the user last selected (defaults to All
         // time on first open). Refresh must never yank the view back to All time.
         showActiveWindow();
