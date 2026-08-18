@@ -586,9 +586,11 @@ public class StorehouseChestRoutine extends DelayedTask {
                     (nextStaminaTime != null) ? nextStaminaTime.format(DATETIME_FORMATTER) : "null"));
         }
 
-        // Exact: the chest time already carries its own 1-8% return jitter, and the queue-wide
-        // jitter on reschedule() would stack a second offset on top of it.
-        rescheduleExact(scheduledTime);
+        // Exact: the chest time already carries its own 1-8% return jitter, and a second, queue-wide
+        // jitter on top would stack a second offset onto it. reschedule() is exact by default
+        // (rescheduleExact() was folded back into it -- see DelayedTask's #252 fix), so this already
+        // gets what it needs without a separate exact-only method.
+        reschedule(scheduledTime);
     }
 
     @Override
