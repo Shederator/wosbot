@@ -23,6 +23,7 @@ import dev.frostguard.api.domain.ProfileTagData;
 import dev.frostguard.app.bootstrap.WorkspacePreferences;
 import dev.frostguard.engine.service.LoggingService;
 import dev.frostguard.engine.service.ProfileService;
+import dev.frostguard.engine.service.ScheduleService;
 import javafx.animation.TranslateTransition;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -1117,6 +1118,24 @@ public class ProfileManagerLayoutController implements IProfileChangeObserver {
 				} else if (key == ConfigurationKeyEnum.SKIP_TUTORIAL_ENABLED_BOOL) {
 					LoggingService.obtain().emit(TpMessageSeverityEnum.INFO, "Profile Manager",
 							String.valueOf(profileId), key.name() + " was saved and applies after the next bot restart");
+				}
+				// matt/2026-08-16: "if I click a box... it doesn't just automatically enable it" --
+				// toggling a task's enabled-bool checkbox used to only ever take effect on the NEXT
+				// app launch (ScheduleService.prepareQueue reads config once, at boot). Now that the
+				// save above has genuinely persisted, also poke the already-running queue (if the bot
+				// is running for this profile at all -- applyEnabledTaskChange no-ops otherwise) so
+				// the change applies live, no restart needed. Boolean-only: a text/combo field change
+				// (e.g. a troop-ratio %) isn't a task-activation toggle, and applyEnabledTaskChange
+				// itself no-ops for any config key that isn't one anyway -- this guard just avoids a
+				// pointless lookup for the much-more-common non-boolean edits.
+				if (saved && value instanceof Boolean enabled) {
+					AccountDescriptor account = ProfileService.obtain().fetchAllAccounts().stream()
+							.filter(a -> Objects.equals(a.getId(), profileId))
+							.findFirst()
+							.orElse(null);
+					if (account != null) {
+						ScheduleService.obtain().applyEnabledTaskChange(account, key, enabled);
+					}
 				}
 			});
 		} catch (Exception e) {
