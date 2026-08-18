@@ -102,8 +102,11 @@ public class MonumentRoutine extends DelayedTask {
     private static final PointData CAMP_TAP_TOP_LEFT = new PointData(310, 650);
     private static final PointData CAMP_TAP_BOTTOM_RIGHT = new PointData(450, 730);
     private static final int POST_LANCER_WAIT_MS = 5000;
+    // matt/2026-08-18: widened 300px -> 350px on matt's direct instruction, paired with the real
+    // template search below (not a coordinate change) -- the search finds the badge wherever it
+    // actually lands, so this only needs to get Monument reliably into frame, not to a precise spot.
     private static final PointData SWIPE_RIGHT_START = new PointData(550, 700);
-    private static final PointData SWIPE_RIGHT_END = new PointData(250, 700);
+    private static final PointData SWIPE_RIGHT_END = new PointData(200, 700);
     private static final int SWIPE_DURATION_MS = 400;
     private static final int POST_SWIPE_WAIT_MS = 1000;
 
