@@ -107,19 +107,13 @@ public class MonumentRoutine extends DelayedTask {
     private static final int SWIPE_DURATION_MS = 400;
     private static final int POST_SWIPE_WAIT_MS = 1000;
 
-    // matt/2026-08-18, THIRD pass: (471,550) was wrong -- the Events-tab guard added earlier never
-    // fired (all 5 EVENTS_TAB_* templates came back "not found" on the very runs matt watched fail
-    // live), which means the tap wasn't landing on Events at all -- it was missing the badge
-    // entirely, and the untouched blind chain after that (MODAL_CLOSE_X etc.) is what wandered onto
-    // Events. Recalibrated from TWO fresh live screenshots matt sent this session showing the exact
-    // current post-swipe frame, badge clearly visible well to the right of where (471,550) tapped --
-    // measured as a fraction of frame (badge center ~76.6% across, ~42.3% down) and applied to the
-    // known 720x1280 game resolution: real center is ~(551, 541), about 80px right of the old point.
-    // Given that's a measurement off a screenshot, not a pixel-exact capture, this uses a generous
-    // tolerant box via tapInside(...) instead of a pinpoint tapNear(...) -- the old approach had zero
-    // margin for exactly this kind of error.
-    private static final PointData MONUMENT_BADGE_TAP_TOP_LEFT = new PointData(516, 506);
-    private static final PointData MONUMENT_BADGE_TAP_BOTTOM_RIGHT = new PointData(586, 576);
+    // matt/2026-08-18, FOURTH pass -- every fixed-pixel guess so far (330,460 / then 471,550 / then
+    // a 516,506-586,576 tolerant box measured off a screenshot) has been wrong at least once live.
+    // Guessing a fifth coordinate off a fifth screenshot has the exact same failure mode as the
+    // first four -- the camera's landing spot after the swipe isn't perfectly fixed run to run, so
+    // no static point or box is ever going to be reliable here. Stopped guessing coordinates for
+    // this entirely; see findAndOpenBadgeViaLancer() below, which now finds the badge with a real
+    // template search every run and taps wherever it actually is.
 
 
     // ========== Quest-list modal + Atlas grid (shared skin across categories) ==========
@@ -272,14 +266,19 @@ public class MonumentRoutine extends DelayedTask {
     };
 
     /**
-     * matt/2026-08-14: replaces the old direct-search-then-pan approach (kept below as
-     * {@link #findBadgeWithPanFallback()}, tried second) -- navigates to Lancer Camp (a fixed,
-     * always-reachable building) then a single confirmed 300px right swipe brings Monument's
-     * badge into view, live-verified repeatedly. Taps the badge, then VERIFIES it's no longer
-     * detectable before proceeding -- a tap that misses returns false here instead of the
-     * caller assuming success and cascading into blind taps on whatever's actually on screen
-     * (this is exactly what happened live: a missed badge tap once led straight into
-     * accidentally opening the Events tab).
+     * matt/2026-08-14: navigates to Lancer Camp (a fixed, always-reachable building) then a single
+     * confirmed 300px right swipe brings Monument's badge into view. matt/2026-08-18, rebuilt from
+     * scratch (fourth pass): no fixed-pixel tap of any kind anymore. After the swipe, this does a
+     * real template search for {@link TemplatesEnum#MONUMENT_REWARD_BADGE} and taps exactly where
+     * it's actually found -- immune to whatever's making the camera's landing spot vary run to run,
+     * since a guessed static point can never account for that but a live search always finds the
+     * real position. Uses {@link SearchConfigConstants#MONUMENT_BADGE_SEARCH} (a deliberately loose
+     * threshold -- see that constant's comment for why) and logs the real match score every time,
+     * hit or miss, so the threshold can be tightened later against real evidence instead of another
+     * guess. If the badge genuinely isn't found, this returns false and taps nothing at all -- no
+     * fallback coordinate, ever. The tap is verified two ways afterward: the same template must no
+     * longer be findable (something actually opened), and none of the Events panel's own tab icons
+     * can be detected (in case a tap that did land somewhere still missed the badge specifically).
      */
     private boolean findAndOpenBadgeViaLancer() {
         marchHelper.openLeftMenuCitySection(true);
@@ -293,28 +292,36 @@ public class MonumentRoutine extends DelayedTask {
         sleepTask(POST_SWIPE_WAIT_MS);
 
         // matt/2026-08-18: "it pans to the right of lancer, you see monument, then it just starts
-        // scrolling around." Pulled the 8-direction pan-fallback entirely -- that's the actual
-        // "scrolling around" behavior. See MONUMENT_BADGE_TAP_TOP_LEFT/BOTTOM_RIGHT above for the
-        // coordinate history (two wrong single-point guesses before this tolerant-box version).
-        tapInside(MONUMENT_BADGE_TAP_TOP_LEFT, MONUMENT_BADGE_TAP_BOTTOM_RIGHT);
+        // scrolling around." The 8-direction pan-fallback that used to live here is gone for good --
+        // that's the actual "scrolling around" behavior matt flagged. This is a single search at the
+        // landing spot, nothing more; on a miss it stops and reschedules (see below), it does not pan.
+        ImageSearchResultData badge = templateSearchHelper.locatePattern(
+                TemplatesEnum.MONUMENT_REWARD_BADGE, SearchConfigConstants.MONUMENT_BADGE_SEARCH);
+        logInfo(logLine("Badge template search result: " + badge));
+
+        if (!badge.isFound()) {
+            logInfo(logLine("Badge not found this pass -- nothing to tap, not guessing a coordinate."));
+            return false;
+        }
+
+        tapNear(badge.getPoint());
         sleepTask(PANEL_SETTLE_MS);
 
         for (TemplatesEnum landingSign : EVENTS_TAB_LANDING_SIGNS) {
             if (templateSearchHelper.locatePattern(landingSign, SearchConfigConstants.QUICK_SEARCH).isFound()) {
-                logWarning(logLine("Badge tap in " + MONUMENT_BADGE_TAP_TOP_LEFT + "-" + MONUMENT_BADGE_TAP_BOTTOM_RIGHT
-                        + " missed and landed on the "
-                        + "Events tab instead (matched " + landingSign + ") -- backing out instead of "
-                        + "cascading blind taps onto the wrong screen. Recovering toward Home."));
+                logWarning(logLine("Tapped the real matched badge at " + badge.getPoint()
+                        + " but still ended up on the Events tab (matched " + landingSign + ") -- backing "
+                        + "out instead of cascading blind taps onto the wrong screen. Recovering toward Home."));
                 recoverTowardHome();
                 return false;
             }
         }
 
         ImageSearchResultData badgeStillThere = templateSearchHelper.locatePattern(
-                TemplatesEnum.MONUMENT_REWARD_BADGE, SearchConfigConstants.QUICK_SEARCH);
+                TemplatesEnum.MONUMENT_REWARD_BADGE, SearchConfigConstants.MONUMENT_BADGE_SEARCH);
         if (badgeStillThere.isFound()) {
-            logWarning(logLine("Tapped inside " + MONUMENT_BADGE_TAP_TOP_LEFT + "-" + MONUMENT_BADGE_TAP_BOTTOM_RIGHT
-                    + " but the badge is still detectable on screen afterward -- nothing opened. "
+            logWarning(logLine("Tapped the real matched badge at " + badge.getPoint()
+                    + " but a badge match is still detectable afterward -- nothing opened. "
                     + "Stopping here instead of cascading into the rest of the chain blind."));
             return false;
         }
