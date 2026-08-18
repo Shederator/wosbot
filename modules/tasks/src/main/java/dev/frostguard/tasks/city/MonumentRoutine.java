@@ -28,15 +28,24 @@ import dev.frostguard.vision.convert.RegexNumberParser;
  * badge was often not where the pan sweep expected. Real fix, live-verified on the
  * Testing profile before merging here: anchor off Lancer Camp instead (a fixed
  * building, always reachable the same way via the left-menu queue list), then a
- * single confirmed 300px right swipe brings Monument's badge into view every time.
+ * single confirmed 300px right swipe brings Monument into view every time.
  * See {@link #findAndOpenBadgeViaLancer()}.
  *
  * <p>
- * <b>Flow (live-verified 2026-08-14, screenshot-confirmed at every step):</b>
+ * matt/2026-08-18: even that swipe still fell back into a full camera-pan sweep
+ * whenever a template search for the reward badge came up empty right after landing
+ * -- "it pans to the right of lancer, you see monument, then it just starts
+ * scrolling around." The swipe lands Monument at a fixed, reliable screen position
+ * every time; the template search (and the pan-fallback it triggered) is gone
+ * entirely, replaced with a direct fixed-pixel tap calibrated off a real debug frame
+ * (see {@link #MONUMENT_TAP_POINT}).
+ *
+ * <p>
+ * <b>Flow:</b>
  * <pre>
  * Home -> open left-menu City section -> tap Lancer row -> tap the camp building
- * -> wait 5s -> swipe right 300px -> template-search the reward badge, tap it,
- * VERIFY it's no longer detectable (confirms something actually opened, instead of
+ * -> wait 5s -> swipe right 300px -> tap the fixed Monument point, VERIFY the reward
+ * badge is no longer detectable (confirms something actually opened, instead of
  * assuming) -> claim any ready rows -> X close -> back arrow -> Tundra Albums hub
  * -> Fragment Backpack (bottom-right of the hub) -> open every owned pack (rescanning
  * from scratch after each open, since the panel reflows) -> close -> milestone chest
@@ -92,6 +101,14 @@ public class MonumentRoutine extends DelayedTask {
     private static final PointData SWIPE_RIGHT_END = new PointData(250, 700);
     private static final int SWIPE_DURATION_MS = 400;
     private static final int POST_SWIPE_WAIT_MS = 1000;
+
+    // matt/2026-08-18: "the moment it goes to the right, the monument is in the same spot all the
+    // time... we can get those square coordinates and just tap in there. i dont think we even need
+    // to ocr." Calibrated off shop-debug/monument_home1.png -- an actual debug frame captured right
+    // after this exact swipe (Lancer's "Upgrade Lancer Camp to Lv. 25" panel still pinned at the
+    // bottom confirms it's the same navigation state), showing the golden Monument ring/pedestal
+    // centered around (330, 460). Fixed pixel tap, no template search, no pan fallback.
+    private static final PointData MONUMENT_TAP_POINT = new PointData(330, 460);
 
     // ========== Quest-list modal + Atlas grid (shared skin across categories) ==========
     private static final PointData MODAL_CLOSE_X = new PointData(662, 157);
@@ -236,25 +253,22 @@ public class MonumentRoutine extends DelayedTask {
         swipe(SWIPE_RIGHT_START, SWIPE_RIGHT_END, SWIPE_DURATION_MS);
         sleepTask(POST_SWIPE_WAIT_MS);
 
-        ImageSearchResultData badge = templateSearchHelper.locatePattern(
-                TemplatesEnum.MONUMENT_REWARD_BADGE, SearchConfigConstants.RESILIENT);
-        if (!badge.isFound()) {
-            logInfo(logLine("Badge not found via the Lancer-relative route -- falling back to the "
-                    + "direct-search-and-pan method."));
-            badge = findBadgeWithPanFallback();
-            if (!badge.isFound()) {
-                return false;
-            }
-        }
-
-        tapNear(badge.getPoint());
+        // matt/2026-08-18: "it pans to the right of lancer, you see monument, then it just starts
+        // scrolling around... the moment it goes to the right, the monument is in the same spot all
+        // the time. we can get those square coordinates and just tap in there. i dont think we even
+        // need to ocr." The template search (and the pan-fallback it used to trigger on a miss --
+        // an 8-direction, up-to-16-tap camera sweep) is gone entirely: the swipe reliably lands
+        // Monument at MONUMENT_TAP_POINT every time, so there's nothing left to search for. Tap it
+        // directly, and confirm something actually opened the same way the old code did -- checking
+        // the badge template is no longer detectable -- without ever searching to find WHERE to tap.
+        tapNear(MONUMENT_TAP_POINT);
         sleepTask(PANEL_SETTLE_MS);
 
         ImageSearchResultData badgeStillThere = templateSearchHelper.locatePattern(
                 TemplatesEnum.MONUMENT_REWARD_BADGE, SearchConfigConstants.QUICK_SEARCH);
         if (badgeStillThere.isFound()) {
-            logWarning(logLine("Tapped the badge at " + badge.getPoint()
-                    + " but it's still detectable on screen afterward -- nothing opened. "
+            logWarning(logLine("Tapped the fixed Monument point " + MONUMENT_TAP_POINT
+                    + " but the badge is still detectable on screen afterward -- nothing opened. "
                     + "Stopping here instead of cascading into the rest of the chain blind."));
             return false;
         }
@@ -331,100 +345,11 @@ public class MonumentRoutine extends DelayedTask {
                 TemplatesEnum.MONUMENT_BUILDING_ANCHOR, SearchConfigConstants.QUICK_SEARCH).isFound();
     }
 
-    // ========== Camera-pan fallback (matt/2026-08-13) ==========
-    // matt/2026-08-13: root-caused live, by hand, comparing a real screenshot against what the bot
-    // was actually seeing -- ensureCorrectScreenLocation(HOME) only confirms the camera is ZOOMED to
-    // the City view (via the Furnace anchor), not that it's PANNED to wherever Monument's building
-    // happens to sit. Repeated automated runs never had Monument in the viewport at all; a manual
-    // screenshot did. The original header comment's claim that the badge is "directly visible with no
-    // panning needed" only held for whatever camera position that walkthrough happened to be at --
-    // not a guarantee for every session. Real fix: after the direct look comes up empty, systematically
-    // pan the camera in each cardinal direction and re-check after every pan, instead of assuming the
-    // first look is the only look. Drags are controlled (explicit duration), not flicks, to avoid
-    // triggering momentum scrolling far past the intended distance.
-    // matt/2026-08-13, Part 2: live-verified by hand -- from the app's own default camera position,
-    // Monument needed a SINGLE pan roughly up-and-left (finger drag from ~(550,800) to ~(300,500), i.e.
-    // dx=-250/dy=-300) to come fully into view; the original 280px reach undershot that in the
-    // corresponding diagonal direction, and the 90-threshold recheck was tight enough that a
-    // partially-settled frame could still miss. Widened the reach, and each direction now takes TWO
-    // steps (so effective max reach is 2x the single-step distance) before giving up on that heading,
-    // re-checking after every single step rather than only at the end.
-    private static final PointData PAN_CENTER = new PointData(360, 650);
-    private static final int PAN_DISTANCE_PX = 320;
-    private static final int PAN_DRAG_DURATION_MS = 400;
-    private static final int PAN_SETTLE_MS = 600;
-
-    /** (dx, dy) pan directions tried in order -- the diagonals moved first since that's the confirmed
-     *  real direction, cardinals as a wider net after. */
-    private static final int[][] PAN_DIRECTIONS = {
-            {-PAN_DISTANCE_PX, -PAN_DISTANCE_PX}, // confirmed live: this is the real direction
-            {PAN_DISTANCE_PX, PAN_DISTANCE_PX},
-            {PAN_DISTANCE_PX, -PAN_DISTANCE_PX},
-            {-PAN_DISTANCE_PX, PAN_DISTANCE_PX},
-            {0, PAN_DISTANCE_PX},   // reveal what's above (drag content up)
-            {0, -PAN_DISTANCE_PX},  // reveal what's below
-            {PAN_DISTANCE_PX, 0},   // reveal what's to the left
-            {-PAN_DISTANCE_PX, 0},  // reveal what's to the right
-    };
-
-    // matt/2026-08-14: caught live watching the app -- "it just randomly searches around the
-    // screen." Root cause chain: (1) MONUMENT_BUILDING_ANCHOR was stale (captured against an old
-    // building skin, live-verified 0.35 score against the actual current golden-ringed Monument --
-    // recaptured), which made isScreenClear() unreliable and pushed almost every run into the full
-    // pan fallback; (2) camera pan position genuinely drifts between runs depending on whatever the
-    // PRIOR task left it at (ensureCorrectScreenLocation only confirms zoom level, not pan position
-    // -- a known, documented limitation, not new). With nothing actually claimable for the last 12
-    // hours straight (confirmed by hand, multiple screens, the building itself only showing its own
-    // multi-day construction timer, no reward badge anywhere), the full 8-direction x2-step (16 tap)
-    // sweep every single run is what LOOKS like erratic wandering even when it's technically correct.
-    // Cut runtime/visual noise roughly in half: keep the one CONFIRMED real direction at full
-    // strength, everything else drops to a single step -- still a real safety net, just not a
-    // performance every hour.
-    private static final int PAN_STEPS_PRIMARY_DIRECTION = 2;
-    private static final int PAN_STEPS_SECONDARY_DIRECTION = 1;
-
-    private ImageSearchResultData findBadgeWithPanFallback() {
-        ImageSearchResultData badge = templateSearchHelper.locatePattern(
-                TemplatesEnum.MONUMENT_REWARD_BADGE, SearchConfigConstants.RESILIENT);
-        if (badge.isFound()) {
-            return badge;
-        }
-
-        logInfo(logLine("Badge not visible at the default camera position -- panning to search for it "
-                + "(Monument's on-screen position isn't guaranteed by ensureCorrectScreenLocation)."));
-
-        int panned = 0;
-        for (int dirIndex = 0; dirIndex < PAN_DIRECTIONS.length; dirIndex++) {
-            int[] direction = PAN_DIRECTIONS[dirIndex];
-            int stepsThisDirection = dirIndex == 0 ? PAN_STEPS_PRIMARY_DIRECTION : PAN_STEPS_SECONDARY_DIRECTION;
-            PointData start = new PointData(PAN_CENTER.getX(), PAN_CENTER.getY());
-            PointData end = new PointData(PAN_CENTER.getX() + direction[0], PAN_CENTER.getY() + direction[1]);
-
-            for (int step = 0; step < stepsThisDirection; step++) {
-                swipe(start, end, PAN_DRAG_DURATION_MS);
-                sleepTask(PAN_SETTLE_MS);
-                panned++;
-
-                badge = templateSearchHelper.locatePattern(
-                        TemplatesEnum.MONUMENT_REWARD_BADGE, SearchConfigConstants.HIGH_SENSITIVITY);
-                if (badge.isFound()) {
-                    logInfo(logLine("Badge found after " + panned + " pan step(s)."));
-                    return badge;
-                }
-            }
-
-            // Undo this direction's steps before trying the next, so every direction is tried from
-            // the same known starting position instead of compounding into unpredictable drift.
-            for (int step = 0; step < stepsThisDirection; step++) {
-                swipe(end, start, PAN_DRAG_DURATION_MS);
-                sleepTask(PAN_SETTLE_MS);
-            }
-        }
-
-        logInfo(logLine("Badge still not found after panning " + panned + " step(s) across all directions; "
-                + "camera restored to the starting position."));
-        return badge;
-    }
+    // matt/2026-08-18: the camera-pan fallback that used to live here (findBadgeWithPanFallback(),
+    // an 8-direction, up-to-16-tap sweep) is removed entirely -- "it pans to the right of lancer,
+    // you see monument, then it just starts scrolling around... we need to fix that." The
+    // Lancer-relative swipe above lands Monument at a fixed, reliable screen position every time
+    // (see MONUMENT_TAP_POINT), so there is nothing left to pan-search for.
 
     private void claimAllReadyRows() {
         for (int i = 0; i < MAX_CLAIM_LOOPS; i++) {
