@@ -107,12 +107,19 @@ public class MonumentRoutine extends DelayedTask {
     private static final int SWIPE_DURATION_MS = 400;
     private static final int POST_SWIPE_WAIT_MS = 1000;
 
-    // matt/2026-08-18: confirmed against 3 real screenshots (shop-debug/monument_find.png,
-    // monument_check2.png, monument_check3.png) -- all show the scroll-with-a-feather "something to
-    // claim here" badge in the identical position above the Monument spire after this exact swipe,
-    // and matt confirmed monument_check3.png live as the correct reference frame. Badge centered at
-    // (471, 550). Fixed pixel tap, no template search, no pan fallback.
-    private static final PointData MONUMENT_BADGE_TAP_POINT = new PointData(471, 550);
+    // matt/2026-08-18, THIRD pass: (471,550) was wrong -- the Events-tab guard added earlier never
+    // fired (all 5 EVENTS_TAB_* templates came back "not found" on the very runs matt watched fail
+    // live), which means the tap wasn't landing on Events at all -- it was missing the badge
+    // entirely, and the untouched blind chain after that (MODAL_CLOSE_X etc.) is what wandered onto
+    // Events. Recalibrated from TWO fresh live screenshots matt sent this session showing the exact
+    // current post-swipe frame, badge clearly visible well to the right of where (471,550) tapped --
+    // measured as a fraction of frame (badge center ~76.6% across, ~42.3% down) and applied to the
+    // known 720x1280 game resolution: real center is ~(551, 541), about 80px right of the old point.
+    // Given that's a measurement off a screenshot, not a pixel-exact capture, this uses a generous
+    // tolerant box via tapInside(...) instead of a pinpoint tapNear(...) -- the old approach had zero
+    // margin for exactly this kind of error.
+    private static final PointData MONUMENT_BADGE_TAP_TOP_LEFT = new PointData(516, 506);
+    private static final PointData MONUMENT_BADGE_TAP_BOTTOM_RIGHT = new PointData(586, 576);
 
 
     // ========== Quest-list modal + Atlas grid (shared skin across categories) ==========
@@ -287,17 +294,15 @@ public class MonumentRoutine extends DelayedTask {
 
         // matt/2026-08-18: "it pans to the right of lancer, you see monument, then it just starts
         // scrolling around." Pulled the 8-direction pan-fallback entirely -- that's the actual
-        // "scrolling around" behavior. A first attempt to also replace the template search with a
-        // fixed-pixel tap was WRONG -- that coordinate was guessed off an old debug frame instead of
-        // a confirmed one, and it mis-tapped the Archer Camp. This coordinate is different: verified
-        // against 3 real screenshots showing the badge in the identical spot, and matt confirmed the
-        // reference frame live. See MONUMENT_BADGE_TAP_POINT above.
-        tapNear(MONUMENT_BADGE_TAP_POINT);
+        // "scrolling around" behavior. See MONUMENT_BADGE_TAP_TOP_LEFT/BOTTOM_RIGHT above for the
+        // coordinate history (two wrong single-point guesses before this tolerant-box version).
+        tapInside(MONUMENT_BADGE_TAP_TOP_LEFT, MONUMENT_BADGE_TAP_BOTTOM_RIGHT);
         sleepTask(PANEL_SETTLE_MS);
 
         for (TemplatesEnum landingSign : EVENTS_TAB_LANDING_SIGNS) {
             if (templateSearchHelper.locatePattern(landingSign, SearchConfigConstants.QUICK_SEARCH).isFound()) {
-                logWarning(logLine("Badge tap at " + MONUMENT_BADGE_TAP_POINT + " missed and landed on the "
+                logWarning(logLine("Badge tap in " + MONUMENT_BADGE_TAP_TOP_LEFT + "-" + MONUMENT_BADGE_TAP_BOTTOM_RIGHT
+                        + " missed and landed on the "
                         + "Events tab instead (matched " + landingSign + ") -- backing out instead of "
                         + "cascading blind taps onto the wrong screen. Recovering toward Home."));
                 recoverTowardHome();
@@ -308,8 +313,8 @@ public class MonumentRoutine extends DelayedTask {
         ImageSearchResultData badgeStillThere = templateSearchHelper.locatePattern(
                 TemplatesEnum.MONUMENT_REWARD_BADGE, SearchConfigConstants.QUICK_SEARCH);
         if (badgeStillThere.isFound()) {
-            logWarning(logLine("Tapped the fixed Monument badge point " + MONUMENT_BADGE_TAP_POINT
-                    + " but it's still detectable on screen afterward -- nothing opened. "
+            logWarning(logLine("Tapped inside " + MONUMENT_BADGE_TAP_TOP_LEFT + "-" + MONUMENT_BADGE_TAP_BOTTOM_RIGHT
+                    + " but the badge is still detectable on screen afterward -- nothing opened. "
                     + "Stopping here instead of cascading into the rest of the chain blind."));
             return false;
         }
