@@ -6,8 +6,19 @@ import org.slf4j.LoggerFactory;
 import dev.frostguard.api.runtime.WorkspacePaths;
 import dev.frostguard.api.runtime.WorkspaceSession;
 import dev.frostguard.api.runtime.WorkspaceSession.WorkspaceInUseException;
+import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.engine.service.AnalyticsService;
+import dev.frostguard.engine.service.ConfigService;
 import dev.frostguard.tasks.TaskRegistrations;
+import dev.frostguard.vision.ocr.OcrEngine;
+import dev.frostguard.vision.ocr.OcrException;
+import dev.frostguard.vision.ocr.PaddleModelDownloader;
+import dev.frostguard.vision.ocr.PaddleOcrProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 public class Main {
     private static volatile WorkspaceSession workspace;
@@ -113,6 +124,20 @@ public class Main {
         } catch (Exception ignored) {
         }
         TaskRegistrations.initialize();
+
+        String ocrProviderStr = ConfigService.obtain().loadGlobalSettings()
+                .getOrDefault(ConfigurationKeyEnum.OCR_PROVIDER_STRING.name(), "tesseract");
+        if ("paddle".equalsIgnoreCase(ocrProviderStr)) {
+            try {
+                Path paddleDir = Paths.get(System.getProperty("user.dir"), "tools", "paddle");
+                PaddleModelDownloader.ensureModels(paddleDir);
+                OcrEngine.setProvider(new PaddleOcrProvider(paddleDir));
+                LoggerFactory.getLogger(Main.class).info("PaddleOCR provider successfully initialized");
+            } catch (OcrException e) {
+                LoggerFactory.getLogger(Main.class).error("Failed to initialize PaddleOCR, falling back to Tesseract: {}", e.getMessage());
+            }
+        }
+
         try {
             AnalyticsService.getInstance().trackAppLaunched(headless);
         } catch (Exception ignored) {

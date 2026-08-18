@@ -46,6 +46,21 @@ public final class OcrEngine {
     }
 
     /**
+     * Overrides the active OCR provider. Called once at application bootstrap by
+     * the engine layer after reading OCR provider preference from config.
+     *
+     * <p>Tests may call this to inject a specific provider; the caller is
+     * responsible for restoring the previous state after the test completes.
+     */
+    public static synchronized void setProvider(OcrProvider newProvider) {
+        if (newProvider == null) {
+            throw new IllegalArgumentException("provider must not be null");
+        }
+        provider = newProvider;
+        log.info("OCR provider set to {}", newProvider.getClass().getSimpleName());
+    }
+
+    /**
      * Recognizes text within the specified region using the default language.
      *
      * @param capture raw RGBA frame from the emulator
@@ -61,7 +76,18 @@ public final class OcrEngine {
         BufferedImage prepared = ImagePreprocessor.prepareForOcr(
                 capture, clip[0], clip[1], clip[2], clip[3],
                 false, null);
-        return getProvider().recognizeText(prepared, lang);
+        try {
+            return getProvider().recognizeText(prepared, lang);
+        } catch (OcrException e) {
+            OcrProvider active = provider;
+            if (!(active instanceof TesseractOcrProvider)) {
+                log.warn("OCR provider {} failed — falling back to Tesseract: {}",
+                        active.getClass().getSimpleName(), e.getMessage());
+                return new TesseractOcrProvider().recognizeText(prepared, lang);
+            } else {
+                throw e;
+            }
+        }
     }
 
     /**
@@ -88,7 +114,19 @@ public final class OcrEngine {
                 cfg.isolateForeground(), cfg.targetColor());
         log.debug("Crop + preprocess: {} ms", System.currentTimeMillis() - step);
 
-        String recognized = getProvider().recognizeText(prepared, cfg);
+        String recognized;
+        try {
+            recognized = getProvider().recognizeText(prepared, cfg);
+        } catch (OcrException e) {
+            OcrProvider active = provider;
+            if (!(active instanceof TesseractOcrProvider)) {
+                log.warn("OCR provider {} failed — falling back to Tesseract: {}",
+                        active.getClass().getSimpleName(), e.getMessage());
+                recognized = new TesseractOcrProvider().recognizeText(prepared, cfg);
+            } else {
+                throw e;
+            }
+        }
         if (cfg.diagnosticMode()) {
             try {
                 OcrDiagnosticWriter.write(capture, prepared, cx, cy, cw, ch, cfg, recognized);

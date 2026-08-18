@@ -269,6 +269,8 @@ public enum ConfigurationKeyEnum {
 
     /* ─────────── system ─────────── */
 
+    /** OCR backend. Allowed values: "tesseract" (default) | "paddle". */
+    OCR_PROVIDER_STRING                 ("tesseract",   String.class,   ConfigCategory.SYSTEM),
     AUTO_START_DELAY_MINUTES_INT        ("5",           Integer.class,  ConfigCategory.SYSTEM),
     AUTO_START_ENABLED_BOOL             ("false",       Boolean.class,  ConfigCategory.SYSTEM),
     AUTO_START_MODE_STRING              ("Continuous",  String.class,   ConfigCategory.SYSTEM),
