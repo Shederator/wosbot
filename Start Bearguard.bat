@@ -52,6 +52,6 @@ if not defined APP_JAR (
 )
 
 start "" "%JDK%\bin\javaw.exe" --enable-native-access=ALL-UNNAMED ^
-    -Dfrostguard.workspace="%~dp0" ^
+    -Dfrostguard.workspace="%~dp0." ^
     -cp "packaging\desktop\target\input\%APP_JAR%;packaging\desktop\target\input\lib\*" ^
     dev.frostguard.app.bootstrap.Main
