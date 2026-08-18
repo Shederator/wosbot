@@ -298,9 +298,18 @@ public class MonumentRoutine extends DelayedTask {
         // scrolling around." The 8-direction pan-fallback that used to live here is gone for good --
         // that's the actual "scrolling around" behavior matt flagged. This is a single search at the
         // landing spot, nothing more; on a miss it stops and reschedules (see below), it does not pan.
-        ImageSearchResultData badge = templateSearchHelper.locatePattern(
+        //
+        // matt/2026-08-18, real evidence from the tightened-crop deploy: two consecutive live misses
+        // logged real scores of 40.7 and 50.6 (threshold 65) -- both well below, and different from
+        // each other on a supposedly-static template, which single-scale correlation is known to do
+        // when the on-screen icon renders at a slightly different size than the template was captured
+        // at. Switched to locatePatternMultiScale (already used elsewhere, e.g.
+        // UpgradeBuildingsRoutine.tapAllianceHelp()) to test multiple scales per attempt instead of
+        // exactly one -- if this raises the logged score meaningfully, that confirms scale was the
+        // real problem; if it doesn't, that's real evidence pointing somewhere else next.
+        ImageSearchResultData badge = templateSearchHelper.locatePatternMultiScale(
                 TemplatesEnum.MONUMENT_REWARD_BADGE, SearchConfigConstants.MONUMENT_BADGE_SEARCH);
-        logInfo(logLine("Badge template search result: " + badge));
+        logInfo(logLine("Badge template search result (multi-scale): " + badge));
 
         if (!badge.isFound()) {
             logInfo(logLine("Badge not found this pass -- nothing to tap, not guessing a coordinate."));
@@ -320,7 +329,7 @@ public class MonumentRoutine extends DelayedTask {
             }
         }
 
-        ImageSearchResultData badgeStillThere = templateSearchHelper.locatePattern(
+        ImageSearchResultData badgeStillThere = templateSearchHelper.locatePatternMultiScale(
                 TemplatesEnum.MONUMENT_REWARD_BADGE, SearchConfigConstants.MONUMENT_BADGE_SEARCH);
         if (badgeStillThere.isFound()) {
             logWarning(logLine("Tapped the real matched badge at " + badge.getPoint()
