@@ -51,6 +51,7 @@ public class StorehouseChestRoutine extends DelayedTask {
     private static final AreaData STOREHOUSE_TITLE_AREA = new AreaData(
             new PointData(245, 515), new PointData(505, 575));
     private static final int STOREHOUSE_SELECTION_SETTLE_MILLIS = 2_200;
+    private static final int STOREHOUSE_DESELECTION_SETTLE_MILLIS = 800;
     private static final PointData STOREHOUSE_SCROLL_START = new PointData(1, 636);
     private static final PointData STOREHOUSE_SCROLL_END = new PointData(2, 636);
 
@@ -172,6 +173,11 @@ public class StorehouseChestRoutine extends DelayedTask {
                         .build());
         if (selected.isFound()) {
             logInfo("Storehouse selected and verified by its title anchor.");
+            // The reward bubbles are only actionable after Android Back closes the
+            // building's Details/Upgrade selection controls.
+            pressBack();
+            sleepTask(STOREHOUSE_DESELECTION_SETTLE_MILLIS);
+            logInfo("Storehouse selection controls closed; reward bubbles are now accessible.");
             return true;
         }
 
