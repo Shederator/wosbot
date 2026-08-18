@@ -18,7 +18,7 @@ public class DealsLayoutController extends AbstractProfileController {
 
 	@FXML
 	private CheckBox checkBoxBank, checkBoxEventHallOfChiefs, checkBoxEventDefeatBeasts,
-			checkBoxEventHeroRally, checkBoxEventLuckyChipSupply;
+			checkBoxEventHeroRally, checkBoxEventLuckyChipSupply, checkBoxEventBrothersInArms;
 
 	@FXML
 	private ComboBox<Integer> comboBoxBankDelay;
@@ -37,7 +37,8 @@ public class DealsLayoutController extends AbstractProfileController {
 			new DealsSwitch(checkBoxEventHallOfChiefs, ConfigurationKeyEnum.EVENT_HALL_OF_CHIEFS_CLAIM_BOOL),
 			new DealsSwitch(checkBoxEventDefeatBeasts, ConfigurationKeyEnum.EVENT_DEFEAT_BEASTS_CLAIM_BOOL),
 			new DealsSwitch(checkBoxEventHeroRally, ConfigurationKeyEnum.EVENT_HERO_RALLY_CLAIM_BOOL),
-			new DealsSwitch(checkBoxEventLuckyChipSupply, ConfigurationKeyEnum.EVENT_LUCKY_CHIP_SUPPLY_CLAIM_BOOL)
+			new DealsSwitch(checkBoxEventLuckyChipSupply, ConfigurationKeyEnum.EVENT_LUCKY_CHIP_SUPPLY_CLAIM_BOOL),
+			new DealsSwitch(checkBoxEventBrothersInArms, ConfigurationKeyEnum.EVENT_BROTHERS_IN_ARMS_CLAIM_BOOL)
 		);
 	}
 

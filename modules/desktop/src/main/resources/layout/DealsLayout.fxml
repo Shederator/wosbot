@@ -52,6 +52,8 @@
                               text="Hero Rally (Claim All)" />
                     <CheckBox fx:id="checkBoxEventLuckyChipSupply" mnemonicParsing="false"
                               text="Lucky Chip Supply (free daily pack only)" />
+                    <CheckBox fx:id="checkBoxEventBrothersInArms" mnemonicParsing="false"
+                              text="Brothers in Arms" />
                 </VBox>
             </VBox>
 

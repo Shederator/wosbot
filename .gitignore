@@ -87,3 +87,6 @@ telemetry/
 
 # ── Runtime settings snapshots (regenerated hourly, machine-specific) ──
 /settings-backups/
+
+# local maven repo cache, never commit
+.m2-cache/

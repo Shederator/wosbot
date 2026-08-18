@@ -171,12 +171,6 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     private HBox coffeeBubbleContainer;
 
     @FXML
-    private FontIcon iconDiscord;
-
-    @FXML
-    private FontIcon iconGithub;
-
-    @FXML
     private FontIcon iconDiscordBubble;
 
     @FXML
@@ -318,17 +312,11 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     }
 
     private void setupSocialIcons() { /* internal */
-        if (null != iconDiscord) {
-            iconDiscord.setIconCode(MaterialDesignD.DISCORD);
-        }
         if (null != iconDiscordBubble) {
             iconDiscordBubble.setIconCode(MaterialDesignD.DISCORD);
         }
         if (null != iconCoffeeBubble) {
             iconCoffeeBubble.setIconCode(MaterialDesignC.COFFEE);
-        }
-        if (null != iconGithub) {
-            iconGithub.setIconCode(MaterialDesignG.GITHUB);
         }
 
         if (java.util.concurrent.ThreadLocalRandom.current().nextBoolean()) {
