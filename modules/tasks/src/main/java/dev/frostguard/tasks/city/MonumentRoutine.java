@@ -35,17 +35,20 @@ import dev.frostguard.vision.convert.RegexNumberParser;
  * matt/2026-08-18: even that swipe still fell back into a full camera-pan sweep
  * whenever a template search for the reward badge came up empty right after landing
  * -- "it pans to the right of lancer, you see monument, then it just starts
- * scrolling around." The swipe lands Monument at a fixed, reliable screen position
- * every time; the template search (and the pan-fallback it triggered) is gone
- * entirely, replaced with a direct fixed-pixel tap calibrated off a real debug frame
- * (see {@link #MONUMENT_TAP_POINT}).
+ * scrolling around." The 8-direction pan-fallback (the actual "scrolling around")
+ * is removed entirely. A follow-up attempt to also drop the template search itself
+ * in favor of a fixed-pixel tap was WRONG -- the coordinate was guessed from an old
+ * debug frame instead of a live screenshot, and it mis-tapped the Archer Camp
+ * instead of Monument -- and was reverted. Back to a plain single-shot template
+ * search: if it's not found right after the swipe, stop and reschedule instead of
+ * panning the camera around OR guessing at a coordinate.
  *
  * <p>
  * <b>Flow:</b>
  * <pre>
  * Home -> open left-menu City section -> tap Lancer row -> tap the camp building
- * -> wait 5s -> swipe right 300px -> tap the fixed Monument point, VERIFY the reward
- * badge is no longer detectable (confirms something actually opened, instead of
+ * -> wait 5s -> swipe right 300px -> template-search the reward badge, tap it,
+ * VERIFY it's no longer detectable (confirms something actually opened, instead of
  * assuming) -> claim any ready rows -> X close -> back arrow -> Tundra Albums hub
  * -> Fragment Backpack (bottom-right of the hub) -> open every owned pack (rescanning
  * from scratch after each open, since the panel reflows) -> close -> milestone chest
@@ -102,13 +105,6 @@ public class MonumentRoutine extends DelayedTask {
     private static final int SWIPE_DURATION_MS = 400;
     private static final int POST_SWIPE_WAIT_MS = 1000;
 
-    // matt/2026-08-18: "the moment it goes to the right, the monument is in the same spot all the
-    // time... we can get those square coordinates and just tap in there. i dont think we even need
-    // to ocr." Calibrated off shop-debug/monument_home1.png -- an actual debug frame captured right
-    // after this exact swipe (Lancer's "Upgrade Lancer Camp to Lv. 25" panel still pinned at the
-    // bottom confirms it's the same navigation state), showing the golden Monument ring/pedestal
-    // centered around (330, 460). Fixed pixel tap, no template search, no pan fallback.
-    private static final PointData MONUMENT_TAP_POINT = new PointData(330, 460);
 
     // ========== Quest-list modal + Atlas grid (shared skin across categories) ==========
     private static final PointData MODAL_CLOSE_X = new PointData(662, 157);
@@ -254,21 +250,29 @@ public class MonumentRoutine extends DelayedTask {
         sleepTask(POST_SWIPE_WAIT_MS);
 
         // matt/2026-08-18: "it pans to the right of lancer, you see monument, then it just starts
-        // scrolling around... the moment it goes to the right, the monument is in the same spot all
-        // the time. we can get those square coordinates and just tap in there. i dont think we even
-        // need to ocr." The template search (and the pan-fallback it used to trigger on a miss --
-        // an 8-direction, up-to-16-tap camera sweep) is gone entirely: the swipe reliably lands
-        // Monument at MONUMENT_TAP_POINT every time, so there's nothing left to search for. Tap it
-        // directly, and confirm something actually opened the same way the old code did -- checking
-        // the badge template is no longer detectable -- without ever searching to find WHERE to tap.
-        tapNear(MONUMENT_TAP_POINT);
+        // scrolling around." Pulled the 8-direction pan-fallback entirely -- that's the actual
+        // "scrolling around" behavior. A follow-up attempt to also replace the template search with
+        // a fixed-pixel tap (MONUMENT_TAP_POINT, guessed from an old debug frame rather than a live
+        // screenshot) was WRONG and got reverted -- it mis-tapped the Archer Camp instead of
+        // Monument. Back to a plain template search, one shot, no pan fallback: if it's not found,
+        // stop and reschedule rather than guessing at a coordinate or scrolling the camera around.
+        ImageSearchResultData badge = templateSearchHelper.locatePattern(
+                TemplatesEnum.MONUMENT_REWARD_BADGE, SearchConfigConstants.RESILIENT);
+        if (!badge.isFound()) {
+            logInfo(logLine("Badge not found via template search after the Lancer-relative swipe -- "
+                    + "stopping here (no pan fallback, no blind fixed-pixel guess) rather than risking "
+                    + "a mis-tap on the wrong building."));
+            return false;
+        }
+
+        tapNear(badge.getPoint());
         sleepTask(PANEL_SETTLE_MS);
 
         ImageSearchResultData badgeStillThere = templateSearchHelper.locatePattern(
                 TemplatesEnum.MONUMENT_REWARD_BADGE, SearchConfigConstants.QUICK_SEARCH);
         if (badgeStillThere.isFound()) {
-            logWarning(logLine("Tapped the fixed Monument point " + MONUMENT_TAP_POINT
-                    + " but the badge is still detectable on screen afterward -- nothing opened. "
+            logWarning(logLine("Tapped the badge at " + badge.getPoint()
+                    + " but it's still detectable on screen afterward -- nothing opened. "
                     + "Stopping here instead of cascading into the rest of the chain blind."));
             return false;
         }
@@ -347,9 +351,9 @@ public class MonumentRoutine extends DelayedTask {
 
     // matt/2026-08-18: the camera-pan fallback that used to live here (findBadgeWithPanFallback(),
     // an 8-direction, up-to-16-tap sweep) is removed entirely -- "it pans to the right of lancer,
-    // you see monument, then it just starts scrolling around... we need to fix that." The
-    // Lancer-relative swipe above lands Monument at a fixed, reliable screen position every time
-    // (see MONUMENT_TAP_POINT), so there is nothing left to pan-search for.
+    // you see monument, then it just starts scrolling around." Removed for good; on a miss the
+    // routine now just stops and reschedules (see findAndOpenBadgeViaLancer() above) instead of
+    // panning around OR guessing at an unverified fixed-pixel coordinate.
 
     private void claimAllReadyRows() {
         for (int i = 0; i < MAX_CLAIM_LOOPS; i++) {
