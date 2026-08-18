@@ -13,6 +13,7 @@ import dev.frostguard.api.domain.ResearchBadgeData;
 import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.config.PriorityConfigResolver;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
+import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -358,33 +359,33 @@ private boolean openResearchTree() {
                 pressBack();
                 sleepTask(500);
                 navigationHelper.ensureCorrectScreenLocation(LaunchPoint.HOME);
-                marchHelper.openLeftMenuCitySection(true);
             }
 
-            ImageSearchResultData researchCenter = templateSearchHelper.locatePattern(
-                    TemplatesEnum.GAME_HOME_SHORTCUTS_RESEARCH_CENTER,
+            if (!navigationHelper.navigateToSidebarDestination(SidebarDestination.RESEARCH_CENTER)) {
+                logWarning(routineLogResearchLine("Research Center destination was not reached during entry attempt "
+                        + attempt + "/" + RESEARCH_ENTRY_ATTEMPTS + "."));
+                continue;
+            }
+
+            ImageSearchResultData researchButton = templateSearchHelper.locatePattern(
+                    TemplatesEnum.BUILDING_BUTTON_RESEARCH,
                     SearchConfigConstants.DEFAULT_SINGLE);
-            if (!isFound(researchCenter)) {
-                logWarning(routineLogResearchLine("Research Center shortcut not detected during entry attempt "
-                        + attempt + "/" + RESEARCH_ENTRY_ATTEMPTS + "."));
-                continue;
+            if (isFound(researchButton)) {
+                logInfo(routineLogResearchLine("Research building button detected. Entering Research tree."));
+                tapInside(researchButton);
+            } else {
+                PointData handTarget = findResearchEntryHandTarget();
+                if (handTarget == null) {
+                    logWarning(routineLogResearchLine("Neither Research building button nor entry hand was detected "
+                            + "on attempt " + attempt + "/" + RESEARCH_ENTRY_ATTEMPTS + "."));
+                    continue;
+                }
+
+                logInfo(routineLogResearchLine(
+                        "Research entry hand detected over the button. Entering at its relative target."));
+                tapNear(handTarget);
             }
-
-            logDebug(routineLogResearchLine("Pressing Research Center (entry attempt "
-                    + attempt + "/" + RESEARCH_ENTRY_ATTEMPTS + ")"));
-            tapInside(researchCenter);
-            sleepTask(1000);
-
-            PointData handTarget = findResearchEntryHandTarget();
-            if (handTarget == null) {
-                logWarning(routineLogResearchLine("Research entry hand was not detected on attempt "
-                        + attempt + "/" + RESEARCH_ENTRY_ATTEMPTS + "."));
-                continue;
-            }
-
-            logInfo(routineLogResearchLine("Research entry hand detected. Pressing it with offset."));
-            tapNear(handTarget);
-            sleepTask(300);
+            sleepTask(500);
 
             if (isResearchTreeVisible()) {
                 logInfo(routineLogResearchLine("Research tree screen verified."));

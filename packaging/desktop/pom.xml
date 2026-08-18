@@ -192,7 +192,7 @@
                 <artifactId>maven-assembly-plugin</artifactId>
                 <executions>
                     <execution>
-                        <id>build-transitional-desktop-bundle</id>
+                        <id>build-pr-test-desktop-bundle</id>
                         <phase>package</phase>
                         <goals>
                             <goal>single</goal>

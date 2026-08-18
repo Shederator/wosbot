@@ -89,7 +89,8 @@ final class GiftCodeRedeemer {
         }
         if (normalized.contains("EXPIRED") || normalized.contains("NOT FOUND")
                 || normalized.contains("LIMIT") || normalized.contains("REQUIREMENT")
-                || normalized.contains("SPEND MORE") || normalized.contains("TIME ERROR")
+                || normalized.contains("SPEND MORE") || normalized.contains("RECHARGE MONEY")
+                || normalized.contains("TIME ERROR")
                 || normalized.contains("ROLE NOT EXIST") || normalized.contains("PLAYER NOT EXIST")) {
             return RedeemResult.failed(message);
         }

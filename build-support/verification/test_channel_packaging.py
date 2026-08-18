@@ -19,10 +19,9 @@ def properties(element: ET.Element) -> dict[str, str]:
 
 
 class ChannelPackagingTest(unittest.TestCase):
-    def test_pr_ci_native_nightly_and_legacy_bundle_are_separate_workflows(self):
+    def test_pr_ci_and_native_release_are_separate_workflows(self):
+        workflows = REPO_ROOT / ".github/workflows"
         ci = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-        legacy = (REPO_ROOT / ".github/workflows/daily-windows-bundle.yml").read_text(
-            encoding="utf-8")
         nightly = (REPO_ROOT / ".github/workflows/"
                    "signed-windows-channel-release.yml").read_text(encoding="utf-8")
         installers = (REPO_ROOT / ".github/workflows/windows-native-package.yml").read_text(
@@ -32,14 +31,9 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertIn("  pull_request:", ci)
         self.assertIn("  contents: read", ci)
         self.assertIn("Build and test Maven reactor", ci)
+        self.assertIn("fetch-depth: 0", ci)
+        self.assertIn("verify_development_version.py", ci)
         self.assertNotIn("contents: write", ci)
-
-        self.assertIn("name: Legacy 2.x — Build ZIP Candidate", legacy)
-        self.assertIn("  workflow_dispatch:", legacy)
-        self.assertNotIn("  schedule:", legacy)
-        self.assertNotIn("contents: write", legacy)
-        self.assertNotIn("gh release create nightly", legacy)
-        self.assertNotIn("Update the Nightly Discord message", legacy)
 
         self.assertIn("name: Release — Windows Stable or Nightly", nightly)
         self.assertIn("  schedule:", nightly)
@@ -47,10 +41,24 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertNotIn("  pull_request:", nightly)
         self.assertNotIn("\n  push:\n", nightly)
         self.assertIn("      contents: write", nightly)
+        self.assertIn("--expected-stable $env:VERSION", nightly)
+
+        self.assertFalse((workflows / "daily-windows-bundle.yml").exists())
+        self.assertFalse((workflows / "stable-windows-release.yml").exists())
 
         self.assertIn("name: CI — Windows Installers", installers)
         self.assertIn("Build and smoke-test Stable and Nightly installers", installers)
         self.assertIn('java-version: "21.0.12+8.0"', installers)
+
+    def test_pr_test_build_keeps_bundle_verification_and_publication(self):
+        workflow = (REPO_ROOT / ".github/workflows/pr-test-build.yml").read_text(
+            encoding="utf-8")
+
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertIn("verify_bundle.py", workflow)
+        self.assertIn("smoke_test_bundle.sh", workflow)
+        self.assertIn("pr-test-bundle", workflow)
+        self.assertIn("gh release create", workflow)
 
     def test_stable_and_nightly_use_distinct_durable_windows_identities(self):
         root = ET.parse(REPO_ROOT / "packaging/desktop/pom.xml").getroot()
@@ -245,11 +253,6 @@ class ChannelPackagingTest(unittest.TestCase):
                 '"repos/$($env:GITHUB_REPOSITORY)/git/refs/tags/$($env:TAG)"'),
             2)
         self.assertIn("$tagRef.object.sha -cne $env:GITHUB_SHA", workflow)
-        legacy_stable = (REPO_ROOT / ".github/workflows/stable-windows-release.yml").read_text(
-            encoding="utf-8")
-        self.assertIn(
-            "Frostguard 3.x must use Release — Windows Stable or Nightly",
-            legacy_stable)
 
     def test_stable_discord_refresh_resolves_the_versioned_msi(self):
         workflow = (REPO_ROOT / ".github/workflows/refresh-stable-discord.yml").read_text(
