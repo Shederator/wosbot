@@ -237,6 +237,33 @@ public class MonumentRoutine extends DelayedTask {
         reschedule(LocalDateTime.now().plusMinutes(IDLE_RECHECK_MINUTES));
     }
 
+    // matt/2026-08-18 (second live failure, ~50% of runs): "moved right three hundred pixels...
+    // then it just, like, went to the events tab." Root cause found from evidence, not guessed --
+    // the ONLY post-tap check below was "is the old badge template no longer visible", which is a
+    // bad proxy for "the tap actually opened something": a tap that misses the badge (scroll drift,
+    // a slightly different swipe landing spot, whatever) also makes the old badge unmatchable, so
+    // this check reported false success just as often as real success. On false success, execute()
+    // cascades straight into tapNear(MODAL_CLOSE_X) at (662,157) -- which sits almost exactly on
+    // the real Events-tab icon's screen position. That's the mechanism: missed tap -> false "opened"
+    // -> blind tap at (662,157) -> Events tab opens. This was flagged as a known risk in this same
+    // method's comment history before it was actually observed live.
+    //
+    // Fix: EVENTS_TAB_HALL_OF_CHIEFS / _DEFEAT_BEASTS / _BROTHERS_IN_ARMS / _HERO_RALLY /
+    // _LUCKY_WHEEL are the Events panel's own tab-selector icons -- all of them render together
+    // across the top of the Events panel regardless of which sub-tab is active (see
+    // EventClaimRoutine), so any one of them matching is a reliable "we ended up in Events, not
+    // Monument" signal, independent of whether the Monument badge template happens to still be
+    // readable. Checked explicitly before treating the badge tap as a success; on a hit this backs
+    // out with pressBack() (which already carries the quit-dialog guard) instead of ever tapping
+    // MODAL_CLOSE_X on a screen that isn't the Atlas panel.
+    private static final TemplatesEnum[] EVENTS_TAB_LANDING_SIGNS = {
+            TemplatesEnum.EVENTS_TAB_HALL_OF_CHIEFS,
+            TemplatesEnum.EVENTS_TAB_DEFEAT_BEASTS,
+            TemplatesEnum.EVENTS_TAB_BROTHERS_IN_ARMS,
+            TemplatesEnum.EVENTS_TAB_HERO_RALLY,
+            TemplatesEnum.EVENTS_TAB_LUCKY_WHEEL,
+    };
+
     /**
      * matt/2026-08-14: replaces the old direct-search-then-pan approach (kept below as
      * {@link #findBadgeWithPanFallback()}, tried second) -- navigates to Lancer Camp (a fixed,
@@ -267,6 +294,16 @@ public class MonumentRoutine extends DelayedTask {
         // reference frame live. See MONUMENT_BADGE_TAP_POINT above.
         tapNear(MONUMENT_BADGE_TAP_POINT);
         sleepTask(PANEL_SETTLE_MS);
+
+        for (TemplatesEnum landingSign : EVENTS_TAB_LANDING_SIGNS) {
+            if (templateSearchHelper.locatePattern(landingSign, SearchConfigConstants.QUICK_SEARCH).isFound()) {
+                logWarning(logLine("Badge tap at " + MONUMENT_BADGE_TAP_POINT + " missed and landed on the "
+                        + "Events tab instead (matched " + landingSign + ") -- backing out instead of "
+                        + "cascading blind taps onto the wrong screen. Recovering toward Home."));
+                recoverTowardHome();
+                return false;
+            }
+        }
 
         ImageSearchResultData badgeStillThere = templateSearchHelper.locatePattern(
                 TemplatesEnum.MONUMENT_REWARD_BADGE, SearchConfigConstants.QUICK_SEARCH);
