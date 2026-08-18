@@ -199,6 +199,32 @@ public class DeploymentHelper {
         return true;
     }
 
+    // matt, 2026-08-08: Equalize alone was spreading troops into a thin 4-5%
+    // ratio that then deployed anyway with zero check for the game's own
+    // "This deployment is almost certain to fail" warning — a real loss of
+    // troops on a doomed march. Beast/Fire Beast deployments now drag every
+    // troop-type slider to its right (max) edge before the fail-check runs.
+    // Calibrated live 2026-08-08 against the 3-troop-type beast deployment
+    // screen (720x1280); the 3-row layout is specific to that screen.
+    private static final dev.frostguard.api.domain.PointData[] TROOP_SLIDER_LEFT = {
+            new dev.frostguard.api.domain.PointData(225, 730),
+            new dev.frostguard.api.domain.PointData(225, 870),
+            new dev.frostguard.api.domain.PointData(225, 1010),
+    };
+    private static final dev.frostguard.api.domain.PointData[] TROOP_SLIDER_RIGHT = {
+            new dev.frostguard.api.domain.PointData(640, 730),
+            new dev.frostguard.api.domain.PointData(640, 870),
+            new dev.frostguard.api.domain.PointData(640, 1010),
+    };
+
+    /** Drags every troop-type slider on the current deployment screen to its maximum. */
+    public void maxAllTroopSliders() {
+        for (int i = 0; i < TROOP_SLIDER_LEFT.length; i++) {
+            emu.swipeScreen(device, TROOP_SLIDER_LEFT[i], TROOP_SLIDER_RIGHT[i]);
+        }
+        log.info("Dragged all troop sliders to max.");
+    }
+
     private BufferedImage captureImage() {
         RawImageData frame = emu.captureScreen(device);
         return dev.frostguard.vision.convert.ImageConverter.toBufferedImage(frame);

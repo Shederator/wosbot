@@ -24,6 +24,20 @@ public class OcrSettingsData {
         AUTO
     }
 
+    /**
+     * Backends supported by the Tesseract recognition engine.
+     */
+    public enum RecognitionEngine {
+        LEGACY_ONLY(0), LSTM_ONLY(1), COMBINED(2), AUTO(3);
+
+        private final int code;
+
+        RecognitionEngine(int code) { this.code = code; }
+
+        /** Numeric identifier passed to the native engine. */
+        public int code() { return code; }
+    }
+
     /* ---- immutable configuration fields ---- */
 
     private final TextLayout textLayout;
@@ -31,6 +45,16 @@ public class OcrSettingsData {
     private final Color targetColor;
     private final boolean diagnosticMode;
     private final String allowedGlyphs;
+    private final RecognitionEngine recognitionEngine;
+    private final boolean reuseFrame;
+    // matt, 2026-08-06: was always hardcoded to "eng" in TesseractOcrProvider
+    // regardless of what any caller configured - Whiteout's Alliance/World
+    // chat is genuinely multilingual (Arabic/Chinese/Russian/Portuguese/
+    // Czech/French all seen live), and an English-only model cannot read
+    // non-Latin scripts, it just emits near-random glyph guesses. null keeps
+    // every existing caller's behaviour identical (falls back to "eng").
+    private final String language;
+    private final boolean preserveLineBreaks;
 
     /* ---- private: construction via Configurator only ---- */
 
@@ -40,6 +64,10 @@ public class OcrSettingsData {
         this.targetColor       = cfg.targetColor;
         this.diagnosticMode    = cfg.diagnosticMode;
         this.allowedGlyphs    = cfg.allowedGlyphs;
+        this.recognitionEngine = cfg.recognitionEngine;
+        this.reuseFrame        = cfg.reuseFrame;
+        this.language           = cfg.language;
+        this.preserveLineBreaks = cfg.preserveLineBreaks;
     }
 
     /* ---- pre-configured presets ---- */
@@ -111,7 +139,11 @@ public class OcrSettingsData {
                 .isolateForeground(this.isolateForeground)
                 .targetColor(this.targetColor)
                 .diagnosticMode(this.diagnosticMode)
-                .allowedGlyphs(this.allowedGlyphs);
+                .allowedGlyphs(this.allowedGlyphs)
+                .recognitionEngine(this.recognitionEngine)
+                .reuseFrame(this.reuseFrame)
+                .language(this.language)
+                .preserveLineBreaks(this.preserveLineBreaks);
     }
 
     /* ---- primary accessors ---- */
@@ -131,6 +163,18 @@ public class OcrSettingsData {
     /** Restricted character set for recognition (whitelist). */
     public String allowedGlyphs()                { return allowedGlyphs; }
 
+    /** Tesseract recognition backend, e.g. LSTM_ONLY. Null -> engine default. */
+    public RecognitionEngine recognitionEngine()  { return recognitionEngine; }
+
+    /** Whether the previous screen capture should be recycled. */
+    public boolean reuseFrame()                  { return reuseFrame; }
+
+    /** Tesseract language code(s), e.g. "eng" or "eng+chi_sim". Null -> caller defaults to "eng". */
+    public String language()                     { return language; }
+
+    /** Whether recognized text should keep its original line breaks (default: flattened to one line). */
+    public boolean preserveLineBreaks()           { return preserveLineBreaks; }
+
     /* ---- presence checks ---- */
 
     public boolean hasTextLayout() { return textLayout != null; }
@@ -138,6 +182,15 @@ public class OcrSettingsData {
     public boolean hasGlyphFilter() {
         return allowedGlyphs != null && !allowedGlyphs.isEmpty();
     }
+
+    public boolean hasEngine() { return recognitionEngine != null; }
+
+    /** Numeric OCR-engine-mode code for the native engine, or {@code null} if unset. */
+    public Integer getOcrEngineMode() {
+        return recognitionEngine != null ? recognitionEngine.code() : null;
+    }
+
+    public boolean hasOcrEngineMode() { return hasEngine(); }
 
     /* ---------- backward-compatible accessor shims ---------- */
 
@@ -196,6 +249,10 @@ public class OcrSettingsData {
         private Color targetColor;
         private boolean diagnosticMode;
         private String allowedGlyphs;
+        private RecognitionEngine recognitionEngine;
+        private boolean reuseFrame = false;
+        private String language;
+        private boolean preserveLineBreaks = false;
 
         /* ---- primary setters ---- */
 
@@ -224,6 +281,26 @@ public class OcrSettingsData {
             return this;
         }
 
+        public Configurator recognitionEngine(RecognitionEngine engine) {
+            this.recognitionEngine = engine;
+            return this;
+        }
+
+        public Configurator reuseFrame(boolean reuse) {
+            this.reuseFrame = reuse;
+            return this;
+        }
+
+        public Configurator language(String lang) {
+            this.language = lang;
+            return this;
+        }
+
+        public Configurator preserveLineBreaks(boolean preserve) {
+            this.preserveLineBreaks = preserve;
+            return this;
+        }
+
         /* ---- backward-compatible setter aliases ---- */
 
         public Configurator stripBackground(boolean s)        { return isolateForeground(s); }
@@ -234,6 +311,8 @@ public class OcrSettingsData {
         public Configurator setTextColor(Color c)             { return targetColor(c); }
         public Configurator setDebug(boolean d)               { return diagnosticMode(d); }
         public Configurator setAllowedChars(String c)         { return allowedGlyphs(c); }
+        public Configurator backend(RecognitionEngine b)      { return recognitionEngine(b); }
+        public Configurator setOcrEngineMode(RecognitionEngine b) { return recognitionEngine(b); }
 
         /** Freezes the current configuration into an immutable instance. */
         public OcrSettingsData build() {

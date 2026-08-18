@@ -196,7 +196,28 @@ public enum ConfigurationKeyEnum {
     INTEL_FIRE_BEAST_BOOL                       ("false",   Boolean.class,  ConfigCategory.INTEL),
     INTEL_RECALL_GATHER_TROOPS_BOOL             ("false",   Boolean.class,  ConfigCategory.INTEL),
     INTEL_SMART_PROCESSING_BOOL                 ("false",   Boolean.class,  ConfigCategory.INTEL),
+    // matt/2026-08-09: set by IntelligenceRoutine each pass — true when the board actually had a
+    // mission, false when empty. GatherRoutine reads it so it only defers/recalls for an imminent
+    // Intel that will really consume a march slot, never for Intel's idle ~15-min beast-recheck.
+    INTEL_LAST_RUN_HAD_MISSIONS_BOOL            ("false",   Boolean.class,  ConfigCategory.INTEL),
+    // matt, 2026-08-06: "if we run on stamina, go ahead and refresh it" - same
+    // Chief Stamina item top-up pattern PolarTerror/Cryptid already use, wired
+    // into IntelligenceRoutine's stamina gate so a low-stamina Intel run tops
+    // up from the backpack instead of idling until natural regeneration.
+    INTEL_USE_STAMINA_ITEMS_BOOL                ("false",   Boolean.class,  ConfigCategory.INTEL),
+    INTEL_STAMINA_ITEM_RESERVE_INT              ("0",       Integer.class,  ConfigCategory.INTEL),
     INTEL_USE_FLAG_BOOL                         ("false",   Boolean.class,  ConfigCategory.INTEL),
+    // matt/2026-08-15: "it's reaching a beast that's too hard to defeat, and it's just looping...
+    // then it's gonna run in another fifteen minutes and do the same thing." Root cause: the
+    // same-run circuit breaker (consecutiveBeastDeploymentFailures/beastStuckThisRun in
+    // IntelligenceRoutine) lives on plain instance fields, but DelayedTaskRegistry.create() hands
+    // out a BRAND NEW instance every scheduled run -- so it correctly stops re-attacking a
+    // certain-to-fail beast for the rest of ONE run, then forgets completely and re-attacks the
+    // identical still-there beast on the very next run 15 minutes later, forever. This timestamp
+    // persists that "give up on beast-hunting for a while" state across runs (Survivor
+    // Camps/Explorations are unaffected -- only beast/fire-beast attempts are skipped while it's
+    // in the future).
+    INTEL_BEAST_SKIP_UNTIL_LONG                 ("0",       Long.class,     ConfigCategory.INTEL),
 
     /* ─────────── experts ─────────── */
 
