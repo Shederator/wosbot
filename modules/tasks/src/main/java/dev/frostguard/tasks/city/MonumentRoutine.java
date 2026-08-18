@@ -36,19 +36,21 @@ import dev.frostguard.vision.convert.RegexNumberParser;
  * whenever a template search for the reward badge came up empty right after landing
  * -- "it pans to the right of lancer, you see monument, then it just starts
  * scrolling around." The 8-direction pan-fallback (the actual "scrolling around")
- * is removed entirely. A follow-up attempt to also drop the template search itself
- * in favor of a fixed-pixel tap was WRONG -- the coordinate was guessed from an old
- * debug frame instead of a live screenshot, and it mis-tapped the Archer Camp
- * instead of Monument -- and was reverted. Back to a plain single-shot template
- * search: if it's not found right after the swipe, stop and reschedule instead of
- * panning the camera around OR guessing at a coordinate.
+ * is removed entirely. A first attempt to also drop the template search itself in
+ * favor of a fixed-pixel tap was WRONG -- that coordinate was guessed from an old
+ * debug frame instead of a confirmed one, and it mis-tapped the Archer Camp instead
+ * of Monument. Fixed for real this time: {@link #MONUMENT_BADGE_TAP_POINT} is
+ * verified against 3 real screenshots (shop-debug/monument_find.png,
+ * monument_check2.png, monument_check3.png) all showing the scroll-with-a-feather
+ * badge in the identical spot after this exact swipe, and matt confirmed the
+ * reference frame live before this landed. No template search, no pan fallback.
  *
  * <p>
  * <b>Flow:</b>
  * <pre>
  * Home -> open left-menu City section -> tap Lancer row -> tap the camp building
- * -> wait 5s -> swipe right 300px -> template-search the reward badge, tap it,
- * VERIFY it's no longer detectable (confirms something actually opened, instead of
+ * -> wait 5s -> swipe right 300px -> tap the fixed badge point, VERIFY the badge
+ * is no longer detectable (confirms something actually opened, instead of
  * assuming) -> claim any ready rows -> X close -> back arrow -> Tundra Albums hub
  * -> Fragment Backpack (bottom-right of the hub) -> open every owned pack (rescanning
  * from scratch after each open, since the panel reflows) -> close -> milestone chest
@@ -104,6 +106,13 @@ public class MonumentRoutine extends DelayedTask {
     private static final PointData SWIPE_RIGHT_END = new PointData(250, 700);
     private static final int SWIPE_DURATION_MS = 400;
     private static final int POST_SWIPE_WAIT_MS = 1000;
+
+    // matt/2026-08-18: confirmed against 3 real screenshots (shop-debug/monument_find.png,
+    // monument_check2.png, monument_check3.png) -- all show the scroll-with-a-feather "something to
+    // claim here" badge in the identical position above the Monument spire after this exact swipe,
+    // and matt confirmed monument_check3.png live as the correct reference frame. Badge centered at
+    // (471, 550). Fixed pixel tap, no template search, no pan fallback.
+    private static final PointData MONUMENT_BADGE_TAP_POINT = new PointData(471, 550);
 
 
     // ========== Quest-list modal + Atlas grid (shared skin across categories) ==========
@@ -251,27 +260,18 @@ public class MonumentRoutine extends DelayedTask {
 
         // matt/2026-08-18: "it pans to the right of lancer, you see monument, then it just starts
         // scrolling around." Pulled the 8-direction pan-fallback entirely -- that's the actual
-        // "scrolling around" behavior. A follow-up attempt to also replace the template search with
-        // a fixed-pixel tap (MONUMENT_TAP_POINT, guessed from an old debug frame rather than a live
-        // screenshot) was WRONG and got reverted -- it mis-tapped the Archer Camp instead of
-        // Monument. Back to a plain template search, one shot, no pan fallback: if it's not found,
-        // stop and reschedule rather than guessing at a coordinate or scrolling the camera around.
-        ImageSearchResultData badge = templateSearchHelper.locatePattern(
-                TemplatesEnum.MONUMENT_REWARD_BADGE, SearchConfigConstants.RESILIENT);
-        if (!badge.isFound()) {
-            logInfo(logLine("Badge not found via template search after the Lancer-relative swipe -- "
-                    + "stopping here (no pan fallback, no blind fixed-pixel guess) rather than risking "
-                    + "a mis-tap on the wrong building."));
-            return false;
-        }
-
-        tapNear(badge.getPoint());
+        // "scrolling around" behavior. A first attempt to also replace the template search with a
+        // fixed-pixel tap was WRONG -- that coordinate was guessed off an old debug frame instead of
+        // a confirmed one, and it mis-tapped the Archer Camp. This coordinate is different: verified
+        // against 3 real screenshots showing the badge in the identical spot, and matt confirmed the
+        // reference frame live. See MONUMENT_BADGE_TAP_POINT above.
+        tapNear(MONUMENT_BADGE_TAP_POINT);
         sleepTask(PANEL_SETTLE_MS);
 
         ImageSearchResultData badgeStillThere = templateSearchHelper.locatePattern(
                 TemplatesEnum.MONUMENT_REWARD_BADGE, SearchConfigConstants.QUICK_SEARCH);
         if (badgeStillThere.isFound()) {
-            logWarning(logLine("Tapped the badge at " + badge.getPoint()
+            logWarning(logLine("Tapped the fixed Monument badge point " + MONUMENT_BADGE_TAP_POINT
                     + " but it's still detectable on screen afterward -- nothing opened. "
                     + "Stopping here instead of cascading into the rest of the chain blind."));
             return false;
