@@ -10,16 +10,12 @@ import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 
-import java.time.DayOfWeek;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Task responsible for completing daily labyrinth challenges.
  * This task navigates to the labyrinth menu and executes appropriate challenges
- * based on the current day of the week.
+ * in the currently active Land of Heroes dungeon.
  */
 public class DailyLabyrinthRoutine extends DelayedTask {
 
@@ -31,7 +27,6 @@ public class DailyLabyrinthRoutine extends DelayedTask {
 
     // Timing constants
     private static final int MENU_NAVIGATION_DELAY = 1000;
-    private static final int TAB_SWITCH_DELAY = 500;
     private static final int BATTLE_COMPLETION_DELAY = 3000;
 
     // =========================== CONSTRUCTOR ===========================
@@ -62,8 +57,8 @@ public class DailyLabyrinthRoutine extends DelayedTask {
                 return;
             }
 
-            // Step 2: Execute challenges based on current day
-            executeLabyrinthChallenges();
+            // The Daily sidebar opens the currently active Land of Heroes dungeon directly.
+            executeCurrentChallenge();
 
             reschedule(GameTimeUtils.dailyResetTime());
 
@@ -94,74 +89,40 @@ public class DailyLabyrinthRoutine extends DelayedTask {
 
     // =========================== CHALLENGE EXECUTION ===========================
 
-    /**
-     * Executes labyrinth challenges based on the current day of the week
-     */
-    private void executeLabyrinthChallenges() {
-        DayOfWeek currentDay = LocalDateTime.now(ZoneOffset.UTC).getDayOfWeek();
-        List<Integer> availableDungeons = getAvailableDungeons(currentDay);
-
-        logInfo("Executing challenges for " + currentDay + ". Available dungeons: " + availableDungeons);
-
-        boolean anyCompleted = false;
-        for (Integer dungeonNumber : availableDungeons) {
-            if (executeDungeonChallenge(dungeonNumber)) {
-                logInfo("Successfully completed challenge for dungeon " + dungeonNumber + ".");
-                anyCompleted = true;
-
-            }
-        }
-
-        if (!anyCompleted) {
-            logWarning("No dungeons were successfully completed today.");
-        }
-    }
-
-    /**
-     * Executes a specific dungeon challenge
-     * 
-     * @param dungeonNumber the dungeon number to challenge
-     * @return true if challenge was completed successfully
-     */
-    private boolean executeDungeonChallenge(int dungeonNumber) {
-        logInfo("Attempting to execute challenge for dungeon " + dungeonNumber + ".");
-
-        ImageSearchResultData labyrinthResult = templateSearchHelper.locatePattern(
-                getDungeonTemplate(dungeonNumber),
-                SearchConfigConstants.DEFAULT_SINGLE);
-        if (!labyrinthResult.isFound()) {
-            logWarning("Dungeon " + dungeonNumber + " is not available today.");
-            return false;
-        }
-
-        tapInside(labyrinthResult);
-        sleepTask(TAB_SWITCH_DELAY);
-
+    private boolean executeCurrentChallenge() {
+        logInfo("Executing the active Land of Heroes challenge.");
         // Try quick challenge first
-        if (attemptQuickChallenge(dungeonNumber)) {
+        if (attemptQuickChallenge()) {
             return true;
         }
 
         // Try raid challenge
-        if (attemptRaidChallenge(dungeonNumber)) {
+        if (attemptRaidChallenge()) {
             return true;
         }
 
         // Try normal challenge
-        return attemptNormalChallenge(dungeonNumber);
+        boolean completed = attemptNormalChallenge();
+        if (!completed) {
+            logWarning("No supported challenge action was available in Land of Heroes.");
+        }
+        return completed;
     }
 
     /**
      * Attempts to execute a quick challenge
      */
-    private boolean attemptQuickChallenge(int dungeonNumber) {
-        tapNear(new PointData(700, 1200));
-        sleepTask(100);
+    private boolean attemptQuickChallenge() {
         ImageSearchResultData quickChallengeResult = templateSearchHelper.locatePattern(
-                TemplatesEnum.LABYRINTH_QUICK_CHALLENGE,
-                SearchConfigConstants.DEFAULT_SINGLE);
+                TemplatesEnum.LABYRINTH_QUICK_CHALLENGE_CURRENT,
+                SearchConfigConstants.SINGLE_WITH_RETRIES);
+        if (!quickChallengeResult.isFound()) {
+            quickChallengeResult = templateSearchHelper.locatePattern(
+                    TemplatesEnum.LABYRINTH_QUICK_CHALLENGE,
+                    SearchConfigConstants.SINGLE_WITH_RETRIES);
+        }
         if (quickChallengeResult.isFound()) {
-            logInfo("'Quick Challenge' is available for dungeon " + dungeonNumber + ".");
+            logInfo("'Quick Challenge' is available in Land of Heroes.");
             tapInside(quickChallengeResult);
             sleepTask(MENU_NAVIGATION_DELAY);
 
@@ -178,12 +139,12 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     /**
      * Attempts to execute a raid challenge
      */
-    private boolean attemptRaidChallenge(int dungeonNumber) {
+    private boolean attemptRaidChallenge() {
         ImageSearchResultData raidResult = templateSearchHelper.locatePattern(
                 TemplatesEnum.LABYRINTH_RAID_CHALLENGE,
                 SearchConfigConstants.DEFAULT_SINGLE);
         if (raidResult.isFound()) {
-            logInfo("'Raid Challenge' is available for dungeon " + dungeonNumber + ".");
+            logInfo("'Raid Challenge' is available in Land of Heroes.");
             tapInside(raidResult);
             sleepTask(400);
             tapInside(SKIP_BUTTON, SKIP_BUTTON, 10, 50);
@@ -198,12 +159,12 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     /**
      * Attempts to execute a normal challenge
      */
-    private boolean attemptNormalChallenge(int dungeonNumber) {
+    private boolean attemptNormalChallenge() {
         ImageSearchResultData normalChallengeResult = templateSearchHelper.locatePattern(
                 TemplatesEnum.LABYRINTH_NORMAL_CHALLENGE,
                 SearchConfigConstants.DEFAULT_SINGLE);
         if (!normalChallengeResult.isFound()) {
-            logWarning("No 'Normal Challenge' button found for dungeon " + dungeonNumber + ".");
+            logDebug("No 'Normal Challenge' button found in Land of Heroes.");
             return false;
         }
 
@@ -215,7 +176,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
                 TemplatesEnum.LABYRINTH_QUICK_DEPLOY,
                 SearchConfigConstants.DEFAULT_SINGLE);
         if (quickDeployResult.isFound()) {
-            logInfo("'Quick Deploy' button found. Deploying for dungeon " + dungeonNumber + ".");
+            logInfo("'Quick Deploy' button found. Deploying for Land of Heroes.");
             tapInside(quickDeployResult);
             sleepTask(100);
         }
@@ -225,7 +186,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
                 TemplatesEnum.LABYRINTH_DEPLOY,
                 SearchConfigConstants.DEFAULT_SINGLE);
         if (deployResult.isFound()) {
-            logInfo("'Deploy' button found. Deploying troops for dungeon " + dungeonNumber + ".");
+            logInfo("'Deploy' button found. Deploying troops for Land of Heroes.");
             tapInside(deployResult);
             sleepTask(BATTLE_COMPLETION_DELAY);
 
@@ -235,56 +196,8 @@ public class DailyLabyrinthRoutine extends DelayedTask {
             return true;
         }
 
-        logWarning("Could not find 'Deploy' button for dungeon " + dungeonNumber + ".");
+        logWarning("Could not find 'Deploy' button for Land of Heroes.");
         return false;
-    }
-
-    // =========================== UTILITY METHODS ===========================
-
-    /**
-     * Returns the list of available dungeons based on the day of the week
-     * 
-     * @param dayOfWeek the current day of the week
-     * @return list of available dungeon numbers
-     */
-    private List<Integer> getAvailableDungeons(DayOfWeek dayOfWeek) {
-        List<Integer> dungeons = new ArrayList<>();
-
-        switch (dayOfWeek) {
-            case MONDAY, TUESDAY -> dungeons.add(1);
-            case WEDNESDAY, THURSDAY -> {
-                dungeons.add(2);
-                dungeons.add(3);
-            }
-            case FRIDAY, SATURDAY -> {
-                dungeons.add(4);
-                dungeons.add(5);
-            }
-            case SUNDAY -> dungeons.add(6);
-        }
-
-        return dungeons;
-    }
-
-    /**
-     * Returns the appropriate template for each dungeon number
-     * 
-     * @param dungeonNumber the dungeon number (1-6)
-     * @return the corresponding template enum
-     */
-    private TemplatesEnum getDungeonTemplate(int dungeonNumber) {
-        return switch (dungeonNumber) {
-            case 1 -> TemplatesEnum.LABYRINTH_DUNGEON_1;
-            case 2 -> TemplatesEnum.LABYRINTH_DUNGEON_2;
-            case 3 -> TemplatesEnum.LABYRINTH_DUNGEON_3;
-            case 4 -> TemplatesEnum.LABYRINTH_DUNGEON_4;
-            case 5 -> TemplatesEnum.LABYRINTH_DUNGEON_5;
-            case 6 -> TemplatesEnum.LABYRINTH_DUNGEON_6;
-            default -> {
-                logWarning("Invalid dungeon number: " + dungeonNumber + ". Using dungeon 1 as a fallback.");
-                yield TemplatesEnum.LABYRINTH_DUNGEON_1;
-            }
-        };
     }
 
     /**

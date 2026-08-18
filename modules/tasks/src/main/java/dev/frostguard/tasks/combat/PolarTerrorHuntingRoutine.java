@@ -149,7 +149,7 @@ private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
                 && taskManagementService.lookupTaskState(profile.getId(), TpDailyTaskEnum.INTEL.getId()).isScheduled()) {
 
             DailyTask intel = iDailyTaskRepository.findByAccountIdAndTaskType(profile.getId(), TpDailyTaskEnum.INTEL);
-            if (ChronoUnit.MINUTES.between(LocalDateTime.now(), intel.getScheduledAt()) < 5) {
+            if (isIntelDueSoon(intel, LocalDateTime.now())) {
                 reschedule(LocalDateTime.now().plusMinutes(5));
                 logWarning(routineLogPolarTerrorHuntingLine("Intel task is scheduled to run soon. Planning next run Polar Hunt to run 5 min after intel."));
                 return;
@@ -298,6 +298,11 @@ private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
                 maxMarches,
                 GameTimeUtils.formatCountdown(nextRun))));
     }
+
+static boolean isIntelDueSoon(DailyTask intel, LocalDateTime now) {
+        return intel != null && intel.getScheduledAt() != null
+                && ChronoUnit.MINUTES.between(now, intel.getScheduledAt()) < 5;
+}
 
 @Override
     protected LaunchPoint getRequiredStartLocation() {

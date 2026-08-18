@@ -352,8 +352,13 @@ public class ArenaRoutine extends DelayedTask {
         logDebug("Opening challenge list");
 
         ImageSearchResultData challengeResult = templateSearchHelper.locatePattern(
-                TemplatesEnum.ARENA_CHALLENGE_BUTTON,
+                TemplatesEnum.ARENA_CHALLENGE_BUTTON_CURRENT,
                 TRANSIENT_BUTTON_SEARCH);
+        if (!challengeResult.isFound()) {
+            challengeResult = templateSearchHelper.locatePattern(
+                    TemplatesEnum.ARENA_CHALLENGE_BUTTON,
+                    TRANSIENT_BUTTON_SEARCH);
+        }
 
         if (!challengeResult.isFound()) {
             logError("Challenge button not found.");

@@ -382,6 +382,11 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
         emuManager.swipeScreen(EMULATOR_NUMBER, start, end);
     }
 
+    public void swipe(PointData start, PointData end, int durationMs) {
+        checkPreemption();
+        emuManager.swipeScreen(EMULATOR_NUMBER, start, end, durationMs);
+    }
+
     public void pressBack() {
         checkPreemption();
         emuManager.pressBack(EMULATOR_NUMBER);

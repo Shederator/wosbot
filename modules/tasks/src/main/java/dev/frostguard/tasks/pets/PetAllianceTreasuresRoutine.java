@@ -3,18 +3,17 @@ package dev.frostguard.tasks.pets;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
-import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
-import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 
 import java.time.LocalDateTime;
 
 /**
- * Task that claims alliance treasures from the Beast Cage.
+ * Task that claims alliance treasures from Pet Adventure.
  * 
  * <p>
  * <b>Execution Flow:</b>
@@ -39,20 +38,6 @@ public class PetAllianceTreasuresRoutine extends DelayedTask {
 	// ========================================================================
 	// NAVIGATION CONSTANTS
 	// ========================================================================
-
-	/**
-	 * Button area for opening the Alliance Treasure Map screen in Beast Cage.
-	 */
-	private static final AreaData ALLIANCE_TREASURE_MAP_BUTTON = new AreaData(
-			new PointData(547, 1150),
-			new PointData(650, 1210));
-
-	/**
-	 * Button area for opening the Ally Treasure screen from treasure map.
-	 */
-	private static final AreaData ALLY_TREASURE_BUTTON = new AreaData(
-			new PointData(612, 1184),
-			new PointData(653, 1211));
 
 	/**
 	 * Delay in minutes before retrying after navigation failure.
@@ -101,12 +86,15 @@ public class PetAllianceTreasuresRoutine extends DelayedTask {
 	@Override
 	protected void execute() {
 
-		if (!navigateToBeastCage()) {
+		if (!navigateToPetAdventure()) {
 			rescheduleForRetry();
 			return;
 		}
 
-		openAllianceTreasureScreens();
+		if (!openAllyTreasureScreen()) {
+			rescheduleForRetry();
+			return;
+		}
 		claimTreasureIfAvailable();
 	}
 
@@ -128,39 +116,9 @@ public class PetAllianceTreasuresRoutine extends DelayedTask {
 	 * 
 	 * @return true if navigation succeeded, false if any step failed
 	 */
-	private boolean navigateToBeastCage() {
-		// Search for Pets button with retries for reliability
-		ImageSearchResultData petsResult = templateSearchHelper.locatePattern(
-				TemplatesEnum.GAME_HOME_PETS,
-				SearchConfigConstants.SINGLE_WITH_RETRIES);
-
-		if (!petsResult.isFound()) {
-			logWarning("Pets button not found on home screen. Will retry in " +
-					RETRY_DELAY_MINUTES + " minutes");
-			return false;
-		}
-
-		logDebug("Opening Pets menu");
-		tapInside(petsResult.getPoint(), petsResult.getPoint());
-		sleepTask(3000); // Wait for Pets menu to fully load
-
-		// Search for Beast Cage button
-		ImageSearchResultData beastCageResult = templateSearchHelper.locatePattern(
-				TemplatesEnum.PETS_BEAST_CAGE,
-				SearchConfigConstants.SINGLE_WITH_RETRIES);
-
-		if (!beastCageResult.isFound()) {
-			logWarning("Beast Cage button not found in Pets menu. Will retry in " +
-					RETRY_DELAY_MINUTES + " minutes");
-			pressBack(); // Exit Pets menu
-			return false;
-		}
-
-		logDebug("Opening Beast Cage");
-		tapInside(beastCageResult.getPoint(), beastCageResult.getPoint());
-		sleepTask(500); // Wait for Beast Cage to open
-
-		return true;
+	private boolean navigateToPetAdventure() {
+		logDebug("Opening Pet Adventure through the Daily sidebar");
+		return navigationHelper.navigateToSidebarDestination(SidebarDestination.PET_ADVENTURE);
 	}
 
 	/**
@@ -174,20 +132,21 @@ public class PetAllianceTreasuresRoutine extends DelayedTask {
 	 * </ol>
 	 * 
 	 * <p>
-	 * This method assumes we're already in the Beast Cage menu.
+	 * This method assumes Pet Adventure is open.
 	 */
-	private void openAllianceTreasureScreens() {
-		logDebug("Opening Alliance Treasure Map screen");
-		tapInside(
-				ALLIANCE_TREASURE_MAP_BUTTON.topLeft(),
-				ALLIANCE_TREASURE_MAP_BUTTON.bottomRight());
-		sleepTask(500); // Wait for treasure map screen to load
+	private boolean openAllyTreasureScreen() {
+		ImageSearchResultData allyTreasure = templateSearchHelper.locatePattern(
+				TemplatesEnum.PETS_ALLY_TREASURE,
+				SearchConfigConstants.SINGLE_WITH_RETRIES);
+		if (!allyTreasure.isFound()) {
+			logWarning("Ally Treasure control not found on Pet Adventure screen");
+			return false;
+		}
 
 		logDebug("Opening Ally Treasure screen");
-		tapInside(
-				ALLY_TREASURE_BUTTON.topLeft(),
-				ALLY_TREASURE_BUTTON.bottomRight());
-		sleepTask(500); // Wait for ally treasure screen to load
+		tapInside(allyTreasure);
+		sleepTask(1000);
+		return true;
 	}
 
 	// ========================================================================

@@ -1,27 +1,27 @@
 package dev.frostguard.tasks.economy;
 
 import java.awt.Color;
-import java.time.LocalDateTime;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.regex.Pattern;
 
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.convert.RegexNumberParser;
-import dev.frostguard.vision.convert.RegexNumberParser;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
-import dev.frostguard.vision.convert.GameTimeUtils;
-import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
+import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.service.StaminaService;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.nav.SearchConfigConstants;
+import dev.frostguard.engine.nav.SidebarDestination;
+import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 
 /**
  * Task responsible for claiming rewards from the Storehouse.
@@ -46,8 +46,11 @@ import dev.frostguard.engine.nav.SearchConfigConstants;
 public class StorehouseChestRoutine extends DelayedTask {
 
     // ========== Navigation Coordinates ==========
-    private static final PointData STOREHOUSE_LOCATION_TOP_LEFT = new PointData(30, 430);
-    private static final PointData STOREHOUSE_LOCATION_BOTTOM_RIGHT = new PointData(50, 470);
+    private static final AreaData STOREHOUSE_VISIBLE_BUILDING_AREA = new AreaData(
+            new PointData(105, 530), new PointData(125, 550));
+    private static final AreaData STOREHOUSE_TITLE_AREA = new AreaData(
+            new PointData(245, 515), new PointData(505, 575));
+    private static final int STOREHOUSE_SELECTION_SETTLE_MILLIS = 2_200;
     private static final PointData STOREHOUSE_SCROLL_START = new PointData(1, 636);
     private static final PointData STOREHOUSE_SCROLL_END = new PointData(2, 636);
 
@@ -92,6 +95,11 @@ public class StorehouseChestRoutine extends DelayedTask {
 
     public StorehouseChestRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDailyTask) {
         super(profile, tpDailyTask);
+    }
+
+    @Override
+    protected boolean acceptsInjections() {
+        return false;
     }
 
     /**
@@ -139,34 +147,36 @@ public class StorehouseChestRoutine extends DelayedTask {
     }
 
     /**
-     * Opens the Storehouse by navigating through Research Center.
+     * Opens the Storehouse from the stable Research Center sidebar anchor.
      */
     private boolean openStorehouse() {
         logDebug("Navigating to Storehouse");
 
-        marchHelper.openLeftMenuCitySection(true);
-
-        ImageSearchResultData researchCenter = templateSearchHelper.locatePattern(
-                TemplatesEnum.GAME_HOME_SHORTCUTS_RESEARCH_CENTER,
-                SearchConfigConstants.DEFAULT_SINGLE);
-
-        if (!researchCenter.isFound()) {
-            logError("Research Center shortcut not found.");
+        if (!navigationHelper.navigateToSidebarDestination(SidebarDestination.RESEARCH_CENTER)) {
+            logError("Research Center sidebar destination not reached.");
             return false;
         }
 
-        logDebug("Tapping Research Center");
-        tapInside(researchCenter);
-        sleepTask(1000); // Wait for Research Center to open
+        // The Research Center centers the city with a visible part of the Storehouse at the left.
+        // Selecting that stable visible area avoids a momentum-sensitive map pan.
+        tapInside(STOREHOUSE_VISIBLE_BUILDING_AREA.topLeft(), STOREHOUSE_VISIBLE_BUILDING_AREA.bottomRight());
+        sleepTask(STOREHOUSE_SELECTION_SETTLE_MILLIS);
 
-        // Navigate to Storehouse
-        logDebug("Tapping on Storehouse to navigate");
-        tapInside(STOREHOUSE_LOCATION_TOP_LEFT, STOREHOUSE_LOCATION_BOTTOM_RIGHT);
-        sleepTask(1000);
+        ImageSearchResultData selected = templateSearchHelper.locatePattern(
+                TemplatesEnum.STOREHOUSE_SELECTED_CURRENT,
+                SearchConfig.builder()
+                        .withArea(STOREHOUSE_TITLE_AREA)
+                        .withThreshold(85)
+                        .withMaxAttempts(3)
+                        .withDelay(300L)
+                        .build());
+        if (selected.isFound()) {
+            logInfo("Storehouse selected and verified by its title anchor.");
+            return true;
+        }
 
-        pressBack();
-
-        return true;
+        logWarning("Storehouse title anchor was not detected after the direct selection.");
+        return false;
     }
 
     /**

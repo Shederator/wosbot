@@ -156,15 +156,11 @@ public class LifeEssenceRoutine extends DelayedTask {
 			logDebug("Claim search attempt " + searchAttempt + "/" + MAX_CLAIM_SEARCH_ATTEMPTS);
 
 			// Search for claimable essence in the defined area
-			List<ImageSearchResultData> essenceList = templateSearchHelper.locateAllPatterns(
-					TemplatesEnum.LIFE_ESSENCE_CLAIM,
-					SearchConfig.builder()
-							.withArea(new AreaData(LIFE_ESSENCE_SEARCH_AREA.topLeft(),
-									LIFE_ESSENCE_SEARCH_AREA.bottomRight()))
-							.withThreshold(90)
-							.withMaxAttempts(1)
-							.withMaxResults(MAX_CLAIM_RESULTS)
-							.build());
+			List<ImageSearchResultData> essenceList = locateClaimableEssence(
+					TemplatesEnum.LIFE_ESSENCE_CLAIM_CURRENT);
+			if (essenceList.isEmpty()) {
+				essenceList = locateClaimableEssence(TemplatesEnum.LIFE_ESSENCE_CLAIM);
+			}
 
 			if (essenceList.isEmpty()) {
 				emptySearches++;
@@ -198,6 +194,18 @@ public class LifeEssenceRoutine extends DelayedTask {
 
 		logInfo("Claimed " + totalClaimed + " Life Essence items");
 		return totalClaimed;
+	}
+
+	private List<ImageSearchResultData> locateClaimableEssence(TemplatesEnum template) {
+		return templateSearchHelper.locateAllPatterns(
+				template,
+				SearchConfig.builder()
+						.withArea(new AreaData(LIFE_ESSENCE_SEARCH_AREA.topLeft(),
+								LIFE_ESSENCE_SEARCH_AREA.bottomRight()))
+						.withThreshold(90)
+						.withMaxAttempts(1)
+						.withMaxResults(MAX_CLAIM_RESULTS)
+						.build());
 	}
 
 	/**

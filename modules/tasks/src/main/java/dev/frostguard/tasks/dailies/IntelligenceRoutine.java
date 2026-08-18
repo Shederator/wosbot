@@ -1142,6 +1142,16 @@ private void handleBeast(ImageSearchResultData beast) {
 			return;
 		}
 
+		IntelDeploymentPreflight.Decision preflight = IntelDeploymentPreflight.assess(travelTimeSeconds);
+		if (!preflight.allowed()) {
+			logWarning(routineLogIntelligenceLine("Deployment refused before tapping Deploy: "
+					+ preflight.evidence() + ". Retrying in 5 minutes."));
+			pressBack();
+			reschedule(LocalDateTime.now().plusMinutes(5));
+			processingTask = false;
+			return;
+		}
+
 
 		ImageSearchResultData deploy = templateSearchHelper.locatePattern(TemplatesEnum.DEPLOY_BUTTON, SearchConfigConstants.SINGLE_WITH_RETRIES);
 		if (!deploy.isFound()) {
@@ -1197,15 +1207,6 @@ private void handleBeast(ImageSearchResultData beast) {
 
 		staminaHelper.subtractStamina(spentStamina, false);
 
-
-		if (travelTimeSeconds <= 0) {
-			logError(routineLogIntelligenceLine("Could not parse travel time via OCR. Using 5 minute fallback reschedule."));
-			LocalDateTime rescheduleTime = LocalDateTime.now().plusMinutes(5);
-			reschedule(rescheduleTime);
-			processingTask = false;
-
-			return;
-		}
 
 		if (useSmartProcessing) {
 			LocalDateTime rescheduleTime = LocalDateTime.now().plusSeconds(travelTimeSeconds * 2);

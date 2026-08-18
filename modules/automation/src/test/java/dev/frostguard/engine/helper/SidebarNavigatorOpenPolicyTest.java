@@ -1,6 +1,8 @@
 package dev.frostguard.engine.helper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Optional;
 
@@ -38,5 +40,13 @@ class SidebarNavigatorOpenPolicyTest {
         assertEquals(SidebarNavigator.NextOpenAction.DONE,
                 SidebarNavigator.nextOpenAction(
                         Optional.of(SidebarSection.DAILY), SidebarSection.DAILY, true, true));
+    }
+
+    @Test
+    void openingOrSelectingASectionEstablishesItsTopPosition() {
+        assertTrue(SidebarNavigator.establishesKnownTop(SidebarNavigator.NextOpenAction.OPEN_PANEL));
+        assertTrue(SidebarNavigator.establishesKnownTop(SidebarNavigator.NextOpenAction.SELECT_SECTION));
+        assertFalse(SidebarNavigator.establishesKnownTop(SidebarNavigator.NextOpenAction.RESET_TO_TOP));
+        assertFalse(SidebarNavigator.establishesKnownTop(SidebarNavigator.NextOpenAction.DONE));
     }
 }

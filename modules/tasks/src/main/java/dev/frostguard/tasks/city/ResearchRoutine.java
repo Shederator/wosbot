@@ -40,6 +40,8 @@ private static final int MAX_SCROLL_ATTEMPTS_LIMIT = 10;
 
 private static final int RESEARCH_SCROLL_SETTLE_MILLIS = 1000;
 
+private static final int RESEARCH_DRAG_DURATION_MILLIS = 800;
+
 private static final int RESEARCH_ENTRY_ATTEMPTS = 2;
 
 private static final int RESEARCH_ENTRY_RETRY_MINUTES = 5;
@@ -489,7 +491,7 @@ private void tapCategoryTab(ResearchCategoryEnum category) {
 private ImageSearchResultData findStartableResearchNode() {
         logDebug(routineLogResearchLine("Normalizing research menu with swipes..."));
         for (int i = 0; i < 3; i++) {
-            swipe(new PointData(489, 320), new PointData(489, 1156));
+            swipe(new PointData(489, 500), new PointData(489, 850), RESEARCH_DRAG_DURATION_MILLIS);
             sleepTask(500);
         }
 
@@ -518,7 +520,7 @@ private ImageSearchResultData findStartableResearchNode() {
                 }
                 logInfo(routineLogResearchLine(
                         "Top incomplete row is partially hidden; repositioning it below the category header."));
-                swipe(new PointData(489, 400), new PointData(489, 650));
+                swipe(new PointData(489, 430), new PointData(489, 650), RESEARCH_DRAG_DURATION_MILLIS);
                 topRowRepositioned = true;
                 continue;
             }
@@ -570,7 +572,7 @@ private ImageSearchResultData findStartableResearchNode() {
 
             logDebug(routineLogResearchLine("No startable research in the visible frontier, scrolling down (attempt "
                     + (scrollAttempt + 1) + "/" + MAX_SCROLL_ATTEMPTS_LIMIT + ")"));
-            swipe(new PointData(489, 800), new PointData(489, 300));
+            swipe(new PointData(489, 760), new PointData(489, 500), RESEARCH_DRAG_DURATION_MILLIS);
         }
         return null;
     }
