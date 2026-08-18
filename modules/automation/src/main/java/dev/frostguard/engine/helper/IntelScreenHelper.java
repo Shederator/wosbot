@@ -57,7 +57,7 @@ public class IntelScreenHelper {
             if (isIntelScreenActive()) { log.info("Intel reached"); return; }
 
             log.warn("Tap failed - backing out");
-            emu.pressBack(dev);
+            QuitDialogGuard.pressBackSafely(emu, dev);
             pause(500);
         }
         log.error("Intel unreachable after " + MAX_NAV_PASSES + " passes");

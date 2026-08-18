@@ -297,15 +297,10 @@ public class NavigationHelper {
     // (used directly by every routine) can also call it after every single back press, not just this
     // loop -- genuinely "anywhere" coverage from one fix point instead of chasing individual call sites.
     public void dismissQuitGameDialogIfPresent() {
-        ImageSearchResultData dialog = searcher.locatePattern(
-                TemplatesEnum.QUIT_GAME_DIALOG, SearchConfigConstants.QUICK_SEARCH);
-        if (!dialog.isFound()) {
-            return;
-        }
-        broadcastWarn("Quit-game confirmation dialog detected -- tapping Cancel to back out safely "
-                + "instead of risking an accidental exit.");
-        emu.tapInteractions(device).tapNear(new PointData(207, 789));
-        interruptibleWait(500);
+        // Dave's #252 review: this used to check immediately with no settle delay and tap once
+        // with no verification the dialog actually closed. Delegated to QuitDialogGuard, the
+        // single shared implementation every Back call site in the codebase now routes through.
+        QuitDialogGuard.dismissIfPresent(emu, device);
     }
 
     // Require one immediate re-check before tapping a home/world anchor to reduce transient mis-taps.

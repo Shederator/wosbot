@@ -6,6 +6,7 @@ import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.RawImageData;
+import dev.frostguard.engine.helper.QuitDialogGuard;
 import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.input.TapJitterPolicy;
 import dev.frostguard.engine.schedule.DelayedTask;
@@ -55,7 +56,7 @@ public class FurnaceUpgradeInjectionRule implements InjectionRule {
             if (!claimResult.isFound()) {
                 activeTask.logDebug("FurnaceUpgrade: claim button missing, aborting with UI recovery back");
                 // Changed by pernerch | Date: 2026-07-04 | Why: close unintended overlay/screen when pack tap succeeded but claim button was not found.
-                controller.pressBack(devIdx);
+                QuitDialogGuard.pressBackSafely(controller, devIdx);
                 Thread.sleep(200);
                 return;
             }
@@ -64,9 +65,9 @@ public class FurnaceUpgradeInjectionRule implements InjectionRule {
             Thread.sleep(200);
             taps.tapNear(CONFIRM_COORD, TapJitterPolicy.DEFAULT_POINT_JITTER_RADIUS);
             Thread.sleep(200);
-            controller.pressBack(devIdx);
+            QuitDialogGuard.pressBackSafely(controller, devIdx);
             Thread.sleep(200);
-            controller.pressBack(devIdx);
+            QuitDialogGuard.pressBackSafely(controller, devIdx);
 
             activeTask.logDebug("FurnaceUpgrade injection completed");
         } catch (Exception ex) {

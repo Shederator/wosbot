@@ -74,7 +74,7 @@ public class StaminaHelper {
                 taps.tapInside(CommonGameAreas.STAMINA_BUTTON, 1, 200);
             } else {
                 emitWarn("Stamina read timeout: stamina button click exceeded 1.5s, aborting");
-                device.pressBack(deviceSlot);
+                QuitDialogGuard.pressBackSafely(device, deviceSlot);
                 return;
             }
 
@@ -99,8 +99,8 @@ public class StaminaHelper {
         } finally {
             // Safety navigation back
             try {
-                device.pressBack(deviceSlot);
-                device.pressBack(deviceSlot);
+                QuitDialogGuard.pressBackSafely(device, deviceSlot);
+                QuitDialogGuard.pressBackSafely(device, deviceSlot);
             } catch (Exception ex) {
                 emitDebug("Press-back cleanup error: " + ex.getMessage());
             }
@@ -121,9 +121,9 @@ public class StaminaHelper {
         pause(1000);
 
         StaminaTopUpResult result = useItemsInOpenDialog(targetStamina, itemReserve);
-        device.pressBack(deviceSlot);
+        QuitDialogGuard.pressBackSafely(device, deviceSlot);
         pause(500);
-        device.pressBack(deviceSlot);
+        QuitDialogGuard.pressBackSafely(device, deviceSlot);
         pause(500);
         return result;
     }

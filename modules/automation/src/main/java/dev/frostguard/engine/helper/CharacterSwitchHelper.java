@@ -56,7 +56,7 @@ public class CharacterSwitchHelper {
         if (!blank(wantId) && blank(liveId)) log.warn("ID configured but OCR failed");
         if (!blank(wantName) && blank(liveName)) log.warn("Name configured but OCR failed");
 
-        if (idOk || nameOk) { log.info("Char verified OK"); emu.pressBack(dev); return true; }
+        if (idOk || nameOk) { log.info("Char verified OK"); QuitDialogGuard.pressBackSafely(emu, dev); return true; }
         log.warn("Char mismatch"); return false;
     }
 
@@ -72,7 +72,7 @@ public class CharacterSwitchHelper {
             log.error("Settings button not found"); return false;
         }
         if (!tapTemplate(TemplatesEnum.GAME_PROFILE_SETTINGS_SWITCH_CHARACTER_BUTTON, null)) {
-            log.error("Switch Character button not found"); emu.pressBack(dev); return false;
+            log.error("Switch Character button not found"); QuitDialogGuard.pressBackSafely(emu, dev); return false;
         }
         sleep(2000);
 
@@ -84,7 +84,7 @@ public class CharacterSwitchHelper {
             // Check if already active via checkmark badge
             if (checkmarkAt(hit.getPoint())) {
                 log.info("Already active — done");
-                emu.pressBack(dev); sleep(500); return true;
+                QuitDialogGuard.pressBackSafely(emu, dev); sleep(500); return true;
             }
 
             // Tap and confirm
@@ -154,7 +154,7 @@ public class CharacterSwitchHelper {
                 TemplateSearchHelper.SearchConfig.builder()
                         .withArea(CommonGameAreas.PROFILE_SETTINGS_SWITCH_CHARACTER_PROMPT_BUTTON_AREA)
                         .withMaxAttempts(3).withDelay(500).withThreshold(80).build());
-        if (btn == null || !btn.isFound()) emu.pressBack(dev);
+        if (btn == null || !btn.isFound()) QuitDialogGuard.pressBackSafely(emu, dev);
         else taps.tapInside(btn, 1, 500);
         sleep(500);
     }

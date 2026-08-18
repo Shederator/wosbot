@@ -386,13 +386,11 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
         emuManager.swipeScreen(EMULATOR_NUMBER, start, end);
     }
 
-    /** Duration-aware swipe -- a real, controlled drag instead of the default
-     *  fast-flick (which triggers momentum scrolling far past the intended
-     *  distance on the World map). Use this for any map-panning navigation. */
-    public void swipe(PointData start, PointData end, int durationMs) {
-        checkPreemption();
-        emuManager.swipeScreen(EMULATOR_NUMBER, start, end, durationMs);
-    }
+    // Dave's #252 review: a duration-aware swipe(start, end, durationMs) overload lived here with
+    // zero callers on this branch -- unrelated scope creep for a schedule-jitter/quit-dialog PR.
+    // Removed; it exists independently on Bearguard's own main where it actually has a consumer
+    // (Monument's map-panning navigation), and can be proposed on its own if it's ever needed
+    // upstream.
 
     public void pressBack() {
         checkPreemption();
@@ -499,13 +497,30 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
     // ── scheduling ──────────────────────────────────────────────────
 
     /**
+     * Schedules the next run at exactly the given time. Every one of this codebase's ~236
+     * existing call sites was written expecting this exact contract, so it stays exact.
+     *
+     * <p>Dave's #252 review, 2026-08-18: an earlier version of this method jittered every call
+     * unconditionally -- silently adding up to {@link ConfigurationKeyEnum#SCHEDULE_JITTER_MAX_SECONDS_INT}
+     * of drift to saved schedules, daily/event reset times, Bear Trap plans, stamina wake-ups,
+     * Telegram schedules, and every custom task, none of which had been audited as tolerant of
+     * that. Some call sites also persisted the original (un-jittered) timestamp separately while
+     * the task itself held the jittered one, so runtime and persisted/UI state could disagree.
+     * Restored to its original exact contract; see {@link #rescheduleWithJitter} for the
+     * opt-in variant, currently unused pending a deliberate, separately-reviewed audit of which
+     * specific call sites actually want a scattered wake-up.</p>
+     */
+    public void reschedule(LocalDateTime rescheduledTime) {
+        long gapMs = Duration.between(LocalDateTime.now(), rescheduledTime).toMillis();
+        scheduledTime = LocalDateTime.now().plus(Duration.ofMillis(gapMs));
+    }
+
+    /**
      * Schedules the next run, nudged by a small random amount so wake-ups do not land on
      * mechanically exact times.
      *
-     * <p>matt, 2026-08-08: every routine funnels its reschedule through here, so this is the one
-     * place that can scatter the bot's clock. Without it Intel fires at exactly 15:00.00 after
-     * every run, hourly tasks land on the same second forever, and the whole schedule is a
-     * metronome.</p>
+     * <p>matt, 2026-08-08: without this, Intel fires at exactly 15:00.00 after every run, hourly
+     * tasks land on the same second forever, and the whole schedule is a metronome.</p>
      *
      * <p>The jitter is a percentage <em>with an absolute ceiling</em>, which is matt's
      * requirement and the part that matters: 15% of a 16-hour research timer would be nearly
@@ -516,21 +531,16 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
      *
      * <p>Only ever delays, never pulls forward — arriving early at a timer that has not expired
      * wastes a navigation cycle and can read as a retry loop.</p>
+     *
+     * <p>Dave's #252 review: deliberately opt-in and currently uncalled. This used to be what
+     * plain {@code reschedule()} did for every one of ~236 call sites, none of which had been
+     * checked for whether a scattered wake-up is actually safe for them (a fixed event window
+     * or march landing, for instance, is not). Migrating specific call sites to this is a
+     * separate, deliberately-reviewed follow-up, not something to do blindly in this pass.</p>
      */
-    public void reschedule(LocalDateTime rescheduledTime) {
+    public void rescheduleWithJitter(LocalDateTime rescheduledTime) {
         long gapMs = Duration.between(LocalDateTime.now(), rescheduledTime).toMillis();
         scheduledTime = LocalDateTime.now().plus(Duration.ofMillis(gapMs + resolveJitterMs(gapMs)));
-    }
-
-    /**
-     * Schedules without jitter, for callers that must hit an exact moment.
-     *
-     * <p>Reserved for hard external deadlines — a fixed event window, a march landing — where
-     * arriving late costs something real.</p>
-     */
-    public void rescheduleExact(LocalDateTime rescheduledTime) {
-        long gapMs = Duration.between(LocalDateTime.now(), rescheduledTime).toMillis();
-        scheduledTime = LocalDateTime.now().plus(Duration.ofMillis(gapMs));
     }
 
     private long resolveJitterMs(long gapMs) {
