@@ -775,16 +775,27 @@ public class MonumentRoutine extends DelayedTask {
     // Alliance, both centered around x=360), and the run log confirmed the failure mode exactly:
     // OCR read a bogus "2" at the wrong (220, 548) candidate -- empty wood panel, nothing there --
     // tapped it, and the Fragment Backpack panel never came back because nothing was actually hit.
+    // matt caught it live, 2026-08-19: a real run reported "No more owned packs found. Opened 0
+    // total." while the Fragment Backpack icon itself was showing a real "15" badge -- General
+    // Album was genuinely empty ("No such Scene Fragment Pack owned") that pass, and its own
+    // placeholder block pushed Rekindled Flames and Divine Weapons further down than any existing
+    // candidate reached (confirmed live: real icon centers at (355,590) and (355,800), owned-count
+    // badges at (355,635) and (355,880) -- none of the 4 candidates below land close enough for
+    // either). Added two more candidates at the real measured positions, and widened the badge
+    // read box (18 -> 32 half-height) so it isn't relying on hitting the exact pixel again next
+    // time this panel reflows by a slightly different amount.
     private static final PointData[] BACKPACK_ICON_CANDIDATES = {
             new PointData(360, 280),  // row 1 icon (General Album, confirmed by live screenshot)
             new PointData(360, 545),  // row 2 icon (Tundra Alliance, confirmed by live screenshot)
             new PointData(360, 587),  // legacy candidate, kept for a placeholder-shifted layout
             new PointData(360, 765),  // 3rd visual row, single icon
+            new PointData(355, 590),  // General-Album-empty-shifted row 2 (Rekindled Flames), live 2026-08-19
+            new PointData(355, 800),  // General-Album-empty-shifted row 3 (Divine Weapons), live 2026-08-19
     };
     /** Owned-count badge sits just under each candidate icon; read box is centered on that offset. */
     private static final int BACKPACK_BADGE_Y_OFFSET = 62;
     private static final int BACKPACK_BADGE_HALF_WIDTH = 45;
-    private static final int BACKPACK_BADGE_HALF_HEIGHT = 18;
+    private static final int BACKPACK_BADGE_HALF_HEIGHT = 32;
     private static final int BACKPACK_MAX_TOTAL_OPENS = 40;
 
     // matt/2026-08-14, caught live: findAnyOwnedPackIcon() false-positived on candidate (360,587) --
