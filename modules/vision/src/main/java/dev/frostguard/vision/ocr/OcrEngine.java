@@ -16,9 +16,15 @@ import java.io.IOException;
  * Provider-neutral OCR facade.
  *
  * <p>All call sites use this class rather than a concrete provider directly.
- * Tesseract is the sole provider in this step; additional providers will be
- * added opt-in in a subsequent step once their behavior is validated against
- * real saved frames.
+ * Tesseract is the default and serves as the always-available fallback.
+ * An alternative provider (e.g. {@link PaddleOcrProvider}) may be activated
+ * at bootstrap via {@link #setProvider(OcrProvider)}.
+ *
+ * <p>When a non-Tesseract provider throws {@link OcrException}, the engine
+ * automatically retries the same prepared image with a fresh
+ * {@link TesseractOcrProvider} instance and logs a warning. Empty or incorrect
+ * results from a provider are not automatically retried — those are valid
+ * recognition outcomes that callers must handle.
  *
  * <p>The shared provider instance is created lazily.
  */
@@ -58,6 +64,16 @@ public final class OcrEngine {
         }
         provider = newProvider;
         log.info("OCR provider set to {}", newProvider.getClass().getSimpleName());
+    }
+
+    /**
+     * Swaps the active provider and returns the previously active one.
+     * Intended for use in tests that need to restore the provider in {@code @AfterAll}.
+     */
+    public static synchronized OcrProvider setProviderAndReturn(OcrProvider newProvider) {
+        OcrProvider previous = provider != null ? provider : new TesseractOcrProvider();
+        setProvider(newProvider);
+        return previous;
     }
 
     /**
@@ -173,7 +189,26 @@ public final class OcrEngine {
         g.drawImage(cropped, 0, 0, outW, outH, null);
         g.dispose();
 
-        return getProvider().recognizeText(magnified, lang);
+        return recognizeFromFile(magnified, lang);
+    }
+
+    /**
+     * Invokes the active provider and falls back to Tesseract on {@link OcrException}
+     * when the active provider is not already Tesseract.
+     */
+    private static String recognizeFromFile(BufferedImage magnified, String lang)
+            throws OcrException {
+        try {
+            return getProvider().recognizeText(magnified, lang);
+        } catch (OcrException e) {
+            OcrProvider active = provider;
+            if (!(active instanceof TesseractOcrProvider)) {
+                log.warn("OCR provider {} failed in readFromFile — falling back to Tesseract: {}",
+                        active.getClass().getSimpleName(), e.getMessage());
+                return new TesseractOcrProvider().recognizeText(magnified, lang);
+            }
+            throw e;
+        }
     }
 
     private static void requireValidCapture(RawImageData capture) {

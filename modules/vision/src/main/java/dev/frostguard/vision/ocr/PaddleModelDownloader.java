@@ -80,14 +80,6 @@ public final class PaddleModelDownloader {
         }
     }
 
-    /**
-     * Returns {@code true} if all required model files exist in {@code modelsDir}.
-     * Does not verify SHA-256 — use for fast startup checks only.
-     */
-    public static boolean modelsPresent(Path modelsDir) {
-        return REQUIRED_MODELS.stream()
-                .allMatch(m -> Files.exists(modelsDir.resolve(m.name())));
-    }
 
     private static void downloadWithVerify(HttpClient client, String url,
                                            Path dest, String expectedSha256)

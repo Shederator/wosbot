@@ -62,8 +62,11 @@ public final class PaddleOcrProvider implements OcrProvider {
             config.getRec().setModelPath(modelsDir.resolve("en_PP-OCRv3_rec_infer.onnx").toString());
 
             this.engine = RapidOCR.create(config);
-        } catch (Exception | Error e) {
-            // Catch Error: JNA can throw LinkageError on a missing native DLL
+        } catch (UnsatisfiedLinkError | ExceptionInInitializerError e) {
+            // ONNX Runtime loads its native DLL via JNI; a missing or
+            // incompatible native library surfaces as a LinkageError subtype.
+            throw new OcrException("PaddleOCR native library failed to load: " + e.getMessage(), e);
+        } catch (Exception e) {
             throw new OcrException("PaddleOCR initialization failed: " + e.getMessage(), e);
         }
         log.info("PaddleOCR provider ready — cold init {} ms",
@@ -94,7 +97,7 @@ public final class PaddleOcrProvider implements OcrProvider {
         try {
             // RapidOCR4j accepts BufferedImage directly — no temp file needed
             result = engine.run(preparedImage, params);
-        } catch (Exception | Error e) {
+        } catch (Exception e) {
             throw new OcrException("PaddleOCR recognition failed", e);
         }
 
