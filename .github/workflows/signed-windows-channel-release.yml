@@ -223,7 +223,7 @@ jobs:
               throw "Immutable release $tag already exists"
           }
 
-      - name: Configure optional Authenticode certificate
+      - name: Configure required Authenticode certificate
         id: certificate
         env:
           SIGNING_CERTIFICATE_BASE64: ${{ secrets.FROSTGUARD_WINDOWS_SIGNING_CERTIFICATE_BASE64 }}
@@ -236,14 +236,8 @@ jobs:
               $env:SIGNING_CERTIFICATE_PASSWORD,
               $env:AUTHENTICODE_PUBLISHER
           ).Where({ -not [string]::IsNullOrWhiteSpace($_) }).Count
-          if ($configuredCount -eq 0) {
-              "enabled=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-              "publisher=" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-              Write-Output "Authenticode is not configured; project signing remains mandatory."
-              exit 0
-          }
           if ($configuredCount -ne 3) {
-              throw "Authenticode certificate, password, and publisher must be configured together"
+              throw "Public releases require the Authenticode certificate, password, and publisher"
           }
           $certificatePath = Join-Path $env:RUNNER_TEMP "frostguard-release-signing.pfx"
           [IO.File]::WriteAllBytes($certificatePath,
@@ -259,11 +253,10 @@ jobs:
               -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "path=$certificatePath" | Out-File `
               -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "enabled=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "publisher=$($certificate.Subject)" | Out-File `
               -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-      - name: Build channel application image and installer
+      - name: Build unsigned channel application image
         shell: pwsh
         env:
           WINDOWS_VERSION: ${{ steps.identity.outputs.windows_version }}
@@ -271,7 +264,7 @@ jobs:
           AUTHENTICODE_PUBLISHER: ${{ steps.certificate.outputs.publisher }}
         run: |
           $mavenArgs = $env:MAVEN_ARGS -split " "
-          $profiles = "windows-app-image,windows-installer$($env:EXTRA_PROFILE)"
+          $profiles = "windows-app-image$($env:EXTRA_PROFILE)"
           $stableManifest = "https://github.com/$($env:GITHUB_REPOSITORY)/releases/latest/download/frostguard-stable-manifest.json"
           $nightlyManifest = "https://github.com/$($env:GITHUB_REPOSITORY)/releases/download/nightly/frostguard-nightly-manifest.json"
           & .\mvnw.cmd @mavenArgs "-Drevision=$($env:VERSION)" `
@@ -281,7 +274,7 @@ jobs:
               "-Dfrostguard.update.manifest.nightly=$nightlyManifest" `
               "-P$profiles" package
 
-      - name: Verify and smoke-test channel application image
+      - name: Verify unsigned channel launchers
         shell: pwsh
         env:
           PRODUCT_NAME: ${{ steps.identity.outputs.product_name }}
@@ -306,17 +299,64 @@ jobs:
               )
           }
           python build-support/verification/verify_app_image.py @verificationArgs
+
+      - name: Sign and verify channel launchers
+        shell: pwsh
+        env:
+          PRODUCT_NAME: ${{ steps.identity.outputs.product_name }}
+          CERTIFICATE_THUMBPRINT: ${{ steps.certificate.outputs.thumbprint }}
+          AUTHENTICODE_PUBLISHER: ${{ steps.certificate.outputs.publisher }}
+        run: |
+          $image = "packaging/desktop/target/app-image/$($env:PRODUCT_NAME)"
+          $watcherName = if ($env:CHANNEL -eq 'nightly') {
+              'FrostguardNightlyWatcher'
+          } else {
+              'FrostguardWatcher'
+          }
+          $launchers = @(
+              (Join-Path $image "$($env:PRODUCT_NAME).exe"),
+              (Join-Path $image "$watcherName.exe")
+          )
+          & build-support/release/sign_windows_artifact.ps1 `
+              -Path $launchers `
+              -CertificateThumbprint $env:CERTIFICATE_THUMBPRINT `
+              -Publisher $env:AUTHENTICODE_PUBLISHER
+
+      - name: Smoke-test signed channel application image
+        shell: pwsh
+        env:
+          PRODUCT_NAME: ${{ steps.identity.outputs.product_name }}
+        run: |
+          $image = "packaging/desktop/target/app-image/$($env:PRODUCT_NAME)"
           powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass `
               -File build-support/verification/smoke_test_app_image.ps1 `
               -ImagePath $image -Channel $env:CHANNEL -ProductName $env:PRODUCT_NAME
 
-      - name: Prepare immutable installer and verify optional Authenticode
+      - name: Build installer from signed channel application image
+        shell: pwsh
+        env:
+          WINDOWS_VERSION: ${{ steps.identity.outputs.windows_version }}
+          EXTRA_PROFILE: ${{ steps.identity.outputs.profile }}
+          AUTHENTICODE_PUBLISHER: ${{ steps.certificate.outputs.publisher }}
+        run: |
+          $mavenArgs = $env:MAVEN_ARGS -split " "
+          $profiles = "windows-installer$($env:EXTRA_PROFILE)"
+          $stableManifest = "https://github.com/$($env:GITHUB_REPOSITORY)/releases/latest/download/frostguard-stable-manifest.json"
+          $nightlyManifest = "https://github.com/$($env:GITHUB_REPOSITORY)/releases/download/nightly/frostguard-nightly-manifest.json"
+          & .\mvnw.cmd @mavenArgs -pl packaging/desktop -am -DskipTests `
+              "-Drevision=$($env:VERSION)" `
+              "-Dfrostguard.windows.app-version=$($env:WINDOWS_VERSION)" `
+              "-Dfrostguard.update.authenticode-publisher=$($env:AUTHENTICODE_PUBLISHER)" `
+              "-Dfrostguard.update.manifest.stable=$stableManifest" `
+              "-Dfrostguard.update.manifest.nightly=$nightlyManifest" `
+              "-P$profiles" package
+
+      - name: Prepare, sign, and verify immutable installer
         id: installer
         shell: pwsh
         env:
           IMMUTABLE_NAME: ${{ steps.identity.outputs.installer_name }}
           CERTIFICATE_THUMBPRINT: ${{ steps.certificate.outputs.thumbprint }}
-          AUTHENTICODE_ENABLED: ${{ steps.certificate.outputs.enabled }}
           AUTHENTICODE_PUBLISHER: ${{ steps.certificate.outputs.publisher }}
         run: |
           $source = @(Get-ChildItem "packaging/desktop/target/installers/$($env:CHANNEL)" `
@@ -326,27 +366,10 @@ jobs:
           }
           $installer = Join-Path $env:RUNNER_TEMP $env:IMMUTABLE_NAME
           Copy-Item -LiteralPath $source[0].FullName -Destination $installer
-          if ($env:AUTHENTICODE_ENABLED -eq 'true') {
-              $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" `
-                  -Recurse -Filter signtool.exe | Where-Object FullName -Match '\\x64\\' `
-                  | Sort-Object FullName -Descending | Select-Object -First 1
-              if ($null -eq $signtool) {
-                  throw "Windows SDK signtool.exe was not found"
-              }
-              & $signtool.FullName sign /sha1 $env:CERTIFICATE_THUMBPRINT /fd SHA256 `
-                  /td SHA256 /tr http://timestamp.digicert.com $installer
-              & $signtool.FullName verify /pa /v $installer
-              if ($LASTEXITCODE -ne 0) {
-                  throw "Authenticode verification failed"
-              }
-              $signature = Get-AuthenticodeSignature -LiteralPath $installer
-              if ($signature.Status -ne 'Valid' -or
-                  $signature.SignerCertificate.Subject -cne $env:AUTHENTICODE_PUBLISHER) {
-                  throw "Signed installer does not match the pinned publisher"
-              }
-          } else {
-              Write-Warning "Installer has no Windows verified publisher; the project-signed manifest is the trust root."
-          }
+          & build-support/release/sign_windows_artifact.ps1 `
+              -Path $installer `
+              -CertificateThumbprint $env:CERTIFICATE_THUMBPRINT `
+              -Publisher $env:AUTHENTICODE_PUBLISHER
           "path=$installer" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Create draft release and verify uploaded installer

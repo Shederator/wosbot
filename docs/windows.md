@@ -69,13 +69,12 @@ and leaves the current installation untouched. A failed installer upgrade uses
 Windows Installer rollback, attempts to reopen the retained application, and
 shows an update failure instead of silently claiming success.
 
-Until release binaries have an Authenticode publisher, Java-only Stable and
-Nightly updates keep their native desktop and watcher bootstrap files
-byte-identical to the already accepted Stable 2.1.0 and Nightly 26.8.12004
-launchers. The MSI version still increases for every release, and Frostguard
-displays the version embedded in its application JAR. Changes to the bootstrap,
-icon, or packaged JDK require a new Windows reputation decision; Authenticode
-signing remains the durable solution.
+Public Stable and Nightly releases Authenticode-sign both native launchers and
+the MSI with the same pinned publisher. Release packaging verifies the known
+unsigned launcher bytes before signing them, then builds the MSI from that
+signed application image. Frostguard displays the version embedded in its
+application JAR while Windows Installer continues to use a monotonically
+increasing numeric product version.
 
 ## Source build commands and native packaging
 
@@ -135,10 +134,10 @@ The application currently packages Windows ADB and Tesseract assets from `tools/
 
 ## Starting Frostguard
 
-After downloading a Frostguard 3.0 installer from the official GitHub release,
-complete the per-user installation. The installer currently has no Windows
-verified publisher, so an **Unknown publisher** or SmartScreen warning is
-expected. Run the installed `Frostguard.exe` or `Frostguard Nightly.exe`.
+After downloading a Frostguard 3 installer from the official GitHub release,
+verify that Windows shows the expected Frostguard publisher and complete the
+per-user installation. Run the installed `Frostguard.exe` or
+`Frostguard Nightly.exe`.
 The per-user installer defaults to `%LOCALAPPDATA%\Frostguard`, while
 all mutable databases, configuration, logs, watcher state, and custom tasks
 remain in the selected workspace below `%USERPROFILE%\.frostguard`. The
