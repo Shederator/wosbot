@@ -329,12 +329,17 @@ public class MonumentRoutine extends DelayedTask {
             }
         }
 
+        // A verification check must actually rule things OUT to mean anything -- MONUMENT_BADGE_SEARCH's
+        // threshold=30 is tuned for finding the real badge pre-tap (including at the low point of its
+        // own bounce animation), not for ruling it out on the DIFFERENT screen that opens post-tap. Real
+        // logged evidence this was a false positive every single pass: see
+        // SearchConfigConstants#MONUMENT_BADGE_STILL_THERE_CHECK's header.
         ImageSearchResultData badgeStillThere = templateSearchHelper.locatePatternMultiScale(
-                TemplatesEnum.MONUMENT_REWARD_BADGE, SearchConfigConstants.MONUMENT_BADGE_SEARCH);
+                TemplatesEnum.MONUMENT_REWARD_BADGE, SearchConfigConstants.MONUMENT_BADGE_STILL_THERE_CHECK);
         if (badgeStillThere.isFound()) {
             logWarning(logLine("Tapped the real matched badge at " + badge.getPoint()
-                    + " but a badge match is still detectable afterward -- nothing opened. "
-                    + "Stopping here instead of cascading into the rest of the chain blind."));
+                    + " but a badge match is still detectable afterward (" + badgeStillThere
+                    + ") -- nothing opened. Stopping here instead of cascading into the rest of the chain blind."));
             return false;
         }
 

@@ -62,4 +62,18 @@ public final class SearchConfigConstants {
     // the full-frame scan. Do not reuse for other templates; revisit if real evidence says otherwise.
     public static final SearchConfig MONUMENT_BADGE_SEARCH =
             SearchConfig.builder().withMaxAttempts(6).withThreshold(30).withDelay(300L).build();
+
+    // matt caught it live, 2026-08-19: MonumentRoutine was reusing MONUMENT_BADGE_SEARCH's
+    // threshold=30 for its post-tap "is the badge still there" check too -- but that threshold was
+    // tuned for finding the real badge on ITS OWN screen pre-tap, not for ruling it out on a
+    // DIFFERENT screen (whatever opened after tapping it) post-tap. Real logged evidence: the
+    // post-tap check fired a "still detectable" false positive at 48.29% match, scale 0.60,
+    // position (67,460) -- a completely different position AND scale than the original tap's
+    // 89.44% match at scale 1.25, position (372,540). That's not the same badge; it's threshold=30
+    // coincidentally matching something else on the newly-opened panel across a full multi-scale
+    // scan, and it happened on effectively every real pass, permanently blocking Monument from ever
+    // reaching Claim All. A verification check needs to actually rule things OUT, so it uses a real
+    // threshold -- the codebase's ordinary default (90) other templates already use safely.
+    public static final SearchConfig MONUMENT_BADGE_STILL_THERE_CHECK =
+            SearchConfig.builder().withMaxAttempts(1).withThreshold(90).withDelay(0L).build();
 }
