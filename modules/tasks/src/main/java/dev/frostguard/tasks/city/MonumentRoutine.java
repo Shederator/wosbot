@@ -591,7 +591,7 @@ public class MonumentRoutine extends DelayedTask {
     private void claimAllReadyRows() {
         for (int i = 0; i < MAX_CLAIM_LOOPS; i++) {
             ImageSearchResultData claimBtn = templateSearchHelper.locatePattern(
-                    TemplatesEnum.MONUMENT_ATLAS_CLAIM_BUTTON, SearchConfigConstants.QUICK_SEARCH);
+                    TemplatesEnum.MONUMENT_ATLAS_CLAIM_BUTTON, SearchConfigConstants.MONUMENT_ATLAS_CLAIM_BUTTON_SEARCH);
             if (!claimBtn.isFound()) {
                 logInfo(logLine("No more Claim buttons visible (" + i + " claimed)."));
                 break;

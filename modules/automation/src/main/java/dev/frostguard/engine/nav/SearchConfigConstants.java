@@ -76,4 +76,18 @@ public final class SearchConfigConstants {
     // threshold -- the codebase's ordinary default (90) other templates already use safely.
     public static final SearchConfig MONUMENT_BADGE_STILL_THERE_CHECK =
             SearchConfig.builder().withMaxAttempts(1).withThreshold(90).withDelay(0L).build();
+
+    // matt caught it live, 2026-08-19: "it has to go to the bottom and hit claim all... it's not
+    // hitting claim all." Root-caused with real evidence, not guessed -- a live-captured native
+    // 720x1280 frame of the Atlas panel measured MONUMENT_ATLAS_CLAIM_BUTTON (the individual green
+    // "Claim" pill) at 100.0% against the real enabled button, but 89.04% against the DISABLED grey
+    // "Claim" button on an unfinished row ("Log in for 60 days", 33/60) -- just 0.96 points below
+    // QUICK_SEARCH's threshold=90. That's not a safe margin; ordinary rendering/compression variance
+    // can and does cross it, and when it does the individual-claim loop taps a dead button (no state
+    // change) instead of the real ready rewards, potentially burning its whole MAX_CLAIM_LOOPS budget
+    // there and never reaching Claim All with the real ready rows still unclaimed underneath it.
+    // threshold=96 sits comfortably below the true positive (100.0) and comfortably above the
+    // measured false positive (89.04) -- a wide margin on both sides, not another guess.
+    public static final SearchConfig MONUMENT_ATLAS_CLAIM_BUTTON_SEARCH =
+            SearchConfig.builder().withMaxAttempts(1).withThreshold(96).withDelay(100L).build();
 }
