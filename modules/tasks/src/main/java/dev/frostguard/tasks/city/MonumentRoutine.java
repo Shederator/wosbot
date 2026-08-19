@@ -182,6 +182,38 @@ public class MonumentRoutine extends DelayedTask {
     private static final PointData PIECE_PICKER_TIPS_CONFIRM = new PointData(358, 789);
     private static final int MAX_REQUEST_LOOPS = 5;
 
+    // matt/2026-08-19: My Requests row has THREE distinct states, not the single "Request"
+    // state the code above originally assumed -- live-verified hand-driven the same day:
+    //   1. "Request" (centered button) -- no active request, free to ask.
+    //   2. "Claim" (right-aligned, inside the row once an ally has fulfilled it) -- a real
+    //      request/reward reveal ("Tap anywhere to close", then back to the panel).
+    //   3. "Requesting..." (disabled-look, paired with a "Cancel" button) -- already pending,
+    //      nothing to do this pass.
+    // The button's own X position DIFFERS between "Request" (centered, ~358) and "Claim"
+    // (right-aligned, ~574) -- so the state must be read via OCR first, then the matching
+    // point tapped, rather than assuming one fixed position for both.
+    private static final PointData MY_REQUESTS_BUTTON_LABEL_TL = new PointData(280, 340);
+    private static final PointData MY_REQUESTS_BUTTON_LABEL_BR = new PointData(620, 400);
+    private static final PointData MY_REQUESTS_CLAIM_BTN = new PointData(574, 356);
+    /** Live-verified today: a center-body tap closes the post-Claim reward reveal
+     *  ("Tap anywhere to close", avatars + reward icon) back to the Alliance Trade panel. */
+    private static final PointData CLAIM_REWARD_TAP_ANYWHERE = new PointData(344, 895);
+
+    // matt/2026-08-19: caught live -- tapping "Request" doesn't always land directly on the
+    // piece-detail popup PIECE_PICKER_REQUEST_BTN below assumes. It can first open the target
+    // puzzle's own overview GRID with an animated hand/glove graphic pointing at whichever
+    // empty slot the game auto-selected -- "this hand could be anywhere on this board... a
+    // three column by four row grid" (matt's words). Tapping the pointed-at cell is what opens
+    // the actual detail popup. No real template exists yet for that hand graphic (the puzzle
+    // that showed it live today, "Friend of Nature", already had its request in flight by the
+    // time this was written, so there's nothing left to crop a native frame from -- same
+    // constraint as the Assemble Now button in the puzzle-ready chain above). Rather than guess
+    // a grid-cell coordinate, processAllianceTradeRequests() below OCR-confirms the detail
+    // popup's own Request button is actually present before tapping it, and stops safely (logs
+    // + backs out) if it isn't, instead of risking one of the 3 daily requests on a blind tap.
+    // Wire up a real ALLIANCE_TRADE_HAND_POINTER template + multi-scale search next time this
+    // is caught live.
+
     private static final PointData ALLY_FIRST_ROW_SEND_BTN = new PointData(583, 712);
     private static final PointData ALLY_FIRST_ROW_OWNED_TL = new PointData(580, 665);
     private static final PointData ALLY_FIRST_ROW_OWNED_BR = new PointData(700, 695);
@@ -253,10 +285,37 @@ public class MonumentRoutine extends DelayedTask {
         logInfo(logLine("Checking the milestone chest track."));
         claimMilestoneChestsIfReady();
 
-        // matt/2026-08-14: Alliance Trade deliberately not run automatically -- matt wants to
-        // handle it manually for now. processAllianceTradeRequests()/processAllianceTradeSends()
-        // are live-verified working correctly (see class header) and left in place for a future
-        // re-enable, just not called here.
+        // matt/2026-08-14: Alliance Trade Sends (giving pieces TO allies) deliberately not run
+        // automatically -- matt's call again live on 2026-08-19: "there's a whole other part of
+        // this where you could give other alliance members pieces, but it's extremely
+        // complicated... not really appropriate at this time." processAllianceTradeSends() is
+        // left in place, live-verified working, just not called here.
+        //
+        // matt/2026-08-19: My Requests (Claim + Request -- asking the alliance FOR a piece) is
+        // now wired in, per matt's direct "build this whole thing" the same day he walked the
+        // real Claim/Request/piece-picker flow live tap-by-tap. Entered via the Tundra Albums
+        // hub's own always-present Alliance Trade button (not the floating city badge that led
+        // here today -- that badge reverted back to the normal MONUMENT_REWARD_BADGE state the
+        // moment its one pending trade got consumed, so there's no stable template for it to
+        // gate on; the hub button needs no badge at all).
+        logInfo(logLine("Opening Alliance Trade for My Requests (Claim/Request only)."));
+        tapNear(ALBUMS_ALLIANCE_TRADE_BTN);
+        sleepTask(PANEL_SETTLE_MS);
+        String tradePanelTitle = stringHelper.attemptRecognition(
+                BACKPACK_TITLE_TL, BACKPACK_TITLE_BR,
+                2, 150L, PANEL_TITLE_OCR_SETTINGS,
+                s -> s != null && !s.isBlank(),
+                s -> s);
+        if (tradePanelTitle == null || !tradePanelTitle.toLowerCase().contains("alliance")) {
+            logWarning(logLine("Alliance Trade panel not confirmed after tapping "
+                    + ALBUMS_ALLIANCE_TRADE_BTN + " (read: '" + tradePanelTitle
+                    + "') -- skipping the My Requests pass this run rather than guessing blindly."));
+            recoverTowardHome();
+        } else {
+            processAllianceTradeRequests();
+            tapNear(TRADE_CLOSE_X);
+            sleepTask(ACTION_SETTLE_MS);
+        }
 
         tapNear(ALBUMS_BACK_ARROW);
         sleepTask(ACTION_SETTLE_MS);
@@ -790,8 +849,49 @@ public class MonumentRoutine extends DelayedTask {
         return false;
     }
 
+    private static final PointData PIECE_PICKER_REQUEST_BTN_LABEL_TL = new PointData(480, 865);
+    private static final PointData PIECE_PICKER_REQUEST_BTN_LABEL_BR = new PointData(610, 915);
+
+    /**
+     * matt/2026-08-19: rebuilt around the real My Requests row's three states (see the class-
+     * level "Alliance Trade panel" constants comment for the live-verified detail). Reads the
+     * button label via OCR every loop instead of assuming it's always "Request" -- a Claim is
+     * claimed, a Requesting row is skipped, and only a genuine Request tap spends one of the
+     * 3 daily requests.
+     */
     private void processAllianceTradeRequests() {
         for (int i = 0; i < MAX_REQUEST_LOOPS; i++) {
+            String label = stringHelper.attemptRecognition(
+                    MY_REQUESTS_BUTTON_LABEL_TL, MY_REQUESTS_BUTTON_LABEL_BR,
+                    2, 150L, PANEL_TITLE_OCR_SETTINGS,
+                    s -> s != null && !s.isBlank(),
+                    s -> s.toLowerCase());
+
+            if (label == null) {
+                logInfo(logLine("My Requests button label unreadable -- moving on rather than guessing."));
+                return;
+            }
+
+            if (label.contains("requesting")) {
+                logInfo(logLine("My Requests already has a pending Requesting... row -- nothing to do."));
+                return;
+            }
+
+            if (label.contains("claim")) {
+                logInfo(logLine("My Requests row is claimable -- tapping Claim."));
+                tapNear(MY_REQUESTS_CLAIM_BTN);
+                sleepTask(ACTION_SETTLE_MS);
+                tapNear(CLAIM_REWARD_TAP_ANYWHERE);
+                sleepTask(ACTION_SETTLE_MS);
+                continue; // re-read the row -- a fresh Request button should be there now.
+            }
+
+            if (!label.contains("request")) {
+                logInfo(logLine("My Requests button label read as '" + label
+                        + "' -- not a recognized state. Moving on rather than guessing."));
+                return;
+            }
+
             String leftText = readStringValueSafe(MY_REQUESTS_LEFT_TL, MY_REQUESTS_LEFT_BR);
             Integer requestsLeft = leftText == null ? null : RegexNumberParser.extractByPattern(
                     leftText, Pattern.compile("\\((\\d+)\\s*/"));
@@ -802,6 +902,27 @@ public class MonumentRoutine extends DelayedTask {
 
             tapNear(MY_REQUESTS_REQUEST_BTN);
             sleepTask(PANEL_SETTLE_MS);
+
+            // matt/2026-08-19: live-verified that this can land on the target puzzle's own grid
+            // with an animated hand pointing at an arbitrary cell, instead of going straight to
+            // the detail popup PIECE_PICKER_REQUEST_BTN below assumes -- see the class-level
+            // comment above these constants. No real template exists yet for that hand graphic,
+            // so rather than guess a grid-cell coordinate, confirm the detail popup's own
+            // Request/Obtain button text is actually present before tapping it.
+            String detailLabel = stringHelper.attemptRecognition(
+                    PIECE_PICKER_REQUEST_BTN_LABEL_TL, PIECE_PICKER_REQUEST_BTN_LABEL_BR,
+                    2, 150L, PANEL_TITLE_OCR_SETTINGS,
+                    s -> s != null && !s.isBlank(),
+                    s -> s.toLowerCase());
+            if (detailLabel == null || !detailLabel.contains("request")) {
+                logWarning(logLine("Tapped My Requests' Request button but the piece-detail popup's own "
+                        + "Request button wasn't confirmed via OCR (read: '" + detailLabel + "') -- likely "
+                        + "landed on the hand-pointer grid screen instead (known gap, no template yet). "
+                        + "Not tapping a guessed grid cell. Backing out instead of spending a daily request blind."));
+                recoverTowardHome();
+                return;
+            }
+
             tapNear(PIECE_PICKER_REQUEST_BTN);
             sleepTask(ACTION_SETTLE_MS);
             // The "Confirm daily requests remaining" Tips dialog only appears the first
