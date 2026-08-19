@@ -1540,8 +1540,16 @@ private void handleJourney(ImageSearchResultData result) {
 	// confirmed wording plus reasonable variants, since the exact on-screen phrasing wasn't
 	// available to lock down further at the time of this fix -- narrow this to the precise string
 	// once a real screenshot of the warning is in hand.
+	// matt, 2026-08-19: caught live again -- the bot kept attacking an overwhelmingly stronger Fire
+	// Beast, meaning the game's real warning text still isn't fully covered here. matt described
+	// the phrases he's actually seen in-game: "not likely to win this," "certain not to win," "gonna
+	// fail." Added those variants (kept the earlier confirmed "not likely to prevail" too, since the
+	// game may phrase this differently across beast types/versions) -- broadened rather than
+	// replaced, since narrowing on a guess risks reintroducing the exact 2026-08-13 bug this list
+	// was built to fix.
 	private static final String[] DEPLOYMENT_FAIL_WARNING_PHRASES = {
-			"fail", "not likely to prevail", "unlikely to prevail", "likely to lose", "low chance"
+			"fail", "not likely to prevail", "unlikely to prevail", "likely to lose", "low chance",
+			"not likely to win", "certain not to win", "not going to win", "sure to lose", "cannot win"
 	};
 
 	private boolean isDeploymentCertainToFail() {
@@ -1646,7 +1654,34 @@ private void handleBeast(ImageSearchResultData beast) {
 			consecutiveBeastDeploymentFailures++;
 			if (consecutiveBeastDeploymentFailures >= MAX_CONSECUTIVE_BEAST_DEPLOYMENT_FAILURES) {
 				beastStuckThisRun = true;
-				LocalDateTime skipUntil = LocalDateTime.now().plusMinutes(BEAST_STUCK_BACKOFF_MINUTES);
+				pressBack();
+				pressBack();
+				dismissQuitGameDialogIfPresent();
+
+				// matt, 2026-08-19: was a flat BEAST_STUCK_BACKOFF_MINUTES=60 guess -- matt's real
+				// ask: OCR the board's own top-of-screen refresh countdown (the same
+				// INTEL_COOLDOWN_WITH_MARKERS_OCR_AREA banner already used elsewhere for the
+				// board-still-has-markers layout, since backing out here lands on the map with
+				// this beast's marker still on it, not an empty board) and skip until THAT real
+				// time instead of a guessed number. Falls back to the fixed 60-minute default only
+				// if the OCR read fails, matching this file's established fallback pattern.
+				LocalDateTime skipUntil = readCooldownFlow(
+						CommonGameAreas.INTEL_COOLDOWN_WITH_MARKERS_OCR_AREA, "marker-map (beast-stuck)");
+				String skipSource;
+				if (skipUntil != null) {
+					LocalDateTime ceiling = LocalDateTime.now().plusMinutes(MAX_INTEL_REFRESH_MINUTES);
+					if (skipUntil.isAfter(ceiling)) {
+						logWarning(routineLogIntelligenceLine(String.format(
+								"Beast-stuck refresh countdown read as %s -- beyond the %d-minute plausible "
+										+ "ceiling; capping there in case of an OCR misread.",
+								skipUntil.format(DATETIME_FORMATTER), MAX_INTEL_REFRESH_MINUTES)));
+						skipUntil = ceiling;
+					}
+					skipSource = "the board's own OCR'd refresh countdown";
+				} else {
+					skipUntil = LocalDateTime.now().plusMinutes(BEAST_STUCK_BACKOFF_MINUTES);
+					skipSource = "the fixed " + BEAST_STUCK_BACKOFF_MINUTES + "-minute default (refresh countdown wasn't readable)";
+				}
 				ConfigService.obtain().writeAccountSetting(profile, ConfigurationKeyEnum.INTEL_BEAST_SKIP_UNTIL_LONG,
 						String.valueOf(skipUntil.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()));
 				logWarning(routineLogIntelligenceLine(
@@ -1654,13 +1689,14 @@ private void handleBeast(ImageSearchResultData beast) {
 								+ "this beast is too strong for current troops. Not attempting any more beasts "
 								+ "for the rest of this run so Survivor Camps/Explorations are never blocked. "
 								+ "Persisting a beast-skip until " + skipUntil.format(DATETIME_FORMATTER)
-								+ " so the NEXT run (15 minutes from now) doesn't just re-attack the same beast "
+								+ " (" + skipSource + ") so the NEXT run doesn't just re-attack the same beast "
 								+ "and fail the same way again."));
-			} else {
-				logWarning(routineLogIntelligenceLine(
-						"Deployment still certain to fail at max troops. Aborting — no march sent, no stamina spent. "
-								+ "Recalling gather troops to free up more power before retrying."));
+				recallGatherTroopsFlow();
+				return;
 			}
+			logWarning(routineLogIntelligenceLine(
+					"Deployment still certain to fail at max troops. Aborting — no march sent, no stamina spent. "
+							+ "Recalling gather troops to free up more power before retrying."));
 			pressBack();
 			pressBack();
 			dismissQuitGameDialogIfPresent();
