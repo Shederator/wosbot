@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Map;
+import java.util.TimeZone;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.GZIPOutputStream;
 
@@ -23,8 +24,19 @@ public final class ProfileContextLogger {
     private static final Logger rootLog = LoggerFactory.getLogger(ProfileContextLogger.class);
     private static final Map<Long, PrintWriter> writerRegistry = new ConcurrentHashMap<>();
     
-    private static final SimpleDateFormat logTimestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    // matt, 2026-08-19: "make everything EST in logs" -- these previously used SimpleDateFormat's
+    // implicit JVM-default timezone with no zone label at all in the output, so a timestamp like
+    // "2026-08-19 09:04:50" gave no way to tell what zone it was in without cross-referencing
+    // frostguard.log's explicit numeric offset separately. Pinned to America/New_York (so it's
+    // correct across the DST boundary rather than a fixed, wrong-half-the-year UTC-5) and the
+    // zone abbreviation is now part of the timestamp itself.
+    private static final TimeZone EASTERN = TimeZone.getTimeZone("America/New_York");
+    private static final SimpleDateFormat logTimestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss zzz");
     private static final SimpleDateFormat fileTimestamp = new SimpleDateFormat("yyyy-MM-dd");
+    static {
+        logTimestamp.setTimeZone(EASTERN);
+        fileTimestamp.setTimeZone(EASTERN);
+    }
     
     private static final long MAX_BYTES = 10_485_760L; // 10MB
     private static final int ROLLOVER_COUNT = 5;

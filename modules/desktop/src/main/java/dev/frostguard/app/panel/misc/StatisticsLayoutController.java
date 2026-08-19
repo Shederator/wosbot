@@ -617,20 +617,36 @@ public class StatisticsLayoutController extends AbstractProfileController {
                 Long current = latest == null ? null : latest.get(metric);
                 if (current == null) continue; // metric never captured
                 TelemetryReport.Delta d = byMetric.get(metric);
-                boolean changed = d != null && d.change() != 0;
+                // matt live, 2026-08-19 + Dave's #250/#251 review: "measured" (we have a real
+                // start/end pair for this window, even if the value didn't move) is NOT the same
+                // as "changed" (start != end). The old code only distinguished changed vs.
+                // everything-else, so a genuinely zero-change metric fell into the same silent
+                // "show the raw current amount" fallback as a metric with NO data in this window
+                // at all -- with telemetry gapped for two days, EVERY metric hit that fallback and
+                // the tab displayed raw absolute power sitting in the "what did you earn" grid,
+                // read as "gained 24 million power" overnight. Now: measured+changed shows the
+                // signed delta, measured+unchanged shows an honest "steady", and only genuinely
+                // missing coverage falls back to the current amount -- clearly labeled as such.
+                boolean measured = d != null;
+                boolean changed = measured && d.change() != 0;
                 // Speedup metrics (sp_*) are DURATIONS in minutes, so they format as "6d 3h",
                 // "+3h 12m" (gained) / "-1d" (spent) — not the M/K resource formatter.
                 boolean isSpeedup = metric.startsWith("sp_");
                 String value;
                 String sub;
                 if (isSpeedup) {
-                    value = changed ? fmtMinutesSigned(d.change()) : fmtMinutes(current);
-                    sub = changed ? fmtMinutes(d.start()) + " → " + fmtMinutes(d.end()) : "on hand now";
+                    value = changed ? fmtMinutesSigned(d.change())
+                            : measured ? "steady" : fmtMinutes(current);
+                    sub = measured ? fmtMinutes(d.start()) + " → " + fmtMinutes(d.end())
+                            : "no data this window (current: " + fmtMinutes(current) + ")";
                 } else {
                     // Measured change → show the before→after range (headline already carries the +/- gain).
-                    // Single data point → the headline IS the current stockpile, so label it plainly.
-                    value = changed ? fmtSigned(d.change()) : fmt(current);
-                    sub = changed ? fmt(d.start()) + " → " + fmt(d.end()) : "on hand now";
+                    // Measured, no change → say so plainly rather than repeating the raw amount.
+                    // No coverage at all → fall back to the current stockpile, explicitly labeled.
+                    value = changed ? fmtSigned(d.change())
+                            : measured ? "steady" : fmt(current);
+                    sub = measured ? fmt(d.start()) + " → " + fmt(d.end())
+                            : "no data this window (current: " + fmt(current) + ")";
                 }
                 flowEarnings.getChildren().add(createStatCard(
                         METRIC_ICONS.get(metric),

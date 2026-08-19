@@ -4,8 +4,13 @@
 
     <property name="LOG_DIR" value="${frostguard.log.dir:-log}"/>
     <property name="LOG_FILE" value="${LOG_DIR}/frostguard.log"/>
-    <property name="APP_PATTERN" value="%d{HH:mm:ss.SSS} %-5level [%thread] %logger{32} - %msg%n"/>
-    <property name="FILE_PATTERN" value="%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] %logger{48} - %msg%n"/>
+    <!-- matt, 2026-08-19: "make everything EST in logs" -- FILE_PATTERN's numeric offset (XXX,
+         e.g. -04:00) was correct but not obviously a timezone at a glance, and APP_PATTERN carried
+         no zone info at all. Both pinned to America/New_York (so it reads EST/EDT correctly across
+         the DST boundary, not a fixed always-wrong-half-the-year offset) with the abbreviation
+         spelled out (zzz) instead of a bare numeric offset. -->
+    <property name="APP_PATTERN" value="%d{HH:mm:ss.SSS zzz, America/New_York} %-5level [%thread] %logger{32} - %msg%n"/>
+    <property name="FILE_PATTERN" value="%d{yyyy-MM-dd'T'HH:mm:ss.SSS zzz, America/New_York} %-5level [%thread] %logger{48} - %msg%n"/>
 
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <target>System.out</target>

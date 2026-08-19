@@ -321,6 +321,19 @@ public class ResourceStockpileRoutine extends DelayedTask {
      *  is reached, trust the new streak and let the cache catch up. In-memory (resets if
      *  Bearguard restarts) -- that only costs one extra recovery cycle, not a lasting bug. */
     private static final int REJECT_STREAK_TO_TRUST = 3;
+
+    /** matt live, 2026-08-19: caught real -- steel cached at 839,000,000 against a last-known-good
+     *  of 1,174,000 (ratio ~715x). The streak-to-trust escape hatch above has no upper bound: a
+     *  gentle 1.5x drift and a physically-impossible 715x spike need the same 3 consistent reads to
+     *  get auto-trusted, because {@link #inBand} only checks readings against EACH OTHER, never
+     *  against how far they are from the cache in absolute terms. Three consecutive misreads of the
+     *  same wrong screen region (an event overlay, a UI shift) agree with each other just as
+     *  reliably as three genuine readings do. A hard ceiling here means an outlier past this ratio
+     *  NEVER auto-trusts no matter how consistent the streak -- it stays rejected (falls back to
+     *  the last known-good) until a human looks at it, instead of quietly overwriting the stockpile
+     *  cache -- and by extension GatherRoutine's Smart Gathering priority and the Statistics tab --
+     *  with a number that can't be real. */
+    private static final double MAX_TRUSTABLE_STREAK_RATIO = 10.0;
     private final Map<String, Long> rejectStreakAnchor = new java.util.HashMap<>();
     private final Map<String, Integer> rejectStreakCount = new java.util.HashMap<>();
 
@@ -379,7 +392,11 @@ public class ResourceStockpileRoutine extends DelayedTask {
         rejectStreakAnchor.put(field, candidate);
         rejectStreakCount.put(field, streak);
 
-        if (streak >= REJECT_STREAK_TO_TRUST) {
+        double cacheRatio = (double) candidate / cached;
+        boolean withinTrustableCeiling = cacheRatio <= MAX_TRUSTABLE_STREAK_RATIO
+                && cacheRatio >= 1.0 / MAX_TRUSTABLE_STREAK_RATIO;
+
+        if (streak >= REJECT_STREAK_TO_TRUST && withinTrustableCeiling) {
             logWarning("ResourceStockpileRoutine | " + field + " has now read consistently near "
                     + candidate + " for " + streak + " consecutive cycles while cached stays at "
                     + cached + " -- trusting the consistent new readings over the stale cache.");
@@ -387,9 +404,18 @@ public class ResourceStockpileRoutine extends DelayedTask {
             rejectStreakAnchor.remove(field);
             return candidate;
         }
+        if (streak >= REJECT_STREAK_TO_TRUST) {
+            logWarning("ResourceStockpileRoutine | " + field + " has read consistently near " + candidate
+                    + " for " + streak + " consecutive cycles, but that is " + String.format("%.1f", cacheRatio)
+                    + "x the last cached " + cached + " -- past the " + MAX_TRUSTABLE_STREAK_RATIO
+                    + "x ceiling for auto-trust, so this is treated as a persistent misread (e.g. a covering "
+                    + "popup or wrong screen region) rather than a real change. Keeping the last known-good "
+                    + "value; this needs a human look, not another cycle.");
+            return null;
+        }
 
         logWarning("ResourceStockpileRoutine | " + field + " reading " + candidate + " is implausibly "
-                + "far from the last cached " + cached + " (ratio " + String.format("%.2f", (double) candidate / cached)
+                + "far from the last cached " + cached + " (ratio " + String.format("%.2f", cacheRatio)
                 + ", /10 correction didn't fit either) -- rejecting for now, keeping the last known-good "
                 + "value (streak toward trusting a consistent new reading: " + streak + "/" + REJECT_STREAK_TO_TRUST + ").");
         return null;

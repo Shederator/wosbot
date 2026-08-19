@@ -192,7 +192,17 @@ public final class TelemetryReport {
                 Long v = s.get(metric);
                 if (v != null) { start = v; break; }
             }
-            if (start == null || start.equals(end)) continue;
+            // Dave's #250/#251 review + matt live, 2026-08-19: a genuinely zero-change metric
+            // (real start AND end samples, equal values) used to be skipped here just like a
+            // metric with NO coverage at all -- the caller couldn't tell "measured, no change"
+            // from "no data", and StatisticsLayoutController's fallback for the latter (show the
+            // raw current stockpile, unlabeled as a delta) fired for BOTH cases. When telemetry
+            // gaps for days, every metric hits that fallback and the tab silently displays a raw
+            // absolute value (e.g. current power) sitting in the "what did you earn" grid --
+            // exactly what read as "gained 24 million power" overnight. Always emit a Delta once
+            // both endpoints are known, even change=0, so the caller can render "steady" honestly
+            // instead of a bare number that looks like a headline gain.
+            if (start == null) continue;
             deltas.add(new Delta(metric, start, end, end - start));
         }
         return deltas;
