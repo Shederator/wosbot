@@ -10,6 +10,8 @@ import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.api.domain.OcrSettingsData.TextLayout;
+import dev.frostguard.api.domain.RawImageData;
+import dev.frostguard.api.domain.SizeData;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -513,6 +515,61 @@ public class MonumentRoutine extends DelayedTask {
         logInfo(logLine("Puzzle-ready chain complete."));
     }
 
+    /**
+     * matt/2026-08-19: color sanity check for a template match, per matt's own direction ("it's a
+     * big green claim button... how accurate do you have to be?"). Averages the RGB pixels inside
+     * the matched region straight from a live emulator frame and requires green to genuinely
+     * dominate red and blue -- not just edge them out. Measured live margins make this an easy
+     * call: the real button averages roughly (82,179,100) -- green beats red by ~97 and blue by
+     * ~79 -- while the disabled lookalike that fooled the shape match averages roughly
+     * (122,124,126), i.e. red/green/blue within 4 of each other, nowhere close to green-dominant.
+     * GREEN_DOMINANCE_MARGIN=40 sits well under the real button's ~79-97 margins and well over the
+     * lookalike's ~2, a real gap either side rather than a fragile guess.
+     *
+     * <p>Only handles the common 32bpp (RGBA_8888) capture format this emulator normally returns;
+     * on any other format this can't verify color and returns true (fail-open to the template
+     * match result alone, i.e. today's prior behavior) rather than silently blocking every claim.
+     */
+    private boolean isRegionPredominantlyGreen(ImageSearchResultData match) {
+        RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+        if (frame == null || frame.getBpp() != 32) {
+            return true;
+        }
+
+        SizeData size = match.getTemplateSize();
+        int w = size != null ? size.getWidth() : 40;
+        int h = size != null ? size.getHeight() : 20;
+        int x0 = Math.max(0, match.getPoint().getX() - w / 2);
+        int y0 = Math.max(0, match.getPoint().getY() - h / 2);
+        int x1 = Math.min(frame.getWidth(), x0 + w);
+        int y1 = Math.min(frame.getHeight(), y0 + h);
+
+        byte[] px = frame.getFrameBytes();
+        int stride = frame.getWidth() * 4;
+        long r = 0, g = 0, b = 0;
+        int count = 0;
+        for (int y = y0; y < y1; y++) {
+            for (int x = x0; x < x1; x++) {
+                int offset = y * stride + x * 4;
+                if (offset + 2 >= px.length) continue;
+                r += px[offset] & 0xFF;
+                g += px[offset + 1] & 0xFF;
+                b += px[offset + 2] & 0xFF;
+                count++;
+            }
+        }
+        if (count == 0) return true;
+
+        double avgR = (double) r / count;
+        double avgG = (double) g / count;
+        double avgB = (double) b / count;
+        boolean isGreen = avgG - avgR >= GREEN_DOMINANCE_MARGIN && avgG - avgB >= GREEN_DOMINANCE_MARGIN;
+        logInfo(logLine(String.format(
+                "Color check at %s: avgRGB=(%.0f,%.0f,%.0f) -- %s",
+                match.getPoint(), avgR, avgG, avgB, isGreen ? "green, trusting the match" : "NOT green, rejecting")));
+        return isGreen;
+    }
+
     private String logLine(String note) {
         return "MonumentRoutine | " + note;
     }
@@ -588,12 +645,28 @@ public class MonumentRoutine extends DelayedTask {
     // routine now just stops and reschedules (see findAndOpenBadgeViaLancer() above) instead of
     // panning around OR guessing at an unverified fixed-pixel coordinate.
 
+    // matt/2026-08-19, real fix per matt's own direction after the threshold-tuning approach above
+    // (kept, still a real improvement) drew a fair "why fight a fragile number instead of the
+    // obvious signal" pushback: the individual "Claim" button is solid green; the disabled
+    // lookalike that fooled the shape-based template match is NOT (measured live: real button
+    // RGB avg ~(82,179,100), disabled lookalike ~(122,124,126) -- essentially grey, R/G/B all
+    // within 4 of each other). Rather than rely on template-match score alone, every match is now
+    // also color-verified against the live screen before it's trusted -- a shape match on a grey
+    // button no longer gets tapped just because its score happened to clear a threshold.
+    private static final int GREEN_DOMINANCE_MARGIN = 40;
+
     private void claimAllReadyRows() {
         for (int i = 0; i < MAX_CLAIM_LOOPS; i++) {
             ImageSearchResultData claimBtn = templateSearchHelper.locatePattern(
                     TemplatesEnum.MONUMENT_ATLAS_CLAIM_BUTTON, SearchConfigConstants.MONUMENT_ATLAS_CLAIM_BUTTON_SEARCH);
             if (!claimBtn.isFound()) {
                 logInfo(logLine("No more Claim buttons visible (" + i + " claimed)."));
+                break;
+            }
+            if (!isRegionPredominantlyGreen(claimBtn)) {
+                logInfo(logLine("Claim button shape-matched at " + claimBtn.getPoint()
+                        + " but the region isn't actually green -- almost certainly the disabled "
+                        + "lookalike button, not a real ready claim. Stopping instead of tapping it."));
                 break;
             }
             tapNear(claimBtn.getPoint());
