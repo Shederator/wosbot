@@ -8,8 +8,8 @@ import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.api.domain.OcrSettingsData.TextLayout;
-import dev.frostguard.api.domain.OcrSettingsData.TextLayout;
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.engine.input.TapJitterPolicy;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.nav.SearchConfigConstants;
@@ -444,7 +444,22 @@ public class DailyLabyrinthRoutine extends DelayedTask {
         }
 
         tapInside(labyrinthResult);
-        sleepTask(TAB_SWITCH_DELAY);
+        // matt, 2026-08-19, caught live: TAB_SWITCH_DELAY (500ms) is a quick-tab-switch delay, not
+        // a real zone-load delay -- entering a dungeon zone plays a slide/fade transition that isn't
+        // finished settling in 500ms. attemptRaidChallenge() then ran its template search against
+        // that still-animating frame and false-matched LABYRINTH_RAID_CHALLENGE (manually replayed
+        // against a real captured frame: raidChallenge.png scores only ~57% against the real, settled
+        // stage-select screen, well under the 90% threshold -- so the live 90%+ match that sent this
+        // down the wrong branch had to be a transient animation frame, not the real screen). That
+        // false branch then tapped nothing meaningful, "skipped" a battle that never started, and
+        // pressBack()'d twice out of the zone -- exactly matt's report: "went in, claimed it, then
+        // just got out" with zero attempts actually spent (confirmed live: Remaining attempts stayed
+        // at 5/5). For dungeon 3 (Charm Mine) the same insufficient settle meant NONE of the three
+        // challenge-type checks matched at all, so the routine silently gave up on that dungeon. Using
+        // LABYRINTH_LOAD_DELAY (2000ms, already used elsewhere in this file for real zone-load waits)
+        // instead of TAB_SWITCH_DELAY here lets the transition actually finish before any challenge-
+        // type check runs.
+        sleepTask(LABYRINTH_LOAD_DELAY);
 
         // Try quick challenge first
         if (attemptQuickChallenge(dungeonNumber)) {
@@ -487,17 +502,36 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     /**
      * Attempts to execute a raid challenge
      */
+    /**
+     * matt, 2026-08-19, caught live: "Raid" is NOT a battle to skip -- it's an instant rewards
+     * claim. Tapping the "Raid" button opens a "Raid Rewards" popup (real Charms/chests, a real
+     * Claim button) with no battle animation at all. The old code assumed the same shape as Quick
+     * Challenge (an animated battle needing SKIP_BUTTON taps at (71,827)) and never once tapped the
+     * real Claim button -- SKIP_BUTTON's coordinate lands on empty space on this screen, so every
+     * "successful" raid was actually two blind pressBack()s abandoning the reward popup unclaimed.
+     * Verified live: a real captured frame showed the popup with 470 Charms + 5/4 chests sitting
+     * there un-clicked; the real Claim button's pixel region (color-scanned from that same frame)
+     * is x=[207,512] y=[825,901], center (359,863).
+     */
+    private static final PointData RAID_REWARDS_CLAIM_BTN = new PointData(359, 863);
+
     private boolean attemptRaidChallenge(int dungeonNumber) {
         ImageSearchResultData raidResult = templateSearchHelper.locatePattern(
                 TemplatesEnum.LABYRINTH_RAID_CHALLENGE,
                 SearchConfigConstants.DEFAULT_SINGLE);
         if (raidResult.isFound()) {
-            logInfo("'Raid Challenge' is available for dungeon " + dungeonNumber + ".");
+            logInfo("'Raid Challenge' is available for dungeon " + dungeonNumber
+                    + " (match score " + String.format("%.1f", raidResult.getMatchScore()) + ").");
+            saveLabyrinthFrame("raid_detected", dungeonNumber);
             tapInside(raidResult);
-            sleepTask(400);
-            tapInside(SKIP_BUTTON, SKIP_BUTTON, 10, 50);
-            pressBack();
-            sleepTask(400);
+            sleepTask(600);
+            saveLabyrinthFrame("raid_after_tap", dungeonNumber);
+
+            // Tap the real Claim button on the Raid Rewards popup (see class javadoc above).
+            tapNear(RAID_REWARDS_CLAIM_BTN);
+            sleepTask(500);
+            saveLabyrinthFrame("raid_claimed", dungeonNumber);
+
             pressBack();
             return true;
         }
@@ -1029,13 +1063,25 @@ public class DailyLabyrinthRoutine extends DelayedTask {
         return false;
     }
 
-    /** Taps a row's minus button enough times to guarantee it sits at 0% (extra taps at 0 are inert). */
+    /**
+     * Taps a row's minus button enough times to guarantee it sits at 0% (extra taps at 0 are inert).
+     *
+     * <p>matt, 2026-08-19, caught live watching this run: {@code sleepTask(LOH_DET_TAP_DELAY)} put
+     * the exact same 90ms between every one of the 105 taps -- mechanically perfect timing on the
+     * same button, over and over, which is about as obvious an automation fingerprint as tap
+     * behavior gets ("you are a f***ing bot, and that's very easy [to spot]," his words). The tap
+     * coordinate itself already has a small randomized jitter (see {@code tapNear}'s default
+     * {@link TapJitterPolicy#DEFAULT_POINT_JITTER_RADIUS}), but the delay between taps had none at
+     * all. {@link TapJitterPolicy#sampleDelay} randomizes it (always >= the requested delay, so the
+     * loop can't out-race the game's own tap-registration rate) the same way real human tapping
+     * naturally varies.</p>
+     */
     private void floorRowToZero(String label, int rowY) {
         logInfo("LoH slider [" + label + "]: flooring to 0%.");
         PointData minus = new PointData(LOH_MINUS_X, rowY);
         for (int i = 0; i < LOH_FLOOR_TAPS; i++) {
             tapNear(minus);
-            sleepTask(LOH_DET_TAP_DELAY);
+            sleepTask(TapJitterPolicy.sampleDelay(LOH_DET_TAP_DELAY));
         }
     }
 
@@ -1050,7 +1096,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
         logInfo("LoH slider [" + label + "]: filling 0 -> " + targetPct + "%.");
         for (int i = 0; i < targetPct; i++) {
             tapNear(plus);
-            sleepTask(LOH_DET_TAP_DELAY);
+            sleepTask(TapJitterPolicy.sampleDelay(LOH_DET_TAP_DELAY));
         }
         // Correction passes: fix dropped taps using the reliable static-frame OCR.
         for (int iter = 0; iter < LOH_CORRECT_ITERS; iter++) {
@@ -1071,7 +1117,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
             PointData btn = (delta > 0) ? plus : minus;
             for (int k = 0; k < Math.abs(delta); k++) {
                 tapNear(btn);
-                sleepTask(LOH_DET_TAP_DELAY);
+                sleepTask(TapJitterPolicy.sampleDelay(LOH_DET_TAP_DELAY));
             }
         }
         logWarning("LoH slider [" + label + "]: could not confirm " + targetPct + "% after "
