@@ -47,8 +47,22 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertFalse((workflows / "stable-windows-release.yml").exists())
 
         self.assertIn("name: CI — Windows Installers", installers)
-        self.assertIn("Build and smoke-test Stable and Nightly installers", installers)
+        self.assertIn("Build and smoke-test required Windows installers", installers)
         self.assertIn('java-version: "21.0.12+8.0"', installers)
+        self.assertIn("windows_pr_channels.py", installers)
+        self.assertIn("fetch-depth: 0", installers)
+        self.assertGreaterEqual(
+            installers.count("if: steps.channels.outputs.nightly == 'true'"), 5)
+        self.assertIn(
+            "if: github.event_name == 'workflow_dispatch'\n"
+            "        uses: actions/upload-artifact@v4\n"
+            "        with:\n"
+            "          name: frostguard-stable-windows-app-image",
+            installers)
+        self.assertIn(
+            "if: github.event_name == 'workflow_dispatch' && "
+            "steps.channels.outputs.nightly == 'true'",
+            installers)
 
     def test_pr_test_build_keeps_bundle_verification_and_publication(self):
         workflow = (REPO_ROOT / ".github/workflows/pr-test-build.yml").read_text(

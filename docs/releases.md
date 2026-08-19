@@ -25,7 +25,7 @@ European local time shown below shifts when daylight-saving time changes.
 | Workflow | Runs | Purpose and side effects |
 |---|---|---|
 | **CI — Java Build and Tests** | Automatically for every pull request and every push to `main` | Builds and tests the complete reactor on Linux. It publishes only short-lived test-report artifacts, never a release. |
-| **CI — Windows Installers** | Automatically for pull requests that touch packaging-related paths | Builds and smoke-tests the Stable and Nightly MSI packages. It uploads short-lived Actions artifacts, never a GitHub Release. |
+| **CI — Windows Installers** | Automatically for pull requests that touch packaging-related paths | Always builds and smoke-tests the Stable MSI; channel-sensitive changes also test Nightly. PR runs upload short-lived MSI artifacts, never a GitHub Release. |
 | **CI — Windows Installers** | Manually with prerelease application and numeric MSI versions | Produces an unpublished Stable release candidate for upgrade testing. It does not change `releases/latest`. |
 | **PR Build — Create Test Release** | Manually in Actions or dispatched through Discord `/build-pr` | Combines selected open pull requests and publishes a temporary `pr-test-*` prerelease. A Discord-originated request receives the result in Discord. |
 | **PR Build — Clean Up Test Releases** | Daily at 04:43 UTC (06:43 CEST / 05:43 CET), or manually | Deletes expired `pr-test-*` releases and their tags, including builds whose selected pull requests are all closed. It never touches Nightly or permanent releases. |
