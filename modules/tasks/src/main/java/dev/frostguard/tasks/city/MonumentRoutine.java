@@ -422,13 +422,30 @@ public class MonumentRoutine extends DelayedTask {
                     TemplatesEnum.MONUMENT_ATLAS_CLAIM_BUTTON, SearchConfigConstants.QUICK_SEARCH);
             if (!claimBtn.isFound()) {
                 logInfo(logLine("No more Claim buttons visible (" + i + " claimed)."));
-                return;
+                break;
             }
             tapNear(claimBtn.getPoint());
             sleepTask(ACTION_SETTLE_MS);
             if (i == MAX_CLAIM_LOOPS - 1) {
                 logWarning(logLine("Hit the claim-loop safety cap (" + MAX_CLAIM_LOOPS + ")."));
             }
+        }
+
+        // matt caught live, 2026-08-19: navigation into this panel is fixed, but the routine never
+        // tapped the bottom "Claim All" button at all -- the loop above only ever scans individual
+        // per-row Claim buttons visible in the CURRENT scroll position, so a ready reward scrolled
+        // out of view was silently left unclaimed. Claim All batches every currently-claimable
+        // reward regardless of scroll position, so it's tapped once here as a real second pass, not
+        // a fallback -- template search (real screenshot, tight crop), matching this routine's own
+        // hard-learned lesson from the badge-tap saga: no fixed-pixel guessing.
+        ImageSearchResultData claimAllBtn = templateSearchHelper.locatePattern(
+                TemplatesEnum.MONUMENT_ATLAS_CLAIM_ALL_BUTTON, SearchConfigConstants.QUICK_SEARCH);
+        if (claimAllBtn.isFound()) {
+            logInfo(logLine("Claim All button found -- tapping it to sweep any remaining ready rewards."));
+            tapNear(claimAllBtn.getPoint());
+            sleepTask(ACTION_SETTLE_MS);
+        } else {
+            logInfo(logLine("No Claim All button visible (nothing left to batch-claim)."));
         }
     }
 
