@@ -167,7 +167,11 @@ class ChannelPackagingTest(unittest.TestCase):
         installers = (REPO_ROOT / ".github/workflows/windows-native-package.yml").read_text(
             encoding="utf-8")
         ordered_steps = (
-            "Prepare immutable installer and verify optional Authenticode",
+            "Verify unsigned channel launchers",
+            "Sign and verify channel launchers",
+            "Smoke-test signed channel application image",
+            "Build installer from signed channel application image",
+            "Prepare, sign, and verify immutable installer",
             "Create draft release and verify uploaded installer",
             "Generate and project-sign update manifest",
             "Publish immutable release and channel manifest last",
@@ -177,8 +181,17 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertIn("FROSTGUARD_UPDATE_SIGNING_PRIVATE_KEY_BASE64", workflow)
         self.assertIn("ProjectManifestSigner", workflow)
         self.assertIn("FROSTGUARD_WINDOWS_SIGNING_CERTIFICATE_BASE64", workflow)
-        self.assertIn("Configure optional Authenticode certificate", workflow)
-        self.assertIn("Get-AuthenticodeSignature", workflow)
+        self.assertIn("Configure required Authenticode certificate", workflow)
+        self.assertIn("sign_windows_artifact.ps1", workflow)
+        self.assertIn("-pl packaging/desktop -am -DskipTests", workflow)
+        self.assertIn("Public releases require the Authenticode certificate", workflow)
+        self.assertNotIn("Authenticode is not configured", workflow)
+        signer = (REPO_ROOT / "build-support/release/"
+                  "sign_windows_artifact.ps1").read_text(encoding="utf-8")
+        self.assertIn("signtool.exe", signer)
+        self.assertIn("Get-AuthenticodeSignature", signer)
+        self.assertIn("/tr http://timestamp.digicert.com", signer)
+        self.assertIn("SignerCertificate.Subject -cne $Publisher", signer)
         self.assertIn('installer_name = "$assetPrefix-$($env:VERSION)-windows-x64.msi"', workflow)
         self.assertIn("-Filter '*.msi' -File", workflow)
         self.assertIn("windows_installer_version.py", workflow)

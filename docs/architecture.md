@@ -75,7 +75,7 @@ Do not put game task business logic in `modules/desktop`; do not put UI concepts
 - semantic-version, channel, operating-system, and architecture selection;
 - restart-safe downloads below the selected workspace cache;
 - byte-size and SHA-256 verification;
-- optional build-pinned Windows Authenticode verification and token-authorized
+- build-pinned Windows Authenticode verification and token-authorized
   external handoff with passive installer execution and workspace-aware restart.
 
 The desktop module owns presentation and runtime shutdown. Update code does not
@@ -274,13 +274,12 @@ the Java/JAR paths retained only for source and temporary PR-test bundles.
 Native packaging is opt-in through Maven profiles so the normal reactor build
 stays platform-neutral.
 
-The Nightly MSI product version remains monotonic for Windows Installer, while
-the unchanged native bootstrap launchers retain the last known-good launcher
-file version until Authenticode signing is enabled. This keeps their bytes and
-Smart App Control reputation stable across Java-only Nightly updates. The
-application reports its release version from packaged build metadata, not from
-the bootstrap file version. A bootstrap, icon, or JDK change still requires a
-new launcher identity and must pass the Windows signing/reputation gate.
+The Nightly MSI product version remains monotonic for Windows Installer. Release
+packaging first verifies the known unsigned bootstrap bytes, Authenticode-signs
+the desktop and watcher launchers, and then builds the MSI from that signed app
+image. The application reports its release version from packaged build metadata,
+not from the bootstrap file version. A bootstrap, icon, or JDK change still
+requires a new launcher identity and must pass the Windows signing gate.
 
 The watcher launcher is channel-specific internal infrastructure and does not
 receive Start-menu or desktop shortcuts. The installer exposes only the desktop
@@ -317,8 +316,8 @@ running files.
 The release feed is a signed envelope whose Ed25519 signature covers the exact
 manifest bytes. The embedded project public key is the primary update trust
 root. The manifest then binds the immutable installer URL, filename, size, and
-SHA-256. Authenticode is an additional check when a release build embeds a
-publisher identity; it is not required for project-signed releases.
+SHA-256. Public Windows releases also embed a required Authenticode publisher;
+the installed launchers and downloaded installer must match it exactly.
 
 `modules/watcher` builds a separate shaded watcher jar.
 

@@ -19,8 +19,8 @@
     <properties>
         <frostguard.release.channel>stable</frostguard.release.channel>
         <frostguard.windows.app-version>${project.version}</frostguard.windows.app-version>
-        <!-- Keep the unchanged bootstrap byte-identical while releases are
-             project-signed but do not yet have an Authenticode publisher. -->
+        <!-- Keep the unsigned bootstrap byte-identical so release packaging can
+             verify its expected bytes before applying Authenticode. -->
         <frostguard.windows.launcher-version>2.1.0</frostguard.windows.launcher-version>
         <frostguard.product.name>Frostguard</frostguard.product.name>
         <frostguard.product.identifier>dev.frostguard.desktop</frostguard.product.identifier>
@@ -376,8 +376,8 @@
             <id>windows-nightly</id>
             <properties>
                 <frostguard.release.channel>nightly</frostguard.release.channel>
-                <!-- Keep the unchanged bootstrap byte-identical while releases are
-                     project-signed but do not yet have an Authenticode publisher. -->
+                <!-- Keep the unsigned bootstrap byte-identical so release packaging can
+                     verify its expected bytes before applying Authenticode. -->
                 <frostguard.windows.launcher-version>26.8.12004</frostguard.windows.launcher-version>
                 <frostguard.product.name>Frostguard Nightly</frostguard.product.name>
                 <frostguard.product.identifier>dev.frostguard.desktop.nightly</frostguard.product.identifier>

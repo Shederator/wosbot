@@ -62,16 +62,17 @@ Ed25519 private key matching the public key committed in
 Keep a second, access-controlled backup of the private key because GitHub
 Actions secrets cannot be exported again.
 
-Authenticode is optional. Configure all three of
+Authenticode is required for public Windows releases. Configure all three of
 `FROSTGUARD_WINDOWS_SIGNING_CERTIFICATE_BASE64`,
 `FROSTGUARD_WINDOWS_SIGNING_CERTIFICATE_PASSWORD`, and
-`FROSTGUARD_AUTHENTICODE_PUBLISHER`, or leave all three unset. A partial
-configuration fails the release.
+`FROSTGUARD_AUTHENTICODE_PUBLISHER`. Missing or partial configuration fails the
+release before packaging.
 
 Stable and Nightly use different application IDs, upgrade UUIDs, install
-directories, shortcuts, workspaces, and feeds. The workflow builds and smokes
-the selected identity, optionally Authenticode-signs the installer, uploads and
-re-downloads the immutable installer, derives its final size and SHA-256,
+directories, shortcuts, workspaces, and feeds. The workflow verifies the
+selected identity's unsigned launcher hashes, signs and smokes both launchers,
+builds and signs the installer, uploads and re-downloads the immutable
+installer, derives its final size and SHA-256,
 project-signs the manifest, verifies it, and publishes it last. Stable exposes
 its manifest through the latest immutable release. Nightly stores the installer
 in an immutable `v<version>` release and updates the manifest asset on the
@@ -141,7 +142,7 @@ The current immutable preview with its own app and settings:
 https://github.com/Shederator/wosbot/releases/tag/nightly
 
 Download the Windows x64 MSI from the selected release. The installer includes
-Java. A Windows Unknown publisher or SmartScreen warning is currently expected.
+Java and must show the configured Frostguard publisher before installation.
 ```
 
 The Stable guide links to GitHub's Latest release because the immutable MSI
@@ -268,14 +269,16 @@ installer must match it exactly.
 
 ### Publication order
 
-1. Build and smoke-test the native application image.
-2. Build the channel-specific installer with its stable upgrade identity.
-3. Optionally Authenticode-sign the final installer and verify its exact subject.
-4. Calculate the final byte size and SHA-256.
-5. Upload and re-download the installer at its immutable versioned HTTPS URL.
-6. Generate the schema-1 payload from that verified file.
-7. Ed25519-sign the exact payload and verify the resulting envelope.
-8. Publish the signed envelope atomically as the final step.
+1. Build the native application image and verify its known unsigned launchers.
+2. Authenticode-sign both launchers and verify their exact subject.
+3. Smoke-test the signed application image.
+4. Build the channel-specific installer from that signed image.
+5. Authenticode-sign the final installer and verify its exact subject.
+6. Calculate the final byte size and SHA-256.
+7. Upload and re-download the installer at its immutable versioned HTTPS URL.
+8. Generate the schema-1 payload from that verified file.
+9. Ed25519-sign the exact payload and verify the resulting envelope.
+10. Publish the signed envelope atomically as the final step.
 
 Never publish a PR artifact, unsigned manifest payload, mutable installer
 filename, or envelope whose artifact has not completed the same verification
@@ -302,8 +305,8 @@ If the private key is lost, restore it from the offline backup; the GitHub
 secret cannot be read back. If compromise is suspected, stop channel
 publication, remove or replace the Actions secret, preserve release evidence,
 and prepare a bridge release and manual recovery instructions before resuming.
-Adding a Windows code-signing certificate later is additive: configure the
-three Authenticode secrets above; the signed-envelope format does not change.
+Rotating the Windows code-signing certificate requires updating the three
+Authenticode secrets together. The signed-envelope format does not change.
 
 ### Runtime and recovery
 
