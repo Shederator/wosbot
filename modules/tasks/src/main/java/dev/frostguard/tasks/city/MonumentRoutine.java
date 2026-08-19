@@ -141,6 +141,31 @@ public class MonumentRoutine extends DelayedTask {
     private static final int BACKPACK_MAX_ROWS = 4;
     private static final int BACKPACK_MAX_OPENS_PER_ROW = 20;
 
+    // ========== Puzzle-ready chain (Assemble Now -> congrats -> lore card) ==========
+    // matt/2026-08-19: real chain, hand-driven tap-by-tap by matt on a genuine live 15/15
+    // puzzle the same day (see chat transcript). Two different confidence levels here:
+    // (1) ASSEMBLE_REGION_TL/BR, ASSEMBLE_NOW_BTN, ASSEMBLED_TAP_ANYWHERE, and
+    //     LORE_CARD_CLOSE_X are all estimates RESCALED from a desktop capture of that
+    //     walkthrough, NOT a native 720x1280 ADB frame -- the live puzzle got fully
+    //     consumed assembling it during the walkthrough itself, so there was nothing left
+    //     to crop a real template from. Matt's own words: "if you did grab it at that time,
+    //     it's gone... we're gonna have to wait till we have another one going." These are
+    //     first-pass numbers, not verified -- see handlePuzzleReadyChain()'s hard re-anchor
+    //     below before anything downstream is trusted.
+    // (2) MONUMENT_PUZZLE_OVERVIEW_FRAGMENT_BACKPACK_ICON (used inside handlePuzzleReadyChain)
+    //     IS a real native ADB template, cropped live the same day -- normal confidence.
+    private static final PointData PUZZLE_OVERVIEW_ASSEMBLE_REGION_TL = new PointData(450, 220);
+    private static final PointData PUZZLE_OVERVIEW_ASSEMBLE_REGION_BR = new PointData(660, 300);
+    private static final PointData PUZZLE_OVERVIEW_ASSEMBLE_NOW_BTN = new PointData(549, 264);
+    /** Live-verified today: a center-body tap closes the "Well done, you assembled the
+     *  Puzzle!" congrats screen. */
+    private static final PointData PUZZLE_ASSEMBLED_TAP_ANYWHERE = new PointData(350, 640);
+    /** Live-verified today: unlike the congrats screen above, the lore card's own
+     *  "Tap anywhere to close" text is unreliable -- two separate body taps at different
+     *  points both failed to close it live; only its own X button worked. */
+    private static final PointData PUZZLE_LORE_CARD_CLOSE_X = new PointData(645, 90);
+    private static final int PUZZLE_ASSEMBLE_ANIM_SETTLE_MS = 1500;
+
     // ========== Fragment Pack detail (Enable) screen ==========
     /** Quantity defaults to the full owned count already -- one Enable tap consumes
      *  all of them (confirmed live twice: stacks of 2 fully consumed in one tap). */
@@ -305,9 +330,10 @@ public class MonumentRoutine extends DelayedTask {
         logInfo(logLine("Puzzle-ready icon search result (multi-scale): " + puzzleReady));
         if (puzzleReady.isFound()) {
             logInfo(logLine("Puzzle-ready icon found at " + puzzleReady.getPoint()
-                    + " -- tapping it and stopping here (gated first step, not chaining further yet)."));
+                    + " -- tapping it and running the assemble/fragment-backpack chain."));
             tapNear(puzzleReady.getPoint());
             sleepTask(PANEL_SETTLE_MS);
+            handlePuzzleReadyChain();
             return false;
         }
 
@@ -361,6 +387,71 @@ public class MonumentRoutine extends DelayedTask {
         }
 
         return true;
+    }
+
+    /**
+     * matt/2026-08-19: the assemble/congrats/lore-card/Fragment-Backpack chain that
+     * {@link #findAndOpenBadgeViaLancer()} used to gate and stop before. See the class-level
+     * "Puzzle-ready chain" constants comment above for which coordinates here are real
+     * native templates vs first-pass rescaled estimates. Every estimated tap is followed by
+     * a real check before the next step trusts it -- this never cascades blind.
+     */
+    private void handlePuzzleReadyChain() {
+        // "Assemble Now" only renders once the puzzle genuinely has every fragment (15/15).
+        // If the icon tap instead opened an in-progress puzzle, there's nothing to assemble --
+        // bail out cleanly rather than tapping an estimated button that isn't there.
+        String overviewText = stringHelper.attemptRecognition(
+                PUZZLE_OVERVIEW_ASSEMBLE_REGION_TL, PUZZLE_OVERVIEW_ASSEMBLE_REGION_BR,
+                2, 150L, PANEL_TITLE_OCR_SETTINGS,
+                s -> s != null && !s.isBlank(),
+                s -> s);
+        if (overviewText == null || !overviewText.toLowerCase().contains("assemble")) {
+            logInfo(logLine("Puzzle-ready icon opened, but no 'Assemble Now' text confirmed via OCR "
+                    + "(read: '" + overviewText + "') -- either the puzzle isn't actually complete yet, "
+                    + "or the estimated OCR region is off. Not tapping blind; recovering toward Home."));
+            recoverTowardHome();
+            return;
+        }
+
+        logInfo(logLine("'Assemble Now' confirmed via OCR -- tapping."));
+        tapNear(PUZZLE_OVERVIEW_ASSEMBLE_NOW_BTN);
+        sleepTask(PUZZLE_ASSEMBLE_ANIM_SETTLE_MS);
+
+        tapNear(PUZZLE_ASSEMBLED_TAP_ANYWHERE);
+        sleepTask(ACTION_SETTLE_MS);
+
+        tapNear(PUZZLE_LORE_CARD_CLOSE_X);
+        sleepTask(PANEL_SETTLE_MS);
+
+        // Real re-anchor: don't trust the three estimated taps above blindly. Confirm we
+        // actually landed back on a puzzle overview screen (real native template) before
+        // touching Fragment Backpack at all.
+        ImageSearchResultData backpackIcon = templateSearchHelper.locatePattern(
+                TemplatesEnum.MONUMENT_PUZZLE_OVERVIEW_FRAGMENT_BACKPACK_ICON, SearchConfigConstants.DEFAULT_SINGLE);
+        if (!backpackIcon.isFound()) {
+            logWarning(logLine("Fragment Backpack icon not found after the assemble/congrats/lore-card "
+                    + "sequence -- one of the estimated taps likely missed. Recovering toward Home "
+                    + "instead of continuing blind."));
+            recoverTowardHome();
+            return;
+        }
+
+        logInfo(logLine("Puzzle overview confirmed (Fragment Backpack icon found at " + backpackIcon.getPoint()
+                + "). Processing the shared Fragment Backpack."));
+        processFragmentBackpack(backpackIcon.getPoint());
+
+        // Two levels deep here (puzzle overview -> Tundra Albums hub -> City/Home), vs one
+        // level for the normal MONUMENT_REWARD_BADGE flow -- confirmed live today (back arrow
+        // from the puzzle overview landed on Tundra Albums, a second back arrow from there
+        // landed on City). ALBUMS_BACK_ARROW's coordinate matches both screens closely enough
+        // (both top-left back arrows render in the same spot across this shared skin).
+        tapNear(ALBUMS_BACK_ARROW);
+        sleepTask(ACTION_SETTLE_MS);
+        tapNear(ALBUMS_BACK_ARROW);
+        sleepTask(ACTION_SETTLE_MS);
+
+        StatisticsService.obtain().addToCounter(profile, "Monument Puzzle Assembled", 1);
+        logInfo(logLine("Puzzle-ready chain complete."));
     }
 
     private String logLine(String note) {
@@ -572,9 +663,20 @@ public class MonumentRoutine extends DelayedTask {
     private static final long BACKPACK_PASS_TIME_BUDGET_MS = 90_000;
 
     private void processFragmentBackpack() {
+        processFragmentBackpack(ALBUMS_FRAGMENT_BACKPACK_BTN);
+    }
+
+    /**
+     * matt/2026-08-19: extracted to accept the open-button location, so
+     * {@link #handlePuzzleReadyChain()} can reuse this same hardened loop from the puzzle
+     * overview screen's own Fragment Backpack icon (found via real template search) instead
+     * of the Tundra Albums hub's fixed {@link #ALBUMS_FRAGMENT_BACKPACK_BTN} -- two different
+     * screens, same shared Fragment Backpack panel underneath.
+     */
+    private void processFragmentBackpack(PointData openButton) {
         long deadline = System.currentTimeMillis() + BACKPACK_PASS_TIME_BUDGET_MS;
 
-        tapNear(ALBUMS_FRAGMENT_BACKPACK_BTN);
+        tapNear(openButton);
         sleepTask(PANEL_SETTLE_MS);
 
         // Confirm the tap actually landed on the Fragment Backpack panel before spending any time
@@ -587,7 +689,7 @@ public class MonumentRoutine extends DelayedTask {
                 s -> s);
         if (panelTitle == null || !panelTitle.toLowerCase().contains("fragment")) {
             logWarning(logLine("Fragment Backpack panel not confirmed after tapping "
-                    + ALBUMS_FRAGMENT_BACKPACK_BTN + " (read: '" + panelTitle
+                    + openButton + " (read: '" + panelTitle
                     + "') -- skipping the backpack pass this run rather than guessing blindly on the "
                     + "wrong screen."));
             recoverTowardHome();
