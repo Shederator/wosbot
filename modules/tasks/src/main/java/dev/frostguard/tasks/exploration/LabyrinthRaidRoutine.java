@@ -14,6 +14,7 @@ import dev.frostguard.api.domain.OcrSettingsData.TextLayout;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.service.StatisticsService;
+import dev.frostguard.tasks.exploration.LabyrinthChallengeDecisionPolicy.TroopType;
 
 /**
  * matt/2026-08-14: "the new labyrinth" -- a separate stage-based raid system layered on top of
@@ -103,8 +104,6 @@ public class LabyrinthRaidRoutine extends DelayedTask {
     private static final PointData STAT_DETAILS_ICON = new PointData(122, 1080);
     private static final PointData STAT_DETAILS_BACK = new PointData(44, 40);
 
-    private enum TroopType { INFANTRY, LANCER, MARKSMAN }
-
     private static final PointData[] MY_STAT_ROWS = {
             new PointData(90, 467), new PointData(90, 535), new PointData(90, 601), new PointData(90, 669),   // Infantry Atk/Def/Leth/HP
             new PointData(90, 737), new PointData(90, 805), new PointData(90, 872), new PointData(90, 939),   // Lancer Atk/Def/Leth/HP
@@ -154,24 +153,11 @@ public class LabyrinthRaidRoutine extends DelayedTask {
             }
         }
 
-        TroopType best = null;
-        double bestAvg = Double.NEGATIVE_INFINITY;
-        StringBuilder summary = new StringBuilder();
-        for (TroopType type : TroopType.values()) {
-            if (counts[type.ordinal()] < 2) {
-                summary.append(type).append("=unreadable ");
-                continue;
-            }
-            double avg = sums[type.ordinal()] / counts[type.ordinal()];
-            summary.append(type).append("=").append(String.format(Locale.US, "%.1f%%", avg))
-                    .append("(" + counts[type.ordinal()] + "/4 rows) ");
-            if (avg > bestAvg) {
-                bestAvg = avg;
-                best = type;
-            }
-        }
-        logInfo(logLine("My Stats averages -- " + summary));
-        return best;
+        // The decision math (which type to lean into) is pure and shared with any zone that wires
+        // in the same "tail of the tape" policy -- see LabyrinthChallengeDecisionPolicy.
+        logInfo(logLine("My Stats averages -- "
+                + LabyrinthChallengeDecisionPolicy.summarize(sums, counts, 2)));
+        return LabyrinthChallengeDecisionPolicy.strongestTroopType(sums, counts, 2);
     }
 
     // ========== Deploy screen -- exact troop-count entry ==========
@@ -200,18 +186,6 @@ public class LabyrinthRaidRoutine extends DelayedTask {
             .charWhitelist("0123456789,/")
             .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
             .build();
-
-    /** Small fixed preset library (matt's call: presets, not live math) -- percentages for
-     *  {Infantry, Lancer, Marksman}, indexed by which type to lean into. Live-tested at 4-4:
-     *  60/20/20 got the enemy to 7% HP remaining; 80/10/10 (more extreme) got WORSE results
-     *  (56% remaining) -- so this stays at a moderate 60% lean, never escalates further. */
-    private static int[] presetFor(TroopType lean) {
-        return switch (lean) {
-            case INFANTRY -> new int[] { 60, 20, 20 };
-            case LANCER -> new int[] { 20, 60, 20 };
-            case MARKSMAN -> new int[] { 20, 20, 60 };
-        };
-    }
 
     /**
      * matt/2026-08-15: "add the research center in the gear forge... where we can start entering
@@ -248,12 +222,8 @@ public class LabyrinthRaidRoutine extends DelayedTask {
 
     /** Which troop type a preset leans into -- the highest of the three percentages. Used so the
      *  escalation-on-loss step (attempt 2) genuinely tries a different composition than matt's
-     *  configured default, not just a different composition than the OCR-derived guess. */
-    private static TroopType leanOf(int[] preset) {
-        if (preset[0] >= preset[1] && preset[0] >= preset[2]) return TroopType.INFANTRY;
-        if (preset[1] >= preset[2]) return TroopType.LANCER;
-        return TroopType.MARKSMAN;
-    }
+     *  configured default, not just a different composition than the OCR-derived guess. Delegates
+     *  to {@link LabyrinthChallengeDecisionPolicy#leanOf}. */
 
     /** Reads the "N,NNN/M,MMM" army total cap so preset percentages can be turned into exact counts. */
     private Integer readArmyCap() {
@@ -420,18 +390,20 @@ public class LabyrinthRaidRoutine extends DelayedTask {
         }
 
         int[] configuredDefault = configuredDefaultFor(zoneName);
-        TroopType baseLean = configuredDefault != null ? leanOf(configuredDefault) : primaryLean;
+        TroopType baseLean = configuredDefault != null
+                ? LabyrinthChallengeDecisionPolicy.leanOf(configuredDefault) : primaryLean;
         if (configuredDefault != null) {
             logInfo(logLine(zoneName + ": using your configured default ratio (" + configuredDefault[0]
                     + "/" + configuredDefault[1] + "/" + configuredDefault[2] + ") for attempt 1."));
         }
 
-        TroopType[] triedOrder = orderedLeanCandidates(baseLean);
+        TroopType[] triedOrder = LabyrinthChallengeDecisionPolicy.orderedLeanCandidates(baseLean);
         for (int attempt = 0; attempt < Math.min(triedOrder.length, MAX_CHALLENGE_ATTEMPTS_PER_ZONE_PER_DAY);
                 attempt++) {
             TroopType lean = triedOrder[attempt];
             boolean usingConfiguredDefault = attempt == 0 && configuredDefault != null;
-            int[] preset = usingConfiguredDefault ? configuredDefault : presetFor(lean);
+            int[] preset = usingConfiguredDefault
+                    ? configuredDefault : LabyrinthChallengeDecisionPolicy.presetFor(lean);
             logInfo(logLine(zoneName + ": attempt " + (attempt + 1) + "/"
                     + MAX_CHALLENGE_ATTEMPTS_PER_ZONE_PER_DAY + " -- "
                     + (usingConfiguredDefault ? "your configured default" : "leaning " + lean) + " ("
@@ -477,19 +449,6 @@ public class LabyrinthRaidRoutine extends DelayedTask {
                 + "levels improve."));
         tapWithJitter(ZONE_CLOSE_X);
         sleepTask(ACTION_SETTLE_MS);
-    }
-
-    /** Primary lean first, then the troop type with the next-highest My Stats average (a genuinely
-     *  different composition) -- never a more extreme version of the same lean (see class header). */
-    private TroopType[] orderedLeanCandidates(TroopType primary) {
-        TroopType[] others = new TroopType[2];
-        int idx = 0;
-        for (TroopType t : TroopType.values()) {
-            if (t != primary) {
-                others[idx++] = t;
-            }
-        }
-        return new TroopType[] { primary, others[0], others[1] };
     }
 
     public LabyrinthRaidRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDailyTask) {
