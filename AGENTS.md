@@ -46,9 +46,15 @@ select a preferred non-clean command for day-to-day work.
 
 Tests use JUnit Jupiter. Name test classes `*Test` and behavior-focused methods
 such as `rejectsMalformedPersistedReservationsConservatively`. Put saved image
-or OCR fixtures in the affected module's `src/test/resources`. Run at least the
-affected module tests; use a full reactor build for cross-module or packaging
-changes.
+or OCR fixtures in the affected module's `src/test/resources`. Before committing
+or sharing visual evidence, irreversibly redact names, aliases, player or account
+IDs, and any other details that could identify the operated or source account.
+Do not include those details in fixture filenames, test names, logs, or derived
+review images. Preserve unrelated players and in-game text when they are needed
+for OCR, pattern, or behavioral evidence; privacy redaction must not erase the
+condition under test. Keep the evidence region intact and verify the redacted
+fixture still proves the intended behavior. Run at least the affected module
+tests; use a full reactor build for cross-module or packaging changes.
 
 ## Shared Engineering Rules
 

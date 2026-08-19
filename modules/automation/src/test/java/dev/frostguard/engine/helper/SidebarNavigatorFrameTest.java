@@ -39,8 +39,8 @@ class SidebarNavigatorFrameTest {
     }
 
     @Test
-    void detectsPetAdventureInTheLilDaveDailyFrame() throws IOException {
-        byte[] frame = resource("/navigation/sidebar-update-20260818/daily-lil-dave.png");
+    void detectsPetAdventureInCurrentAccountDailyFrame() throws IOException {
+        byte[] frame = resource("/navigation/sidebar-update-20260818/daily-current-account.png");
 
         assertDestination(frame, TemplatesEnum.SIDEBAR_DAILY_PET_ADVENTURE, 46, 487);
     }

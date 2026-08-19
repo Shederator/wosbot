@@ -25,7 +25,7 @@ import dev.frostguard.vision.match.OpenCvPatternLocator;
 
 class MarchQueueCurrentFrameEvidenceTest {
 
-    private static final String FRAME = "/marchqueue/lil-dave-2-of-3-20260818.png";
+    private static final String FRAME = "/marchqueue/current-account-2-of-3-20260818.png";
 
     @BeforeAll
     static void loadOpenCv() throws IOException {
