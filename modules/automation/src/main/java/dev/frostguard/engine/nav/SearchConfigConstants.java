@@ -88,6 +88,24 @@ public final class SearchConfigConstants {
     // there and never reaching Claim All with the real ready rows still unclaimed underneath it.
     // threshold=96 sits comfortably below the true positive (100.0) and comfortably above the
     // measured false positive (89.04) -- a wide margin on both sides, not another guess.
+    // matt caught it live, 2026-08-19 (second Claim All investigation same day): MonumentRoutine's
+    // puzzle-ready icon search was ALSO reusing MONUMENT_BADGE_SEARCH's threshold=30 -- and that's
+    // the real reason Claim All kept looking "missing": the routine never even reached the real
+    // Monument tower. Live-captured evidence: a completely unrelated building badge (an
+    // Alliance-Tech-style "scale/briefcase" icon, nothing to do with Monument at all) matched
+    // MONUMENT_PUZZLE_READY_ICON at 35.965% and 40.535% across two separate real passes --
+    // comfortably above threshold=30, so the routine tapped IT instead, opened the wrong panel,
+    // correctly found no "Assemble Now" text there (it's not Monument), and gave up. Meanwhile the
+    // REAL Monument tower, confirmed by hand via ADB the same session, was showing the plain
+    // MONUMENT_REWARD_BADGE (scroll+feather) state the whole time -- Claim All was never actually
+    // broken, the routine just never got there. threshold=50 sits above both measured false-positive
+    // scores (35.965, 40.535) while still under the range of genuine historical hits (40.7-76.9) --
+    // an imperfect gap given the false positive overlaps the low end of real matches, but a missed
+    // real hit only costs a 60-minute recheck delay, while a false hit derails the entire routine
+    // every single pass. That asymmetry is why this leans strict rather than loose.
+    public static final SearchConfig MONUMENT_PUZZLE_READY_ICON_SEARCH =
+            SearchConfig.builder().withMaxAttempts(6).withThreshold(50).withDelay(300L).build();
+
     public static final SearchConfig MONUMENT_ATLAS_CLAIM_BUTTON_SEARCH =
             SearchConfig.builder().withMaxAttempts(1).withThreshold(96).withDelay(100L).build();
 }

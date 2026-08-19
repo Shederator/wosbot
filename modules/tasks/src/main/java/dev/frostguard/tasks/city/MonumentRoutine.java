@@ -386,8 +386,13 @@ public class MonumentRoutine extends DelayedTask {
         // ADB frame, self-verified 1.0 match against its source. Gated first step per matt's explicit
         // request: identify it, tap it, and stop here -- the Assemble/puzzle-solve/lore-card/Fragment-
         // Backpack chain after it is a separate, deliberately-untested-yet next step, not guessed now.
+        // matt caught it live, 2026-08-19 (second pass, same day): threshold=30 (MONUMENT_BADGE_SEARCH)
+        // was letting an unrelated building's badge (an Alliance-Tech-style scale/briefcase icon)
+        // false-match this template at 35.965%/40.535% across two real runs, short-circuiting the
+        // whole routine before it ever reached the real Monument tower or Claim All. See
+        // MONUMENT_PUZZLE_READY_ICON_SEARCH's own comment for the full evidence.
         ImageSearchResultData puzzleReady = templateSearchHelper.locatePatternMultiScale(
-                TemplatesEnum.MONUMENT_PUZZLE_READY_ICON, SearchConfigConstants.MONUMENT_BADGE_SEARCH);
+                TemplatesEnum.MONUMENT_PUZZLE_READY_ICON, SearchConfigConstants.MONUMENT_PUZZLE_READY_ICON_SEARCH);
         logInfo(logLine("Puzzle-ready icon search result (multi-scale): " + puzzleReady));
         if (puzzleReady.isFound()) {
             logInfo(logLine("Puzzle-ready icon found at " + puzzleReady.getPoint()
