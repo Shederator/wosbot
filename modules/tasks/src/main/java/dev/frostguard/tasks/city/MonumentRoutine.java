@@ -294,6 +294,23 @@ public class MonumentRoutine extends DelayedTask {
         swipe(SWIPE_RIGHT_START, SWIPE_RIGHT_END, SWIPE_DURATION_MS);
         sleepTask(POST_SWIPE_WAIT_MS);
 
+        // matt caught live, 2026-08-19: a completed Scene Fragment set shows a SEPARATE icon at this
+        // same landing spot -- a spiral notebook with an orange puzzle-piece speech bubble -- distinct
+        // from the scroll-with-a-feather MONUMENT_REWARD_BADGE. Template cropped from a live 720x1280
+        // ADB frame, self-verified 1.0 match against its source. Gated first step per matt's explicit
+        // request: identify it, tap it, and stop here -- the Assemble/puzzle-solve/lore-card/Fragment-
+        // Backpack chain after it is a separate, deliberately-untested-yet next step, not guessed now.
+        ImageSearchResultData puzzleReady = templateSearchHelper.locatePatternMultiScale(
+                TemplatesEnum.MONUMENT_PUZZLE_READY_ICON, SearchConfigConstants.MONUMENT_BADGE_SEARCH);
+        logInfo(logLine("Puzzle-ready icon search result (multi-scale): " + puzzleReady));
+        if (puzzleReady.isFound()) {
+            logInfo(logLine("Puzzle-ready icon found at " + puzzleReady.getPoint()
+                    + " -- tapping it and stopping here (gated first step, not chaining further yet)."));
+            tapNear(puzzleReady.getPoint());
+            sleepTask(PANEL_SETTLE_MS);
+            return false;
+        }
+
         // matt/2026-08-18: "it pans to the right of lancer, you see monument, then it just starts
         // scrolling around." The 8-direction pan-fallback that used to live here is gone for good --
         // that's the actual "scrolling around" behavior matt flagged. This is a single search at the
