@@ -21,7 +21,7 @@
 	     Build-wide property declarations
 	     ────────────────────────────────────────────── -->
 	<properties>
-		<revision>3.0.1</revision>
+		<revision>3.0.2</revision>
 		<frostguard.pull-request-build>false</frostguard.pull-request-build>
 		<frostguard.update.manifest.stable></frostguard.update.manifest.stable>
 		<frostguard.update.manifest.nightly></frostguard.update.manifest.nightly>

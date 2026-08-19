@@ -111,9 +111,9 @@ Windows Installers** with a prerelease application version such as
 `3.0.0-rc.1` and a numeric Windows Installer version below the final release,
 such as `2.99.1`.
 The workflow validates that ordering, builds with release updates disabled,
-verifies the pinned Stable launcher hashes, smoke-tests the image, and uploads
-the MSI only as a short-lived Actions artifact. It does not create a GitHub
-Release or change `releases/latest`.
+injects and verifies the pinned accepted Nightly bootstrap bytes, smoke-tests
+the Stable runtime identity, and uploads the MSI only as a short-lived Actions
+artifact. It does not create a GitHub Release or change `releases/latest`.
 
 Use the artifact to prove a real upgrade from the current Stable installation.
 The candidate's numeric MSI version must be newer than the installed Stable but
@@ -268,14 +268,17 @@ installer must match it exactly.
 
 ### Publication order
 
-1. Build and smoke-test the native application image.
-2. Build the channel-specific installer with its stable upgrade identity.
-3. Optionally Authenticode-sign the final installer and verify its exact subject.
-4. Calculate the final byte size and SHA-256.
-5. Upload and re-download the installer at its immutable versioned HTTPS URL.
-6. Generate the schema-1 payload from that verified file.
-7. Ed25519-sign the exact payload and verify the resulting envelope.
-8. Publish the signed envelope atomically as the final step.
+1. Build the channel-specific native application image.
+2. For Stable, inject the pinned accepted Nightly bootstrap bytes while keeping
+   the Stable JVM configuration and verify both bootstrap hashes.
+3. Smoke-test the application image and its runtime channel identity.
+4. Build the channel-specific installer with its stable upgrade identity.
+5. Optionally Authenticode-sign the final installer and verify its exact subject.
+6. Calculate the final byte size and SHA-256.
+7. Upload and re-download the installer at its immutable versioned HTTPS URL.
+8. Generate the schema-1 payload from that verified file.
+9. Ed25519-sign the exact payload and verify the resulting envelope.
+10. Publish the signed envelope atomically as the final step.
 
 Never publish a PR artifact, unsigned manifest payload, mutable installer
 filename, or envelope whose artifact has not completed the same verification
