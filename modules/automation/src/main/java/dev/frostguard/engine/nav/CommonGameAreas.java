@@ -30,7 +30,15 @@ public final class CommonGameAreas {
 
     // The cooldown stays in the top banner while Intel markers remain, then moves to the center
     // after every completed Intel reward has been claimed.
-    public static final AreaData INTEL_COOLDOWN_WITH_MARKERS_OCR_AREA = region(378, 103, 508, 146);
+    //
+    // matt caught it live, 2026-08-19: this region only ever captured a blank sliver of the
+    // banner's right edge (verified: cropping (378,103)-(508,146) from a live 720x1280 Intel
+    // screenshot came back empty blue background, not text) -- the real "Refreshes In: HH:MM:SS"
+    // banner text sits further left and taller than this box ever covered. Re-measured from a live
+    // capture: text spans roughly x=118-548, y=106-144. Verified against the actual bundled
+    // Tesseract binary (tools/tesseract-win/tesseract.exe, --psm 7) on that exact crop -- reads
+    // "Refreshes In: 00:11:43" perfectly, character for character.
+    public static final AreaData INTEL_COOLDOWN_WITH_MARKERS_OCR_AREA = region(118, 106, 548, 144);
     public static final AreaData INTEL_COOLDOWN_EMPTY_MAP_OCR_AREA    = region(378, 580, 530, 640);
 
     // ── side panel navigation ────────────────────────────────────────
