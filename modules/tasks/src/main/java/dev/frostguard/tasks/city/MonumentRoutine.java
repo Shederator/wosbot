@@ -426,14 +426,29 @@ public class MonumentRoutine extends DelayedTask {
         tapNear(badge.getPoint());
         sleepTask(PANEL_SETTLE_MS);
 
-        for (TemplatesEnum landingSign : EVENTS_TAB_LANDING_SIGNS) {
-            if (templateSearchHelper.locatePattern(landingSign, SearchConfigConstants.QUICK_SEARCH).isFound()) {
-                logWarning(logLine("Tapped the real matched badge at " + badge.getPoint()
-                        + " but still ended up on the Events tab (matched " + landingSign + ") -- backing "
-                        + "out instead of cascading blind taps onto the wrong screen. Recovering toward Home."));
-                recoverTowardHome();
-                return false;
-            }
+        // matt caught it live, 2026-08-19 (twice, two days apart -- "it just went to the events
+        // tab"): the EVENTS_TAB_LANDING_SIGNS check below enumerated 5 SPECIFIC rotating event
+        // banners (Hall of Chiefs, Defeat Beasts, Brothers in Arms, Hero Rally, Lucky Wheel).
+        // Whiteout Survival's live event roster changes -- confirmed live via screenshot the
+        // featured events right now are Events/Deals/Snowbusters, none of which are in that list
+        // -- so this "did we land on Events" check can never fire once the seasonal events differ
+        // from whatever 5 were hardcoded, no matter how badly it actually did land there. A
+        // negative check enumerating every possible wrong screen is the wrong shape entirely; a
+        // positive check for "did we actually land on Monument" doesn't care what's on Events.
+        // MONUMENT_TUNDRA_ALBUMS_OPTION / MONUMENT_ATLAS_CLAIM_BUTTON / _CLAIM_ALL_BUTTON are all
+        // Monument-Atlas-panel-specific UI, not tied to any rotating content -- any one present
+        // means we're really on Monument; none present means we're not, whatever screen this is.
+        boolean onMonumentPanel =
+                templateSearchHelper.locatePattern(TemplatesEnum.MONUMENT_TUNDRA_ALBUMS_OPTION, SearchConfigConstants.QUICK_SEARCH).isFound()
+                || templateSearchHelper.locatePattern(TemplatesEnum.MONUMENT_ATLAS_CLAIM_BUTTON, SearchConfigConstants.QUICK_SEARCH).isFound()
+                || templateSearchHelper.locatePattern(TemplatesEnum.MONUMENT_ATLAS_CLAIM_ALL_BUTTON, SearchConfigConstants.QUICK_SEARCH).isFound();
+        if (!onMonumentPanel) {
+            logWarning(logLine("Tapped the real matched badge at " + badge.getPoint()
+                    + " but none of Monument's own panel signals (Tundra Albums option / Claim / Claim All) "
+                    + "are present -- didn't actually land on Monument, whatever screen this is. Backing "
+                    + "out instead of cascading blind taps onto the wrong screen. Recovering toward Home."));
+            recoverTowardHome();
+            return false;
         }
 
         // A verification check must actually rule things OUT to mean anything -- MONUMENT_BADGE_SEARCH's
