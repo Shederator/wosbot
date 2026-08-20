@@ -548,6 +548,38 @@ public class MonumentRoutine extends DelayedTask {
      * on any other format this can't verify color and returns true (fail-open to the template
      * match result alone, i.e. today's prior behavior) rather than silently blocking every claim.
      */
+    /**
+     * matt/2026-08-20: every Monument fix so far has been a guess at coordinates, because when an
+     * OCR gate fails all it reports is the garbled text -- never WHAT SCREEN it was looking at.
+     * "read as 'd to perform i epic pbuyy'" says the region holds prose instead of a button label,
+     * but not whether the Alliance Trade panel failed to open, opened on a different default tab,
+     * or opened behind a first-run Tips dialog. Those need different fixes and the log cannot tell
+     * them apart. So on failure, write the actual frame to disk; the next run leaves real evidence
+     * to calibrate against instead of another round of guessing.
+     *
+     * <p>Deliberately best-effort: a diagnostic must never be able to break the routine it is
+     * diagnosing, so every failure here is swallowed and reported inline in the caller's log line.
+     */
+    private String dumpDiagnosticFrame(String tag) {
+        try {
+            RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+            if (frame == null) {
+                return "(diagnostic frame unavailable: capture returned null)";
+            }
+            java.io.File dir = new java.io.File("C:/Bearguard/ocr-debug");
+            if (!dir.isDirectory() && !dir.mkdirs()) {
+                return "(diagnostic frame not saved: could not create " + dir + ")";
+            }
+            String stamp = LocalDateTime.now().toString().replace(':', '-').replace('.', '-');
+            java.io.File out = new java.io.File(dir, "monument-" + tag + "-" + stamp + ".png");
+            javax.imageio.ImageIO.write(
+                    dev.frostguard.vision.convert.ImageConverter.toBufferedImage(frame), "png", out);
+            return "Diagnostic frame saved: " + out.getAbsolutePath();
+        } catch (Exception e) {
+            return "(diagnostic frame not saved: " + e.getMessage() + ")";
+        }
+    }
+
     private boolean isRegionPredominantlyGreen(ImageSearchResultData match) {
         RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
         if (frame == null || frame.getBpp() != 32) {
@@ -865,7 +897,7 @@ public class MonumentRoutine extends DelayedTask {
             logWarning(logLine("Fragment Backpack panel not confirmed after tapping "
                     + openButton + " (read: '" + panelTitle
                     + "') -- skipping the backpack pass this run rather than guessing blindly on the "
-                    + "wrong screen."));
+                    + "wrong screen. " + dumpDiagnosticFrame("backpack-title-null")));
             recoverTowardHome();
             return;
         }
@@ -983,7 +1015,8 @@ public class MonumentRoutine extends DelayedTask {
                     s -> s.toLowerCase());
 
             if (label == null) {
-                logInfo(logLine("My Requests button label unreadable -- moving on rather than guessing."));
+                logInfo(logLine("My Requests button label unreadable -- moving on rather than guessing. "
+                        + dumpDiagnosticFrame("my-requests-label-null")));
                 return;
             }
 
@@ -1003,7 +1036,8 @@ public class MonumentRoutine extends DelayedTask {
 
             if (!label.contains("request")) {
                 logInfo(logLine("My Requests button label read as '" + label
-                        + "' -- not a recognized state. Moving on rather than guessing."));
+                        + "' -- not a recognized state. Moving on rather than guessing. "
+                        + dumpDiagnosticFrame("my-requests-label-unrecognized")));
                 return;
             }
 
