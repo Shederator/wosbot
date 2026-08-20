@@ -1684,6 +1684,17 @@ private void handleBeast(ImageSearchResultData beast) {
 				pressBack();
 				dismissQuitGameDialogIfPresent();
 
+				// matt caught it live, 2026-08-19 (real first attempt): the OCR read came back null
+				// ("refresh countdown wasn't readable") and fell through to the flat 60-minute
+				// default every time, even though the same region reads perfectly (verified against
+				// the real bundled Tesseract binary) once the screen has actually settled. Root
+				// cause: two pressBack() calls plus a quit-dialog cancel tap were fired straight into
+				// the OCR read with zero settle time -- readCooldownFlow's own 3 retries only span
+				// ~600ms total, nowhere near enough for two panel closes plus a screen transition to
+				// finish rendering. Every other call site reading this same region gets there via
+				// normal navigation flow with settle time already baked in; this one didn't.
+				sleepTask(1200);
+
 				// matt, 2026-08-19: was a flat BEAST_STUCK_BACKOFF_MINUTES=60 guess -- matt's real
 				// ask: OCR the board's own top-of-screen refresh countdown (the same
 				// INTEL_COOLDOWN_WITH_MARKERS_OCR_AREA banner already used elsewhere for the
