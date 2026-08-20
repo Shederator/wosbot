@@ -1684,15 +1684,20 @@ private void handleBeast(ImageSearchResultData beast) {
 				pressBack();
 				dismissQuitGameDialogIfPresent();
 
-				// matt caught it live, 2026-08-19 (real first attempt): the OCR read came back null
-				// ("refresh countdown wasn't readable") and fell through to the flat 60-minute
-				// default every time, even though the same region reads perfectly (verified against
-				// the real bundled Tesseract binary) once the screen has actually settled. Root
-				// cause: two pressBack() calls plus a quit-dialog cancel tap were fired straight into
-				// the OCR read with zero settle time -- readCooldownFlow's own 3 retries only span
-				// ~600ms total, nowhere near enough for two panel closes plus a screen transition to
-				// finish rendering. Every other call site reading this same region gets there via
-				// normal navigation flow with settle time already baked in; this one didn't.
+				// matt caught it live, 2026-08-19 (second real attempt, after the settle-delay fix
+				// below still didn't help): a QUIT-GAME DIALOG fired on this exact pass ("tapping
+				// Cancel to back out safely"), which only happens when a pressBack() lands on a bare
+				// screen with nothing left to close -- meaning the two unconditional pressBack()
+				// calls above overshot past the Intel map entirely. The settle delay was real but
+				// insufficient on its own: you can wait as long as you want, OCR will never read the
+				// "Refreshes In" banner off a screen that isn't showing it. This is the exact same
+				// failure shape already documented and fixed elsewhere in this file for a different
+				// call site (see the 2026-08-14 "several recovery paths ... press back TWICE
+				// unconditionally" comment near dismissQuitGameDialogIfPresent's definition) -- it
+				// was never applied here. Real fix: don't trust the back-press count at all, actively
+				// navigate back to the Intel screen the same way every other OCR read of this region
+				// does, then settle before reading.
+				intelScreenHelper.ensureOnIntelScreen();
 				sleepTask(1200);
 
 				// matt, 2026-08-19: was a flat BEAST_STUCK_BACKOFF_MINUTES=60 guess -- matt's real
