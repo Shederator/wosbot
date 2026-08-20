@@ -300,24 +300,22 @@ public class MonumentRoutine extends DelayedTask {
         // here today -- that badge reverted back to the normal MONUMENT_REWARD_BADGE state the
         // moment its one pending trade got consumed, so there's no stable template for it to
         // gate on; the hub button needs no badge at all).
+        // matt caught it live, 2026-08-19: this gate was OCR'ing BACKPACK_TITLE_TL/BR -- the
+        // Fragment Backpack panel's own title box, a completely different panel -- to "confirm"
+        // the Alliance Trade panel opened. Copy-paste bug: that region always reads blank here
+        // ('null' every single run), so this pass never once actually proceeded past the gate.
+        // No dedicated Alliance Trade title box was ever measured. Per matt's direct instruction
+        // ("keep it simple -- worst case is a false positive and it exits out anyway, who cares"):
+        // drop the broken OCR gate entirely and just proceed. ALBUMS_ALLIANCE_TRADE_BTN is a
+        // reliable always-present hub button (not a floating badge that can be absent), so a tap
+        // there is already good evidence -- if it somehow lands wrong, processAllianceTradeRequests
+        // simply fails to find its own buttons and falls through harmlessly.
         logInfo(logLine("Opening Alliance Trade for My Requests (Claim/Request only)."));
         tapNear(ALBUMS_ALLIANCE_TRADE_BTN);
         sleepTask(PANEL_SETTLE_MS);
-        String tradePanelTitle = stringHelper.attemptRecognition(
-                BACKPACK_TITLE_TL, BACKPACK_TITLE_BR,
-                2, 150L, PANEL_TITLE_OCR_SETTINGS,
-                s -> s != null && !s.isBlank(),
-                s -> s);
-        if (tradePanelTitle == null || !tradePanelTitle.toLowerCase().contains("alliance")) {
-            logWarning(logLine("Alliance Trade panel not confirmed after tapping "
-                    + ALBUMS_ALLIANCE_TRADE_BTN + " (read: '" + tradePanelTitle
-                    + "') -- skipping the My Requests pass this run rather than guessing blindly."));
-            recoverTowardHome();
-        } else {
-            processAllianceTradeRequests();
-            tapNear(TRADE_CLOSE_X);
-            sleepTask(ACTION_SETTLE_MS);
-        }
+        processAllianceTradeRequests();
+        tapNear(TRADE_CLOSE_X);
+        sleepTask(ACTION_SETTLE_MS);
 
         tapNear(ALBUMS_BACK_ARROW);
         sleepTask(ACTION_SETTLE_MS);
@@ -827,15 +825,28 @@ public class MonumentRoutine extends DelayedTask {
         tapNear(openButton);
         sleepTask(PANEL_SETTLE_MS);
 
-        // Confirm the tap actually landed on the Fragment Backpack panel before spending any time
-        // looping rows on what might be the wrong screen -- makes a future coordinate drift loud in
-        // the logs instead of silently doing nothing, which is exactly what happened here.
+        // matt caught it live, 2026-08-19: this came back null the same way the Alliance Trade
+        // gate did earlier tonight -- right region this time (BACKPACK_TITLE_TL/BR is genuinely
+        // this panel's own title box), but only one OCR pass right after PANEL_SETTLE_MS with no
+        // second attempt if the panel just hadn't finished rendering yet. Per matt's direct
+        // instruction to stop over-gating on exact keyword matches ("worst case is a false
+        // positive and it exits out anyway, who cares"): retry once after a longer settle before
+        // giving up, and accept ANY non-blank read as confirmation instead of requiring the
+        // literal word "fragment".
         String panelTitle = stringHelper.attemptRecognition(
                 BACKPACK_TITLE_TL, BACKPACK_TITLE_BR,
                 2, 150L, PANEL_TITLE_OCR_SETTINGS,
                 s -> s != null && !s.isBlank(),
                 s -> s);
-        if (panelTitle == null || !panelTitle.toLowerCase().contains("fragment")) {
+        if (panelTitle == null) {
+            sleepTask(PANEL_SETTLE_MS);
+            panelTitle = stringHelper.attemptRecognition(
+                    BACKPACK_TITLE_TL, BACKPACK_TITLE_BR,
+                    2, 150L, PANEL_TITLE_OCR_SETTINGS,
+                    s -> s != null && !s.isBlank(),
+                    s -> s);
+        }
+        if (panelTitle == null) {
             logWarning(logLine("Fragment Backpack panel not confirmed after tapping "
                     + openButton + " (read: '" + panelTitle
                     + "') -- skipping the backpack pass this run rather than guessing blindly on the "
