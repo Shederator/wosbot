@@ -176,10 +176,21 @@ public class MonumentRoutine extends DelayedTask {
     private static final PointData REWARD_REVEAL_TAP_ANYWHERE = new PointData(358, 1198);
 
     // ========== Alliance Trade panel ==========
+    /**
+     * The Alliance Trade panel's own title box ("Alliance Trade", centred in the wooden header).
+     * Measured off a live frame, 2026-08-20: the text spans roughly x 258-465, y 133-163; the box
+     * below is padded generously around that so a slightly different render still lands inside.
+     */
+    private static final PointData TRADE_PANEL_TITLE_TL = new PointData(150, 122);
+    private static final PointData TRADE_PANEL_TITLE_BR = new PointData(580, 180);
+
     private static final PointData TRADE_CLOSE_X = new PointData(662, 155);
     private static final PointData MY_REQUESTS_REQUEST_BTN = new PointData(358, 370);
-    private static final PointData MY_REQUESTS_LEFT_TL = new PointData(200, 268);
-    private static final PointData MY_REQUESTS_LEFT_BR = new PointData(560, 300);
+    // matt/2026-08-20, measured off the first live capture of this panel: "Requests Left Today (3/3)"
+    // spans roughly y 262-288, so the old 268 top edge sliced the caps off every glyph. Widened both
+    // ways with padding.
+    private static final PointData MY_REQUESTS_LEFT_TL = new PointData(195, 256);
+    private static final PointData MY_REQUESTS_LEFT_BR = new PointData(575, 298);
     private static final PointData PIECE_PICKER_REQUEST_BTN = new PointData(543, 891);
     private static final PointData PIECE_PICKER_TIPS_CONFIRM = new PointData(358, 789);
     private static final int MAX_REQUEST_LOOPS = 5;
@@ -194,8 +205,12 @@ public class MonumentRoutine extends DelayedTask {
     // The button's own X position DIFFERS between "Request" (centered, ~358) and "Claim"
     // (right-aligned, ~574) -- so the state must be read via OCR first, then the matching
     // point tapped, rather than assuming one fixed position for both.
+    // matt/2026-08-20: the old 620 right edge cut the Claim button in half on the real panel -- the
+    // button runs to about x 660, so OCR saw "Clai" and label.contains("claim") never fired. Widened
+    // to 670. The left edge stays at 280 because the "Request" state renders centred (~358) while
+    // "Claim" is right-aligned (~583), and one region has to cover both.
     private static final PointData MY_REQUESTS_BUTTON_LABEL_TL = new PointData(280, 340);
-    private static final PointData MY_REQUESTS_BUTTON_LABEL_BR = new PointData(620, 400);
+    private static final PointData MY_REQUESTS_BUTTON_LABEL_BR = new PointData(670, 400);
     private static final PointData MY_REQUESTS_CLAIM_BTN = new PointData(574, 356);
     /** Live-verified today: a center-body tap closes the post-Claim reward reveal
      *  ("Tap anywhere to close", avatars + reward icon) back to the Alliance Trade panel. */
@@ -240,6 +255,22 @@ public class MonumentRoutine extends DelayedTask {
     private static final OcrSettingsData PANEL_TITLE_OCR_SETTINGS = OcrSettingsData.assembler()
             .stripBackground(true)
             .charWhitelist("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ ")
+            .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
+            .build();
+
+    /**
+     * matt/2026-08-20: the "Requests Left Today (3/3)" counter was being read with
+     * OWNED_COUNT_OCR_SETTINGS, whose whitelist is "OwnedOWNED:0123456789 " -- no '(' and no '/'.
+     * processAllianceTradeRequests() then parses it with a regex that requires a literal open
+     * paren followed by digits and a slash -- both characters the whitelist forbids. Tesseract
+     * cannot emit a glyph outside its whitelist, so that parse could never match and the Request
+     * path always bailed out with "No My Requests left today (or couldn't read the counter)" no
+     * matter how many requests were actually available. Give the counter a whitelist that can
+     * actually spell what's on screen.
+     */
+    private static final OcrSettingsData REQUESTS_LEFT_OCR_SETTINGS = OcrSettingsData.assembler()
+            .stripBackground(true)
+            .charWhitelist("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789()/ ")
             .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
             .build();
 
@@ -479,9 +510,39 @@ public class MonumentRoutine extends DelayedTask {
                 || templateSearchHelper.locatePattern(TemplatesEnum.MONUMENT_ATLAS_CLAIM_BUTTON, SearchConfigConstants.QUICK_SEARCH).isFound()
                 || templateSearchHelper.locatePattern(TemplatesEnum.MONUMENT_ATLAS_CLAIM_ALL_BUTTON, SearchConfigConstants.QUICK_SEARCH).isFound();
         if (!onMonumentPanel) {
+            // matt/2026-08-20: with the badge template finally correct (see 761450f), the very first
+            // real badge tap -- at (367,537), the actual badge rather than noise -- landed straight on
+            // the ALLIANCE TRADE panel, captured in
+            // ocr-debug/monument-landed-off-monument-2026-08-20T00-56-15. Not the Monument panel, and
+            // not a wrong screen either: the gold-puzzle-piece-with-blue-swap-arrow badge IS the
+            // Alliance Trade badge, and tapping it is a direct shortcut. This whole routine assumed
+            // badge -> Monument -> Tundra Albums -> Alliance Trade button, so the one screen matt has
+            // been asking for all night was being opened and then immediately backed out of as
+            // "whatever screen this is".
+            //
+            // The panel's own coordinates were never the problem -- checked against that live frame,
+            // every existing constant is right (close X 662,155 vs 662,157; Claim 574,356 inside the
+            // real button at 583,367; ally Send 583,712 vs 583,710; row spacing 237 vs a measured
+            // 238). They had simply never been reached. So: recognise the screen and do the work.
+            String tradeTitle = stringHelper.attemptRecognition(
+                    TRADE_PANEL_TITLE_TL, TRADE_PANEL_TITLE_BR,
+                    2, 150L, PANEL_TITLE_OCR_SETTINGS,
+                    s -> s != null && !s.isBlank(),
+                    s -> s.toLowerCase());
+            if (tradeTitle != null && (tradeTitle.contains("alliance") || tradeTitle.contains("trade"))) {
+                logInfo(logLine("Badge opened Alliance Trade directly (title read as '" + tradeTitle
+                        + "') -- that badge is the Alliance Trade badge, not a Monument-panel badge. "
+                        + "Running the My Requests pass right here instead of backing out."));
+                processAllianceTradeRequests();
+                tapNear(TRADE_CLOSE_X);
+                sleepTask(ACTION_SETTLE_MS);
+                return false;
+            }
+
             logWarning(logLine("Tapped the real matched badge at " + badge.getPoint()
                     + " but none of Monument's own panel signals (Tundra Albums option / Claim / Claim All) "
-                    + "are present -- didn't actually land on Monument, whatever screen this is. Backing "
+                    + "are present, and the panel title didn't read as Alliance Trade either (read: '"
+                    + tradeTitle + "') -- didn't actually land on Monument, whatever screen this is. Backing "
                     + "out instead of cascading blind taps onto the wrong screen. Recovering toward Home. "
                     + dumpDiagnosticFrame("landed-off-monument")));
             recoverTowardHome();
@@ -1078,7 +1139,11 @@ public class MonumentRoutine extends DelayedTask {
                 return;
             }
 
-            String leftText = readStringValueSafe(MY_REQUESTS_LEFT_TL, MY_REQUESTS_LEFT_BR);
+            String leftText = stringHelper.attemptRecognition(
+                    MY_REQUESTS_LEFT_TL, MY_REQUESTS_LEFT_BR,
+                    2, 150L, REQUESTS_LEFT_OCR_SETTINGS,
+                    s -> s != null && !s.isBlank(),
+                    s -> s);
             Integer requestsLeft = leftText == null ? null : RegexNumberParser.extractByPattern(
                     leftText, Pattern.compile("\\((\\d+)\\s*/"));
             if (requestsLeft == null || requestsLeft <= 0) {
