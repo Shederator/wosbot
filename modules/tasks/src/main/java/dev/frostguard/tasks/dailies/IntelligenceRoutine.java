@@ -28,7 +28,10 @@ import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.engine.service.TaskManagementService;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -553,18 +556,91 @@ private void tryRescheduleFromCooldownFlow() {
 		logInfo(routineLogIntelligenceLine("Zero new intel detected. Planning next run task to run at: " + nextRun.format(DATETIME_FORMATTER)));
 	}
 
-private LocalDateTime readCooldownFlow(AreaData area, String layout) {
+	/**
+	 * matt caught it live again, 2026-08-20 -- and this time with the log proving the bot WAS
+	 * on the right screen ("Already on Intel" at 23:58:14, OCR gave up at 23:58:16). Every
+	 * previous fix here was a guess at coordinates because this method threw the raw OCR text
+	 * away: ResilientOcrExecutor does log it ("=== OCR Completed === Text: '...'"), but on its
+	 * OWN logger, which isn't routed into the per-account log file -- so the one piece of
+	 * evidence that would have ended this days ago has been invisible the whole time. Capture
+	 * the raw text here, on the routine's own logger, and always log it.
+	 *
+	 * <p>Second change, the actual fix attempt: INTEL_COOLDOWN_SETTINGS colour-isolates PURE
+	 * WHITE (255,255,255). If the header countdown is any other shade -- the game's headers are
+	 * commonly pale blue/grey, not pure white -- isolation erases every glyph before Tesseract
+	 * ever sees it, which reads exactly like "the region is wrong" but isn't. So on failure,
+	 * retry the SAME region with no colour isolation at all and a permissive layout, then pull
+	 * the first H:MM:SS out of whatever text comes back. That is the simple thing: look at the
+	 * top, take the number, use it.
+	 */
+	private static final OcrSettingsData INTEL_COOLDOWN_RELAXED_SETTINGS = OcrSettingsData.builder()
+			.allowedGlyphs("0123456789:dhms ")
+			.textLayout(TextLayout.SPARSE)
+			.build();
+
+	private static final Pattern ANY_HMS = Pattern.compile("(\\d{1,2}):(\\d{2}):(\\d{2})");
+
+	private LocalDateTime readCooldownFlow(AreaData area, String layout) {
+		String where = layout + " " + area.topLeft().getX() + "," + area.topLeft().getY()
+				+ "->" + area.bottomRight().getX() + "," + area.bottomRight().getY();
+
+		final String[] strictRaw = { null };
 		LocalDateTime cooldown = textHelper.attemptRecognition(
 				area,
 				3,
 				200L,
 				CommonOCRSettings.INTEL_COOLDOWN_SETTINGS,
-				GameTimeUtils::isAcceptedFormat,
+				text -> {
+					strictRaw[0] = text;
+					return GameTimeUtils.isAcceptedFormat(text);
+				},
 				text -> LocalDateTime.now().plus(GameTimeUtils.parseDuration(text)));
 		if (cooldown != null) {
-			logInfo(routineLogIntelligenceLine("Cooldown timer read from " + layout + " layout."));
+			logInfo(routineLogIntelligenceLine("Cooldown timer read from " + where
+					+ " (white-isolated) -- raw text '" + flatten(strictRaw[0]) + "'."));
+			return cooldown;
 		}
-		return cooldown;
+
+		logWarning(routineLogIntelligenceLine("Cooldown OCR failed on " + where
+				+ " with white colour-isolation. Raw text the engine actually saw: '"
+				+ flatten(strictRaw[0]) + "'. Retrying the same region with colour isolation OFF."));
+
+		final String[] relaxedRaw = { null };
+		LocalDateTime relaxed = textHelper.attemptRecognition(
+				area,
+				3,
+				200L,
+				INTEL_COOLDOWN_RELAXED_SETTINGS,
+				text -> {
+					relaxedRaw[0] = text;
+					return text != null && ANY_HMS.matcher(text).find();
+				},
+				text -> {
+					Matcher m = ANY_HMS.matcher(text);
+					if (!m.find()) {
+						return null;
+					}
+					return LocalDateTime.now().plus(Duration.ofHours(Long.parseLong(m.group(1)))
+							.plusMinutes(Long.parseLong(m.group(2)))
+							.plusSeconds(Long.parseLong(m.group(3))));
+				});
+
+		if (relaxed != null) {
+			logInfo(routineLogIntelligenceLine("Cooldown timer recovered from " + where
+					+ " with colour isolation OFF -- raw text '" + flatten(relaxedRaw[0])
+					+ "' -> " + relaxed.format(DATETIME_FORMATTER) + "."));
+			return relaxed;
+		}
+
+		logWarning(routineLogIntelligenceLine("Cooldown OCR failed on " + where
+				+ " with colour isolation OFF too. Raw text the engine actually saw: '"
+				+ flatten(relaxedRaw[0]) + "'. Region or screen is genuinely wrong, not a colour problem."));
+		return null;
+	}
+
+	/** Raw OCR text is multi-line and noisy; keep it on one log line so it's greppable. */
+	private static String flatten(String raw) {
+		return raw == null ? "<null>" : raw.replace("\n", " ").replace("\r", " ").trim();
 	}
 
 private String routineLogIntelligenceLine(String note) {
