@@ -205,12 +205,19 @@ public class MonumentRoutine extends DelayedTask {
     // The button's own X position DIFFERS between "Request" (centered, ~358) and "Claim"
     // (right-aligned, ~574) -- so the state must be read via OCR first, then the matching
     // point tapped, rather than assuming one fixed position for both.
-    // matt/2026-08-20: the old 620 right edge cut the Claim button in half on the real panel -- the
-    // button runs to about x 660, so OCR saw "Clai" and label.contains("claim") never fired. Widened
-    // to 670. The left edge stays at 280 because the "Request" state renders centred (~358) while
-    // "Claim" is right-aligned (~583), and one region has to cover both.
-    private static final PointData MY_REQUESTS_BUTTON_LABEL_TL = new PointData(280, 340);
-    private static final PointData MY_REQUESTS_BUTTON_LABEL_BR = new PointData(670, 400);
+    // matt/2026-08-20: one wide region spanning both button positions cannot work, and the bundled
+    // tesseract proves it on the real captured panel:
+    //     (280,340)-(670,400)  wide, covers both states -> reads NOTHING
+    //     (500,340)-(670,400)  the Claim button alone   -> reads "Claim"
+    // Between the two button positions sit the ally avatar, the green progress chevrons and the
+    // fulfilled puzzle-piece artwork; that imagery swamps a single-line OCR pass and the text is
+    // lost entirely. (The earlier 620 right edge additionally sliced the Claim button in half.)
+    // So read the two button positions as two separate tight regions instead, Claim first.
+    private static final PointData MY_REQUESTS_CLAIM_LABEL_TL = new PointData(500, 340);
+    private static final PointData MY_REQUESTS_CLAIM_LABEL_BR = new PointData(670, 400);
+    /** The "Request" / "Requesting..." button renders centred (~358) rather than right-aligned. */
+    private static final PointData MY_REQUESTS_REQUEST_LABEL_TL = new PointData(268, 335);
+    private static final PointData MY_REQUESTS_REQUEST_LABEL_BR = new PointData(452, 405);
     private static final PointData MY_REQUESTS_CLAIM_BTN = new PointData(574, 356);
     /** Live-verified today: a center-body tap closes the post-Claim reward reveal
      *  ("Tap anywhere to close", avatars + reward icon) back to the Alliance Trade panel. */
@@ -1104,16 +1111,27 @@ public class MonumentRoutine extends DelayedTask {
      * claimed, a Requesting row is skipped, and only a genuine Request tap spends one of the
      * 3 daily requests.
      */
+    /** Reads one button-label region, lower-cased, or null when nothing legible is there. */
+    private String readButtonLabel(PointData tl, PointData br) {
+        return stringHelper.attemptRecognition(
+                tl, br, 2, 150L, PANEL_TITLE_OCR_SETTINGS,
+                s -> s != null && !s.isBlank(),
+                s -> s.toLowerCase());
+    }
+
     private void processAllianceTradeRequests() {
         for (int i = 0; i < MAX_REQUEST_LOOPS; i++) {
-            String label = stringHelper.attemptRecognition(
-                    MY_REQUESTS_BUTTON_LABEL_TL, MY_REQUESTS_BUTTON_LABEL_BR,
-                    2, 150L, PANEL_TITLE_OCR_SETTINGS,
-                    s -> s != null && !s.isBlank(),
-                    s -> s.toLowerCase());
+            // Two tight regions rather than one wide one -- see MY_REQUESTS_CLAIM_LABEL_TL's note
+            // for the measured reason. Claim is checked first because it's the state that has
+            // something to collect.
+            String claimLabel = readButtonLabel(MY_REQUESTS_CLAIM_LABEL_TL, MY_REQUESTS_CLAIM_LABEL_BR);
+            String centreLabel = readButtonLabel(MY_REQUESTS_REQUEST_LABEL_TL, MY_REQUESTS_REQUEST_LABEL_BR);
+            String label = (claimLabel == null ? "" : claimLabel) + " " + (centreLabel == null ? "" : centreLabel);
+            label = label.trim();
 
-            if (label == null) {
-                logInfo(logLine("My Requests button label unreadable -- moving on rather than guessing. "
+            if (label.isEmpty()) {
+                logInfo(logLine("My Requests button label unreadable in either the Claim or the Request "
+                        + "position -- moving on rather than guessing. "
                         + dumpDiagnosticFrame("my-requests-label-null")));
                 return;
             }
