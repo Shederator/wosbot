@@ -38,6 +38,41 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     private static final PointData SKIP_BUTTON = new PointData(71, 827);
     private static final PointData RESULT_SKIP_BUTTON = new PointData(640, 175);
 
+    // ============ Win/loss by stage advancement (matt/2026-08-20) ============
+    // matt: "you wanna keep going if you're winning. When you lose once, you're toast. Just exit
+    // then, but keep going if you win."
+    //
+    // The routine had NO win/loss detection at all -- "Successfully completed challenge" only ever
+    // meant the flow ran. The obvious place to look was the post-battle result screen, but it is
+    // transient and BATTLE_COMPLETION_DELAY fires 3s after Deploy, so every "result" frame ever
+    // saved is mid-battle; there was nothing to build from.
+    //
+    // The stage screen the game returns to afterwards is a better signal precisely because it is
+    // NOT transient: it prints the current stage and the remaining attempts, and the stage number
+    // ADVANCES on a win and stays put on a loss. Both read cleanly with the bundled tesseract off a
+    // real captured frame (battleres_7s.png, Charm Mine after a win):
+    //     (28,958)-(200,1008)   -> "Stage 5-9"
+    //     (175,1135)-(545,1178) -> "Remaining attempts today: 3"
+    private static final PointData STAGE_LABEL_TL = new PointData(28, 958);
+    private static final PointData STAGE_LABEL_BR = new PointData(200, 1008);
+    private static final PointData ATTEMPTS_LEFT_TL = new PointData(175, 1135);
+    private static final PointData ATTEMPTS_LEFT_BR = new PointData(545, 1178);
+    private static final OcrSettingsData STAGE_LINE_SETTINGS =
+            OcrSettingsData.assembler()
+                    .charWhitelist("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:- ")
+                    .textLayout(TextLayout.SINGLE_LINE)
+                    .build();
+    private static final java.util.regex.Pattern STAGE_PATTERN =
+            java.util.regex.Pattern.compile("([0-9]{1,2})\\s*-\\s*([0-9]{1,2})");
+    private static final java.util.regex.Pattern ATTEMPTS_PATTERN =
+            java.util.regex.Pattern.compile("([0-9]{1,2})\\s*$");
+    /** Hard stop so a misread can never spin the loop; the game's own cap is 5/zone/day. */
+    private static final int MAX_WIN_STREAK_ATTEMPTS = 5;
+    /** Filled by executeDungeonChallenge() once it reaches the zone's own stage screen. */
+    private String stageBeforeBattle;
+    private String stageAfterBattle;
+    private Integer lastAttemptsRemaining;
+
     // Timing constants
     private static final int MENU_NAVIGATION_DELAY = 1000;
     private static final int TAB_SWITCH_DELAY = 500;
@@ -240,6 +275,31 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     //
     // All coordinates and the OCR shape below were measured off a real capture of that screen
     // (Cave of Monsters stage 3-9), not estimated.
+    /**
+     * matt/2026-08-20: SHELVED at matt's direction -- "put the tale of the tape on the shelf for now
+     * and rewire it so it only listens to whatever is in the app."
+     *
+     * <p>When false (the current setting) the routine does exactly one thing with troop ratios: it
+     * applies the percentages configured in the Bearguard app's Labyrinth panel, via
+     * readSingleRatioFromConfig() / readSquadRatiosFromConfig(). No scouting, no Equalize, no
+     * overriding the configured numbers for any reason.
+     *
+     * <p>Flipping this to true re-enables both halves of the shelved work, which are left intact
+     * below rather than deleted because both were verified working:
+     * <ul>
+     *   <li>the pre-fight scout, which reads the enemy's troop counts and the full per-troop-type
+     *       stat comparison off the "View Details" panel for zero attempts;</li>
+     *   <li>the Equalize shortcut, which replaces ~5 minutes of 1%-per-tap slider work with one tap
+     *       when the opponent presents identically to all three troop types.</li>
+     * </ul>
+     * Verified live on 2026-08-20 before being shelved: a full four-zone pass in 39 seconds, with
+     * Cave of Monsters and Charm Mine both confirming "Troop Ratio now [33, 33, 33]".
+     *
+     * <p>Note the trade being made deliberately: with this off, the configured ratio is applied
+     * through the Balance slider flow, which costs roughly five minutes per zone.
+     */
+    private static final boolean SCOUT_AND_AUTO_RATIO_ENABLED = false;
+
     /** Magnifier badge on the stage screen's enemy portrait (bottom-left, next to "Stage N-N"). */
     private static final PointData STAGE_ENEMY_MAGNIFIER = new PointData(122, 1082);
     /** "View Details" title, top-left of the scouting panel. */
@@ -487,10 +547,54 @@ public class DailyLabyrinthRoutine extends DelayedTask {
                     continue;
                 }
             }
-            if (executeDungeonChallenge(dungeonNumber)) {
+            // matt/2026-08-20: "you wanna keep going if you're winning. When you lose once, you're
+            // toast. Just exit then, but keep going if you win." Win/loss is read from the stage
+            // screen's own "Stage N-M" label, which advances on a win and stays put on a loss --
+            // see STAGE_LABEL_TL. Bounded three ways so a misread can't spin it: the game's own
+            // remaining-attempts counter, MAX_WIN_STREAK_ATTEMPTS, and an unreadable stage stopping
+            // the streak rather than assuming a win.
+            for (int battle = 1; battle <= MAX_WIN_STREAK_ATTEMPTS; battle++) {
+                stageBeforeBattle = null;
+                stageAfterBattle = null;
+                lastAttemptsRemaining = null;
+
+                // executeDungeonChallenge() fills stageBeforeBattle/lastAttemptsRemaining once it
+                // actually reaches the zone's stage screen -- the caller is still on the map here.
+                if (!executeDungeonChallenge(dungeonNumber)) {
+                    break;
+                }
                 logInfo("Successfully completed challenge for dungeon " + dungeonNumber + ".");
                 anyCompleted = true;
 
+                String stageBefore = stageBeforeBattle;
+                if (lastAttemptsRemaining != null && lastAttemptsRemaining <= 1) {
+                    logInfo("Dungeon " + dungeonNumber + ": that was the last attempt available today "
+                            + "(counter read " + lastAttemptsRemaining + " before the battle). Stopping this zone.");
+                    break;
+                }
+
+                // Captured inside attemptNormalChallenge() while the stage screen was still up --
+                // reading it here would be on the map, where the label does not exist.
+                String stageAfter = stageAfterBattle;
+                if (stageBefore == null || stageAfter == null) {
+                    logInfo("Dungeon " + dungeonNumber + ": couldn't read the stage label before/after "
+                            + "(" + stageBefore + " -> " + stageAfter + "), so can't tell a win from a "
+                            + "loss. Stopping this zone rather than spending another attempt on a guess.");
+                    break;
+                }
+                if (stageAfter.equals(stageBefore)) {
+                    logInfo("Dungeon " + dungeonNumber + ": LOST — still on stage " + stageAfter
+                            + ". Stopping this zone, per matt's rule: one loss and we're toast.");
+                    break;
+                }
+                logInfo("Dungeon " + dungeonNumber + ": WON — advanced " + stageBefore + " -> "
+                        + stageAfter + ". Going again while we're winning.");
+
+                if (!settleAndNavigateToLabyrinthMenu(dungeonNumber)) {
+                    logWarning("Dungeon " + dungeonNumber + ": couldn't get back to the map for the next "
+                            + "battle; stopping this zone.");
+                    break;
+                }
             }
         }
 
@@ -505,6 +609,34 @@ public class DailyLabyrinthRoutine extends DelayedTask {
      * @param dungeonNumber the dungeon number to challenge
      * @return true if challenge was completed successfully
      */
+    /** Reads "Stage N-M" off the stage screen, or null if it isn't showing/legible. */
+    private String readCurrentStage() {
+        String raw = readStringValue(STAGE_LABEL_TL, STAGE_LABEL_BR, STAGE_LINE_SETTINGS);
+        if (raw == null) {
+            return null;
+        }
+        java.util.regex.Matcher m = STAGE_PATTERN.matcher(raw);
+        return m.find() ? m.group(1) + "-" + m.group(2) : null;
+    }
+
+    /** Reads "Remaining attempts today: N", or null if it isn't showing/legible. */
+    private Integer readRemainingAttempts() {
+        String raw = readStringValue(ATTEMPTS_LEFT_TL, ATTEMPTS_LEFT_BR, STAGE_LINE_SETTINGS);
+        if (raw == null) {
+            return null;
+        }
+        java.util.regex.Matcher m = ATTEMPTS_PATTERN.matcher(raw.trim());
+        if (!m.find()) {
+            return null;
+        }
+        try {
+            int v = Integer.parseInt(m.group(1));
+            return (v >= 0 && v <= 20) ? v : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
     private boolean executeDungeonChallenge(int dungeonNumber) {
         logInfo("Attempting to execute challenge for dungeon " + dungeonNumber + ".");
 
@@ -558,6 +690,15 @@ public class DailyLabyrinthRoutine extends DelayedTask {
         // instead of TAB_SWITCH_DELAY here lets the transition actually finish before any challenge-
         // type check runs.
         sleepTask(LABYRINTH_LOAD_DELAY);
+
+        // matt/2026-08-20: capture the stage BEFORE the battle, from here rather than from the
+        // caller. The caller's loop starts on the Labyrinth MAP, where the "Stage N-M" label does
+        // not exist -- reading it there returns null and the win/loss comparison can never work.
+        // This is the first point at which the zone's own stage screen is actually showing.
+        stageBeforeBattle = readCurrentStage();
+        lastAttemptsRemaining = readRemainingAttempts();
+        logInfo("Dungeon " + dungeonNumber + ": on stage " + stageBeforeBattle
+                + ", attempts left today: " + lastAttemptsRemaining + ".");
 
         // Try quick challenge first
         if (attemptQuickChallenge(dungeonNumber)) {
@@ -686,6 +827,17 @@ public class DailyLabyrinthRoutine extends DelayedTask {
 
             // Skip battle results
             tapInside(RESULT_SKIP_BUTTON, RESULT_SKIP_BUTTON, 10, 50);
+
+            // matt/2026-08-20: read the post-battle stage HERE, before the pressBack() below. That
+            // back-press leaves the zone's stage screen for the outer Labyrinth map, where the
+            // "Stage N-M" label does not exist -- reading it after the fact returned null every
+            // time ("couldn't read the stage label before/after (4-1 -> null)") and the win-streak
+            // stopped on its own safety rule after a single battle. Same mistake as reading the
+            // stage BEFORE the battle from the map; this is the last moment the label is on screen.
+            sleepTask(LABYRINTH_LOAD_DELAY);
+            stageAfterBattle = readCurrentStage();
+            logInfo("Dungeon " + dungeonNumber + ": post-battle stage reads " + stageAfterBattle + ".");
+
             pressBack();
             return true;
         }
@@ -1024,10 +1176,9 @@ public class DailyLabyrinthRoutine extends DelayedTask {
         }
         saveLabyrinthFrame("stage", 0);
 
-        // Free pre-fight scout -- opens the enemy's View Details panel, logs the matchup, backs out.
-        // Costs no attempt and cannot affect the fight; see scoutStageDetails() for why it is
-        // observation-only for now.
-        ScoutResult scout = scoutStageDetails(tag);
+        // Shelved -- see SCOUT_AND_AUTO_RATIO_ENABLED. With it off the routine applies the app's
+        // configured percentages and nothing else.
+        ScoutResult scout = SCOUT_AND_AUTO_RATIO_ENABLED ? scoutStageDetails(tag) : ScoutResult.none();
 
         if (zone.singleSquad()) {
             setupSingleSquadZone(zone, tag, scout);
@@ -1091,12 +1242,14 @@ public class DailyLabyrinthRoutine extends DelayedTask {
         }
         saveLabyrinthFrame("troop", 0);
 
-        if (scout.opponentUniform() && tapEqualize(tag)) {
+        if (SCOUT_AND_AUTO_RATIO_ENABLED && scout.opponentUniform() && tapEqualize(tag)) {
             logInfo(tag + ": configured via Equalize. STOPPING before Deploy (no battle attempt spent).");
             return;
         }
 
         int[] ratio = readSingleRatioFromConfig(zone);
+        logInfo(tag + ": applying the ratio configured in the app -- " + ratio[0] + "/" + ratio[1]
+                + "/" + ratio[2] + " (Inf/Lan/Mrk).");
         if (!driveBalanceAndSave(tag, "single", zone.zoneName().toLowerCase(), ratio, false)) {
             logWarning(tag + ": ratio setup failed.");
             return;
