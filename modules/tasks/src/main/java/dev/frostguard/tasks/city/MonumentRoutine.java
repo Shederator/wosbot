@@ -479,18 +479,6 @@ public class MonumentRoutine extends DelayedTask {
         // false-match this template at 35.965%/40.535% across two real runs, short-circuiting the
         // whole routine before it ever reached the real Monument tower or Claim All. See
         // MONUMENT_PUZZLE_READY_ICON_SEARCH's own comment for the full evidence.
-        ImageSearchResultData puzzleReady = templateSearchHelper.locatePatternMultiScale(
-                TemplatesEnum.MONUMENT_PUZZLE_READY_ICON, SearchConfigConstants.MONUMENT_PUZZLE_READY_ICON_SEARCH);
-        logInfo(logLine("Puzzle-ready icon search result (multi-scale): " + puzzleReady));
-        if (puzzleReady.isFound()) {
-            logInfo(logLine("Puzzle-ready icon found at " + puzzleReady.getPoint()
-                    + " -- tapping it and running the assemble/fragment-backpack chain."));
-            tapNear(puzzleReady.getPoint());
-            sleepTask(PANEL_SETTLE_MS);
-            handlePuzzleReadyChain();
-            return false;
-        }
-
         // matt/2026-08-18: "it pans to the right of lancer, you see monument, then it just starts
         // scrolling around." The 8-direction pan-fallback that used to live here is gone for good --
         // that's the actual "scrolling around" behavior matt flagged. This is a single search at the
@@ -523,6 +511,33 @@ public class MonumentRoutine extends DelayedTask {
         }
 
         if (!badge.isFound()) {
+            // matt/2026-08-20: this puzzle-ready search used to run BEFORE the badge search, and
+            // overnight that cost six consecutive hourly passes. Once the tower switched to the
+            // scroll/quill badge, MONUMENT_PUZZLE_READY_ICON -- a cluttered 115x115 crop of a brown
+            // scroll -- began matching that badge and hijacking it into handlePuzzleReadyChain(),
+            // which then failed every time on its own "Assemble Now" gate:
+            //     01:26 HIT 72.779 -> no 'Assemble Now' (read: 'null')
+            //     02:29 HIT 57.331 -> no 'Assemble Now' (read: 'WP neseraie')
+            //     03:31 HIT 58.607, 04:34 HIT 74.692, 05:36 HIT 71.874, 06:38 -- same, every hour.
+            // Note the scores swinging 41 -> 75 on a static icon: that template is unstable, which
+            // is also how it missed at 41.344 in the one pass that DID take the badge route -- and
+            // that pass claimed a reward and opened 2 packs. So the badge route works and this one
+            // does not; the only reason the badge route ever ran was that unstable score dipping.
+            // Search the badges first (both score 87-98% and are stable) and only fall back to
+            // puzzle-ready when neither badge state is present.
+            ImageSearchResultData puzzleReady = templateSearchHelper.locatePatternMultiScale(
+                    TemplatesEnum.MONUMENT_PUZZLE_READY_ICON, SearchConfigConstants.MONUMENT_PUZZLE_READY_ICON_SEARCH);
+            logInfo(logLine("No badge in either state; puzzle-ready icon search result (multi-scale): "
+                    + puzzleReady));
+            if (puzzleReady.isFound()) {
+                logInfo(logLine("Puzzle-ready icon found at " + puzzleReady.getPoint()
+                        + " -- tapping it and running the assemble/fragment-backpack chain."));
+                tapNear(puzzleReady.getPoint());
+                sleepTask(PANEL_SETTLE_MS);
+                handlePuzzleReadyChain();
+                return false;
+            }
+
             logInfo(logLine("Badge not found this pass -- nothing to tap, not guessing a coordinate. "
                     + dumpDiagnosticFrame("badge-not-found")));
             return false;
