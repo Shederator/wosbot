@@ -419,8 +419,23 @@ private static final DateTimeFormatter STRICT_HMS =
         }
     }
 
+    // Observed live: the Intel banner reads "Refreshes In: 00:02:03", and because the
+    // OCR whitelist admits ':' the label's own colon survives into the text handed to this
+    // parser -- ":00:02:03". Every strategy below is whole-string anchored (LocalTime.parse,
+    // matches(), exact length checks), so that single leading colon rejected an otherwise
+    // perfect read, and the caller silently fell back to a fixed retry interval instead of the
+    // board's real countdown. Stripping leading separator noise here fixes it once for both
+    // parseDuration() and isAcceptedFormat(), which share this normalizer -- rather than in one
+    // routine, where the other callers of this parser would keep the bug.
+    //
+    // Leading only, deliberately: a TRAILING colon is genuinely ambiguous ("12:" could be 12
+    // hours or 12 minutes) and no real frame has produced one, so it still fails loudly rather
+    // than being guessed at.
+    private static final Pattern LEADING_SEPARATOR_NOISE = Pattern.compile("^[:.,;-]+");
+
     private static String normalizeDurationText(String input) {
-        return input.trim().toLowerCase().replaceAll("\\s+", "");
+        String collapsed = input.trim().toLowerCase().replaceAll("\\s+", "");
+        return LEADING_SEPARATOR_NOISE.matcher(collapsed).replaceAll("");
     }
 
     // ------------------------------------------------------------------
