@@ -469,9 +469,23 @@ public class MonumentRoutine extends DelayedTask {
         // UpgradeBuildingsRoutine.tapAllianceHelp()) to test multiple scales per attempt instead of
         // exactly one -- if this raises the logged score meaningfully, that confirms scale was the
         // real problem; if it doesn't, that's real evidence pointing somewhere else next.
+        // matt/2026-08-20: the badge has (at least) TWO states and only one was ever searched for.
+        // Watched both live within four minutes of each other on the same tower: the gold puzzle
+        // piece with the blue swap arrow (which opens Alliance Trade), and, once its Claim had been
+        // collected, a scroll-and-quill -- the "scroll+feather" this file's comments have described
+        // all along. Scored against the real frames, each template is decisive on its own state and
+        // clearly negative on the other's (97-98% / 89.97% vs 42-45%), so they're separate icons,
+        // not one icon rendering differently. Search both instead of walking a single threshold down
+        // until noise matches, which is precisely how this ended up at threshold=30 tapping the
+        // Events rail and empty snow.
         ImageSearchResultData badge = templateSearchHelper.locatePatternMultiScale(
                 TemplatesEnum.MONUMENT_REWARD_BADGE, SearchConfigConstants.MONUMENT_BADGE_SEARCH);
-        logInfo(logLine("Badge template search result (multi-scale): " + badge));
+        logInfo(logLine("Badge template search result (puzzle/swap state, multi-scale): " + badge));
+        if (!badge.isFound()) {
+            badge = templateSearchHelper.locatePatternMultiScale(
+                    TemplatesEnum.MONUMENT_REWARD_BADGE_SCROLL, SearchConfigConstants.MONUMENT_BADGE_SEARCH);
+            logInfo(logLine("Badge template search result (scroll/quill state, multi-scale): " + badge));
+        }
 
         if (!badge.isFound()) {
             logInfo(logLine("Badge not found this pass -- nothing to tap, not guessing a coordinate. "
