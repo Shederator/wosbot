@@ -24,7 +24,7 @@ import dev.frostguard.vision.convert.RegexNumberParser;
  * shared Fragment Backpack.
  *
  * <p>
- * matt/2026-08-14: the original {@code LaunchPoint.HOME}-then-pan-search approach
+ * The original {@code LaunchPoint.HOME}-then-pan-search approach
  * (see the old header below) turned out to be unreliable in practice -- camera pan
  * position drifts run to run depending on whatever the prior task left it at, so the
  * badge was often not where the pan sweep expected. Real fix, live-verified on the
@@ -34,7 +34,7 @@ import dev.frostguard.vision.convert.RegexNumberParser;
  * See {@link #findAndOpenBadgeViaLancer()}.
  *
  * <p>
- * matt/2026-08-18: even that swipe still fell back into a full camera-pan sweep
+ * Even that swipe still fell back into a full camera-pan sweep
  * whenever a template search for the reward badge came up empty right after landing
  * -- "it pans to the right of lancer, you see monument, then it just starts
  * scrolling around." The 8-direction pan-fallback (the actual "scrolling around")
@@ -44,7 +44,7 @@ import dev.frostguard.vision.convert.RegexNumberParser;
  * of Monument. Fixed for real this time: {@link #MONUMENT_BADGE_TAP_POINT} is
  * verified against 3 real screenshots (shop-debug/monument_find.png,
  * monument_check2.png, monument_check3.png) all showing the scroll-with-a-feather
- * badge in the identical spot after this exact swipe, and matt confirmed the
+ * badge in the identical spot after this exact swipe, and confirmed the
  * reference frame live before this landed. No template search, no pan fallback.
  *
  * <p>
@@ -71,10 +71,10 @@ import dev.frostguard.vision.convert.RegexNumberParser;
  * candidate-rescan logic below expects.
  *
  * <p>
- * <b>Alliance Trade deliberately NOT run automatically (matt's call, 2026-08-14):</b>
+ * <b>Alliance Trade deliberately NOT run automatically (by design):</b>
  * the request/send logic below is real and was live-verified working correctly (Ally
  * Requests skip owned:1 rows and only send genuine duplicates, confirmed against a
- * live panel) -- but matt wants to handle Alliance Trade manually for now, so
+ * live panel) -- but the intent is to handle Alliance Trade manually for now, so
  * {@code execute()} no longer calls it. Left in place, unused, for a future re-enable
  * rather than deleted.
  *
@@ -96,7 +96,7 @@ public class MonumentRoutine extends DelayedTask {
             new PointData(665, 258),
     };
 
-    // ========== Lancer-relative navigation to Monument (matt/2026-08-14) ==========
+    // ========== Lancer-relative navigation to Monument  ==========
     // Same coordinates as TrainingRoutine.LANCER_AREA_VALUE / TRAINING_CAMP_TAP_MIN/MAX_VALUE --
     // the Lancer row in the left-menu City queue list, then the camp building itself.
     private static final PointData LANCER_AREA_TOP_LEFT = new PointData(161, 636);
@@ -104,7 +104,7 @@ public class MonumentRoutine extends DelayedTask {
     private static final PointData CAMP_TAP_TOP_LEFT = new PointData(310, 650);
     private static final PointData CAMP_TAP_BOTTOM_RIGHT = new PointData(450, 730);
     private static final int POST_LANCER_WAIT_MS = 5000;
-    // matt/2026-08-18: widened 300px -> 350px on matt's direct instruction, paired with the real
+    // Widened 300px -> 350px by design, paired with the real
     // template search below (not a coordinate change) -- the search finds the badge wherever it
     // actually lands, so this only needs to get Monument reliably into frame, not to a precise spot.
     private static final PointData SWIPE_RIGHT_START = new PointData(550, 700);
@@ -112,7 +112,7 @@ public class MonumentRoutine extends DelayedTask {
     private static final int SWIPE_DURATION_MS = 400;
     private static final int POST_SWIPE_WAIT_MS = 1000;
 
-    // matt/2026-08-18, FOURTH pass -- every fixed-pixel guess so far (330,460 / then 471,550 / then
+    // FOURTH pass -- every fixed-pixel guess so far (330,460 / then 471,550 / then
     // a 516,506-586,576 tolerant box measured off a screenshot) has been wrong at least once live.
     // Guessing a fifth coordinate off a fifth screenshot has the exact same failure mode as the
     // first four -- the camera's landing spot after the swipe isn't perfectly fixed run to run, so
@@ -144,19 +144,19 @@ public class MonumentRoutine extends DelayedTask {
     private static final int BACKPACK_MAX_OPENS_PER_ROW = 20;
 
     // ========== Puzzle-ready chain (Assemble Now -> congrats -> lore card) ==========
-    // matt/2026-08-19: real chain, hand-driven tap-by-tap by matt on a genuine live 15/15
+    // Real chain, hand-driven tap-by-tap on a genuine live 15/15
     // puzzle the same day (see chat transcript). Two different confidence levels here:
     // (1) ASSEMBLE_REGION_TL/BR, ASSEMBLE_NOW_BTN, ASSEMBLED_TAP_ANYWHERE, and
     //     LORE_CARD_CLOSE_X are all estimates RESCALED from a desktop capture of that
     //     walkthrough, NOT a native 720x1280 ADB frame -- the live puzzle got fully
     //     consumed assembling it during the walkthrough itself, so there was nothing left
-    //     to crop a real template from. Matt's own words: "if you did grab it at that time,
+    //     to crop a real template from. The reported symptom: "if you did grab it at that time,
     //     it's gone... we're gonna have to wait till we have another one going." These are
     //     first-pass numbers, not verified -- see handlePuzzleReadyChain()'s hard re-anchor
     //     below before anything downstream is trusted.
     // (2) MONUMENT_PUZZLE_OVERVIEW_FRAGMENT_BACKPACK_ICON (used inside handlePuzzleReadyChain)
     //     IS a real native ADB template, cropped live the same day -- normal confidence.
-    // matt/2026-08-20: "it's clicking the red book, but it's missing the assemble now button in the
+    // "it's clicking the red book, but it's missing the assemble now button in the
     // top right." The screen is finally captured --
     // ocr-debug/monument-puzzle-overview-no-assemble-2026-08-20T08-51-10 -- and everything he
     // described is on it: the "Assemble Now" button top-right, the six-sided blue reward hexagon
@@ -220,7 +220,7 @@ public class MonumentRoutine extends DelayedTask {
 
     private static final PointData TRADE_CLOSE_X = new PointData(662, 155);
     private static final PointData MY_REQUESTS_REQUEST_BTN = new PointData(358, 370);
-    // matt/2026-08-20, measured off the first live capture of this panel: "Requests Left Today (3/3)"
+    // Measured off the first live capture of this panel: "Requests Left Today (3/3)"
     // spans roughly y 262-288, so the old 268 top edge sliced the caps off every glyph. Widened both
     // ways with padding.
     private static final PointData MY_REQUESTS_LEFT_TL = new PointData(195, 256);
@@ -229,7 +229,7 @@ public class MonumentRoutine extends DelayedTask {
     private static final PointData PIECE_PICKER_TIPS_CONFIRM = new PointData(358, 789);
     private static final int MAX_REQUEST_LOOPS = 5;
 
-    // matt/2026-08-19: My Requests row has THREE distinct states, not the single "Request"
+    // My Requests row has THREE distinct states, not the single "Request"
     // state the code above originally assumed -- live-verified hand-driven the same day:
     //   1. "Request" (centered button) -- no active request, free to ask.
     //   2. "Claim" (right-aligned, inside the row once an ally has fulfilled it) -- a real
@@ -239,7 +239,7 @@ public class MonumentRoutine extends DelayedTask {
     // The button's own X position DIFFERS between "Request" (centered, ~358) and "Claim"
     // (right-aligned, ~574) -- so the state must be read via OCR first, then the matching
     // point tapped, rather than assuming one fixed position for both.
-    // matt/2026-08-20: one wide region spanning both button positions cannot work, and the bundled
+    // One wide region spanning both button positions cannot work, and the bundled
     // tesseract proves it on the real captured panel:
     //     (280,340)-(670,400)  wide, covers both states -> reads NOTHING
     //     (500,340)-(670,400)  the Claim button alone   -> reads "Claim"
@@ -266,11 +266,11 @@ public class MonumentRoutine extends DelayedTask {
      *  ("Tap anywhere to close", avatars + reward icon) back to the Alliance Trade panel. */
     private static final PointData CLAIM_REWARD_TAP_ANYWHERE = new PointData(344, 895);
 
-    // matt/2026-08-19: caught live -- tapping "Request" doesn't always land directly on the
+    // Caught live -- tapping "Request" doesn't always land directly on the
     // piece-detail popup PIECE_PICKER_REQUEST_BTN below assumes. It can first open the target
     // puzzle's own overview GRID with an animated hand/glove graphic pointing at whichever
     // empty slot the game auto-selected -- "this hand could be anywhere on this board... a
-    // three column by four row grid" (matt's words). Tapping the pointed-at cell is what opens
+    // three column by four row grid" (the reported symptom). Tapping the pointed-at cell is what opens
     // the actual detail popup. No real template exists yet for that hand graphic (the puzzle
     // that showed it live today, "Friend of Nature", already had its request in flight by the
     // time this was written, so there's nothing left to crop a native frame from -- same
@@ -299,7 +299,7 @@ public class MonumentRoutine extends DelayedTask {
     private static final int PANEL_SETTLE_MS = 1200;
     private static final int ACTION_SETTLE_MS = 900;
     /** The reward-reveal animation after Enable runs noticeably longer than a normal
-     *  panel transition -- matt/2026-08-12, root cause of an earlier stuck-owned-count bug. */
+     *  panel transition -- root cause of an earlier stuck-owned-count bug. */
     private static final int PACK_OPEN_SETTLE_MS = 1800;
 
     private static final OcrSettingsData PANEL_TITLE_OCR_SETTINGS = OcrSettingsData.assembler()
@@ -309,7 +309,7 @@ public class MonumentRoutine extends DelayedTask {
             .build();
 
     /**
-     * matt/2026-08-20: the "Requests Left Today (3/3)" counter was being read with
+     * The "Requests Left Today (3/3)" counter was being read with
      * OWNED_COUNT_OCR_SETTINGS, whose whitelist is "OwnedOWNED:0123456789 " -- no '(' and no '/'.
      * processAllianceTradeRequests() then parses it with a regex that requires a literal open
      * paren followed by digits and a slash -- both characters the whitelist forbids. Tesseract
@@ -346,7 +346,7 @@ public class MonumentRoutine extends DelayedTask {
 
     @Override
     protected void execute() {
-        // matt/2026-08-12: a prior task (Resource Stockpile Scan, in particular) can
+        // A prior task (Resource Stockpile Scan, in particular) can
         // leave its own popup open when Monument's turn comes up. Clear it first,
         // unconditionally, before searching for anything.
         clearStrayPopups();
@@ -367,7 +367,7 @@ public class MonumentRoutine extends DelayedTask {
         tapNear(ATLAS_BACK_ARROW);
         sleepTask(ACTION_SETTLE_MS);
 
-        // matt/2026-08-14: moved here (was called before the back-arrow, at a coordinate that
+        // Moved here (was called before the back-arrow, at a coordinate that
         // doesn't exist on that screen -- see class header). This is the real Tundra Albums
         // hub, where Fragment Backpack's actual button lives.
         logInfo(logLine("On Tundra Albums. Processing the shared Fragment Backpack."));
@@ -376,30 +376,30 @@ public class MonumentRoutine extends DelayedTask {
         logInfo(logLine("Checking the milestone chest track."));
         claimMilestoneChestsIfReady();
 
-        // matt/2026-08-14: Alliance Trade Sends (giving pieces TO allies) deliberately not run
-        // automatically -- matt's call again live on 2026-08-19: "there's a whole other part of
+        // Alliance Trade Sends (giving pieces TO allies) deliberately not run
+        // automatically -- by design, confirmed live: "there's a whole other part of
         // this where you could give other alliance members pieces, but it's extremely
         // complicated... not really appropriate at this time." processAllianceTradeSends() is
         // left in place, live-verified working, just not called here.
         //
-        // matt/2026-08-19: My Requests (Claim + Request -- asking the alliance FOR a piece) is
-        // now wired in, per matt's direct "build this whole thing" the same day he walked the
+        // My Requests (Claim + Request -- asking the alliance FOR a piece) is
+        // now wired in, by design, a direct "build this whole thing" the same day he walked the
         // real Claim/Request/piece-picker flow live tap-by-tap. Entered via the Tundra Albums
         // hub's own always-present Alliance Trade button (not the floating city badge that led
         // here today -- that badge reverted back to the normal MONUMENT_REWARD_BADGE state the
         // moment its one pending trade got consumed, so there's no stable template for it to
         // gate on; the hub button needs no badge at all).
-        // matt caught it live, 2026-08-19: this gate was OCR'ing BACKPACK_TITLE_TL/BR -- the
+        // Observed live: this gate was OCR'ing BACKPACK_TITLE_TL/BR -- the
         // Fragment Backpack panel's own title box, a completely different panel -- to "confirm"
         // the Alliance Trade panel opened. Copy-paste bug: that region always reads blank here
         // ('null' every single run), so this pass never once actually proceeded past the gate.
-        // No dedicated Alliance Trade title box was ever measured. Per matt's direct instruction
+        // No dedicated Alliance Trade title box was ever measured. Per the direct instruction
         // ("keep it simple -- worst case is a false positive and it exits out anyway, who cares"):
         // drop the broken OCR gate entirely and just proceed. ALBUMS_ALLIANCE_TRADE_BTN is a
         // reliable always-present hub button (not a floating badge that can be absent), so a tap
         // there is already good evidence -- if it somehow lands wrong, processAllianceTradeRequests
         // simply fails to find its own buttons and falls through harmlessly.
-        // matt/2026-08-20: the gate came back, because "worst case is a harmless false positive"
+        // The gate came back, because "worst case is a harmless false positive"
         // turned out to be false. A live frame of what this tap ACTUALLY opens is now captured
         // (ocr-debug/monument-my-requests-label-unrecognized-2026-08-20T01-22-33): it is the
         // "Obtain more" GOLD KEY PURCHASE dialog, not Alliance Trade. That also finally explains the
@@ -449,7 +449,7 @@ public class MonumentRoutine extends DelayedTask {
         reschedule(LocalDateTime.now().plusMinutes(IDLE_RECHECK_MINUTES));
     }
 
-    // matt/2026-08-18 (second live failure, ~50% of runs): "moved right three hundred pixels...
+    // "moved right three hundred pixels...
     // then it just, like, went to the events tab." Root cause found from evidence, not guessed --
     // the ONLY post-tap check below was "is the old badge template no longer visible", which is a
     // bad proxy for "the tap actually opened something": a tap that misses the badge (scroll drift,
@@ -477,8 +477,8 @@ public class MonumentRoutine extends DelayedTask {
     };
 
     /**
-     * matt/2026-08-14: navigates to Lancer Camp (a fixed, always-reachable building) then a single
-     * confirmed 300px right swipe brings Monument's badge into view. matt/2026-08-18, rebuilt from
+     * Navigates to Lancer Camp (a fixed, always-reachable building) then a single
+     * confirmed 300px right swipe brings Monument's badge into view. rebuilt from
      * scratch (fourth pass): no fixed-pixel tap of any kind anymore. After the swipe, this does a
      * real template search for {@link TemplatesEnum#MONUMENT_REWARD_BADGE} and taps exactly where
      * it's actually found -- immune to whatever's making the camera's landing spot vary run to run,
@@ -502,23 +502,23 @@ public class MonumentRoutine extends DelayedTask {
         swipe(SWIPE_RIGHT_START, SWIPE_RIGHT_END, SWIPE_DURATION_MS);
         sleepTask(POST_SWIPE_WAIT_MS);
 
-        // matt caught live, 2026-08-19: a completed Scene Fragment set shows a SEPARATE icon at this
+        // Observed live: a completed Scene Fragment set shows a SEPARATE icon at this
         // same landing spot -- a spiral notebook with an orange puzzle-piece speech bubble -- distinct
         // from the scroll-with-a-feather MONUMENT_REWARD_BADGE. Template cropped from a live 720x1280
-        // ADB frame, self-verified 1.0 match against its source. Gated first step per matt's explicit
+        // ADB frame, self-verified 1.0 match against its source. Gated first step by explicit
         // request: identify it, tap it, and stop here -- the Assemble/puzzle-solve/lore-card/Fragment-
         // Backpack chain after it is a separate, deliberately-untested-yet next step, not guessed now.
-        // matt caught it live, 2026-08-19 (second pass, same day): threshold=30 (MONUMENT_BADGE_SEARCH)
+        // Observed live: threshold=30 (MONUMENT_BADGE_SEARCH)
         // was letting an unrelated building's badge (an Alliance-Tech-style scale/briefcase icon)
         // false-match this template at 35.965%/40.535% across two real runs, short-circuiting the
         // whole routine before it ever reached the real Monument tower or Claim All. See
         // MONUMENT_PUZZLE_READY_ICON_SEARCH's own comment for the full evidence.
-        // matt/2026-08-18: "it pans to the right of lancer, you see monument, then it just starts
+        // "it pans to the right of lancer, you see monument, then it just starts
         // scrolling around." The 8-direction pan-fallback that used to live here is gone for good --
-        // that's the actual "scrolling around" behavior matt flagged. This is a single search at the
+        // that's the actual "scrolling around" behavior flagged. This is a single search at the
         // landing spot, nothing more; on a miss it stops and reschedules (see below), it does not pan.
         //
-        // matt/2026-08-18, real evidence from the tightened-crop deploy: two consecutive live misses
+        // Evidence: two consecutive live misses
         // logged real scores of 40.7 and 50.6 (threshold 65) -- both well below, and different from
         // each other on a supposedly-static template, which single-scale correlation is known to do
         // when the on-screen icon renders at a slightly different size than the template was captured
@@ -526,7 +526,7 @@ public class MonumentRoutine extends DelayedTask {
         // UpgradeBuildingsRoutine.tapAllianceHelp()) to test multiple scales per attempt instead of
         // exactly one -- if this raises the logged score meaningfully, that confirms scale was the
         // real problem; if it doesn't, that's real evidence pointing somewhere else next.
-        // matt/2026-08-20: the badge has (at least) TWO states and only one was ever searched for.
+        // The badge has (at least) TWO states and only one was ever searched for.
         // Watched both live within four minutes of each other on the same tower: the gold puzzle
         // piece with the blue swap arrow (which opens Alliance Trade), and, once its Claim had been
         // collected, a scroll-and-quill -- the "scroll+feather" this file's comments have described
@@ -545,7 +545,7 @@ public class MonumentRoutine extends DelayedTask {
         }
 
         if (!badge.isFound()) {
-            // matt/2026-08-20: this puzzle-ready search used to run BEFORE the badge search, and
+            // This puzzle-ready search used to run BEFORE the badge search, and
             // overnight that cost six consecutive hourly passes. Once the tower switched to the
             // scroll/quill badge, MONUMENT_PUZZLE_READY_ICON -- a cluttered 115x115 crop of a brown
             // scroll -- began matching that badge and hijacking it into handlePuzzleReadyChain(),
@@ -577,7 +577,7 @@ public class MonumentRoutine extends DelayedTask {
             return false;
         }
 
-        // matt/2026-08-20: "you're clicking the monument, and you're clicking the fucking events tab
+        // "you're clicking the monument, and you're clicking the fucking events tab
         // in the top right." The coordinates prove him exactly right. The right-hand UI rail carries
         // the featured-event icons (currently Events / Deals / Snowbusters) stacked around x 630-700,
         // and each one wears a small red notification dot. MONUMENT_BADGE_SEARCH runs a full-screen
@@ -607,7 +607,7 @@ public class MonumentRoutine extends DelayedTask {
         tapNear(badge.getPoint());
         sleepTask(PANEL_SETTLE_MS);
 
-        // matt caught it live, 2026-08-19 (twice, two days apart -- "it just went to the events
+        // Observed live twice, two days apart -- "it just went to the events
         // tab"): the EVENTS_TAB_LANDING_SIGNS check below enumerated 5 SPECIFIC rotating event
         // banners (Hall of Chiefs, Defeat Beasts, Brothers in Arms, Hero Rally, Lucky Wheel).
         // Whiteout Survival's live event roster changes -- confirmed live via screenshot the
@@ -624,13 +624,13 @@ public class MonumentRoutine extends DelayedTask {
                 || templateSearchHelper.locatePattern(TemplatesEnum.MONUMENT_ATLAS_CLAIM_BUTTON, SearchConfigConstants.QUICK_SEARCH).isFound()
                 || templateSearchHelper.locatePattern(TemplatesEnum.MONUMENT_ATLAS_CLAIM_ALL_BUTTON, SearchConfigConstants.QUICK_SEARCH).isFound();
         if (!onMonumentPanel) {
-            // matt/2026-08-20: with the badge template finally correct (see 761450f), the very first
+            // With the badge template finally correct (see 761450f), the very first
             // real badge tap -- at (367,537), the actual badge rather than noise -- landed straight on
             // the ALLIANCE TRADE panel, captured in
             // ocr-debug/monument-landed-off-monument-2026-08-20T00-56-15. Not the Monument panel, and
             // not a wrong screen either: the gold-puzzle-piece-with-blue-swap-arrow badge IS the
             // Alliance Trade badge, and tapping it is a direct shortcut. This whole routine assumed
-            // badge -> Monument -> Tundra Albums -> Alliance Trade button, so the one screen matt has
+            // badge -> Monument -> Tundra Albums -> Alliance Trade button, so the one screen this has
             // been asking for all night was being opened and then immediately backed out of as
             // "whatever screen this is".
             //
@@ -681,7 +681,7 @@ public class MonumentRoutine extends DelayedTask {
     }
 
     /**
-     * matt/2026-08-19: the assemble/congrats/lore-card/Fragment-Backpack chain that
+     * The assemble/congrats/lore-card/Fragment-Backpack chain that
      * {@link #findAndOpenBadgeViaLancer()} used to gate and stop before. See the class-level
      * "Puzzle-ready chain" constants comment above for which coordinates here are real
      * native templates vs first-pass rescaled estimates. Every estimated tap is followed by
@@ -709,7 +709,7 @@ public class MonumentRoutine extends DelayedTask {
             }
         }
         if (overviewText == null || !overviewText.toLowerCase().contains("assemble")) {
-            // matt/2026-08-20: "it's clicking the red book, but it's missing the assemble now button
+            // "it's clicking the red book, but it's missing the assemble now button
             // in the top right." This region was an ESTIMATE that has never once been checked against
             // a real capture of this screen -- it failed six times overnight reading 'null',
             // 'WP neseraie', 'WP ncceraie', 'WP reverie'. Dump the frame so the button's actual
@@ -727,7 +727,7 @@ public class MonumentRoutine extends DelayedTask {
         tapNear(PUZZLE_OVERVIEW_ASSEMBLE_NOW_BTN);
         sleepTask(PUZZLE_ASSEMBLE_ANIM_SETTLE_MS);
 
-        // matt/2026-08-20, describing this from memory before it was ever captured: "there should be
+        // Describing this from memory before it was ever captured: "there should be
         // [a] six sided blue [button] with a puzzle in it with a green checkbox maybe in the bottom
         // right." Exactly right. Tapping Assemble Now does not finish anything -- it opens an
         // interactive jigsaw screen with the pieces scattered on a wooden board, and the assembly is
@@ -783,7 +783,7 @@ public class MonumentRoutine extends DelayedTask {
     }
 
     /**
-     * matt/2026-08-19: color sanity check for a template match, per matt's own direction ("it's a
+     * Color sanity check for a template match, by design ("it's a
      * big green claim button... how accurate do you have to be?"). Averages the RGB pixels inside
      * the matched region straight from a live emulator frame and requires green to genuinely
      * dominate red and blue -- not just edge them out. Measured live margins make this an easy
@@ -798,7 +798,7 @@ public class MonumentRoutine extends DelayedTask {
      * match result alone, i.e. today's prior behavior) rather than silently blocking every claim.
      */
     /**
-     * matt/2026-08-20: every Monument fix so far has been a guess at coordinates, because when an
+     * Every Monument fix so far has been a guess at coordinates, because when an
      * OCR gate fails all it reports is the garbled text -- never WHAT SCREEN it was looking at.
      * "read as 'd to perform i epic pbuyy'" says the region holds prose instead of a button label,
      * but not whether the Alliance Trade panel failed to open, opened on a different default tab,
@@ -870,14 +870,14 @@ public class MonumentRoutine extends DelayedTask {
     }
 
     /**
-     * matt/2026-08-20: stop trying to OCR the Claim button. The bundled tesseract reads "Claim"
+     * Stop trying to OCR the Claim button. The bundled tesseract reads "Claim"
      * cleanly off a raw crop of it, but through the app's own pipeline -- PANEL_TITLE_OCR_SETTINGS
      * has stripBackground(true) -- the same button comes back as 's' or as nothing at all, twice
      * live. White text on a saturated green fill does not survive that preprocessing, and the panel
      * title ("Alliance Trade", white on flat orange) reading fine through the identical settings is
      * what makes the difference easy to miss.
      *
-     * <p>The button doesn't need reading. It's a big solid green slab and matt has already said as
+     * <p>The button doesn't need reading. It's a big solid green slab, and this was already established as
      * much about the other one in this file: "it's a big green claim button... how accurate do you
      * have to be?" Sampled straight off the live panel, the separation is not close:
      * <pre>
@@ -985,7 +985,7 @@ public class MonumentRoutine extends DelayedTask {
     }
 
     /**
-     * matt/2026-08-12: confirmed live that Resource Stockpile Scan's "Overview"
+     * Confirmed live that Resource Stockpile Scan's "Overview"
      * panel does NOT close on a back press -- it's a game-rendered modal, not a
      * native Android view, so the system back key is simply ignored by it. A
      * different task later left a DIFFERENT panel open ("Resource &amp; Speedup
@@ -996,7 +996,7 @@ public class MonumentRoutine extends DelayedTask {
      * clean Home screen is confirmed.
      *
      * <p>
-     * matt/2026-08-14: root-caused live, by watching the actual screen after a run --
+     * Root-caused live, by watching the actual screen after a run --
      * this game's own back-button behavior on the City/Home view is to ZOOM OUT to
      * the World strategic map, not to close nothing-there / exit. With nothing open
      * (the overwhelmingly common case), the blind {@code pressBack()} x3 x4-rounds
@@ -1005,7 +1005,7 @@ public class MonumentRoutine extends DelayedTask {
      * World map. From World, Monument's badge/building templates (Home-only) can
      * never match again, so it got permanently stuck until some unrelated task
      * happened to navigate back to Home for its own purposes. This is exactly what
-     * matt saw and described as the app "freaking out" / "almost exiting."
+     * described as the app "freaking out" / "almost exiting."
      * <p>
      * Fix: stop reinventing Home-recovery with raw back-presses. The framework
      * already has {@link dev.frostguard.engine.helper.NavigationHelper#ensureCorrectScreenLocation}
@@ -1049,13 +1049,13 @@ public class MonumentRoutine extends DelayedTask {
                 TemplatesEnum.MONUMENT_BUILDING_ANCHOR, SearchConfigConstants.QUICK_SEARCH).isFound();
     }
 
-    // matt/2026-08-18: the camera-pan fallback that used to live here (findBadgeWithPanFallback(),
+    // The camera-pan fallback that used to live here (findBadgeWithPanFallback(),
     // an 8-direction, up-to-16-tap sweep) is removed entirely -- "it pans to the right of lancer,
     // you see monument, then it just starts scrolling around." Removed for good; on a miss the
     // routine now just stops and reschedules (see findAndOpenBadgeViaLancer() above) instead of
     // panning around OR guessing at an unverified fixed-pixel coordinate.
 
-    // matt/2026-08-19, real fix per matt's own direction after the threshold-tuning approach above
+    // Real fix by design after the threshold-tuning approach above
     // (kept, still a real improvement) drew a fair "why fight a fragile number instead of the
     // obvious signal" pushback: the individual "Claim" button is solid green; the disabled
     // lookalike that fooled the shape-based template match is NOT (measured live: real button
@@ -1086,7 +1086,7 @@ public class MonumentRoutine extends DelayedTask {
             }
         }
 
-        // matt caught live, 2026-08-19: navigation into this panel is fixed, but the routine never
+        // Observed live: navigation into this panel is fixed, but the routine never
         // tapped the bottom "Claim All" button at all -- the loop above only ever scans individual
         // per-row Claim buttons visible in the CURRENT scroll position, so a ready reward scrolled
         // out of view was silently left unclaimed. Claim All batches every currently-claimable
@@ -1104,7 +1104,7 @@ public class MonumentRoutine extends DelayedTask {
         }
     }
 
-    // matt/2026-08-13: caught live -- the Tundra Albums hub has its own fragment-count milestone
+    // Caught live -- the Tundra Albums hub has its own fragment-count milestone
     // chest track at the top (separate from the per-category Atlas rewards handled above) that this
     // routine's own header comment had flagged as a known, unhandled gap. Live-verified by hand: the
     // currently-claimable chest is visually lit/glowing; tapping it opens a real "Rewards" popup
@@ -1154,15 +1154,15 @@ public class MonumentRoutine extends DelayedTask {
         logWarning(logLine("Hit the milestone-chest safety cap (" + MAX_MILESTONE_CHEST_CLAIMS + ")."));
     }
 
-    // matt/2026-08-13: caught live -- ALBUMS_FRAGMENT_BACKPACK_BTN was documented as the Tundra
+    // Caught live -- ALBUMS_FRAGMENT_BACKPACK_BTN was documented as the Tundra
     // Albums hub's own button, but this method used to fire BEFORE the back-arrow tap, on a
     // screen where that coordinate doesn't correspond to a real button at all -- 0 rows ever
     // opened, with no error, because the panel-title check below just correctly declined every
-    // time. matt/2026-08-14: fixed by moving the call to after the back-arrow (see execute()) so
+    // time. : fixed by moving the call to after the back-arrow (see execute()) so
     // this now genuinely runs on the Tundra Albums hub, where ALBUMS_FRAGMENT_BACKPACK_BTN is
     // the real button -- live-verified hand-driven, screenshot-confirmed.
 
-    // matt/2026-08-13, live-verified by hand, full real clear-out (General Album -> Daybreak Island
+    // Live-verified by hand, full real clear-out (General Album -> Daybreak Island
     // x3 -> The Labyrinth, 5 packs total): the fixed-row model above was wrong on two counts.
     // (1) A row with multiple pack types side by side (e.g. Daybreak Island showing 3 colors at
     // once) RE-CENTERS its remaining icons after each one is opened -- tapping a fixed per-slot X
@@ -1174,13 +1174,13 @@ public class MonumentRoutine extends DelayedTask {
     // Read the owned-count badge under each of the positions actually observed live across that
     // clear-out, tap whichever one genuinely shows a count, and rescan from scratch after every
     // single open (since everything can reflow) instead of marching through fixed rows.
-    // matt/2026-08-18: real live log evidence, not a guess -- the 3-across row below
+    // Real live log evidence, not a guess -- the 3-across row below
     // (220/360/490, 548) assumed an old side-by-side icon layout. A live screenshot showed the
     // actual current layout is single-column (General Album stacked directly above Tundra
     // Alliance, both centered around x=360), and the run log confirmed the failure mode exactly:
     // OCR read a bogus "2" at the wrong (220, 548) candidate -- empty wood panel, nothing there --
     // tapped it, and the Fragment Backpack panel never came back because nothing was actually hit.
-    // matt caught it live, 2026-08-19: a real run reported "No more owned packs found. Opened 0
+    // Observed live: a real run reported "No more owned packs found. Opened 0
     // total." while the Fragment Backpack icon itself was showing a real "15" badge -- General
     // Album was genuinely empty ("No such Scene Fragment Pack owned") that pass, and its own
     // placeholder block pushed Rekindled Flames and Divine Weapons further down than any existing
@@ -1203,12 +1203,12 @@ public class MonumentRoutine extends DelayedTask {
     private static final int BACKPACK_BADGE_HALF_HEIGHT = 32;
     private static final int BACKPACK_MAX_TOTAL_OPENS = 40;
 
-    // matt/2026-08-14, caught live: findAnyOwnedPackIcon() false-positived on candidate (360,587) --
+    // Observed live: findAnyOwnedPackIcon() false-positived on candidate (360,587) --
     // the OCR "owned count" read at that offset actually landed on the unrelated Labyrinth hub's own
     // milestone-chest track digits, not a real pack. The bot tapped it, tapped where Enable should be,
     // tapped where a reward-reveal close should be -- all blind, all on the wrong screen -- and ended
     // up stuck on a completely different "Rewards ... Tap anywhere to exit" chest-reveal screen (a
-    // different UI skin REWARD_REVEAL_TAP_ANYWHERE doesn't clear) for 7+ minutes until matt manually
+    // different UI skin REWARD_REVEAL_TAP_ANYWHERE doesn't clear) for 7+ minutes until manually
     // quit. Two real fixes: (1) a hard wall-clock time budget on the whole pass, so an unrecognized
     // screen can never again silently eat minutes; (2) active recovery (repeated back-presses, which
     // already carry the quit-game-dialog safety net) instead of one blind close-tap that assumes
@@ -1220,7 +1220,7 @@ public class MonumentRoutine extends DelayedTask {
     }
 
     /**
-     * matt/2026-08-19: extracted to accept the open-button location, so
+     * Extracted to accept the open-button location, so
      * {@link #handlePuzzleReadyChain()} can reuse this same hardened loop from the puzzle
      * overview screen's own Fragment Backpack icon (found via real template search) instead
      * of the Tundra Albums hub's fixed {@link #ALBUMS_FRAGMENT_BACKPACK_BTN} -- two different
@@ -1232,10 +1232,10 @@ public class MonumentRoutine extends DelayedTask {
         tapNear(openButton);
         sleepTask(PANEL_SETTLE_MS);
 
-        // matt caught it live, 2026-08-19: this came back null the same way the Alliance Trade
+        // Observed live: this came back null the same way the Alliance Trade
         // gate did earlier tonight -- right region this time (BACKPACK_TITLE_TL/BR is genuinely
         // this panel's own title box), but only one OCR pass right after PANEL_SETTLE_MS with no
-        // second attempt if the panel just hadn't finished rendering yet. Per matt's direct
+        // second attempt if the panel just hadn't finished rendering yet. Per the's direct
         // instruction to stop over-gating on exact keyword matches ("worst case is a false
         // positive and it exits out anyway, who cares"): retry once after a longer settle before
         // giving up, and accept ANY non-blank read as confirmation instead of requiring the
@@ -1291,7 +1291,7 @@ public class MonumentRoutine extends DelayedTask {
             tapNear(target);
             sleepTask(ACTION_SETTLE_MS);
 
-            // matt/2026-08-20: findAnyOwnedPackIcon() reads an owned-count badge under each candidate
+            // FindAnyOwnedPackIcon() reads an owned-count badge under each candidate
             // icon, but when an album has no packs the panel shows "No such Scene Fragment Pack owned"
             // with an OBTAIN button roughly where that badge would be (see
             // labyrinth-debug/monument/state_current.png). The badge whitelist is
@@ -1323,7 +1323,7 @@ public class MonumentRoutine extends DelayedTask {
             tapNear(PACK_DETAIL_ENABLE_BTN);
             sleepTask(PACK_OPEN_SETTLE_MS);
 
-            // matt/2026-08-13: the reward-reveal screen has two visual variants -- a quick single-icon
+            // The reward-reveal screen has two visual variants -- a quick single-icon
             // flash for small stacks, and a slower multi-piece grid intro for bigger ones -- and the
             // grid variant is still mid-animation (not yet tappable) right when a single "tap anywhere"
             // would have landed before. Tap twice with a settle between; harmless no-op on the fast
@@ -1390,7 +1390,7 @@ public class MonumentRoutine extends DelayedTask {
     private static final PointData PIECE_PICKER_REQUEST_BTN_LABEL_BR = new PointData(610, 915);
 
     /**
-     * matt/2026-08-19: rebuilt around the real My Requests row's three states (see the class-
+     * Rebuilt around the real My Requests row's three states (see the class-
      * level "Alliance Trade panel" constants comment for the live-verified detail). Reads the
      * button label via OCR every loop instead of assuming it's always "Request" -- a Claim is
      * claimed, a Requesting row is skipped, and only a genuine Request tap spends one of the
@@ -1448,7 +1448,7 @@ public class MonumentRoutine extends DelayedTask {
             Integer requestsLeft = leftText == null ? null : RegexNumberParser.extractByPattern(
                     leftText, Pattern.compile("\\((\\d+)\\s*/"));
             if (requestsLeft == null || requestsLeft <= 0) {
-                // matt/2026-08-20: same discipline as everywhere else tonight -- report the raw text
+                // Same discipline as everywhere else tonight -- report the raw text
                 // and the screen, never just "couldn't read it". A null here is ambiguous between a
                 // genuinely exhausted counter, an OCR miss, and the post-Claim reward reveal not
                 // having closed back to the panel yet, and those need different fixes.
@@ -1462,7 +1462,7 @@ public class MonumentRoutine extends DelayedTask {
             tapNear(MY_REQUESTS_REQUEST_BTN);
             sleepTask(PANEL_SETTLE_MS);
 
-            // matt/2026-08-19: live-verified that this can land on the target puzzle's own grid
+            // Live-verified that this can land on the target puzzle's own grid
             // with an animated hand pointing at an arbitrary cell, instead of going straight to
             // the detail popup PIECE_PICKER_REQUEST_BTN below assumes -- see the class-level
             // comment above these constants. No real template exists yet for that hand graphic,
@@ -1506,7 +1506,7 @@ public class MonumentRoutine extends DelayedTask {
             Integer owned = ownedText == null ? null : RegexNumberParser.extractByPattern(
                     ownedText, Pattern.compile("(\\d+)"));
 
-            // matt, 2026-08-12: only send when a duplicate is actually owned (>=2) --
+            // Only send when a duplicate is actually owned (>=2) --
             // "Owned: 1" means it's their only copy, leave it alone.
             if (owned != null && owned >= 2) {
                 logInfo(logLine("Ally Requests row " + row + ": owned " + owned + ", sending."));

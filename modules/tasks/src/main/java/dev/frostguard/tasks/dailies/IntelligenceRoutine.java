@@ -56,7 +56,7 @@ private static final int MIN_INTEL_MARCH_SLOTS = 1;
 
 private static final int SURVIVOR_BATCH_LIMIT = 2;
 
-	// matt, 2026-08-08: real bug found live — after a clean re-scan finds
+	// Real bug found live — after a clean re-scan finds
 	// nothing, the routine trusted the game's own full-LIST "Refreshes In"
 	// cooldown (observed ~7 hours) as "nothing to check until then." But
 	// individual Beast/Fire Beast spawns clearly happen well inside that
@@ -67,7 +67,7 @@ private static final int SURVIVOR_BATCH_LIMIT = 2;
 	// cooldown reads, so a new spawn is never missed by more than this.
 	private static final int MAX_BEAST_RECHECK_MINUTES = 15;
 
-	// matt, 2026-08-09 (Part 2 — Intel refresh-timer fix): sanity ceiling on the OCR-read full-list
+	// Intel refresh-timer fix: sanity ceiling on the OCR-read full-list
 	// "Refreshes In" cooldown. The real refresh runs ~7h, but the value is read by OCR and the same
 	// font that turns "1d" into "Jd" elsewhere (see TimerSweepRoutine.normaliseDayGlyphs / its
 	// SANITY_CEILING) can inflate this read — a spurious day prefix or an extra digit pushes the
@@ -77,7 +77,7 @@ private static final int SURVIVOR_BATCH_LIMIT = 2;
 	// headroom above the genuine ~7h refresh while catching any misread that lands implausibly far.
 	private static final int MAX_INTEL_REFRESH_MINUTES = 8 * 60;
 
-	// matt caught it live, 2026-08-19: the "3 consecutive cycles processed nothing" branch read the
+	// Observed live: the "3 consecutive cycles processed nothing" branch read the
 	// empty-map OCR area (378,580)-(530,640) and came back with a cooldown of essentially RIGHT NOW
 	// (read at 23:18:39, parsed value 23:18:44 -- 5 seconds later) instead of the real ~6.5h board
 	// refresh, then rescheduled for cooldown+3min, kicking the whole routine off again in under 3
@@ -142,7 +142,7 @@ private boolean explorationsEnabled;
 
 private boolean isAutoJoinTaskEnabled;
 
-// matt, 2026-08-06: "if we run on stamina, go ahead and refresh it" - same
+// "if we run on stamina, go ahead and refresh it" - same
 // Chief Stamina item top-up PolarTerrorHuntingRoutine/CryptidHostingRoutine
 // already use, so a low-stamina Intel run tops up from the backpack instead
 // of sitting idle for the full regen window.
@@ -152,7 +152,7 @@ private int staminaItemReserve;
 
 private boolean processingTask;
 
-// matt/2026-08-13: the while(processingTask) loop below had NO exit and NO delay
+// The while(processingTask) loop below had NO exit and NO delay
 // for the case where missions exist but genuinely can never be processed (e.g. a
 // Fire Beast / mob too high-level for every available troop composition to beat) --
 // manageRescheduling()'s "!anyIntelProcessed" branch just logged and fell through
@@ -163,7 +163,7 @@ private boolean processingTask;
 // screen" the whole night; nothing else in the queue ever got a turn). Tracks
 // consecutive no-progress cycles and forces a real backoff instead of an infinite
 // immediate retry.
-// matt/2026-08-13: "why 30 minutes, why not until the next refresh" -- correct
+// "why 30 minutes, why not until the next refresh" -- correct
 // catch. A stuck mission (like an unbeatable mob) doesn't clear on its own; it sits
 // there until the whole Intel board refreshes, and that refresh is already known
 // elsewhere in this file to run ~7h (MAX_INTEL_REFRESH_MINUTES, 8h ceiling with
@@ -176,7 +176,7 @@ private boolean processingTask;
 private int consecutiveNoProgressCycles;
 private static final int MAX_CONSECUTIVE_NO_PROGRESS_CYCLES = 3;
 
-// matt/2026-08-13: the actual loop matt caught live doesn't even trip the counter
+// The actual loop observed live doesn't even trip the counter
 // above -- a beast the game itself says is "certain to fail" still counts as
 // "found" every cycle (seekAndProcessGrayscale only checks whether the template
 // matched, not whether the attack succeeded), so anyIntelProcessed stays true
@@ -189,14 +189,14 @@ private int consecutiveBeastDeploymentFailures;
 private boolean beastStuckThisRun;
 private static final int MAX_CONSECUTIVE_BEAST_DEPLOYMENT_FAILURES = 2;
 
-// matt/2026-08-15: "it's reaching a beast that's too hard to defeat, and it's just looping...
+// "it's reaching a beast that's too hard to defeat, and it's just looping...
 // then it's gonna run in another fifteen minutes and do the same thing." consecutiveBeastDeploymentFailures
 // and beastStuckThisRun above are plain instance fields -- they correctly stop this RUN from
 // re-attacking a certain-to-fail beast, but DelayedTaskRegistry.create() hands out a fresh
 // IntelligenceRoutine instance every scheduled execution, so that memory is gone by the very
 // next run. Confirmed live: the same still-there beast got re-attacked, failed twice, and
 // stopped again every ~15 minutes, forever. INTEL_BEAST_SKIP_UNTIL_LONG persists the give-up
-// state across runs; this is deliberately shorter than a full board refresh (matt's own past
+// state across runs; this is deliberately shorter than a full board refresh (the past
 // call on a DIFFERENT no-progress case -- "why not until next refresh") because a beast spawn
 // can rotate mid-board, and 60 minutes was picked as a middle ground between "stop spamming
 // the same fight" and "don't miss a beast that gets weaker/replaced partway through the board's
@@ -219,7 +219,7 @@ private boolean shouldRequeueGatherAfterIntel;
 // Changed by pernerch | Date: 2026-07-02 | Why: restore autojoin after Intel processing so helping rallies continues.
 private boolean shouldRequeueAutoJoinAfterIntel;
 
-// matt, 2026-08-09 (Part 3): true once this Intel pass has already pulled Gather forward, so the
+// True once this Intel pass has already pulled Gather forward, so the
 // completion path and the finally-block requeue can't double-fire runNow on the same run.
 private boolean gatherRunNowTriggered;
 
@@ -279,7 +279,7 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 
 		// Changed by pernerch | Date: 2026-07-02 | Why: check mission availability before
 		// recalling gather marches, so Intel does not disrupt gathering when nothing is actionable.
-		// matt, 2026-08-08: claim BEFORE the availability check, not after. Finished missions sit
+		// Claim BEFORE the availability check, not after. Finished missions sit
 		// on the Intel map as a marker wearing a green tick, with a big "Claim All" button at the
 		// bottom of the screen. None of the mission templates match a ticked marker, so
 		// hasAnyIntelMissionAvailableFlow() reported "nothing here" and returned at the branch
@@ -295,14 +295,14 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 		}
 
 		boolean intelMissionsDetected = hasAnyIntelMissionAvailableFlow();
-		// matt/2026-08-09: record whether Intel actually has work so GatherRoutine can distinguish a
+		// Record whether Intel actually has work so GatherRoutine can distinguish a
 		// real march-consuming Intel from Intel's idle ~15-min beast recheck. Without this, Gather saw
 		// "Intel pending within 15 min" every cycle, recalled + deferred, and NEVER deployed (livelock).
 		profile.setConfig(ConfigurationKeyEnum.INTEL_LAST_RUN_HAD_MISSIONS_BOOL, intelMissionsDetected);
 		setShouldUpdateConfig(true);
 		if (!intelMissionsDetected) {
 			logInfo(routineLogIntelligenceLine("No intel missions detected. Skipping Intel run for now."));
-			// matt/2026-08-09 (troop-slot economy): no missions ⇒ no genuine slot demand. Drop any
+			// Troop-slot economy: no missions ⇒ no genuine slot demand. Drop any
 			// stale Intel claim (also pulls Gather forward). Agrees with the LAST_RUN_HAD_MISSIONS flag
 			// above — the ledger is the generalization, the flag the belt-and-suspenders.
 			TroopSlotPolicy.release(profile, TpDailyTaskEnum.INTEL);
@@ -311,7 +311,7 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 			return;
 		}
 
-		// matt/2026-08-09 (troop-slot economy): Intel has confirmed actionable missions, so publish its
+		// Troop-slot economy: Intel has confirmed actionable missions, so publish its
 		// real demand on the slot ledger. Gather recalls only the shortfall and defers to this claim's
 		// expiry; the claim self-sweeps if this pass is interrupted before finalize releases it.
 		TroopSlotPolicy.claim(profile, TpDailyTaskEnum.INTEL, resolveConfiguredIntelMarchesFlow(),
@@ -362,7 +362,7 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 			}
 
 
-			// matt/2026-08-13: Survivor Camps and Explorations run BEFORE Beast/Fire Beast
+			// Survivor Camps and Explorations run BEFORE Beast/Fire Beast
 			// now, deliberately -- these always fully complete (no "too high level to
 			// beat" failure mode), while a beast can be stuck unbeatable and burn repeated
 			// attempts. Processing the guaranteed-completable activities first means a
@@ -412,7 +412,7 @@ private boolean hasAnyIntelMissionAvailableFlow() {
 		// gather recalls when Intel has no visible missions to process.
 		intelScreenHelper.ensureOnIntelScreen();
 
-		// matt, 2026-08-08: an unclaimed reward IS actionable intel. Without this the pre-check
+		// An unclaimed reward IS actionable intel. Without this the pre-check
 		// answered "no" to a screen showing a finished Fire Beast and a Claim All button.
 		if (templateSearchHelper.locatePattern(
 				TemplatesEnum.INTEL_CLAIM_ALL, SearchConfigConstants.DEFAULT_SINGLE).isFound()) {
@@ -476,7 +476,7 @@ private void tryRescheduleFromCooldownFlow() {
 					"Claimed " + completedRewardsClaimed + " completed Intel reward(s) before cooldown scheduling."));
 		}
 
-		// matt, 2026-08-09 (Part 3): reaching this method means Intel has nothing left to do and is
+		// Reaching this method means Intel has nothing left to do and is
 		// booking its next run — i.e. the pass is complete. Trigger Gather right here so gathering
 		// resumes immediately, covering the early no-missions return (which exits before the
 		// try/finally that would otherwise run requeueGatherTasksFlow). The once-per-run guard inside
@@ -500,7 +500,7 @@ private void tryRescheduleFromCooldownFlow() {
 			return;
 		}
 
-		// matt, 2026-08-09 (Part 2 — Intel refresh-timer fix): clamp the OCR-read refresh to a
+		// Intel refresh-timer fix: clamp the OCR-read refresh to a
 		// plausible maximum before anything downstream trusts it. Without this, a garbled cooldown
 		// read (stray day prefix / extra digit) could park Intel a day or more out — well past the
 		// next real ~7h refresh — whenever Beast hunting wasn't on to cap it. See the constant's note.
@@ -513,12 +513,12 @@ private void tryRescheduleFromCooldownFlow() {
 			cooldown = refreshCeiling;
 		}
 
-		// matt/2026-08-09: this path only runs when the board is EMPTY (nothing left to fight) and shows
+		// This path only runs when the board is EMPTY (nothing left to fight) and shows
 		// the central refresh countdown (read from the middle of the screen). Nothing — beasts included —
 		// appears until that countdown expires, so the old 15-minute Beast/Fire-Beast recheck cap here
 		// just re-opened the Intel screen every 15 min for hours with nothing to find (wasted activity /
 		// ban risk). Honor the OCR'd countdown directly. A beast march still in flight is handled below
-		// and pulls the next run forward to claim. Add +1..3 min of randomness (matt's request) so we
+		// and pulls the next run forward to claim. Add +1..3 min of randomness (a deliberate choice) so we
 		// arrive just AFTER the refresh — never reading a stale "still counting" value — and never hit
 		// the exact same instant twice.
 		long jitterSeconds = java.util.concurrent.ThreadLocalRandom.current().nextLong(60, 181); // 1–3 min
@@ -527,7 +527,7 @@ private void tryRescheduleFromCooldownFlow() {
 				"Empty board — scheduling next Intel run to the middle-screen refresh countdown %s + %ds jitter.",
 				cooldown.format(DATETIME_FORMATTER), jitterSeconds)));
 
-		// matt, 2026-08-08: a march already in flight beats every other signal. When a beast
+		// A march already in flight beats every other signal. When a beast
 		// march was just sent, the reward lands at the return ETA — come back then and claim it,
 		// rather than honouring a cooldown or the 15-minute cap and leaving a dead beast on the
 		// board. The buffer covers the battle resolving after the march touches down.
@@ -557,7 +557,7 @@ private void tryRescheduleFromCooldownFlow() {
 	}
 
 	/**
-	 * matt caught it live again, 2026-08-20 -- and this time with the log proving the bot WAS
+	 * Observed live again -- and this time with the log proving the bot WAS
 	 * on the right screen ("Already on Intel" at 23:58:14, OCR gave up at 23:58:16). Every
 	 * previous fix here was a guess at coordinates because this method threw the raw OCR text
 	 * away: ResilientOcrExecutor does log it ("=== OCR Completed === Text: '...'"), but on its
@@ -575,7 +575,7 @@ private void tryRescheduleFromCooldownFlow() {
 	 * here guessed at coordinates; the coordinates were never the problem.
 	 *
 	 * <p>So don't demand the region contain nothing but a timer -- pull the first H:MM:SS out of
-	 * whatever text comes back, which is exactly what matt asked for ("I go to the top, I OCR how
+	 * whatever text comes back, which is exactly the intent ("I go to the top, I OCR how
 	 * much time is left, I get the exact number"). The relaxed no-isolation pass is kept as a
 	 * second attempt for the case where isolation genuinely does erase the glyphs on some other
 	 * screen, but it should now be rare -- the first pass handles the label-colon case cleanly
@@ -820,7 +820,7 @@ private void requeueGatherTasksFlow() {
 		sleepTask(500);
 	}
 
-	// matt, 2026-08-09 (Part 3): Intel recalls/cancels gather marches while it works, and Gather
+	// Intel recalls/cancels gather marches while it works, and Gather
 	// itself speculatively defers ~15-25 min out the moment it sees Intel pending (see
 	// GatherRoutine.checkHighPriorityEventConflict). Once Intel finishes its pass and books its long
 	// (~7h) refresh, that speculative defer is stale — nothing was pulling Gather back, so gathering
@@ -887,7 +887,7 @@ private void requeueAutoJoinTaskFlow() {
 	}
 
 private void finalizePostIntelTaskFlow() {
-		// matt/2026-08-09 (troop-slot economy): the Intel pass is over — drop its slot claim. release()
+		// Troop-slot economy: the Intel pass is over — drop its slot claim. release()
 		// also pulls Gather forward, so freed slots refill immediately. The existing requeue below is
 		// harmless (isTaskScheduledSoon grace prevents a double runNow).
 		TroopSlotPolicy.release(profile, TpDailyTaskEnum.INTEL);
@@ -1308,7 +1308,7 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 		if (!anyIntelProcessed) {
 			consecutiveNoProgressCycles++;
 			if (consecutiveNoProgressCycles >= MAX_CONSECUTIVE_NO_PROGRESS_CYCLES) {
-				// matt/2026-08-13: don't blindly wait MAX_INTEL_REFRESH_MINUTES (8h) here --
+				// Don't blindly wait MAX_INTEL_REFRESH_MINUTES (8h) here --
 				// that could mean sitting idle for 8h when the real board refresh was only
 				// 1 minute away. Read the actual "Refreshes In" timer (same OCR helper the
 				// empty-board cooldown path already uses -- the WITH_MARKERS layout works
@@ -1355,7 +1355,7 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 							+ "-minute ceiling -- rescheduling for " + backoffTime.format(DATETIME_FORMATTER) + "."));
 				}
 
-				// matt/2026-08-14, caught live watching the app: "intel timer is wrong" -- this branch
+				// Observed live: "intel timer is wrong" -- this branch
 				// was scheduling straight off the full board-refresh cooldown (up to
 				// MAX_INTEL_REFRESH_MINUTES / 8h away, confirmed live jumping from a 12:00 to a 20:00
 				// UTC read), completely ignoring MAX_BEAST_RECHECK_MINUTES. That constant's own header
@@ -1368,14 +1368,14 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 				// unattended. Cap the backoff at the same 15-minute recheck interval whenever
 				// Beast/Fire Beast hunting is enabled, regardless of how far out the real board refresh
 				// reads.
-				// matt/2026-08-20, caught live and stated directly: "Intel is running in sixteen
+				// Caught live and stated directly: "Intel is running in sixteen
 				// minutes instead of what is it like, four hours. So wrong again." The cap above was
 				// firing even when the board's own countdown had been read successfully, so the whole
 				// point of reading it -- "I OCR how much time is left, I get the exact number, and I
 				// run this again that amount of time plus five minutes" (his words) -- was thrown away
 				// on the very next line. Two cases, and they are genuinely different:
 				//
-				//   Timer READ  -> honor it. This is matt's explicit, repeated instruction, and he is
+				//   Timer READ  -> honor it. This is the explicit, repeated instruction, and he is
 				//                  the one watching the board live. Note the tradeoff being accepted:
 				//                  the 2026-08-14 note below recorded fire beasts spawning ~10 min
 				//                  apart INSIDE a refresh window, so a long honored backoff can miss a
@@ -1429,7 +1429,7 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 		logInfo(routineLogIntelligenceLine("Missions are available. Continuing Intel mission processing."));
 	}
 
-	// matt caught it live, 2026-08-19: Intel got rescheduled almost 20 hours out ("rerun says 19
+	// Observed live: Intel got rescheduled almost 20 hours out ("rerun says 19
 	// hours... you failed") while the just-logged real beast march ETA was only ~5 minutes away.
 	// Root cause: this file already has a proven fix for exactly this failure shape (see
 	// MAX_INTEL_REFRESH_MINUTES's comment -- "a garbled cooldown read (stray day prefix / extra
@@ -1523,7 +1523,7 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 		return false;
 	}
 
-	// matt/2026-08-14, caught live watching the app: "that purple is being ignored... it SHOULD
+	// Observed live: "that purple is being ignored... it SHOULD
 	// atk firebeast last." Root cause -- Fire Beast was scanned FIRST here, and Fire Beast is
 	// disproportionately likely to be "too strong to beat" (confirmed live: two straight
 	// "certain to fail" deployments). consecutiveBeastDeploymentFailures/beastStuckThisRun are
@@ -1531,7 +1531,7 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 	// circuit breaker, the outer loop's `!beastStuckThisRun` gate blocks handleBeastIntel() from
 	// running again for the REST of the run, meaning the regular Beast never gets attempted on
 	// any later cycle even if it's genuinely winnable. Reordered so the regular Beast goes
-	// first and Fire Beast goes last, exactly as matt asked -- a Fire Beast that's too strong
+	// first and Fire Beast goes last, by design -- a Fire Beast that's too strong
 	// can no longer crowd out a beatable regular Beast.
 	private boolean handleBeastIntel() {
 		if (isBeastSkipActive()) {
@@ -1600,12 +1600,12 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 		return false;
 	}
 
-	// matt/2026-08-14, caught live watching the app: several recovery paths in this routine press
+	// Observed live: several recovery paths in this routine press
 	// back TWICE unconditionally, assuming exactly two screens are stacked (e.g. Attack detail +
 	// Deploy screen). That assumption isn't always true -- when only ONE layer was actually open,
 	// the second back press lands on a bare screen, and this game's own back-button handling
 	// there is to pop a native "Quit game?" confirmation dialog. Left alone, that's one accidental
-	// tap away from actually exiting the game mid-automation -- confirmed live, matt found it
+	// tap away from actually exiting the game mid-automation -- confirmed live, found
 	// sitting open after a beast-deployment abort. Safety net: after any back-press chain that
 	// might overshoot, check specifically for this dialog's "Quit game?" body text and tap Cancel
 	// -- never Confirm -- to back out of it safely. Coordinates/OCR region calibrated from a live
@@ -1706,22 +1706,22 @@ private void handleJourney(ImageSearchResultData result) {
 		StatisticsService.obtain().addToCounter(profile, "Intel Journeys", 1);
 	}
 
-	// matt, 2026-08-08: the game shows this exact red warning on the
+	// The game shows this exact red warning on the
 	// deployment screen when the composition can't win — the bot was never
 	// checking for it, so it equalized troops into a thin 4-5% ratio and
 	// deployed straight into a doomed march. Calibrated live 2026-08-08.
 	private static final PointData FAIL_WARNING_TOP_LEFT = new PointData(0, 590);
 	private static final PointData FAIL_WARNING_BOTTOM_RIGHT = new PointData(720, 640);
 
-	// matt/2026-08-13: caught live, real troop losses (5 attacks against the same beast before it
+	// Caught live, real troop losses (5 attacks against the same beast before it
 	// stopped) — the real in-game warning reads "Not likely to prevail," which never contains the
 	// literal word "fail" this check was looking for. The substring match silently returned false
 	// every single time and let the deploy go straight through the warning. Broadened to the actual
 	// confirmed wording plus reasonable variants, since the exact on-screen phrasing wasn't
 	// available to lock down further at the time of this fix -- narrow this to the precise string
 	// once a real screenshot of the warning is in hand.
-	// matt, 2026-08-19: caught live again -- the bot kept attacking an overwhelmingly stronger Fire
-	// Beast, meaning the game's real warning text still isn't fully covered here. matt described
+	// Caught live again -- the bot kept attacking an overwhelmingly stronger Fire
+	// Beast, meaning the game's real warning text still isn't fully covered here. Described
 	// the phrases he's actually seen in-game: "not likely to win this," "certain not to win," "gonna
 	// fail." Added those variants (kept the earlier confirmed "not likely to prevail" too, since the
 	// game may phrase this differently across beast types/versions) -- broadened rather than
@@ -1805,7 +1805,7 @@ private void handleBeast(ImageSearchResultData beast) {
 		}
 
 
-		// matt, 2026-08-08: max troops instead of Equalize — Equalize was
+		// Max troops instead of Equalize — Equalize was
 		// spreading a thin 4-5% ratio per type, which the game itself then
 		// flagged as "almost certain to fail" and the bot deployed anyway.
 		deploymentHelper.maxAllTroopSliders();
@@ -1823,7 +1823,7 @@ private void handleBeast(ImageSearchResultData beast) {
 			return;
 		}
 
-		// matt, 2026-08-08: even at max troops, the game itself can still say
+		// Even at max troops, the game itself can still say
 		// this march will lose (not enough total power available right now).
 		// Never deploy through that warning — back out, pull any troops
 		// still out gathering back to the city to free up more power, and
@@ -1838,7 +1838,7 @@ private void handleBeast(ImageSearchResultData beast) {
 				pressBack();
 				dismissQuitGameDialogIfPresent();
 
-				// matt caught it live, 2026-08-19 (second real attempt, after the settle-delay fix
+				// Observed live (second real attempt, after the settle-delay fix
 				// below still didn't help): a QUIT-GAME DIALOG fired on this exact pass ("tapping
 				// Cancel to back out safely"), which only happens when a pressBack() lands on a bare
 				// screen with nothing left to close -- meaning the two unconditional pressBack()
@@ -1853,7 +1853,7 @@ private void handleBeast(ImageSearchResultData beast) {
 				// does, then settle before reading.
 				intelScreenHelper.ensureOnIntelScreen();
 
-				// matt caught it live again, 2026-08-19 (third attempt): ensureOnIntelScreen()
+				// Observed live: ensureOnIntelScreen()
 				// DID correctly recover navigation this time -- log proof: "GAME_HOME_INTEL found"
 				// -> "Tapping Intel button" -> "Intel reached", all within 2 seconds, immediately
 				// followed by the OCR-failed fallback firing 2s after "Intel reached". This is a
@@ -1979,8 +1979,8 @@ private void handleBeast(ImageSearchResultData beast) {
 			return;
 		}
 
-		// matt, 2026-08-08: record the return ETA ALWAYS, not just in smart mode. With
-		// smart=false (matt's Default profile) this was computed from a good OCR read and then
+		// Record the return ETA ALWAYS, not just in smart mode. With
+		// smart=false (the Default profile) this was computed from a good OCR read and then
 		// silently discarded, so the run that follows a deployment had no idea a march was in
 		// flight. Concrete case observed at 14:45: travelSeconds=24, so the beast was dead and
 		// claimable by ~14:46:35 — but the next Intel visit was booked for 15:01 off the generic

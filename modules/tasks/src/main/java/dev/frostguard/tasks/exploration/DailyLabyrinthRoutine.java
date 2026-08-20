@@ -38,8 +38,8 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     private static final PointData SKIP_BUTTON = new PointData(71, 827);
     private static final PointData RESULT_SKIP_BUTTON = new PointData(640, 175);
 
-    // ============ Win/loss by stage advancement (matt/2026-08-20) ============
-    // matt: "you wanna keep going if you're winning. When you lose once, you're toast. Just exit
+    // ============ Win/loss by stage advancement  ============
+    // Reported: "you wanna keep going if you're winning. When you lose once, you're toast. Just exit
     // then, but keep going if you win."
     //
     // The routine had NO win/loss detection at all -- "Successfully completed challenge" only ever
@@ -80,7 +80,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     private static final int LABYRINTH_LOAD_DELAY = 2000;
 
     // ===================================================================
-    // Land-of-Heroes formation-setup flow (matt/2026-08-10)
+    // Land-of-Heroes formation-setup flow 
     // ===================================================================
     // ALL coordinates below are BEST-ESTIMATE from 720x1280 screenshots and are marked
     // "LIVE-TUNE" — the orchestrator will calibrate each one via ADB before this runs for real.
@@ -96,11 +96,11 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     /** LIVE-TUNE: tap point on the "Land of Heroes" purple banner to enter the zone. */
     private static final PointData LOH_ZONE_BANNER = new PointData(460, 337);
     /** LIVE-TUNE: OCR region over the Land-of-Heroes label (name + timer). A LOCKED zone's line reads
-     *  "Opens in …"; an OPEN zone shows just name + a bare countdown. matt's rule: "Opens in" ⇒ skip. */
+     *  "Opens in …"; an OPEN zone shows just name + a bare countdown. the documented rule: "Opens in" ⇒ skip. */
     private static final PointData LOH_ZONE_LABEL_TL = new PointData(358, 302);
     private static final PointData LOH_ZONE_LABEL_BR = new PointData(562, 372);
 
-    // matt/2026-08-13: same formation-setup extended to Cave of Monsters and Charm Mine ("we're up
+    // Same formation-setup extended to Cave of Monsters and Charm Mine ("we're up
     // to like three now"). Calibrated live via ADB from the Labyrinth zone map (same map screen as
     // Land of Heroes, different scroll position). Banner = tap point on the zone's structure
     // graphic; label = OCR box over its name+timer banner, same "Opens in" open/locked rule.
@@ -111,7 +111,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     private static final PointData CHARM_ZONE_LABEL_TL = new PointData(390, 595);
     private static final PointData CHARM_ZONE_LABEL_BR = new PointData(640, 655);
 
-    // matt/2026-08-16: Gaia Heart -- live-calibrated via ADB the same day (a Sunday, its actual open
+    // Gaia Heart -- live-calibrated via ADB the same day (a Sunday, its actual open
     // rotation), not guessed. Confirmed it renders on the DEFAULT unscrolled map view (no scroll
     // needed) at the bottom of the frame, at least while open -- unconfirmed whether it still renders
     // here on a day it's closed.
@@ -135,7 +135,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     private static final PointData LOH_EDIT_FORMATION_SQUAD1_BTN = new PointData(360, 357);
 
     // -- Troop-detail screen (post Edit Formation) --
-    /** "Balance" button on the troop-detail screen that opens the troop-ratio popup. matt/2026-08-13:
+    /** "Balance" button on the troop-detail screen that opens the troop-ratio popup.
      *  re-calibrated 1195->1183 live via ADB on Cave of Monsters -- 1195 landed on the Backpack nav
      *  icon underneath (a stray Alliance Vote popup had been interfering with earlier attempts and
      *  masked this; confirmed twice clean at 1183 with no popups in the way). */
@@ -164,7 +164,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
 
     // -- % readout OCR crops (top-left / bottom-right), one per troop row --
     /** LIVE-TUNE: Infantry % box. */
-    // matt/2026-08-20: these boxes spanned the value pill's full width INCLUDING its dark rounded
+    // These boxes spanned the value pill's full width INCLUDING its dark rounded
     // border, and the border survives the white-outline isolation as extra digits. Measured live off
     // lab_d0_balance_set_1787233252229.png, where the popup genuinely showed 50/10/40 and the app's
     // own raw reads were:
@@ -184,7 +184,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     private static final PointData LOH_MRK_PCT_BR = new PointData(618, 836);
 
     // ===================================================================
-    // Gaia Heart formation flow (matt/2026-08-16)
+    // Gaia Heart formation flow 
     // ===================================================================
     // Live-calibrated the same day Gaia Heart was actually open (a Sunday). Genuinely two-squad, same
     // shape as Land of Heroes -- BUT the commit mechanism is DIFFERENT and was verified live: the
@@ -203,7 +203,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     private static final PointData[] GAIA_SQUAD_EDIT_BTNS = new PointData[] {
             new PointData(360, 357),   // Squad 1
             new PointData(360, 700),   // Squad 2
-            // Squad 3 unlocks at Stage 15-10 -- not live-verified (still locked on matt's account as
+            // Squad 3 unlocks at Stage 15-10 -- not live-verified (still locked on this account as
             // of 2026-08-16), so no coordinate here yet. setupGaiaZone() only ever processes 2 squads
             // until this is added AND verified against the real unlocked screen.
     };
@@ -264,9 +264,9 @@ public class DailyLabyrinthRoutine extends DelayedTask {
                     .setTextColor(new java.awt.Color(255, 255, 255))
                     .build();
     // ===================================================================
-    // Pre-fight scouting -- "View Details" (matt/2026-08-20)
+    // Pre-fight scouting -- "View Details" 
     // ===================================================================
-    // matt asked for a "tale of the tape": after losing, read the battle report to see what the
+    // The "tale of the tape" request: after losing, read the battle report to see what the
     // enemy actually ran, then counter it on the retry. Driving the game by hand to find that screen
     // turned up something strictly better -- the magnifier on the stage screen's enemy portrait opens
     // a "View Details" panel that shows the enemy's troop counts AND a full per-troop-type stat
@@ -276,7 +276,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     // All coordinates and the OCR shape below were measured off a real capture of that screen
     // (Cave of Monsters stage 3-9), not estimated.
     /**
-     * matt/2026-08-20: SHELVED at matt's direction -- "put the tale of the tape on the shelf for now
+     * SHELVED by design -- "put the tale of the tape on the shelf for now
      * and rewire it so it only listens to whatever is in the app."
      *
      * <p>When false (the current setting) the routine does exactly one thing with troop ratios: it
@@ -317,7 +317,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     /** Opponent stats this close across all three types count as "the same enemy to everyone". */
     private static final double OPPONENT_UNIFORM_TOLERANCE = 0.5;
 
-    // -- Equalize (matt/2026-08-20) --------------------------------------------------------------
+    // -- Equalize  --------------------------------------------------------------
     // The single-squad deployment screen carries its own "Equalize" button, which sets 33/33/33 in
     // ONE tap. Confirmed on lab_d0_troop_1787238417242.png alongside Withdraw All / Balance / Deploy,
     // with the live ratio printed along the bottom as "Troop Ratio: 33% 33% 33%".
@@ -336,7 +336,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
                     .charWhitelist("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:% ")
                     .textLayout(TextLayout.SINGLE_LINE)
                     .build();
-    // matt/2026-08-20: this demanded a literal '%' and so rejected a perfectly good read -- the strip
+    // This demanded a literal '%' and so rejected a perfectly good read -- the strip
     // came back 'Troop Ratio: W 33% GP 33x 33%', where the middle percent sign OCR'd as an 'x'. The
     // three values were plainly 33/33/33 and Equalize had worked. Requiring the % adds nothing: the
     // icons between the numbers ('W', 'GP') contain no digits, so pulling every 1-3 digit number in
@@ -430,9 +430,9 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     protected void execute() {
 
         try {
-            // TEST GATE (matt/2026-08-10): when LABYRINTH_FORMATION_TEST_BOOL is on, run ONLY the
+            // TEST GATE : when LABYRINTH_FORMATION_TEST_BOOL is on, run ONLY the
             // free Land-of-Heroes formation-setup flow and stop — skip the normal daily-clear logic
-            // so matt can trigger just this without burning a daily battle attempt.
+            // so this can be triggered alone without burning a daily battle attempt.
             Boolean formationTestOn =
                     profile.getConfig(ConfigurationKeyEnum.LABYRINTH_FORMATION_TEST_BOOL, Boolean.class);
             if (Boolean.TRUE.equals(formationTestOn)) {
@@ -441,7 +441,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
                     rescheduleOneHourLater("Failed to navigate to the Labyrinth menu (formation test)");
                     return;
                 }
-                // matt/2026-08-13: "we're up to like three now" -- runs Land of Heroes, THEN Cave of
+                // "we're up to like three now" -- runs Land of Heroes, THEN Cave of
                 // Monsters, THEN Charm Mine, each independently gated by its own open/locked check.
                 for (ZoneFormation zone : ZONE_FORMATIONS) {
                     setupZoneFormation(zone);
@@ -490,7 +490,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     }
 
     /**
-     * matt/2026-08-13, caught live: right after a real Charm-Mine-flow battle, one attempt found the
+     * Observed live: right after a real Charm-Mine-flow battle, one attempt found the
      * screen already drifted into an unrelated City popup (March Queue) by the time we went looking
      * for the Labyrinth menu item -- {@link #navigateToLabyrinthMenu} assumes it's starting from a
      * clean home/city screen and has no way to close a stray popup on its own, so the menu-item search
@@ -534,7 +534,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
 
         boolean anyCompleted = false;
         for (Integer dungeonNumber : availableDungeons) {
-            // matt/2026-08-13, caught live: after a completed battle, attemptNormalChallenge's single
+            // Observed live: after a completed battle, attemptNormalChallenge's single
             // pressBack() only returns to the zone's OWN stage-select screen, not the outer "The
             // Labyrinth" map -- so the next dungeon's banner search (which only exists on the outer
             // map) silently failed with a false "not available today". Re-navigating explicitly
@@ -547,7 +547,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
                     continue;
                 }
             }
-            // matt/2026-08-20: "you wanna keep going if you're winning. When you lose once, you're
+            // "you wanna keep going if you're winning. When you lose once, you're
             // toast. Just exit then, but keep going if you win." Win/loss is read from the stage
             // screen's own "Stage N-M" label, which advances on a win and stays put on a loss --
             // see STAGE_LABEL_TL. Bounded three ways so a misread can't spin it: the game's own
@@ -584,7 +584,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
                 }
                 if (stageAfter.equals(stageBefore)) {
                     logInfo("Dungeon " + dungeonNumber + ": LOST — still on stage " + stageAfter
-                            + ". Stopping this zone, per matt's rule: one loss and we're toast.");
+                            + ". Stopping this zone: one loss and we're toast.");
                     break;
                 }
                 logInfo("Dungeon " + dungeonNumber + ": WON — advanced " + stageBefore + " -> "
@@ -640,7 +640,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     private boolean executeDungeonChallenge(int dungeonNumber) {
         logInfo("Attempting to execute challenge for dungeon " + dungeonNumber + ".");
 
-        // matt/2026-08-13, caught live: on a dungeon that comes right after a just-completed battle
+        // Observed live: on a dungeon that comes right after a just-completed battle
         // (i.e. after settleAndNavigateToLabyrinthMenu's re-navigation, not the task's very first
         // dungeon), the very first banner search sometimes missed even though navigateToLabyrinthMenu
         // itself reported success -- the outer map likely hadn't finished settling/rendering (or a
@@ -663,7 +663,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
             }
         }
         if (!labyrinthResult.isFound()) {
-            // matt/2026-08-13: caught live twice now that the retry above doesn't actually fix this --
+            // Caught live twice now that the retry above doesn't actually fix this --
             // by the time a screenshot gets pulled externally, the app has already moved on to whatever
             // screen the NEXT queued task opened, so there was never a real look at what the banner
             // search actually saw. Capture the frame right here, in the same instant as the failed
@@ -674,7 +674,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
         }
 
         tapInside(labyrinthResult);
-        // matt, 2026-08-19, caught live: TAB_SWITCH_DELAY (500ms) is a quick-tab-switch delay, not
+        // Observed live: TAB_SWITCH_DELAY (500ms) is a quick-tab-switch delay, not
         // a real zone-load delay -- entering a dungeon zone plays a slide/fade transition that isn't
         // finished settling in 500ms. attemptRaidChallenge() then ran its template search against
         // that still-animating frame and false-matched LABYRINTH_RAID_CHALLENGE (manually replayed
@@ -682,7 +682,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
         // stage-select screen, well under the 90% threshold -- so the live 90%+ match that sent this
         // down the wrong branch had to be a transient animation frame, not the real screen). That
         // false branch then tapped nothing meaningful, "skipped" a battle that never started, and
-        // pressBack()'d twice out of the zone -- exactly matt's report: "went in, claimed it, then
+        // pressBack()'d twice out of the zone -- exactly the reported symptom: "went in, claimed it, then
         // just got out" with zero attempts actually spent (confirmed live: Remaining attempts stayed
         // at 5/5). For dungeon 3 (Charm Mine) the same insufficient settle meant NONE of the three
         // challenge-type checks matched at all, so the routine silently gave up on that dungeon. Using
@@ -691,7 +691,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
         // type check runs.
         sleepTask(LABYRINTH_LOAD_DELAY);
 
-        // matt/2026-08-20: capture the stage BEFORE the battle, from here rather than from the
+        // Capture the stage BEFORE the battle, from here rather than from the
         // caller. The caller's loop starts on the Labyrinth MAP, where the "Stage N-M" label does
         // not exist -- reading it there returns null and the win/loss comparison can never work.
         // This is the first point at which the zone's own stage screen is actually showing.
@@ -742,7 +742,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
      * Attempts to execute a raid challenge
      */
     /**
-     * matt, 2026-08-19, caught live: "Raid" is NOT a battle to skip -- it's an instant rewards
+     * Observed live: "Raid" is NOT a battle to skip -- it's an instant rewards
      * claim. Tapping the "Raid" button opens a "Raid Rewards" popup (real Charms/chests, a real
      * Claim button) with no battle animation at all. The old code assumed the same shape as Quick
      * Challenge (an animated battle needing SKIP_BUTTON taps at (71,827)) and never once tapped the
@@ -805,7 +805,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
             sleepTask(100);
         }
 
-        // matt/2026-08-13: for Cave of Monsters / Charm Mine, drive the configured ratio NOW --
+        // For Cave of Monsters / Charm Mine, drive the configured ratio NOW --
         // right before Deploy, since it doesn't persist between visits like Land of Heroes does.
         ZoneFormation singleSquadZone = DUNGEON_SINGLE_SQUAD_ZONES.get(dungeonNumber);
         if (singleSquadZone != null) {
@@ -828,7 +828,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
             // Skip battle results
             tapInside(RESULT_SKIP_BUTTON, RESULT_SKIP_BUTTON, 10, 50);
 
-            // matt/2026-08-20: read the post-battle stage HERE, before the pressBack() below. That
+            // Read the post-battle stage HERE, before the pressBack() below. That
             // back-press leaves the zone's stage screen for the outer Labyrinth map, where the
             // "Stage N-M" label does not exist -- reading it after the fact returned null every
             // time ("couldn't read the stage label before/after (4-1 -> null)") and the win-streak
@@ -849,12 +849,12 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     // =================== ZONE FORMATION SETUP ===================
 
     /**
-     * matt/2026-08-13: describes one Labyrinth zone's formation-setup inputs — the map-screen banner
+     * Describes one Labyrinth zone's formation-setup inputs — the map-screen banner
      * tap point + label OCR box (for the open/locked check), and the config keys that drive its
      * troop ratios. {@link #setupZoneFormation} is generic over this.
      *
      * <p>
-     * <b>matt/2026-08-13, caught live via ADB (Cave of Monsters):</b> the original design assumed
+     * <b>caught live via ADB (Cave of Monsters):</b> the original design assumed
      * every zone shares Land of Heroes' two-squad structure (Challenge -> Squad Config -> Quick
      * Deploy -> per-squad Edit Formation -> Balance). Watching Cave of Monsters live end-to-end
      * proved that wrong: tapping Challenge on Cave of Monsters lands DIRECTLY on a single combined
@@ -883,7 +883,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
                         ConfigurationKeyEnum.LABYRINTH_CHARM_SQUAD1_LANCER_INT, ConfigurationKeyEnum.LABYRINTH_CHARM_SQUAD1_MARKSMAN_INT },
                 new ConfigurationKeyEnum[] { ConfigurationKeyEnum.LABYRINTH_CHARM_SQUAD2_INFANTRY_INT,
                         ConfigurationKeyEnum.LABYRINTH_CHARM_SQUAD2_LANCER_INT, ConfigurationKeyEnum.LABYRINTH_CHARM_SQUAD2_MARKSMAN_INT }),
-        // matt/2026-08-16: Gaia Heart -- two-squad like Land of Heroes, but dispatched to its own
+        // Gaia Heart -- two-squad like Land of Heroes, but dispatched to its own
         // setupGaiaZone() (see the "Gaia Heart formation flow" constants above) because its commit
         // mechanism genuinely differs (direct-commit button, no back-arrow/dialog). The `singleSquad`
         // flag here is unused for Gaia -- routing happens by name in setupZoneFormation() below.
@@ -895,7 +895,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     };
 
     /**
-     * matt/2026-08-13: Cave of Monsters (dungeon 2) / Charm Mine (dungeon 3) proven live to have NO
+     * Cave of Monsters (dungeon 2) / Charm Mine (dungeon 3) proven live to have NO
      * standalone saved formation -- re-entering always resets to 33/33/33 no matter what the
      * Formation Test flow does. The only way their configured ratio ever actually applies is if it's
      * set fresh right before the REAL Deploy, every single attempt (see {@link #setRatioBeforeDeploy}).
@@ -908,7 +908,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     );
 
     /**
-     * matt/2026-08-10 (Land of Heroes), extended 2026-08-13 to Cave of Monsters + Charm Mine —
+     * (Land of Heroes), extended 2026-08-13 to Cave of Monsters + Charm Mine —
      * TEST harness (free, no battle). From the Labyrinth menu this opens the given zone's stage
      * screen and sets up the deploy formation to its configured troop ratio, then SAVES it and
      * STOPS — it never taps Deploy/battle (battling burns a daily attempt while formation-setup is
@@ -964,7 +964,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
         }
         saveLabyrinthFrame("scout", 0);
 
-        // matt/2026-08-20: TWO passes, and they matter. The panel doesn't fit on one screen -- the
+        // TWO passes, and they matter. The panel doesn't fit on one screen -- the
         // first live run read Infantry and Lancer complete (4 stats each) but only 3 rows of
         // Marksman, because Marksman Health sits below the fold. Summing edges over different row
         // counts then made Marksman look BEST (+5.5) purely because its worst row was missing
@@ -1101,7 +1101,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     /**
      * Presses back until the Labyrinth map is showing again.
      *
-     * <p>matt/2026-08-20: the zone loop calls setupZoneFormation() once per zone and each call
+     * <p>: the zone loop calls setupZoneFormation() once per zone and each call
      * STARTS by OCR'ing that zone's label off the map, so every call must END on the map. Nothing
      * used to do that deliberately -- the old flow got back purely as a side effect of the
      * save-dialog navStep pressing back while failing to find a dialog that never existed. Removing
@@ -1134,12 +1134,12 @@ public class DailyLabyrinthRoutine extends DelayedTask {
 
         saveLabyrinthFrame("map", 0); // one-shot: capture the Labyrinth map to calibrate zone-label OCR
 
-        // Enter the zone by reading its map label (matt's rule): a LOCKED zone's line reads
+        // Enter the zone by reading its map label (the documented rule): a LOCKED zone's line reads
         // "Opens in …"; an OPEN zone shows just name + countdown. Only tap the banner if it's open.
         String zoneLabel = readStringValue(zone.labelTl(), zone.labelBr(), ZONE_LABEL_SETTINGS);
         logInfo(tag + ": label OCR = '" + zoneLabel + "'.");
 
-        // matt/2026-08-20: this gate was "if the label says 'Opens in' it's locked, OTHERWISE it's
+        // This gate was "if the label says 'Opens in' it's locked, OTHERWISE it's
         // open" -- a negative check, and the same wrong shape as the Monument Events-tab check fixed
         // in 80772e5. Anything unreadable sails straight through it. Caught live today: the Labyrinth
         // map only shows four zones at this scroll position (Cave of Monsters, Charm Mine, Research
@@ -1228,7 +1228,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     }
 
     /**
-     * matt/2026-08-13: Cave of Monsters / Charm Mine's actual flow, proven live via ADB. Challenge
+     * Cave of Monsters / Charm Mine's actual flow, proven live via ADB. Challenge
      * lands DIRECTLY on the combined troop-detail screen (Infantry/Lancer/Marksman, ONE Balance
      * button) -- no Squad Config, no Quick Deploy, no second squad. Only squad1Keys is used.
      */
@@ -1258,7 +1258,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     }
 
     /**
-     * matt/2026-08-16: Gaia Heart's real flow, proven live via ADB. Two squads like Land of Heroes
+     * Gaia Heart's real flow, proven live via ADB. Two squads like Land of Heroes
      * (Challenge -> Squad Config -> Quick Deploy -> per-squad Edit Formation -> Balance), but the
      * troop-detail screen's OWN "Edit Formation" button commits the ratio directly and returns to
      * Squad Config -- confirmed live that this alone (no back-arrow, no Save-and-Exit dialog) is
@@ -1414,7 +1414,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     }
 
     /**
-     * matt/2026-08-13: extracted from {@code configureSquadRatio} so both the two-squad (Land of
+     * Extracted from {@code configureSquadRatio} so both the two-squad (Land of
      * Heroes) and single-squad (Cave of Monsters / Charm Mine) flows share one implementation.
      * Assumes we're ALREADY on the troop-detail screen (Balance button visible) -- drives
      * Balance → the three sliders → Confirm → back → Save and Exit.
@@ -1433,7 +1433,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
      *                        -- used to confirm Confirm returned us there, not a fixed "heroes" string
      */
     /**
-     * matt/2026-08-13: the REAL fix for Cave of Monsters / Charm Mine -- since neither zone persists
+     * The REAL fix for Cave of Monsters / Charm Mine -- since neither zone persists
      * a formation between visits, the only place setting a ratio actually matters is right here,
      * immediately before the real Deploy tap in {@code attemptNormalChallenge}. Best-effort: any
      * failure just logs a warning and lets Deploy proceed with whatever ratio is already showing
@@ -1499,7 +1499,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
         }
         saveLabyrinthFrame("balance_popup", 0);
 
-        // matt's approach: ZERO all three rows first, THEN fill each to target top-to-bottom. Zeroing
+        // Approach: ZERO all three rows first, THEN fill each to target top-to-bottom. Zeroing
         // everything up front means the running total is 0 when we start adding, so a fill can never be
         // blocked by the 100% cap. 1 tap == 1% (verified live). No mid-drive OCR — the small stroked
         // digits only read reliably on a settled/static frame, so OCR is used ONLY for the correction
@@ -1584,7 +1584,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     /**
      * Taps a row's minus button enough times to guarantee it sits at 0% (extra taps at 0 are inert).
      *
-     * <p>matt, 2026-08-19, caught live watching this run: {@code sleepTask(LOH_DET_TAP_DELAY)} put
+     * <p>caught live watching this run: {@code sleepTask(LOH_DET_TAP_DELAY)} put
      * the exact same 90ms between every one of the 105 taps -- mechanically perfect timing on the
      * same button, over and over, which is about as obvious an automation fingerprint as tap
      * behavior gets ("you are a f***ing bot, and that's very easy [to spot]," his words). The tap
@@ -1663,7 +1663,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
             }
             if (attempt < LOH_PCT_READ_ATTEMPTS) sleepTask(LOH_PCT_READ_RETRY_DELAY);
         }
-        // matt/2026-08-20: report WHAT was actually seen. The raw text only went to the shared
+        // Report WHAT was actually seen. The raw text only went to the shared
         // "String OCR result" DEBUG line, which is buried among hundreds of others and gives no clue
         // which region produced it -- so "read failed" looked like a blank read for months when it was
         // really an out-of-range parse ("690" for a box showing 50, "407" for one showing 40, both
@@ -1724,7 +1724,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     }
 
     /**
-     * matt/2026-08-10 (Labyrinth observation phase): dumps the current emulator frame to
+     * Dumps the current emulator frame to
      * {@code labyrinth-debug/} so we can build enemy-type + win/loss detection from real battle
      * screens. Pure observation — never changes deploy behaviour. The game has NO labyrinth
      * victory/defeat templates yet, so this is how we collect the training data for them.
@@ -1755,7 +1755,7 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     }
 
     /**
-     * matt/2026-08-13: "kick Labyrinth off at noon every day" -- reads the picked local start time
+     * "kick Labyrinth off at noon every day" -- reads the picked local start time
      * (LABYRINTH_DAILY_START_TIME_STRING, HH:mm, defaults to noon) instead of always following the
      * game's own 00:00 UTC reset boundary.
      */
