@@ -1698,17 +1698,30 @@ private void handleBeast(ImageSearchResultData beast) {
 				// navigate back to the Intel screen the same way every other OCR read of this region
 				// does, then settle before reading.
 				intelScreenHelper.ensureOnIntelScreen();
-				sleepTask(1200);
 
-				// matt, 2026-08-19: was a flat BEAST_STUCK_BACKOFF_MINUTES=60 guess -- matt's real
-				// ask: OCR the board's own top-of-screen refresh countdown (the same
-				// INTEL_COOLDOWN_WITH_MARKERS_OCR_AREA banner already used elsewhere for the
-				// board-still-has-markers layout, since backing out here lands on the map with
-				// this beast's marker still on it, not an empty board) and skip until THAT real
-				// time instead of a guessed number. Falls back to the fixed 60-minute default only
-				// if the OCR read fails, matching this file's established fallback pattern.
+				// matt caught it live again, 2026-08-19 (third attempt): ensureOnIntelScreen()
+				// DID correctly recover navigation this time -- log proof: "GAME_HOME_INTEL found"
+				// -> "Tapping Intel button" -> "Intel reached", all within 2 seconds, immediately
+				// followed by the OCR-failed fallback firing 2s after "Intel reached". This is a
+				// COLD re-entry (bottom-nav icon tap from Game Home after a back-press+quit-dialog
+				// scramble), not the routine's usual warm navigation into this same OCR region --
+				// the icon-tap transition animation plus marker/banner render-in plainly needs more
+				// than 1200ms to finish before text is stable enough to OCR. Tripled the settle
+				// delay for this cold-entry path specifically. Also matched the established
+				// marker-map -> empty-map fallback pattern used at the other successful call site
+				// (tryRescheduleFromCooldownFlow, ~line 472) instead of only trying one layout --
+				// belt and suspenders in case the beast's marker was actually already claimed/gone
+				// by the time we re-enter and the board reads as empty instead.
+				sleepTask(3600);
+
 				LocalDateTime skipUntil = readCooldownFlow(
 						CommonGameAreas.INTEL_COOLDOWN_WITH_MARKERS_OCR_AREA, "marker-map (beast-stuck)");
+				if (skipUntil == null) {
+					logDebug(routineLogIntelligenceLine(
+							"Beast-stuck cooldown not readable in the marker-map banner. Trying the empty-map layout."));
+					skipUntil = readCooldownFlow(
+							CommonGameAreas.INTEL_COOLDOWN_EMPTY_MAP_OCR_AREA, "empty-map (beast-stuck)");
+				}
 				String skipSource;
 				if (skipUntil != null) {
 					LocalDateTime ceiling = LocalDateTime.now().plusMinutes(MAX_INTEL_REFRESH_MINUTES);

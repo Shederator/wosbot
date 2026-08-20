@@ -1,0 +1,9 @@
+[ {
+  "className" : "bg_telemetry",
+  "sourcePath" : "C:\\Bearguard\\examples\\custom-tasks\\bg_telemetry.java",
+  "enabled" : true,
+  "offsetMinutes" : 0,
+  "priority" : 50,
+  "firstExecutionUtc" : null,
+  "followUpDelayHours" : 2
+} ]
