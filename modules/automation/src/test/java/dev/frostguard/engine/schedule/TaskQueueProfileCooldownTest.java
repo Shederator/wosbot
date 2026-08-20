@@ -1,12 +1,15 @@
 package dev.frostguard.engine.schedule;
 
 import dev.frostguard.api.configs.TpDailyTaskEnum;
+import dev.frostguard.api.domain.ActionRequiredIncidentData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.LogMessageData;
 import dev.frostguard.data.entity.DailyTask;
 import dev.frostguard.data.repository.DailyTaskRepository;
 import dev.frostguard.engine.error.ProfileCooldownException;
+import dev.frostguard.engine.error.ActionRequiredContext;
 import dev.frostguard.engine.service.LoggingService;
+import dev.frostguard.engine.service.ActionRequiredIncidentService;
 import dev.frostguard.engine.service.ProfileService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -59,6 +62,15 @@ class TaskQueueProfileCooldownTest {
                 .findByAccountIdAndTaskType(profile.getId(), TpDailyTaskEnum.INITIALIZE);
         assertNotNull(persisted);
         assertCloseTo(retryAt, persisted.getNextRunAt());
+        ActionRequiredIncidentData incident = ActionRequiredIncidentService.obtain().findAll().stream()
+                .filter(candidate -> profile.getId().equals(candidate.profileId()))
+                .filter(candidate -> "INITIALIZE".equals(candidate.taskKey()))
+                .filter(candidate -> "operator intervention required".equals(candidate.cause()))
+                .findFirst()
+                .orElseThrow();
+        assertTrue(incident.isUnread());
+        assertCloseTo(retryAt, incident.retryAt());
+        assertEquals("gameStopped=true; slotReleased=true", incident.resourceOutcome());
 
         int logsAfterCooldown = logEntries.size();
         queue.runSchedulerTick();
@@ -122,7 +134,14 @@ class TaskQueueProfileCooldownTest {
         @Override
         protected void execute() {
             executionCount++;
-            throw new ProfileCooldownException("operator intervention required", retryAt);
+            throw new ProfileCooldownException("operator intervention required", retryAt,
+                    new ActionRequiredContext(
+                            "test.operator-intervention",
+                            "Operator intervention required",
+                            "Task can continue",
+                            "Operator-owned blocker",
+                            "Bounded recovery exhausted",
+                            "Pause and retry"));
         }
     }
 

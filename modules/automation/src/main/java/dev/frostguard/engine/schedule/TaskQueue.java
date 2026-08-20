@@ -24,6 +24,8 @@ import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.configs.TpMessageSeverityEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.api.domain.ActionRequiredIncidentReport;
+import dev.frostguard.api.domain.TaskFailureReport;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.ProfileStatusData;
 import dev.frostguard.api.domain.TaskQueueStatusData;
@@ -31,6 +33,7 @@ import dev.frostguard.api.domain.TaskStateData;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.emulator.QueuePositionListener;
 import dev.frostguard.engine.error.ADBConnectionException;
+import dev.frostguard.engine.error.ActionRequiredContext;
 import dev.frostguard.engine.error.HomeNotFoundException;
 import dev.frostguard.engine.error.ProfileCooldownException;
 import dev.frostguard.engine.error.ProfileInReconnectStateException;
@@ -41,6 +44,8 @@ import dev.frostguard.engine.schedule.preempt.PreemptionRule;
 import dev.frostguard.engine.schedule.priority.DefaultTaskPriorityProvider;
 import dev.frostguard.engine.schedule.priority.TaskPriorityProvider;
 import dev.frostguard.engine.service.AnalyticsService;
+import dev.frostguard.engine.service.ActionRequiredIncidentService;
+import dev.frostguard.engine.service.TaskFailureIncidentService;
 import dev.frostguard.engine.service.ConfigService;
 import dev.frostguard.engine.service.LoggingService;
 import dev.frostguard.engine.service.ProfileService;
@@ -551,6 +556,13 @@ public class TaskQueue {
             AnalyticsService.getInstance().trackTaskCompleted(task.getTaskName(), "success", elapsed);
             ok = true;
             checkDailyMissionFollow(task);
+            try {
+                TaskFailureIncidentService.obtain().recordSuccess(
+                        profile.getId(), incidentTaskKey(task));
+            } catch (RuntimeException exception) {
+                emitWarnTask(task, "Could not reset persistent task-failure state: "
+                        + exception.getMessage());
+            }
         } catch (dev.frostguard.engine.error.TaskPreemptedException ex) {
             emitWarnTask(task, "PREEMPTED: " + ex.getReasoning());
             AnalyticsService.getInstance().trackTaskCompleted(task.getTaskName(), "preempted", (System.currentTimeMillis()-t0)/1000);
@@ -687,8 +699,37 @@ public class TaskQueue {
             emitErrorTask(task, "ADB error: " + ex.getMessage());
             enqueue(DelayedTaskRegistry.create(TpDailyTaskEnum.INITIALIZE, profile));
         } else {
-            emitErrorTask(task, "Unexpected error: " + ex.getMessage());
+            routeUnexpectedFailure(task, ex);
         }
+    }
+
+    private void routeUnexpectedFailure(DelayedTask task, Exception failure) {
+        LocalDateTime retryAt = LocalDateTime.now()
+                .plus(TaskFailureIncidentService.DEFAULT_UNHANDLED_RETRY_DELAY);
+        int consecutiveFailures = 0;
+        boolean escalated = false;
+        try {
+            TaskFailureIncidentService.FailureDecision decision =
+                    TaskFailureIncidentService.obtain().recordUnhandledFailure(
+                            profile.getId(), profile.getName(), incidentTaskKey(task),
+                            task.getTaskName(), failure, LocalDateTime.now());
+            retryAt = decision.retryAt();
+            consecutiveFailures = decision.consecutiveFailures();
+            escalated = decision.escalated();
+        } catch (RuntimeException persistenceFailure) {
+            emitWarnTask(task, "Could not persist the task-failure streak: "
+                    + persistenceFailure.getMessage());
+        }
+
+        task.setRecurring(true);
+        if (task.getScheduled() == null || task.getScheduled().isBefore(retryAt)) {
+            task.reschedule(retryAt);
+        }
+        emitErrorTask(task, "Unexpected " + failure.getClass().getSimpleName()
+                + ": " + failure.getMessage()
+                + "; consecutiveFailures=" + consecutiveFailures
+                + "; retryAt=" + retryAt.format(TS_FMT)
+                + (escalated ? "; action-required incident active" : ""));
     }
 
     private void pauseForProfileCooldown(DelayedTask task, ProfileCooldownException cooldown) {
@@ -696,15 +737,87 @@ public class TaskQueue {
         emitErrorTask(task, "Profile cooldown requested: " + cooldown.getMessage()
                 + "; queue paused until " + retryAt.format(TS_FMT));
         applyProfileCooldown(task, statusModel, retryAt);
-        profileCooldownStatus = "ACTION REQUIRED - " + cooldown.getMessage()
-                + " - retry " + retryAt.format(TS_FMT);
+        boolean immediatelyActionRequired = cooldown.getActionRequiredContext().isPresent();
+        profileCooldownStatus = (immediatelyActionRequired ? "ACTION REQUIRED - " : "COOLDOWN - ")
+                + cooldown.getMessage() + " - retry " + retryAt.format(TS_FMT);
 
         boolean gameStopped = stopBlockedGameProcess(task);
         boolean slotReleased = releaseBlockedProfileSlot(task);
         emitInfoTask(task, "Cooldown resources settled: gameStopped=" + gameStopped
                 + ", slotReleased=" + slotReleased
                 + ", retryAt=" + retryAt.format(TS_FMT));
+        if (immediatelyActionRequired) {
+            recordActionRequiredIncident(task, cooldown, gameStopped, slotReleased);
+        } else {
+            recordCooldownFailureAttempt(task, cooldown, gameStopped, slotReleased);
+        }
         broadcastStatus(profileCooldownStatus);
+    }
+
+    private void recordActionRequiredIncident(DelayedTask task, ProfileCooldownException cooldown,
+            boolean gameStopped, boolean slotReleased) {
+        ActionRequiredContext context = cooldown.getActionRequiredContext().orElseThrow();
+        try {
+            ActionRequiredIncidentService.obtain().report(new ActionRequiredIncidentReport(
+                    profile.getId(),
+                    profile.getName(),
+                    incidentTaskKey(task),
+                    task.getTaskName(),
+                    context.signature(),
+                    context.title(),
+                    cooldown.getMessage(),
+                    context.expectedState(),
+                    context.observedState(),
+                    context.lastAction(),
+                    context.retryOrFallback(),
+                    "gameStopped=" + gameStopped + "; slotReleased=" + slotReleased,
+                    cooldown.getRetryAt()));
+        } catch (RuntimeException exception) {
+            emitErrorTask(task, "Could not persist action-required incident: " + exception.getMessage());
+        }
+    }
+
+    private void recordCooldownFailureAttempt(DelayedTask task, ProfileCooldownException cooldown,
+            boolean gameStopped, boolean slotReleased) {
+        try {
+            TaskFailureIncidentService.obtain().recordFailure(new TaskFailureReport(
+                    profile.getId(),
+                    profile.getName(),
+                    incidentTaskKey(task),
+                    task.getTaskName(),
+                    defaultIncidentSignature(task, cooldown),
+                    "Task remains blocked after repeated recovery attempts",
+                    cooldown.getMessage(),
+                    "Task reaches its verified completion state",
+                    "Bounded recovery ended in a profile cooldown",
+                    "The task stopped its bounded recovery and yielded the profile",
+                    "Retry at " + cooldown.getRetryAt(),
+                    "gameStopped=" + gameStopped + "; slotReleased=" + slotReleased,
+                    cooldown.getRetryAt(),
+                    TaskFailureIncidentService.DEFAULT_ESCALATION_THRESHOLD));
+        } catch (RuntimeException exception) {
+            emitErrorTask(task, "Could not persist the task-failure streak: " + exception.getMessage());
+        }
+    }
+
+    private String incidentTaskKey(DelayedTask task) {
+        String customLabel = distinctTaskLabel(task);
+        return customLabel == null || customLabel.isBlank()
+                ? task.getTpTask().name()
+                : task.getTpTask().name() + ":" + customLabel;
+    }
+
+    private static String defaultIncidentSignature(DelayedTask task, ProfileCooldownException cooldown) {
+        String normalized = Optional.ofNullable(cooldown.getMessage()).orElse("profile cooldown")
+                .toLowerCase(java.util.Locale.ROOT)
+                .replaceAll("\\d+", "#")
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("(^-|-$)", "");
+        if (normalized.length() > 150) {
+            normalized = normalized.substring(0, 150);
+        }
+        return "profile-cooldown." + task.getTpTask().name().toLowerCase(java.util.Locale.ROOT)
+                + "." + normalized;
     }
 
     protected boolean stopBlockedGameProcess(DelayedTask task) {

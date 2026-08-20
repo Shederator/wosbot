@@ -3,6 +3,7 @@ package dev.frostguard.tasks.lifecycle;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.engine.error.ActionRequiredContext;
 import dev.frostguard.engine.error.ProfileCooldownException;
 import dev.frostguard.engine.error.ProfileInReconnectStateException;
 import dev.frostguard.engine.error.StartupCaptureException;
@@ -678,7 +679,13 @@ public class InitializeRoutine extends DelayedTask {
 				+ "/" + StartupRecoveryPolicy.MAX_EMULATOR_RESTART_ATTEMPTS
 				+ ", fallback=stop-game-and-release-slot, retryAt=" + retryAt
 				+ ", reason=" + reason + ".");
-		throw new ProfileCooldownException(reason, retryAt);
+		throw new ProfileCooldownException(reason, retryAt, new ActionRequiredContext(
+				"startup.home-unavailable-after-restart",
+				"Startup remains blocked after automatic recovery",
+				"home/world",
+				"unsupported startup screen",
+				"One bounded emulator restart; no speculative screen input",
+				"Stop the game, release the slot, and retry initialization after fifteen minutes"));
 	}
 
 	/**

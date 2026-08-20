@@ -3,6 +3,8 @@ package dev.frostguard.tasks.lifecycle;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
+import dev.frostguard.engine.error.ActionRequiredContext;
+import dev.frostguard.engine.error.ProfileCooldownException;
 import dev.frostguard.vision.match.OpenCvPatternLocator;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -11,8 +13,10 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.LocalDateTime;
 import java.util.Objects;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
