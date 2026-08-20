@@ -365,12 +365,47 @@ public class MonumentRoutine extends DelayedTask {
         // reliable always-present hub button (not a floating badge that can be absent), so a tap
         // there is already good evidence -- if it somehow lands wrong, processAllianceTradeRequests
         // simply fails to find its own buttons and falls through harmlessly.
+        // matt/2026-08-20: the gate came back, because "worst case is a harmless false positive"
+        // turned out to be false. A live frame of what this tap ACTUALLY opens is now captured
+        // (ocr-debug/monument-my-requests-label-unrecognized-2026-08-20T01-22-33): it is the
+        // "Obtain more" GOLD KEY PURCHASE dialog, not Alliance Trade. That also finally explains the
+        // string from the original report -- 'd to perform i epic pbuyy' is that panel's own line
+        // "Can be used to perform 1 Epic Recruitment." plus its Buy button, sitting inside the label
+        // region. ALBUMS_ALLIANCE_TRADE_BTN at (448,1197) is simply the wrong coordinate on this hub.
+        //
+        // And this is NOT harmless: MY_REQUESTS_CLAIM_BTN is (574,356), while that dialog's
+        // "Buy 1,500 gems" button sits at about (578,391). A blind Claim tap lands within ~35px of
+        // spending 1,500 gems. Nothing was spent only because the colour check happened to see 0
+        // green pixels (the Buy button is gold) -- luck, not design. So gate it properly on the
+        // panel's own title before any tapping happens, and dump the hub frame when the gate fails
+        // so the real button coordinate can be measured instead of guessed.
+        //
+        // Note this path only matters in the scroll/quill badge state; the puzzle/swap badge opens
+        // Alliance Trade directly and is already handled in processMonumentBadge().
         logInfo(logLine("Opening Alliance Trade for My Requests (Claim/Request only)."));
+        String hubFrame = dumpDiagnosticFrame("albums-hub-before-alliance-trade-tap");
         tapNear(ALBUMS_ALLIANCE_TRADE_BTN);
         sleepTask(PANEL_SETTLE_MS);
-        processAllianceTradeRequests();
-        tapNear(TRADE_CLOSE_X);
-        sleepTask(ACTION_SETTLE_MS);
+
+        String tradeTitle = stringHelper.attemptRecognition(
+                TRADE_PANEL_TITLE_TL, TRADE_PANEL_TITLE_BR,
+                2, 150L, PANEL_TITLE_OCR_SETTINGS,
+                s -> s != null && !s.isBlank(),
+                s -> s.toLowerCase());
+        if (tradeTitle != null && (tradeTitle.contains("alliance") || tradeTitle.contains("trade"))) {
+            processAllianceTradeRequests();
+            tapNear(TRADE_CLOSE_X);
+            sleepTask(ACTION_SETTLE_MS);
+        } else {
+            logWarning(logLine("Tapping " + ALBUMS_ALLIANCE_TRADE_BTN + " on the Tundra Albums hub did NOT "
+                    + "open Alliance Trade -- panel title read as '" + tradeTitle + "'. Live evidence says "
+                    + "this coordinate opens the 'Obtain more' Gold Key purchase dialog, whose Buy button "
+                    + "sits ~35px from where a blind Claim tap would land. Not touching it. Closing out. "
+                    + "Hub frame before the tap: " + hubFrame + " | after: "
+                    + dumpDiagnosticFrame("albums-alliance-trade-tap-wrong-panel")));
+            tapNear(TRADE_CLOSE_X);
+            sleepTask(ACTION_SETTLE_MS);
+        }
 
         tapNear(ALBUMS_BACK_ARROW);
         sleepTask(ACTION_SETTLE_MS);
