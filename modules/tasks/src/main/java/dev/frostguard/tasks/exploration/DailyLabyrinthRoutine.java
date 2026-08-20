@@ -228,6 +228,49 @@ public class DailyLabyrinthRoutine extends DelayedTask {
                     .stripBackground(true)
                     .setTextColor(new java.awt.Color(255, 255, 255))
                     .build();
+    // ===================================================================
+    // Pre-fight scouting -- "View Details" (matt/2026-08-20)
+    // ===================================================================
+    // matt asked for a "tale of the tape": after losing, read the battle report to see what the
+    // enemy actually ran, then counter it on the retry. Driving the game by hand to find that screen
+    // turned up something strictly better -- the magnifier on the stage screen's enemy portrait opens
+    // a "View Details" panel that shows the enemy's troop counts AND a full per-troop-type stat
+    // comparison BEFORE the fight. So the same decision can be made for ZERO attempts instead of
+    // paying one attempt to learn it.
+    //
+    // All coordinates and the OCR shape below were measured off a real capture of that screen
+    // (Cave of Monsters stage 3-9), not estimated.
+    /** Magnifier badge on the stage screen's enemy portrait (bottom-left, next to "Stage N-N"). */
+    private static final PointData STAGE_ENEMY_MAGNIFIER = new PointData(122, 1082);
+    /** "View Details" title, top-left of the scouting panel. */
+    private static final PointData SCOUT_ANCHOR_TL = new PointData(88, 20);
+    private static final PointData SCOUT_ANCHOR_BR = new PointData(330, 62);
+    private static final String    SCOUT_ANCHOR_TEXT = "details";
+    /** Back arrow out of the scouting panel. */
+    private static final PointData SCOUT_BACK_BTN = new PointData(40, 40);
+    /** The panel is taller than the screen -- Marksman Health sits below the fold on first open. */
+    private static final PointData SCOUT_SCROLL_FROM = new PointData(360, 1000);
+    private static final PointData SCOUT_SCROLL_TO = new PointData(360, 500);
+    /** A troop type is only comparable when all four of these were read. */
+    private static final java.util.List<String> SCOUT_REQUIRED_STATS =
+            java.util.List.of("Attack", "Defense", "Lethality", "Health");
+    /** The whole panel body: enemy troop counts near the top, then the 12 stat rows. Read as one
+     *  block and parsed BY LABEL rather than by row coordinates, so it survives the panel sitting at
+     *  a different scroll offset (verified: the same parse works scrolled and unscrolled). */
+    private static final PointData SCOUT_BODY_TL = new PointData(28, 170);
+    private static final PointData SCOUT_BODY_BR = new PointData(700, 1275);
+    /** Plain multi-line read -- this panel is dark text on flat light rows and needs no isolation.
+     *  Verified with the bundled tesseract: all 12 rows and the troop counts came back exact. */
+    private static final OcrSettingsData SCOUT_SETTINGS =
+            OcrSettingsData.assembler()
+                    .charWhitelist("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,%+' ")
+                    .textLayout(TextLayout.TEXT_BLOCK)
+                    .build();
+    /** e.g. "+27.7% Infantry Attack +19.8%" -> mine, type, stat, theirs. */
+    private static final java.util.regex.Pattern SCOUT_ROW = java.util.regex.Pattern.compile(
+            "([0-9]+(?:\\.[0-9]+)?)\\s*%?\\s*(Infantry|Lancer|Marksman)\\s+(Attack|Defense|Lethality|Health)\\s*\\+?\\s*([0-9]+(?:\\.[0-9]+)?)\\s*%?",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+
     // Stage screen: the "Challenge" button (white text, blue button).
     private static final PointData STAGE_ANCHOR_TL = new PointData(255, 1195);
     private static final PointData STAGE_ANCHOR_BR = new PointData(465, 1245);
@@ -679,6 +722,107 @@ public class DailyLabyrinthRoutine extends DelayedTask {
      * Cave of Monsters / Charm Mine (proven live) skip straight from Challenge to a single combined
      * troop-detail screen with ONE Balance button -- no Squad Config, no Quick Deploy, one ratio.
      */
+    /** One troop type's four stats, mine vs the opponent's, as shown on the View Details panel. */
+    private record ScoutLine(double mine, double theirs) {
+        double edge() { return mine - theirs; }
+    }
+
+    /**
+     * Reads the pre-fight "View Details" panel from the stage screen: the enemy's troop counts and
+     * the per-troop-type stat comparison. Pure OBSERVATION for now -- it logs what it finds and
+     * changes no deploy behaviour.
+     *
+     * <p>Deliberately observation-only at this stage. The one stage scouted by hand so far (Cave of
+     * Monsters 3-9) came back perfectly SYMMETRIC -- enemy 50,000/50,000/50,000, and identical stats
+     * against all three of my troop types (+19.8 Atk/Def, +26.4 Leth/Health) -- so there was nothing
+     * to counter there and no way to tell a good weighting rule from a bad one. Building a
+     * counter-picker on a single symmetric sample would be guessing. Collect real readings across
+     * zones and stages first, then wire the decision once there is an asymmetric case to test it on.
+     *
+     * @return true if the panel was read, false if it never opened (caller carries on regardless)
+     */
+    private boolean scoutStageDetails(String tag) {
+        if (!navStep(STAGE_ENEMY_MAGNIFIER, SCOUT_ANCHOR_TL, SCOUT_ANCHOR_BR, SCOUT_ANCHOR_TEXT,
+                tag + " stage->viewDetails")) {
+            logInfo(tag + " scout: View Details didn't open; skipping the scout (costs nothing, "
+                    + "the fight is unaffected).");
+            return false;
+        }
+        saveLabyrinthFrame("scout", 0);
+
+        // matt/2026-08-20: TWO passes, and they matter. The panel doesn't fit on one screen -- the
+        // first live run read Infantry and Lancer complete (4 stats each) but only 3 rows of
+        // Marksman, because Marksman Health sits below the fold. Summing edges over different row
+        // counts then made Marksman look BEST (+5.5) purely because its worst row was missing
+        // (Health 15.8 vs 26.4 = -10.6). Had the decision been live it would have loaded the ratio
+        // onto the weakest troop type. So: read, scroll, read again, merge by (type, stat).
+        java.util.Map<String, java.util.Map<String, ScoutLine>> byType = new java.util.LinkedHashMap<>();
+        StringBuilder seen = new StringBuilder();
+        for (int pass = 0; pass < 2; pass++) {
+            if (pass == 1) {
+                emuManager.swipeScreen(String.valueOf(EMULATOR_NUMBER), SCOUT_SCROLL_FROM, SCOUT_SCROLL_TO, 400);
+                sleepTask(LABYRINTH_LOAD_DELAY);
+            }
+            String body = readStringValue(SCOUT_BODY_TL, SCOUT_BODY_BR, SCOUT_SETTINGS);
+            if (body == null || body.isBlank()) continue;
+            seen.append(body).append('\n');
+            java.util.regex.Matcher m = SCOUT_ROW.matcher(body);
+            while (m.find()) {
+                String type = capitalize(m.group(2));
+                String stat = capitalize(m.group(3));
+                try {
+                    byType.computeIfAbsent(type, k -> new java.util.LinkedHashMap<>())
+                            .put(stat, new ScoutLine(Double.parseDouble(m.group(1)), Double.parseDouble(m.group(4))));
+                } catch (NumberFormatException ignored) { /* skip a mangled row */ }
+            }
+        }
+        String body = seen.toString();
+        if (body.isBlank()) {
+            logWarning(tag + " scout: View Details opened but its body read blank on both passes.");
+            pressBack();
+            sleepTask(LABYRINTH_LOAD_DELAY);
+            return false;
+        }
+
+        if (byType.isEmpty()) {
+            logWarning(tag + " scout: no stat rows parsed out of View Details. Raw text was: '"
+                    + body.replace("\n", " | ").trim() + "'");
+        } else {
+            for (java.util.Map.Entry<String, java.util.Map<String, ScoutLine>> e : byType.entrySet()) {
+                StringBuilder sb = new StringBuilder(tag + " scout [" + e.getKey() + "]:");
+                double edge = 0;
+                for (java.util.Map.Entry<String, ScoutLine> s : e.getValue().entrySet()) {
+                    sb.append(' ').append(s.getKey()).append('=').append(s.getValue().mine())
+                      .append("/").append(s.getValue().theirs());
+                    edge += s.getValue().edge();
+                }
+                // Only a type with all four stats gets a comparable number. A partial sum is not a
+                // smaller edge, it is a DIFFERENT measurement, and mixing the two is what made
+                // Marksman read as the best type on the first live run. Say "incomplete" instead.
+                if (e.getValue().keySet().containsAll(SCOUT_REQUIRED_STATS)) {
+                    sb.append("  net edge ").append(String.format("%+.1f", edge));
+                } else {
+                    sb.append("  net edge N/A -- only ").append(e.getValue().size())
+                      .append("/4 stats read (have ").append(e.getValue().keySet())
+                      .append("); NOT comparable against a complete type, so not ranked.");
+                }
+                logInfo(sb.toString());
+            }
+            logInfo(tag + " scout: parsed " + byType.size() + " troop type(s). OBSERVATION ONLY -- "
+                    + "the deploy ratio is unchanged. Collecting readings until an asymmetric stage "
+                    + "appears to calibrate a counter-pick against.");
+        }
+
+        pressBack();
+        sleepTask(LABYRINTH_LOAD_DELAY);
+        return !byType.isEmpty();
+    }
+
+    private static String capitalize(String s) {
+        if (s == null || s.isEmpty()) return s;
+        return Character.toUpperCase(s.charAt(0)) + s.substring(1).toLowerCase(java.util.Locale.ROOT);
+    }
+
     private void setupZoneFormation(ZoneFormation zone) {
         String tag = zone.zoneName() + " formation";
         logInfo(tag + ": starting formation setup (setup only, no battle).");
@@ -726,6 +870,11 @@ public class DailyLabyrinthRoutine extends DelayedTask {
             return;
         }
         saveLabyrinthFrame("stage", 0);
+
+        // Free pre-fight scout -- opens the enemy's View Details panel, logs the matchup, backs out.
+        // Costs no attempt and cannot affect the fight; see scoutStageDetails() for why it is
+        // observation-only for now.
+        scoutStageDetails(tag);
 
         if (zone.singleSquad()) {
             setupSingleSquadZone(zone, tag);
