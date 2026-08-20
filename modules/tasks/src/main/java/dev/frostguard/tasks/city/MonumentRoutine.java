@@ -218,6 +218,15 @@ public class MonumentRoutine extends DelayedTask {
     /** The "Request" / "Requesting..." button renders centred (~358) rather than right-aligned. */
     private static final PointData MY_REQUESTS_REQUEST_LABEL_TL = new PointData(268, 335);
     private static final PointData MY_REQUESTS_REQUEST_LABEL_BR = new PointData(452, 405);
+
+    /** The Claim button's own slab, measured live; used for the colour check, not for OCR. */
+    private static final PointData CLAIM_BTN_BOX_TL = new PointData(515, 345);
+    private static final PointData CLAIM_BTN_BOX_BR = new PointData(655, 392);
+    /** Live sample of the real button is (37,183,86): g-r=146, g-b=97. These sit well under that. */
+    private static final int CLAIM_GREEN_MIN_G = 140;
+    private static final int CLAIM_GREEN_DOMINANCE = 60;
+    /** The real button fills ~3400 px of that box; 800 is a wide margin under it. */
+    private static final int CLAIM_GREEN_MIN_PIXELS = 800;
     private static final PointData MY_REQUESTS_CLAIM_BTN = new PointData(574, 356);
     /** Live-verified today: a center-body tap closes the post-Claim reward reveal
      *  ("Tap anywhere to close", avatars + reward icon) back to the Alliance Trade panel. */
@@ -725,6 +734,65 @@ public class MonumentRoutine extends DelayedTask {
         return isGreen;
     }
 
+    /**
+     * matt/2026-08-20: stop trying to OCR the Claim button. The bundled tesseract reads "Claim"
+     * cleanly off a raw crop of it, but through the app's own pipeline -- PANEL_TITLE_OCR_SETTINGS
+     * has stripBackground(true) -- the same button comes back as 's' or as nothing at all, twice
+     * live. White text on a saturated green fill does not survive that preprocessing, and the panel
+     * title ("Alliance Trade", white on flat orange) reading fine through the identical settings is
+     * what makes the difference easy to miss.
+     *
+     * <p>The button doesn't need reading. It's a big solid green slab and matt has already said as
+     * much about the other one in this file: "it's a big green claim button... how accurate do you
+     * have to be?" Sampled straight off the live panel, the separation is not close:
+     * <pre>
+     *   Claim button   (37,183,86)  x3406 px   green dominant
+     *   Send button    (79,165,252)            blue, different row anyway
+     *   centre chevrons(36,227,59)  x265 px    G=227 vs 183, far off, and a tiny area
+     * </pre>
+     * So count pixels near the Claim green inside the button's own box. Present means claimable.
+     *
+     * <p>Fails CLOSED (returns false) if the frame is missing or isn't the usual 32bpp format --
+     * an unread frame must not be reported as a claimable button, since the caller taps on a true.
+     */
+    private boolean isClaimButtonPresent() {
+        RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+        if (frame == null || frame.getBpp() != 32) {
+            logInfo(logLine("Claim-button colour check skipped (frame unavailable or not 32bpp) -- "
+                    + "treating the row as not claimable rather than tapping on a guess."));
+            return false;
+        }
+
+        byte[] px = frame.getFrameBytes();
+        int stride = frame.getWidth() * 4;
+        int matched = 0;
+        for (int y = CLAIM_BTN_BOX_TL.getY(); y < CLAIM_BTN_BOX_BR.getY() && y < frame.getHeight(); y++) {
+            for (int x = CLAIM_BTN_BOX_TL.getX(); x < CLAIM_BTN_BOX_BR.getX() && x < frame.getWidth(); x++) {
+                int offset = y * stride + x * 4;
+                if (offset + 2 >= px.length) continue;
+                int c0 = px[offset] & 0xFF, g = px[offset + 1] & 0xFF, c2 = px[offset + 2] & 0xFF;
+                // Deliberately channel-order agnostic. Green is the middle byte in both RGBA and
+                // BGRA, but the outer two swap between them, so testing "green dominates the other
+                // two" holds either way where testing a literal (37,183,86) would silently fail on
+                // a BGRA frame. Checked against every colour measured on the real panel:
+                //   Claim  (37,183,86)   g-r=146 g-b=97   -> passes
+                //   tan bg (239,203,153) g-r=-36          -> fails
+                //   white  (254,254,254) g-r=0            -> fails
+                //   Send   (79,165,252)  g-b=-87          -> fails
+                if (g >= CLAIM_GREEN_MIN_G
+                        && g - c0 >= CLAIM_GREEN_DOMINANCE
+                        && g - c2 >= CLAIM_GREEN_DOMINANCE) {
+                    matched++;
+                }
+            }
+        }
+        boolean present = matched >= CLAIM_GREEN_MIN_PIXELS;
+        logInfo(logLine("Claim-button colour check: " + matched + " green pixels in "
+                + CLAIM_BTN_BOX_TL + "->" + CLAIM_BTN_BOX_BR + " (need " + CLAIM_GREEN_MIN_PIXELS
+                + ") -- " + (present ? "Claim is present" : "no Claim button")));
+        return present;
+    }
+
     private String logLine(String note) {
         return "MonumentRoutine | " + note;
     }
@@ -1121,17 +1189,24 @@ public class MonumentRoutine extends DelayedTask {
 
     private void processAllianceTradeRequests() {
         for (int i = 0; i < MAX_REQUEST_LOOPS; i++) {
-            // Two tight regions rather than one wide one -- see MY_REQUESTS_CLAIM_LABEL_TL's note
-            // for the measured reason. Claim is checked first because it's the state that has
-            // something to collect.
-            String claimLabel = readButtonLabel(MY_REQUESTS_CLAIM_LABEL_TL, MY_REQUESTS_CLAIM_LABEL_BR);
-            String centreLabel = readButtonLabel(MY_REQUESTS_REQUEST_LABEL_TL, MY_REQUESTS_REQUEST_LABEL_BR);
-            String label = (claimLabel == null ? "" : claimLabel) + " " + (centreLabel == null ? "" : centreLabel);
-            label = label.trim();
+            // Claim is decided by colour, not OCR -- see isClaimButtonPresent(). It's checked first
+            // because it's the state that has something to collect.
+            if (isClaimButtonPresent()) {
+                logInfo(logLine("My Requests row is claimable -- tapping Claim."));
+                tapNear(MY_REQUESTS_CLAIM_BTN);
+                sleepTask(ACTION_SETTLE_MS);
+                tapNear(CLAIM_REWARD_TAP_ANYWHERE);
+                sleepTask(ACTION_SETTLE_MS);
+                continue; // re-read the row -- a fresh Request button should be there now.
+            }
 
-            if (label.isEmpty()) {
-                logInfo(logLine("My Requests button label unreadable in either the Claim or the Request "
-                        + "position -- moving on rather than guessing. "
+            // No Claim slab, so the row is in the centred Request / Requesting... state. That
+            // button sits on flat tan, which the OCR pipeline handles fine.
+            String label = readButtonLabel(MY_REQUESTS_REQUEST_LABEL_TL, MY_REQUESTS_REQUEST_LABEL_BR);
+
+            if (label == null || label.isBlank()) {
+                logInfo(logLine("No Claim button, and the centred Request button was unreadable -- "
+                        + "moving on rather than guessing. "
                         + dumpDiagnosticFrame("my-requests-label-null")));
                 return;
             }
@@ -1139,15 +1214,6 @@ public class MonumentRoutine extends DelayedTask {
             if (label.contains("requesting")) {
                 logInfo(logLine("My Requests already has a pending Requesting... row -- nothing to do."));
                 return;
-            }
-
-            if (label.contains("claim")) {
-                logInfo(logLine("My Requests row is claimable -- tapping Claim."));
-                tapNear(MY_REQUESTS_CLAIM_BTN);
-                sleepTask(ACTION_SETTLE_MS);
-                tapNear(CLAIM_REWARD_TAP_ANYWHERE);
-                sleepTask(ACTION_SETTLE_MS);
-                continue; // re-read the row -- a fresh Request button should be there now.
             }
 
             if (!label.contains("request")) {
