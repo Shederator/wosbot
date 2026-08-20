@@ -1275,10 +1275,36 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 		logInfo(routineLogIntelligenceLine("Missions are available. Continuing Intel mission processing."));
 	}
 
+	// matt caught it live, 2026-08-19: Intel got rescheduled almost 20 hours out ("rerun says 19
+	// hours... you failed") while the just-logged real beast march ETA was only ~5 minutes away.
+	// Root cause: this file already has a proven fix for exactly this failure shape (see
+	// MAX_INTEL_REFRESH_MINUTES's comment -- "a garbled cooldown read (stray day prefix / extra
+	// digit) could park Intel a day or more out") but that ceiling was only ever applied to the
+	// empty-board refresh cooldown, never to the march-queue return-wait path here. A returning
+	// march's OCR'd countdown is exactly the same kind of read (digits + colons, same OCR
+	// pipeline) and was never clamped -- a single garbled read on a RETURNING slot's countdown
+	// could push this reschedule arbitrarily far out with nothing to catch it. A returning march's
+	// real travel time is minutes, not hours; MAX_MARCH_RETURN_WAIT_MINUTES gives real headroom
+	// (3h) while catching an implausible read the same way the refresh-cooldown ceiling already
+	// does, falling back to the policy's own short unknown-release retry instead of trusting it.
+	private static final int MAX_MARCH_RETURN_WAIT_MINUTES = 3 * 60;
+
 	private LocalDateTime resolveMarchReturnWaitTimeFlow(MarchesAvailable marchesAvailable) {
 		LocalDateTime now = LocalDateTime.now();
 		LocalDateTime queueRelease = marchesAvailable == null ? null : marchesAvailable.rescheduleTo();
-		return IntelMarchAvailabilityPolicy.resolveNextRelease(now, queueRelease, intelBeastReturnTimes);
+		LocalDateTime resolved = IntelMarchAvailabilityPolicy.resolveNextRelease(now, queueRelease, intelBeastReturnTimes);
+
+		LocalDateTime ceiling = now.plusMinutes(MAX_MARCH_RETURN_WAIT_MINUTES);
+		if (resolved.isAfter(ceiling)) {
+			logWarning(routineLogIntelligenceLine(String.format(
+					"March-return wait resolved to %s -- beyond the %d-minute plausible ceiling for a "
+							+ "returning march (real travel times are minutes, not hours); capping there in "
+							+ "case of an OCR misread on a march slot's countdown rather than parking Intel "
+							+ "for a day.",
+					resolved.format(DATETIME_FORMATTER), MAX_MARCH_RETURN_WAIT_MINUTES)));
+			resolved = ceiling;
+		}
+		return resolved;
 	}
 
 	private void initializeIntelMarchCountersFlow() {
