@@ -129,14 +129,24 @@ public class DailyLabyrinthRoutine extends DelayedTask {
 
     // -- % readout OCR crops (top-left / bottom-right), one per troop row --
     /** LIVE-TUNE: Infantry % box. */
-    private static final PointData LOH_INF_PCT_TL = new PointData(558, 508);
-    private static final PointData LOH_INF_PCT_BR = new PointData(632, 552);
+    // matt/2026-08-20: these boxes spanned the value pill's full width INCLUDING its dark rounded
+    // border, and the border survives the white-outline isolation as extra digits. Measured live off
+    // lab_d0_balance_set_1787233252229.png, where the popup genuinely showed 50/10/40 and the app's
+    // own raw reads were:
+    //     Infantry (really 50) -> "690"   rejected, >100
+    //     Lancer   (really 10) -> "10"    accepted -- the short digit sits clear of the border
+    //     Marksman (really 40) -> "407"   rejected, >100
+    // which is exactly the null/10/null readback in that run. The pill measures x 556-634; the DIGITS
+    // occupy x 580-612, y 519-539 (Infantry), with the rows 145px apart. Tightened to the digits with
+    // a small pad so the border is outside the box entirely.
+    private static final PointData LOH_INF_PCT_TL = new PointData(576, 513);
+    private static final PointData LOH_INF_PCT_BR = new PointData(618, 546);
     /** LIVE-TUNE: Lancer % box. */
-    private static final PointData LOH_LAN_PCT_TL = new PointData(558, 653);
-    private static final PointData LOH_LAN_PCT_BR = new PointData(632, 697);
+    private static final PointData LOH_LAN_PCT_TL = new PointData(576, 658);
+    private static final PointData LOH_LAN_PCT_BR = new PointData(618, 691);
     /** LIVE-TUNE: Marksman % box. */
-    private static final PointData LOH_MRK_PCT_TL = new PointData(558, 798);
-    private static final PointData LOH_MRK_PCT_BR = new PointData(632, 842);
+    private static final PointData LOH_MRK_PCT_TL = new PointData(576, 803);
+    private static final PointData LOH_MRK_PCT_BR = new PointData(618, 836);
 
     // ===================================================================
     // Gaia Heart formation flow (matt/2026-08-16)
@@ -679,11 +689,37 @@ public class DailyLabyrinthRoutine extends DelayedTask {
         // "Opens in …"; an OPEN zone shows just name + countdown. Only tap the banner if it's open.
         String zoneLabel = readStringValue(zone.labelTl(), zone.labelBr(), ZONE_LABEL_SETTINGS);
         logInfo(tag + ": label OCR = '" + zoneLabel + "'.");
-        if (zoneLabel != null && zoneLabel.toLowerCase().contains("open")) {
+
+        // matt/2026-08-20: this gate was "if the label says 'Opens in' it's locked, OTHERWISE it's
+        // open" -- a negative check, and the same wrong shape as the Monument Events-tab check fixed
+        // in 80772e5. Anything unreadable sails straight through it. Caught live today: the Labyrinth
+        // map only shows four zones at this scroll position (Cave of Monsters, Charm Mine, Research
+        // Center, Gear Forge) and Land of Heroes is NOT on screen at all, so its label box lands on
+        // bare fog and OCR'd 'Oo'. 'Oo' doesn't contain "open", so the zone was declared open, its
+        // banner coordinate was tapped anyway, and the run wandered off into the Shelter/Furniture
+        // screen -- see lab_d9_navfail_1787165251660.png from the 08-19 run, which is a furniture
+        // catalogue, not the Labyrinth.
+        //
+        // Flip it to a positive check: the label must actually contain the zone's own name. Cave of
+        // Monsters read exactly 'Cave of Monsters' on the same pass, so a real zone reads cleanly.
+        // Deliberately fail-closed -- an unreadable label now SKIPS the zone, because skipping costs
+        // nothing while proceeding blind taps unknown coordinates on an unknown screen.
+        String normalizedLabel = zoneLabel == null
+                ? "" : zoneLabel.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z]", "");
+        String normalizedName = zone.zoneName().toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z]", "");
+        if (normalizedLabel.contains("opensin")) {
             logWarning(tag + ": reads LOCKED ('Opens in') — not open yet, skipping.");
             return;
         }
-        logInfo(tag + ": looks open — tapping its banner to enter.");
+        if (!normalizedLabel.contains(normalizedName)) {
+            logWarning(tag + ": label OCR ('" + zoneLabel + "') doesn't contain the zone's own name, so "
+                    + "this zone isn't at that spot on the map right now (the map shows a different set "
+                    + "of zones depending on scroll position). Skipping rather than tapping "
+                    + zone.banner() + " blind on whatever IS there.");
+            saveLabyrinthFrame("zone_label_mismatch", 9);
+            return;
+        }
+        logInfo(tag + ": label confirms the zone is present and open — tapping its banner to enter.");
         // Step 1: banner -> stage screen (poll for the "Challenge" button).
         if (!navStep(zone.banner(), STAGE_ANCHOR_TL, STAGE_ANCHOR_BR, STAGE_ANCHOR_TEXT, tag + " banner->stage")) {
             logWarning(tag + ": never reached the stage screen; aborting.");
@@ -1130,9 +1166,11 @@ public class DailyLabyrinthRoutine extends DelayedTask {
      * RE-READS a few times before giving up — a fresh frame each attempt smooths over transient misses.
      */
     private Integer readPercent(PointData tl, PointData br) {
+        String lastRaw = null;
         for (int attempt = 1; attempt <= LOH_PCT_READ_ATTEMPTS; attempt++) {
             String raw = readStringValue(tl, br, LOH_PCT_SETTINGS);
             if (raw != null && !raw.isBlank()) {
+                lastRaw = raw;
                 String digits = raw.replaceAll("[^0-9]", "");
                 if (!digits.isEmpty()) {
                     try {
@@ -1143,6 +1181,15 @@ public class DailyLabyrinthRoutine extends DelayedTask {
             }
             if (attempt < LOH_PCT_READ_ATTEMPTS) sleepTask(LOH_PCT_READ_RETRY_DELAY);
         }
+        // matt/2026-08-20: report WHAT was actually seen. The raw text only went to the shared
+        // "String OCR result" DEBUG line, which is buried among hundreds of others and gives no clue
+        // which region produced it -- so "read failed" looked like a blank read for months when it was
+        // really an out-of-range parse ("690" for a box showing 50, "407" for one showing 40, both
+        // rejected by the 0..100 guard). Naming the region and the text makes the next miscalibration
+        // a one-line diagnosis.
+        logWarning("percent read failed at " + tl + "->" + br + " after " + LOH_PCT_READ_ATTEMPTS
+                + " attempts; last raw text was '" + (lastRaw == null ? "<null>" : lastRaw.trim())
+                + "' (rejected: not a number in 0..100).");
         return null;
     }
 
