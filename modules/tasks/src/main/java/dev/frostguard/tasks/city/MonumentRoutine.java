@@ -222,6 +222,14 @@ public class MonumentRoutine extends DelayedTask {
     private static final int ALLY_ROW_SPACING = 237;
     private static final int ALLY_MAX_VISIBLE_ROWS = 3;
 
+    /**
+     * Left edge of the right-hand featured-event icon rail (Events / Deals / Snowbusters and
+     * friends) on this 720x1280 layout, measured off a live frame: the icons sit around x 630-700,
+     * each with a red notification dot. Any MONUMENT_REWARD_BADGE match at or past this X is one of
+     * those dots, not the Monument badge -- see processMonumentBadge() for the logged evidence.
+     */
+    private static final int EVENT_RAIL_MIN_X = 640;
+
     private static final int IDLE_RECHECK_MINUTES = 60;
     private static final int PANEL_SETTLE_MS = 1200;
     private static final int ACTION_SETTLE_MS = 900;
@@ -419,7 +427,35 @@ public class MonumentRoutine extends DelayedTask {
         logInfo(logLine("Badge template search result (multi-scale): " + badge));
 
         if (!badge.isFound()) {
-            logInfo(logLine("Badge not found this pass -- nothing to tap, not guessing a coordinate."));
+            logInfo(logLine("Badge not found this pass -- nothing to tap, not guessing a coordinate. "
+                    + dumpDiagnosticFrame("badge-not-found")));
+            return false;
+        }
+
+        // matt/2026-08-20: "you're clicking the monument, and you're clicking the fucking events tab
+        // in the top right." The coordinates prove him exactly right. The right-hand UI rail carries
+        // the featured-event icons (currently Events / Deals / Snowbusters) stacked around x 630-700,
+        // and each one wears a small red notification dot. MONUMENT_BADGE_SEARCH runs a full-screen
+        // multi-scale search at threshold=30, which is loose enough for one of those red dots to win
+        // outright. Logged evidence across four consecutive runs, and it splits perfectly by X:
+        //
+        //   20:17  HIT @(515,316) score=45.068  -> reached Tundra Albums   (real Monument)
+        //   23:29  HIT @(456,318) score=45.814  -> reached Tundra Albums   (real Monument)
+        //   23:41  HIT @(699,417) score=50.013  -> landed on the wrong screen
+        //   00:43  HIT @(693,417)               -> landed on the wrong screen
+        //
+        // Every good match is central; every bad one is out in the rail. The scores don't separate
+        // them (45.0 vs 50.0 -- and the file's own notes record a genuine tap scoring 89.44), so no
+        // threshold tweak can tell these apart without also throwing away real hits. Position can.
+        // Monument is a building out in the city view and is never in that rail, so a match there is
+        // a red notification dot, not the Monument badge. Reject it instead of tapping it.
+        if (badge.getPoint().getX() >= EVENT_RAIL_MIN_X) {
+            logWarning(logLine("Badge matched at " + badge.getPoint() + " -- that's inside the right-hand "
+                    + "event rail (x >= " + EVENT_RAIL_MIN_X + "), where the Events/Deals/Snowbusters icons "
+                    + "carry red notification dots that this template matches at threshold=30. Monument is a "
+                    + "city building and is never there, so this is a false positive, not the badge. Not "
+                    + "tapping it -- that tap is what opens the Events tab. "
+                    + dumpDiagnosticFrame("badge-matched-in-event-rail")));
             return false;
         }
 
@@ -446,7 +482,8 @@ public class MonumentRoutine extends DelayedTask {
             logWarning(logLine("Tapped the real matched badge at " + badge.getPoint()
                     + " but none of Monument's own panel signals (Tundra Albums option / Claim / Claim All) "
                     + "are present -- didn't actually land on Monument, whatever screen this is. Backing "
-                    + "out instead of cascading blind taps onto the wrong screen. Recovering toward Home."));
+                    + "out instead of cascading blind taps onto the wrong screen. Recovering toward Home. "
+                    + dumpDiagnosticFrame("landed-off-monument")));
             recoverTowardHome();
             return false;
         }
