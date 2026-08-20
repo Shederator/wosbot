@@ -60,8 +60,25 @@ public final class SearchConfigConstants {
     // (40.7) so a low point in the bounce cycle still clears it, while still requiring real
     // correlation (not near-zero) so an unrelated screen element can't match by coincidence during
     // the full-frame scan. Do not reuse for other templates; revisit if real evidence says otherwise.
+    // matt/2026-08-20: threshold was 30 because MONUMENT_REWARD_BADGE pointed at the WRONG ASSET --
+    // /templates/exploration/exploreTheWorldIcon.png, the Explore-the-World scroll-and-quill, which
+    // is not Monument's badge and never was. (That's the "scroll+feather" every comment in this file
+    // describes; the comments were faithfully describing the wrong picture.) Nothing on screen could
+    // ever match it, so the threshold had been dragged down to 30 until noise started "matching",
+    // and the routine then tapped that noise -- landing on the Events rail, or on blank snow.
+    //
+    // Measured against a live frame captured at the moment of failure:
+    //     exploreTheWorldIcon (old)  43.68%  @(366,366)   <- noise, nowhere near the badge
+    //     monumentRewardBadge (new) 100.00%  @(389,537)   <- the actual badge
+    // The real badge is a white bubble holding a gold puzzle piece with a blue swap arrow, sitting
+    // above the Monument spire. It's now cropped from that frame and wired up in
+    // templates.properties, so a real threshold works again.
+    //
+    // 60 sits far above the measured noise floor (43-52 across every stale template tried on that
+    // frame) and far below a genuine hit. Not set higher: the 100% above is inflated by the template
+    // having been cropped from this exact frame, so real matches on other frames will score lower.
     public static final SearchConfig MONUMENT_BADGE_SEARCH =
-            SearchConfig.builder().withMaxAttempts(6).withThreshold(30).withDelay(300L).build();
+            SearchConfig.builder().withMaxAttempts(6).withThreshold(60).withDelay(300L).build();
 
     // matt caught it live, 2026-08-19: MonumentRoutine was reusing MONUMENT_BADGE_SEARCH's
     // threshold=30 for its post-tap "is the badge still there" check too -- but that threshold was
