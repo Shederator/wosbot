@@ -197,6 +197,15 @@ public class MonumentRoutine extends DelayedTask {
     /** Quantity defaults to the full owned count already -- one Enable tap consumes
      *  all of them (confirmed live twice: stacks of 2 fully consumed in one tap). */
     private static final PointData PACK_DETAIL_ENABLE_BTN = new PointData(358, 905);
+    /**
+     * The "Obtain more" Gold Key purchase dialog -- what a no-packs-left album's Obtain button opens.
+     * Title box and close X both measured off the live capture at
+     * ocr-debug/monument-my-requests-label-unrecognized-2026-08-20T01-22-33 (title reads
+     * "Obtain more"; the X sits at 620-697 x 153-184).
+     */
+    private static final PointData OBTAIN_DIALOG_TITLE_TL = new PointData(150, 122);
+    private static final PointData OBTAIN_DIALOG_TITLE_BR = new PointData(580, 180);
+    private static final PointData OBTAIN_DIALOG_CLOSE_X = new PointData(658, 168);
     /** "Tap anywhere to close" reward-reveal screen -- tap near the text, not dead-center. */
     private static final PointData REWARD_REVEAL_TAP_ANYWHERE = new PointData(358, 1198);
 
@@ -1281,6 +1290,36 @@ public class MonumentRoutine extends DelayedTask {
             logInfo(logLine("Opening pack " + opened + " at " + target + "."));
             tapNear(target);
             sleepTask(ACTION_SETTLE_MS);
+
+            // matt/2026-08-20: findAnyOwnedPackIcon() reads an owned-count badge under each candidate
+            // icon, but when an album has no packs the panel shows "No such Scene Fragment Pack owned"
+            // with an OBTAIN button roughly where that badge would be (see
+            // labyrinth-debug/monument/state_current.png). The badge whitelist is
+            // "OwnedOWNED:0123456789 ", so an Obtain button can read as a number and the candidate
+            // gets returned as if it were a real pack. Tapping it opens the "Obtain more" GOLD KEY
+            // PURCHASE dialog -- confirmed live at 01:22, and that stray dialog is what the Alliance
+            // Trade step then landed on and OCR'd as 'd to perform i epic pbuyy'.
+            //
+            // Nothing could be spent (the Buy button needs its own confirm, and PACK_DETAIL_ENABLE_BTN
+            // at (358,905) is well clear of it), but prodding a purchase screen once per pass is not
+            // acceptable behaviour. Check the panel title before the Enable tap: the real pack detail
+            // sits under "Fragment Backpack", the purchase dialog announces itself as "Obtain more".
+            String detailTitle = stringHelper.attemptRecognition(
+                    OBTAIN_DIALOG_TITLE_TL, OBTAIN_DIALOG_TITLE_BR,
+                    2, 150L, PANEL_TITLE_OCR_SETTINGS,
+                    s -> s != null && !s.isBlank(),
+                    s -> s.toLowerCase());
+            if (detailTitle != null && detailTitle.contains("obtain")) {
+                logInfo(logLine("Candidate " + target + " was not a pack -- it opened the '" + detailTitle.trim()
+                        + "' purchase dialog, so that album has no packs left and its Obtain button was "
+                        + "misread as an owned count. Closing it and ending the backpack pass. Opened "
+                        + (opened - 1) + " real pack(s)."));
+                tapNear(OBTAIN_DIALOG_CLOSE_X);
+                sleepTask(ACTION_SETTLE_MS);
+                opened--;
+                break;
+            }
+
             tapNear(PACK_DETAIL_ENABLE_BTN);
             sleepTask(PACK_OPEN_SETTLE_MS);
 
