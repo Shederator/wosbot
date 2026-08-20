@@ -178,7 +178,7 @@ private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
             List<MarchSlotState> marchQueue = marchHelper.readMarchQueue();
             if (marchQueue.stream().noneMatch(MarchSlotState::isIdle)) {
                 LocalDateTime retryAt = resolveNoSlotRetry(marchQueue);
-                // matt/2026-08-09 (troop-slot economy): a rally is ready to send but every slot is busy.
+                // A rally is ready to send but every slot is busy.
                 // Publish the demand so Gather frees one on its next run instead of holding it gathering.
                 TroopSlotPolicy.claim(profile, TpDailyTaskEnum.EVENT_POLAR_TERROR, 1,
                         retryAt.plusMinutes(2));
@@ -229,7 +229,7 @@ private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
             if (result.outcome() == RallyLaunchOutcome.NO_SPECIAL_REWARDS) {
                 logInfo(routineLogPolarTerrorHuntingLine(
                         "Zero special rewards left. Planning next run after daily reset."));
-                // matt/2026-08-09 (troop-slot economy): done for the day — drop any slot demand so
+                // Done for the day — drop any slot demand so
                 // gathering resumes immediately (release also pulls Gather forward).
                 TroopSlotPolicy.release(profile, TpDailyTaskEnum.EVENT_POLAR_TERROR);
                 reschedule(GameTimeUtils.dailyResetTime().plusMinutes(30));
@@ -300,7 +300,7 @@ private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
             }
         }
 
-        // matt/2026-08-09 (troop-slot economy): all configured rallies are out and self-tracked via
+        // All configured rallies are out and self-tracked via
         // activeDeployments — this pass is complete, so release the slot demand. Gather is pulled
         // forward and refills whatever idle slots remain until Polar's next pass needs one again.
         TroopSlotPolicy.release(profile, TpDailyTaskEnum.EVENT_POLAR_TERROR);

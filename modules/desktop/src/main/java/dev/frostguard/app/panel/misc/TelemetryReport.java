@@ -23,13 +23,13 @@ import dev.frostguard.api.runtime.WorkspacePaths;
  * {@code data/telemetry/profiles/<id>/history.jsonl} and turns it into the "what did the bot
  * earn" reports the Statistics tab shows.
  *
- * <p>matt, 2026-08-09: he wants the Statistics page to answer real questions —
+ * <p>the operator, 2026-08-09: he wants the Statistics page to answer real questions —
  * "how many resources did I gather overnight", "how much power / how many gems
  * did botting earn me today / this week / total" — instead of run counts. Each
  * report is a delta between the snapshot at the start of a window and the most
  * recent one, so it reads directly off the same history the bot already logs.</p>
  *
- * <p>Dave's #250 review, 2026-08-18: previously read {@code telemetry/history.jsonl} off
+ * <p>previously read {@code telemetry/history.jsonl} off
  * {@code user.dir} and filtered by profile NAME within one shared file -- and a row with no
  * "profile" field (or a null caller-supplied name) was accepted for every profile, not rejected.
  * Now that {@code bg_telemetry} writes one file per profile ID under the workspace, {@link #load}
@@ -163,7 +163,7 @@ public final class TelemetryReport {
      * Change in every metric between the first sample at/after {@code from} and the last
      * at/before {@code to} that actually carries that metric.
      *
-     * <p>Dave's #250 review: this used to anchor every metric's END value to the single latest
+     * <p>this used to anchor every metric's END value to the single latest
      * overall sample, so a metric simply missing from THAT one row (a transient OCR miss, or a
      * row written before that metric existed) vanished from the whole window even though earlier
      * in-window samples had it. Each metric now finds its own latest carrying sample independently,
@@ -192,7 +192,7 @@ public final class TelemetryReport {
                 Long v = s.get(metric);
                 if (v != null) { start = v; break; }
             }
-            // Dave's #250/#251 review + matt live, 2026-08-19: a genuinely zero-change metric
+            // review feedback + observed live: a genuinely zero-change metric
             // (real start AND end samples, equal values) used to be skipped here just like a
             // metric with NO coverage at all -- the caller couldn't tell "measured, no change"
             // from "no data", and StatisticsLayoutController's fallback for the latter (show the
@@ -211,7 +211,7 @@ public final class TelemetryReport {
     // ---- named windows ------------------------------------------------------
 
     /**
-     * matt/2026-08-10: the 08:30 "wake" snapshot fires AT 08:30 but timestamps a bit later once
+     * The 08:30 "wake" snapshot fires AT 08:30 but timestamps a bit later once
      * navigation + OCR finish (observed 08:30:43). Without grace, that purpose-built end-of-night
      * reading lands just past an exact 08:30:00 cutoff and gets excluded, so "last night" ended at the
      * prior hourly sample instead. Extend the window end by this grace so the wake anchor is always in.
@@ -235,7 +235,7 @@ public final class TelemetryReport {
         return deltaOverWindow(samples.get(0).at(), samples.get(samples.size() - 1).at());
     }
 
-    // ---- real recorded coverage (matt/2026-08-15) ---------------------------
+    // ---- real recorded coverage  ---------------------------
     // "I just don't trust these statistics... put like at the top the timeframe that it was
     // recorded." A window LABEL like "Last night (23:00-08:30)" describes the intended window,
     // not what was actually captured -- if bg_telemetry was disabled, gapped, or only caught two
@@ -283,7 +283,7 @@ public final class TelemetryReport {
     /** Human-readable names for the activity keys worth surfacing, in display order. */
     private static final Map<String, String> ACTIVITY_LABELS = new LinkedHashMap<>();
     static {
-        // matt/2026-08-10: accomplishments ONLY — never scan/run tallies ("I only care about things
+        // Accomplishments ONLY — never scan/run tallies ("I only care about things
         // accomplished"). Every tile is a ctr.* counter the game code increments when the thing actually
         // happens. run.* task-execution counts were all removed. Labels kept short so they don't truncate.
         ACTIVITY_LABELS.put("ctr.Intel Beast", "Beasts hunted");

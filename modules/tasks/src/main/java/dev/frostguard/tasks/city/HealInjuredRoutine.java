@@ -20,21 +20,21 @@ import dev.frostguard.vision.convert.RegexNumberParser;
  * Task responsible for auto-healing injured troops.
  *
  * <p>
- * matt/2026-08-12: on the World map, an icon over "My City" shows a healing-progress
+ * On the World map, an icon over "My City" shows a healing-progress
  * percentage whenever troops are injured. Tapping it opens the "Heal Injured" panel,
  * which lists severely-injured troops by type with per-type heal queues (up to a few
  * running in parallel, mirroring how Training splits by camp). "Quick Select" + "Heal"
  * starts the highest-priority queue; once started, the same button becomes "Help" --
  * tapping it requests alliance assistance, which measured live cut a real 14:21 timer
  * down to 1:45 (roughly 90% reduction). The World-map badge percentage itself ("1%",
- * sometimes "2%" or higher per matt) is NOT used for the actual decision here -- the
+ * sometimes "2%" or higher by design) is NOT used for the actual decision here -- the
  * panel's own "Severely Injured X/Y" count is read instead, since that's the number
  * that actually determines whether there's anything to heal.
  *
  * <p>
- * <b>Known gap (matt, 2026-08-12):</b> a real backpack-item Speedup ("if needed") is not
+ * <b>Known gap :</b> a real backpack-item Speedup ("if needed") is not
  * wired up yet -- Help alone handled the observed case (90% reduction), so this was left
- * as a manual matt action for now rather than adding a whole Backpack-inventory read for
+ * as a manual the operator action for now rather than adding a whole Backpack-inventory read for
  * a case that may not come up often. Flagged as a clean follow-up, not forgotten.
  *
  * <p>
@@ -68,7 +68,7 @@ public class HealInjuredRoutine extends DelayedTask {
     private static final PointData HEALING_TIMER_BOTTOM_RIGHT = new PointData(560, 780);
 
     // ========== Constants ==========
-    /** matt, 2026-08-12: "check every 30 minutes for the healing" when idle. */
+    /** "check every 30 minutes for the healing" when idle. */
     private static final int IDLE_RECHECK_MINUTES = 30;
     private static final int PANEL_SETTLE_MS = 1500;
     private static final int ACTION_SETTLE_MS = 1000;

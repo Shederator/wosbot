@@ -199,7 +199,7 @@ public class DeploymentHelper {
         return true;
     }
 
-    // matt, 2026-08-08: Equalize alone was spreading troops into a thin 4-5%
+    // Equalize alone was spreading troops into a thin 4-5%
     // ratio that then deployed anyway with zero check for the game's own
     // "This deployment is almost certain to fail" warning — a real loss of
     // troops on a doomed march. Beast/Fire Beast deployments now drag every

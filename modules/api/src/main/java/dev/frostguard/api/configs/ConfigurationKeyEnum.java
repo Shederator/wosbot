@@ -100,7 +100,7 @@ public enum ConfigurationKeyEnum {
     ARENA_TASK_ACTIVATION_TIME_STRING   ("23:50",   String.class,   ConfigCategory.DAILIES),
     ARENA_TASK_BOOL                     ("false",   Boolean.class,  ConfigCategory.DAILIES),
     ARENA_TASK_EXTRA_ATTEMPTS_INT       ("0",       Integer.class,  ConfigCategory.DAILIES),
-    /** matt, 2026-08-08: Testing-profile-only safety valve — taps the challenge
+    /** Testing-profile-only safety valve — taps the challenge
      *  button to confirm which opponent was selected, then stops before the
      *  actual battle so a targeting-logic change can be verified live without
      *  spending a real attempt. Default false everywhere. */
@@ -114,20 +114,20 @@ public enum ConfigurationKeyEnum {
     ARENA_TASK_PROTECT_ALLIANCE_BOOL    ("true",    Boolean.class,  ConfigCategory.DAILIES, true),
     ARENA_TASK_REFRESH_WITH_GEMS_BOOL   ("false",   Boolean.class,  ConfigCategory.DAILIES),
     DAILY_LABYRINTH_BOOL                ("false",   Boolean.class,  ConfigCategory.DAILIES),
-    /** matt/2026-08-10: Testing-only gate for the Land-of-Heroes formation-setup flow. When true,
+    /** Testing-only gate for the Land-of-Heroes formation-setup flow. When true,
      *  DailyLabyrinthRoutine.execute() ONLY runs setupLandOfHeroesFormation() (tap Challenge → Quick
      *  Deploy → Balance → OCR-drive the troop ratio → use-as-default → Confirm → Edit Formation → STOP)
      *  and skips the normal daily-clear logic, so the free formation-setup can be triggered without
      *  spending a daily battle attempt. Default false everywhere. */
     LABYRINTH_FORMATION_TEST_BOOL       ("false",   Boolean.class,  ConfigCategory.DAILIES),
-    /** matt/2026-08-13: "kick Labyrinth off at noon every day" -- the daily run used to always
+    /** "kick Labyrinth off at noon every day" -- the daily run used to always
      *  reschedule to the game's own 00:00 UTC reset (dailyResetTime()), which lands at an unintuitive
      *  local-time hour depending on DST. Picked, HH:mm local time, defaults to noon. */
     LABYRINTH_DAILY_START_TIME_STRING   ("12:00",   String.class,   ConfigCategory.DAILIES),
-    /** Labyrinth generation the account is playing (matt is Gen 1). Informational + future tuning. */
+    /** Labyrinth generation the account is playing (this account is Gen 1). Informational + future tuning. */
     LABYRINTH_GENERATION_STRING         ("Gen 1",   String.class,   ConfigCategory.DAILIES),
     /** Land-of-Heroes per-squad troop ratios (Infantry/Lancer/Marksman), driven from the Labyrinth tab.
-     *  matt/2026-08-14: defaults set to an alliance-mate's posted recommendation ("For the best results
+     *  : defaults set to an alliance-mate's posted recommendation ("For the best results
      *  in the labyrinth ... this will allow you to get the farthest you can") -- Land of Heroes 50/20/30,
      *  applied to both squads since the post gave one ratio per zone. */
     LABYRINTH_SQUAD1_INFANTRY_INT       ("50",      Integer.class,  ConfigCategory.DAILIES),
@@ -136,12 +136,12 @@ public enum ConfigurationKeyEnum {
     LABYRINTH_SQUAD2_INFANTRY_INT       ("50",      Integer.class,  ConfigCategory.DAILIES),
     LABYRINTH_SQUAD2_LANCER_INT         ("20",      Integer.class,  ConfigCategory.DAILIES),
     LABYRINTH_SQUAD2_MARKSMAN_INT       ("30",      Integer.class,  ConfigCategory.DAILIES),
-    // matt/2026-08-13: "we're up to like three now" -- extended the same per-squad troop-ratio
+    // "we're up to like three now" -- extended the same per-squad troop-ratio
     // formation-setup to Cave of Monsters and Charm Mine (Labyrinth zones 2 & 3). Each zone's own
     // in-game rule ("Only the stats of Pets/Chief Charms take effect here") means troop stats don't
-    // score the fight directly, but composition still affects tanking/positioning -- matt's explicit
+    // score the fight directly, but composition still affects tanking/positioning -- the explicit
     // call to build the ratio controls for these anyway.
-    // matt/2026-08-14: defaults updated to match the same alliance-mate recommendation --
+    // Defaults updated to match the same alliance-mate recommendation --
     // Cave of Monsters 50/10/40, Charm Mine 60/20/20. Cave/Charm are single-squad zones
     // (see ZoneFormation.singleSquad -- only squad1Keys is actually read), squad2 kept in sync anyway.
     LABYRINTH_CAVE_SQUAD1_INFANTRY_INT  ("50",      Integer.class,  ConfigCategory.DAILIES),
@@ -156,7 +156,7 @@ public enum ConfigurationKeyEnum {
     LABYRINTH_CHARM_SQUAD2_INFANTRY_INT ("60",      Integer.class,  ConfigCategory.DAILIES),
     LABYRINTH_CHARM_SQUAD2_LANCER_INT   ("20",      Integer.class,  ConfigCategory.DAILIES),
     LABYRINTH_CHARM_SQUAD2_MARKSMAN_INT ("20",      Integer.class,  ConfigCategory.DAILIES),
-    // matt/2026-08-15: "add the research center in the gear forge... where we can start entering
+    // "add the research center in the gear forge... where we can start entering
     // true default troop ratios" -- Research Center and Gear Forge are single-troop-composition
     // Challenge fights (no Squad1/Squad2 split like the other zones), so one Infantry/Lancer/Marksman
     // % triple each. LabyrinthRaidRoutine.challengeZone() uses this as the FIRST attempt's preset,
@@ -170,19 +170,19 @@ public enum ConfigurationKeyEnum {
     LABYRINTH_GEARFORGE_INFANTRY_INT    ("60",      Integer.class,  ConfigCategory.DAILIES),
     LABYRINTH_GEARFORGE_LANCER_INT      ("10",      Integer.class,  ConfigCategory.DAILIES),
     LABYRINTH_GEARFORGE_MARKSMAN_INT    ("30",      Integer.class,  ConfigCategory.DAILIES),
-    // matt/2026-08-16: "once you add Gaia [Heart], I should be able to put in both formation
+    // "once you add Gaia [Heart], I should be able to put in both formation
     // percentages, and you'll automatically be able to adjust those in the game." Live-calibrated the
     // same day (a Sunday, Gaia Heart's real open day) -- it's a genuine two-squad zone (Squad Config,
     // Quick Deploy, per-squad Edit Formation/Balance), same shape as Land of Heroes, NOT single-squad
     // like Cave of Monsters/Charm Mine. Deploys real troops/heroes, not normalized ones, but the
     // Infantry/Lancer/Marksman comp lever works the same way. Squad 3 unlocks at Stage 15-10 (confirmed
     // live -- "Clear Gaia Heart Stage 15-10 to unlock" shown on the still-locked 3rd slot); scaffolded
-    // now so the config/UI/automation are all ready the moment matt's account unlocks it, rather than
+    // now so the config/UI/automation are all ready the moment this account unlocks it, rather than
     // needing a second round-trip later. Defaults for all 3 squads come from community guides
     // (topuplive.com's Whiteout Survival troops guide + corroborating community writeups, 2026-08-16
     // research pass) recommending exactly a 3-army split of 60/40/0, 50/0/50, 50/20/30 for Gaia Heart
     // -- happens to match the Land of Heroes "mirrored fix" ratio for squads 1-2 plus a third balanced
-    // comp for squad 3. Tune from real loss reports once matt has enough data.
+    // comp for squad 3. Tune from real loss reports once the operator has enough data.
     LABYRINTH_GAIA_SQUAD1_INFANTRY_INT  ("60",      Integer.class,  ConfigCategory.DAILIES),
     LABYRINTH_GAIA_SQUAD1_LANCER_INT    ("40",      Integer.class,  ConfigCategory.DAILIES),
     LABYRINTH_GAIA_SQUAD1_MARKSMAN_INT  ("0",       Integer.class,  ConfigCategory.DAILIES),
@@ -281,18 +281,18 @@ public enum ConfigurationKeyEnum {
     INTEL_FIRE_BEAST_BOOL                       ("false",   Boolean.class,  ConfigCategory.INTEL),
     INTEL_RECALL_GATHER_TROOPS_BOOL             ("false",   Boolean.class,  ConfigCategory.INTEL),
     INTEL_SMART_PROCESSING_BOOL                 ("false",   Boolean.class,  ConfigCategory.INTEL),
-    // matt/2026-08-09: set by IntelligenceRoutine each pass — true when the board actually had a
+    // Set by IntelligenceRoutine each pass — true when the board actually had a
     // mission, false when empty. GatherRoutine reads it so it only defers/recalls for an imminent
     // Intel that will really consume a march slot, never for Intel's idle ~15-min beast-recheck.
     INTEL_LAST_RUN_HAD_MISSIONS_BOOL            ("false",   Boolean.class,  ConfigCategory.INTEL),
-    // matt, 2026-08-06: "if we run on stamina, go ahead and refresh it" - same
+    // "if we run on stamina, go ahead and refresh it" - same
     // Chief Stamina item top-up pattern PolarTerror/Cryptid already use, wired
     // into IntelligenceRoutine's stamina gate so a low-stamina Intel run tops
     // up from the backpack instead of idling until natural regeneration.
     INTEL_USE_STAMINA_ITEMS_BOOL                ("false",   Boolean.class,  ConfigCategory.INTEL),
     INTEL_STAMINA_ITEM_RESERVE_INT              ("0",       Integer.class,  ConfigCategory.INTEL),
     INTEL_USE_FLAG_BOOL                         ("false",   Boolean.class,  ConfigCategory.INTEL),
-    // matt/2026-08-15: "it's reaching a beast that's too hard to defeat, and it's just looping...
+    // "it's reaching a beast that's too hard to defeat, and it's just looping...
     // then it's gonna run in another fifteen minutes and do the same thing." Root cause: the
     // same-run circuit breaker (consecutiveBeastDeploymentFailures/beastStuckThisRun in
     // IntelligenceRoutine) lives on plain instance fields, but DelayedTaskRegistry.create() hands
@@ -332,12 +332,12 @@ public enum ConfigurationKeyEnum {
     GATHER_LAST_RECALL_TIME_STRING  ("",                    String.class,   ConfigCategory.GATHERING),
     GATHER_SPEED_BOOL               ("false",               Boolean.class,  ConfigCategory.GATHERING),
     GATHER_SPEED_BOOST_TYPE_STRING  ("24h (600 gems)",      String.class,   ConfigCategory.GATHERING),
-    // matt/2026-08-06: when enabled, the rotation pool is ordered by scarcity-relative-to-value
+    // When enabled, the rotation pool is ordered by scarcity-relative-to-value
     // (stockpile / valueWeight, ascending) instead of Collections.shuffle(). See
     // GatherRoutine.RESOURCE_VALUE_WEIGHT for the sourced value ratio. Off by default so existing
     // blind-rotation behavior is unchanged unless a user opts in.
     GATHER_SMART_PRIORITY_BOOL      ("false",               Boolean.class,  ConfigCategory.GATHERING),
-    // matt/2026-08-06: cache written by ResourceStockpileRoutine (runs only when
+    // Cache written by ResourceStockpileRoutine (runs only when
     // GATHER_SMART_PRIORITY_BOOL is on - no separate checkbox to find/enable), read back by
     // GatherRoutine.readCurrentStockpiles(). Source screen: Research Center -> Research -> any
     // non-maxed tech node's "Research Cost" panel, which shows all 4 resources as current/cost -
@@ -400,37 +400,37 @@ public enum ConfigurationKeyEnum {
     /* ─────────── system ─────────── */
 
     AUTO_START_DELAY_MINUTES_INT        ("5",           Integer.class,  ConfigCategory.SYSTEM),
-    /** matt, 2026-08-08: sub-minute precision for the countdown (he wants 30s specifically). Takes priority over the minutes key when present. */
+    /** Sub-minute precision for the countdown (he wants 30s specifically). Takes priority over the minutes key when present. */
     AUTO_START_DELAY_SECONDS_INT        ("30",          Integer.class,  ConfigCategory.SYSTEM),
     AUTO_START_ENABLED_BOOL             ("false",       Boolean.class,  ConfigCategory.SYSTEM),
     AUTO_START_MODE_STRING              ("Continuous",  String.class,   ConfigCategory.SYSTEM),
-    /** matt, 2026-08-08: set by the "Full Stop" button — persists across app restarts, unlike a
+    /** Set by the "Full Stop" button — persists across app restarts, unlike a
      *  regular Stop. Suppresses auto-start entirely until Start Bot is clicked manually again. */
     AUTO_START_SUPPRESSED_BOOL          ("false",       Boolean.class,  ConfigCategory.SYSTEM),
     BOOL_DEBUG                          ("false",       Boolean.class,  ConfigCategory.SYSTEM),
-    /** matt, 2026-08-08: pixels of scatter applied to every tap so repeats never land identically.
+    /** Pixels of scatter applied to every tap so repeats never land identically.
      *  0 restores the old exact-pixel behaviour. Kept small — tap targets are button centres. */
     TAP_JITTER_RADIUS_PX_INT            ("3",           Integer.class,  ConfigCategory.SYSTEM),
-    /** matt, 2026-08-08: percent of the wait added as random delay, so reschedules never land on
+    /** Percent of the wait added as random delay, so reschedules never land on
      *  an exact repeating time. Always paired with the absolute cap below. 0 disables. */
     SCHEDULE_JITTER_PERCENT_INT         ("15",          Integer.class,  ConfigCategory.SYSTEM),
-    /** Hard ceiling on schedule jitter. Without it, 15% of a 16h timer would idle ~2.5h — matt's
+    /** Hard ceiling on schedule jitter. Without it, 15% of a 16h timer would idle ~2.5h — the operator's
      *  explicit requirement was a cap of a couple of minutes, not a percentage of a long wait. */
     SCHEDULE_JITTER_MAX_SECONDS_INT     ("150",         Integer.class,  ConfigCategory.SYSTEM),
-    /** matt, 2026-08-08: an idle gap at least this long counts as sleep rather than a pause
+    /** An idle gap at least this long counts as sleep rather than a pause
      *  between tasks. His spec: minimum twenty minutes, no upper bound. Derived from the real
      *  schedule, so it replaced the fixed nightly window he originally asked for. */
     SLEEP_IDLE_THRESHOLD_MINUTES_INT    ("20",          Integer.class,  ConfigCategory.SYSTEM),
-    /** matt, 2026-08-08: read-only timer sweep at startup and hourly. */
+    /** Read-only timer sweep at startup and hourly. */
     TIMER_SWEEP_ENABLED_BOOL            ("true",        Boolean.class,  ConfigCategory.SYSTEM),
     /** Minutes between timer sweeps once the startup sweep has run. */
     TIMER_SWEEP_INTERVAL_MINUTES_INT    ("60",          Integer.class,  ConfigCategory.SYSTEM),
-    /** matt, 2026-08-08: DEFAULT OFF, deliberately reversed after matt watched it run.
+    /** DEFAULT OFF, deliberately reversed after the operator watched it run.
      *
      *  <p>Forcing every task due at startup does re-derive real timers, but it does so by
      *  running each routine's full workload — navigate, perform the task, then reschedule.
      *  From the outside that is a bot blindly tearing through every activity it owns the moment
-     *  it starts, which is the opposite of the order of operations matt asked for: read all the
+     *  it starts, which is the opposite of the order of operations the request was for: read all the
      *  timers first, record them, then act only on what is genuinely due.</p>
      *
      *  <p>Left in place as an escape hatch for the case it was built for — schedules gone badly
@@ -482,29 +482,29 @@ public enum ConfigurationKeyEnum {
     TRAIN_MINISTRY_APPOINTMENT_TIME_LONG("0",       Long.class,     ConfigCategory.TRAINING),
     TRAIN_PRIORITIZE_PROMOTION_BOOL     ("false",   Boolean.class,  ConfigCategory.TRAINING),
 
-    // matt/2026-08-12: auto-heal injured troops (World map -> the "Heal Injured" panel
+    // Auto-heal injured troops (World map -> the "Heal Injured" panel
     // above My City) + tap Help to speed the queue up via alliance assistance.
     HEAL_INJURED_ENABLED_BOOL           ("false",   Boolean.class,  ConfigCategory.TRAINING),
 
-    // matt/2026-08-12: "Explore the World" Atlas/Monument -- claim ready quest rows,
+    // "Explore the World" Atlas/Monument -- claim ready quest rows,
     // open owned Scene Fragment Packs, run daily Alliance Trade requests/sends.
     MONUMENT_ENABLED_BOOL               ("false",   Boolean.class,  ConfigCategory.CITY),
 
-    // matt/2026-08-12: "event slop" claim toggles -- rotating limited-time Events-tab
-    // events, one checkbox each so matt can pick which ones the bot bothers with.
+    // "event slop" claim toggles -- rotating limited-time Events-tab
+    // events, one checkbox each so the operator can pick which ones the bot bothers with.
     EVENT_HALL_OF_CHIEFS_CLAIM_BOOL      ("false",   Boolean.class,  ConfigCategory.EVENTS),
     EVENT_DEFEAT_BEASTS_CLAIM_BOOL       ("false",   Boolean.class,  ConfigCategory.EVENTS),
     EVENT_HERO_RALLY_CLAIM_BOOL          ("false",   Boolean.class,  ConfigCategory.EVENTS),
     EVENT_LUCKY_CHIP_SUPPLY_CLAIM_BOOL   ("false",   Boolean.class,  ConfigCategory.EVENTS),
     EVENT_BROTHERS_IN_ARMS_CLAIM_BOOL    ("false",   Boolean.class,  ConfigCategory.EVENTS),
 
-    // matt/2026-08-13: top-right cart-icon Shop panel, built out tab by tab. Custom
+    // Top-right cart-icon Shop panel, built out tab by tab. Custom
     // Armament Chest's free "Claimable" chest badge is periodic (may not appear for
     // weeks) -- checked once a day, no-ops when nothing's there.
     SHOP_CUSTOM_ARMAMENT_CHEST_CLAIM_BOOL ("false",  Boolean.class,  ConfigCategory.SHOPS),
     SHOP_DAILY_DEALS_FREE_CHEST_CLAIM_BOOL ("false", Boolean.class,  ConfigCategory.SHOPS),
 
-    // matt/2026-08-14: "the new labyrinth" -- Research Center + Gear Forge stage-raid claims.
+    // "the new labyrinth" -- Research Center + Gear Forge stage-raid claims.
     LABYRINTH_RAID_ENABLED_BOOL ("false", Boolean.class, ConfigCategory.DAILIES),
 
     // Bearguard: Berserk Cryptid rally HOSTING, distinct from the RALLY_* keys

@@ -184,7 +184,7 @@ public class BeastSlayRoutine extends DelayedTask {
 				LocalDateTime marchReturn = LocalDateTime.now().plusSeconds(returnSeconds);
 				updateReschedule(marchReturn);
 
-				// matt/2026-08-09 (troop-slot economy): a beast attack is genuinely out holding a slot.
+				// A beast attack is genuinely out holding a slot.
 				// Publish demand (sized to attacks dispatched this pass) so Gather leaves those slots be
 				// until the marches return; the claim self-expires at the latest return time.
 				TroopSlotPolicy.claim(profile, TpDailyTaskEnum.BEAST_HUNTING, attacksDone, marchReturn);
@@ -265,7 +265,7 @@ public class BeastSlayRoutine extends DelayedTask {
 	}
 
 	private void finalizeReschedule() {
-		// matt/2026-08-09 (troop-slot economy): this pass is done dispatching — release the slot demand
+		// This pass is done dispatching — release the slot demand
 		// (release also pulls Gather forward). The marches already out are self-tracked via their return
 		// time and occupy real slots Gather already sees as busy, so gathering can safely resume now.
 		TroopSlotPolicy.release(profile, TpDailyTaskEnum.BEAST_HUNTING);

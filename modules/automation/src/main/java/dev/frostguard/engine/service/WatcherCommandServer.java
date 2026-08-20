@@ -117,7 +117,7 @@ public class WatcherCommandServer {
      * Synchronous GET /status — {"queueRunning": true|false}. Added 2026-08-07
      * for run-full-capture.js: the 2h sync must know whether the automation
      * queue was already running before it decides to stop/scrape/resume, so it
-     * never turns the bot on when matt had it manually stopped (or the app
+     * never turns the bot on when the operator had it manually stopped (or the app
      * closed, in which case this endpoint isn't reachable at all — a connection
      * failure IS the "closed" signal to callers).
      */

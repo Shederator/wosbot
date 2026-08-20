@@ -69,9 +69,9 @@ public class TundraTrekRoutine extends DelayedTask {
                 reschedule(LocalDateTime.now().plusHours(1));
             }
         } else {
-            // matt, 2026-08-08: five swipes through the whole city menu without finding the entry
+            // Five swipes through the whole city menu without finding the entry
             // does not mean navigation glitched — it means Trek Supplies is not on this account's
-            // menu at all. matt plays a Gen 1 server where not every feature exists, and retrying
+            // menu at all. the operator plays a Gen 1 server where not every feature exists, and retrying
             // hourly for something that is not there is pure noise: it opened the left menu, took
             // five swipes and gave up, 24 times a day, forever. Logged at INFO because a missing
             // feature is not an error, and backed off hard. If the feature does appear later, the

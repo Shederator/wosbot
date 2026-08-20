@@ -44,7 +44,7 @@ public AllianceChestRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDailyTa
 		allianceGiftsCollected += gatherAllianceGifts();
 		allianceGiftsCollected += gatherHonorChest();
 
-		// matt, 2026-08-10: count what was actually collected this pass, not a per-run +1. The
+		// Count what was actually collected this pass, not a per-run +1. The
 		// per-row individual-gift loop reports a true claimed count; the loot claim and (config-
 		// gated) honor claim are single blind taps with no on-screen success signal, so each is
 		// counted as 1 when its claim action is performed.

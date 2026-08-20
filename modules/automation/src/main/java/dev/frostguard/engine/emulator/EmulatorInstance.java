@@ -286,7 +286,7 @@ public abstract class EmulatorInstance {
     boolean touchArea(String idx, PointData a, PointData b)                    { return tap(idx, a, b, 1, 0); }
     boolean touchArea(String idx, PointData a, PointData b, int n, int delMs) { return tap(idx, a, b, n, delMs); }
 
-    // matt/2026-08-14: coordinate sampling and delay timing now go through
+    // Coordinate sampling and delay timing now go through
     // dev.frostguard.engine.input.TapJitterPolicy (ported from Frostguard
     // v3.0.0's centralized tap-input work, PR #42) instead of the flat
     // Random.nextInt() this used to do. This is the single choke point both
@@ -332,7 +332,7 @@ public abstract class EmulatorInstance {
         }, "swipe");
     }
 
-    // matt/2026-08-12: the no-duration overload above sends a bare "input swipe"
+    // The no-duration overload above sends a bare "input swipe"
     // with no duration argument, which Android/the game's map engine treats as a
     // fast flick -- real momentum/inertia scrolling kicks in, sweeping the camera
     // MUCH further than the raw start/end pixel delta suggests (confirmed live:

@@ -13,7 +13,7 @@ import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.service.StatisticsService;
 
 /**
- * matt/2026-08-13: Hero Rally lives under the in-game "Deals" panel (not "Events"),
+ * Hero Rally lives under the in-game "Deals" panel (not "Events"),
  * a leveled reward track filled by normal play -- the bot's only job is finding a
  * ready Claim and hitting it, same "event slop" idea as EventClaimRoutine.
  *
@@ -23,7 +23,7 @@ import dev.frostguard.engine.service.StatisticsService;
  * row showed a green checkmark afterward, confirming full depletion.
  *
  * <p>
- * <b>matt/2026-08-13, caught live</b>: "Claim All" only appears when multiple levels
+ * <b>caught live</b>: "Claim All" only appears when multiple levels
  * are ready at once and batch together -- the far more common state is a single
  * level ready with a plain green "Claim" button next to it (screenshot: Lv.16,
  * ordinary "Claim" pill, no "All"). The original build only searched for
@@ -37,7 +37,7 @@ public class HeroRallyClaimRoutine extends DelayedTask {
 
     private static final PointData REWARD_REVEAL_TAP_ANYWHERE = new PointData(358, 1182);
     private static final int MAX_CLAIM_LOOPS = 10;
-    /** matt/2026-08-13: a fresh app launch doesn't reliably reopen the Deals panel on
+    /** A fresh app launch doesn't reliably reopen the Deals panel on
      *  the last-viewed tab -- confirmed live, the Hero Rally tab search came up empty
      *  even though nothing about the game had changed since it was open moments
      *  earlier by hand. Same tab-strip swipe BankRoutine already uses to reveal its
@@ -113,7 +113,7 @@ public class HeroRallyClaimRoutine extends DelayedTask {
         reschedule(next);
     }
 
-    // matt/2026-08-14: "have Hall of Chiefs and other rewards claimed at noon everyday, every
+    // "have Hall of Chiefs and other rewards claimed at noon everyday, every
     // 24h" -- was rescheduling on a rolling "+12h from whenever it last ran" basis, which drifts.
     // Anchoring to the next real noon instead so this always lands at the same clock time.
     private LocalDateTime nextNoon() {
@@ -125,7 +125,7 @@ public class HeroRallyClaimRoutine extends DelayedTask {
         return noon;
     }
 
-    /** matt/2026-08-13: the common single-level case -- a plain "Claim" pill (not
+    /** The common single-level case -- a plain "Claim" pill (not
      *  "Claim All"). Loops since more than one level's reward can be ready at once,
      *  each claim collapsing the row and potentially revealing the next one. */
     private int claimAllReadySingleRows() {

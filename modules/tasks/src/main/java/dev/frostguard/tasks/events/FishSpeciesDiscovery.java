@@ -33,7 +33,7 @@ import dev.frostguard.vision.match.OpenCvPatternLocator;
  * <p><b>Why this exists:</b> {@link FishingMinigameRoutine} can only
  * recognize the 4 species it has hand-calibrated templates for
  * (pufferfish/redfish/small/stripe). Every OTHER species swimming past is
- * invisible to it. Matt's plan (2026-08-06): instead of hand-calibrating a
+ * invisible to it. The operator's plan (2026-08-06): instead of hand-calibrating a
  * template for all ~140 catalogued species up front, let every ordinary
  * dive automatically notice and log whatever it doesn't recognize -
  * cropped image + rough speed - so the template library grows on its own
@@ -53,7 +53,7 @@ import dev.frostguard.vision.match.OpenCvPatternLocator;
  * their eye-dot registered, not the full body) even after widening the hue
  * range once. That is a real gap, not fixed here - color-only segmentation
  * has a real ceiling against camouflaged sprites. It was deliberately not
- * chased further with more threshold tuning tonight: per matt's own
+ * chased further with more threshold tuning tonight: by design's own
  * "grows over time" design, a species only needs to be cleanly caught in
  * SOME frames across many dives, not every single frame it appears in, so
  * this ships as a genuinely useful v1 rather than blocking on a harder

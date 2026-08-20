@@ -241,8 +241,8 @@ public class StatisticsLayoutController extends AbstractProfileController {
         return fi;
     }
 
-    /** matt's sleep window for the "last night" report (11pm–8:30am local).
-     *  Dave's #250 review: this had drifted to 8:00 while bg_telemetry's own wake-snapshot anchor
+    /** the configured sleep window for the "last night" report (11pm–8:30am local).
+     *  this had drifted to 8:00 while bg_telemetry's own wake-snapshot anchor
      *  documents an observed real capture at 08:30:43 -- restored to match, same fix as #250. */
     private static final LocalTime SLEEP_START = LocalTime.of(23, 0);
     private static final LocalTime WAKE_END = LocalTime.of(8, 30);
@@ -257,7 +257,7 @@ public class StatisticsLayoutController extends AbstractProfileController {
     private TelemetryReport telemetry = TelemetryReport.load(NO_PROFILE_SELECTED_ID);
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    /** The "what the bot did" timeframe segments. matt/2026-08-15: dropdown replaces the old
+    /** The "what the bot did" timeframe segments. the operator/2026-08-15: dropdown replaces the old
      *  button row -- Past Hour and This Month are new, This Week is the renamed Last 7 Days
      *  (same rolling-7-day math, just a friendlier label). A custom range was explicitly
      *  descoped ("let's just do those for now"). */
@@ -293,7 +293,7 @@ public class StatisticsLayoutController extends AbstractProfileController {
         colAvgImg.setCellValueFactory(cellData -> new SimpleStringProperty(String.format("%.2f", cellData.getValue().getAverageTemplateFailures())));
         colLastRun.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getLastRunTime()));
 
-        // matt/2026-08-15: "stats page is just blank now" -- the old button row never fired
+        // "stats page is just blank now" -- the old button row never fired
         // anything until clicked, so showActiveWindow() only ever ran after onProfileLoad() had
         // set currentProfile and reloaded telemetry. Selecting a ComboBox value fires its
         // valueProperty listener immediately, so wiring the listener BEFORE this initial select
@@ -508,7 +508,7 @@ public class StatisticsLayoutController extends AbstractProfileController {
     // ========================================================================
 
     private void refreshEarnings() {
-        // Dave's #250 review: loading by profile NAME let one profile's telemetry satisfy
+        // Loading by profile NAME let one profile's telemetry satisfy
         // another's (names are mutable/non-unique); TelemetryReport now loads by the profile's
         // stable numeric ID instead, from its own workspace-local file.
         long profileId = currentProfile != null && currentProfile.getId() != null
@@ -561,7 +561,7 @@ public class StatisticsLayoutController extends AbstractProfileController {
         }
     }
 
-    // matt/2026-08-15: "I just don't trust these statistics... put like at the top the timeframe
+    // "I just don't trust these statistics... put like at the top the timeframe
     // that it was recorded." A window label like "Last night (23:00-08:30)" is the INTENDED
     // window, not proof of what was actually captured — this formats the REAL first/last sample
     // timestamps a window's numbers were built from, so a gapped or stale telemetry run is
@@ -617,7 +617,7 @@ public class StatisticsLayoutController extends AbstractProfileController {
                 Long current = latest == null ? null : latest.get(metric);
                 if (current == null) continue; // metric never captured
                 TelemetryReport.Delta d = byMetric.get(metric);
-                // matt live, 2026-08-19 + Dave's #250/#251 review: "measured" (we have a real
+                // Observed live: "measured" (we have a real
                 // start/end pair for this window, even if the value didn't move) is NOT the same
                 // as "changed" (start != end). The old code only distinguished changed vs.
                 // everything-else, so a genuinely zero-change metric fell into the same silent
@@ -728,7 +728,7 @@ public class StatisticsLayoutController extends AbstractProfileController {
         long abs = Math.abs(v);
         if (abs >= 1_000_000_000L) return trim(v / 1_000_000_000.0) + "B";
         if (abs >= 1_000_000L) return trim(v / 1_000_000.0) + "M";
-        // Below a million, show the real number with commas — no "K". matt: "million makes
+        // Below a million, show the real number with commas — no "K". the operator: "million makes
         // sense, the K does not." 76944 → "76,944", not "76.04K".
         return String.format(Locale.US, "%,d", v);
     }

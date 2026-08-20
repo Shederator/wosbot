@@ -11,7 +11,7 @@ import dev.frostguard.engine.service.ConfigService;
 /**
  * Tracks when a profile's queue has nothing to do for long enough to call it asleep.
  *
- * <p>matt, 2026-08-08, revising his own earlier request for a fixed nightly window: sleep should
+ * <p>revising his own earlier request for a fixed nightly window: sleep should
  * fall out of the real schedule rather than being imposed on it. Once everything has been read
  * off the screen, the queue already knows when the next action is due — if that is far enough
  * away, the bot is asleep until then, whatever the clock says.</p>
@@ -33,7 +33,7 @@ public final class SleepWindowPolicy {
     /**
      * Idle gap long enough to be called sleep rather than a pause between tasks.
      *
-     * <p>matt: <em>"look for anything more than twenty minutes... the minimum should be twenty
+     * <p>the operator: <em>"look for anything more than twenty minutes... the minimum should be twenty
      * minutes"</em>, with no upper bound.</p>
      */
     public static int thresholdMinutes() {

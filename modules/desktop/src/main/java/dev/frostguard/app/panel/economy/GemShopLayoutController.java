@@ -7,7 +7,7 @@ import javafx.scene.control.CheckBox;
 
 import java.util.List;
 
-// matt/2026-08-13: "Gem Shop" -- the top-right cart-icon panel, split out of the old combined
+// "Gem Shop" -- the top-right cart-icon panel, split out of the old combined
 // "Shop" page so it's never confused with the bottom-nav "General Shop" (a completely different
 // feature). Custom Armament Chest + Daily Deals are both confirmed live to live behind that same
 // cart icon.

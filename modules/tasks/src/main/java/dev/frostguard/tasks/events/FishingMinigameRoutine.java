@@ -33,7 +33,7 @@ import dev.frostguard.engine.schedule.DelayedTask;
  * using constant-velocity physics with wall bouncing.
  *
  * <p>
- * <b>Steering policy â€” changed by matt, 2026-08-06:</b> this used to steer
+ * <b>Steering policy â€” changed , 2026-08-06:</b> this used to steer
  * the hook <i>away</i> from every tracked fish (treating all of them as
  * hazards). A live-captured 30s Tournament run (70 frames, sampled early/
  * mid/late) showed the shield meter (0/4) never took a single hit despite
@@ -249,7 +249,7 @@ public class FishingMinigameRoutine extends DelayedTask {
                 logInfo(String.format("T%d | SCAN %d det, %d tracked: %s| scan=%dms",
                         ticks, detections.size(), trackedFish.size(), detSb.toString(), scanMs));
 
-                // matt, 2026-08-06: "grows over time" species discovery - every
+                // "grows over time" species discovery - every
                 // scan also checks for creatures that don't match any of the 4
                 // known templates, and logs a crop of each so a future review
                 // pass can name them. Runs at DISCOVERY_INTERVAL (coarser than
@@ -274,7 +274,7 @@ public class FishingMinigameRoutine extends DelayedTask {
             }
 
             // â”€â”€ 7â€“8. Intercept target from predicted positions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            // matt, 2026-08-06: steer ONTO the nearest fish, not away from
+            // Steer ONTO the nearest fish, not away from
             // it (see class doc above for why). computeDangerZones/
             // chooseSafeTarget are kept below, unused, in case a real
             // hazard type is identified later.
@@ -560,7 +560,7 @@ public class FishingMinigameRoutine extends DelayedTask {
     }
 
     /**
-     * matt, 2026-08-06: replaces {@link #chooseSafeTarget} as the live
+     * Replaces {@link #chooseSafeTarget} as the live
      * target-selection path. Picks the nearest tracked fish below the hook
      * (soonest to reach hook-Y) and aims for the CENTER of its projected
      * arrival window â€” i.e. the same physics projection {@link

@@ -85,7 +85,7 @@ public class ChatCaptureRoutine extends DelayedTask {
     private static final int FEED_BOTTOM = 1150;
     private static final int FEED_X = 360;
 
-    // matt, 2026-08-06: OCR region now EXCLUDES the avatar column (x < ~112
+    // OCR region now EXCLUDES the avatar column (x < ~112
     // on a live capture - avatar art + rank badge). Feeding player-portrait
     // images into Tesseract as if they were text was a real source of the
     // garbage glyphs polluting every capture. Sender name + message bubble
@@ -96,7 +96,7 @@ public class ChatCaptureRoutine extends DelayedTask {
     private static final int MAX_SCROLL_BACK = 8;
 
     /**
-     * matt, 2026-08-06: two real bugs fixed here, found by comparing this
+     * Two real bugs fixed here, found by comparing this
      * task's actual saved output against a live screenshot of the real chat
      * UI:
      * (1) TesseractOcrProvider hardcoded "eng" regardless of what any caller
@@ -142,7 +142,7 @@ public class ChatCaptureRoutine extends DelayedTask {
                     "^(VIP\\d+\\s*)?([\\[(][A-Za-z0-9]{2,5}[\\])]\\s*)?[\\p{L}0-9_.'\\- ]{2,24}$");
 
     /**
-     * matt, 2026-08-06: added after live evidence the header-only pattern
+     * Added after live evidence the header-only pattern
      * above was missing a second, equally common format - the small gray
      * "reply preview" strip under a bubble, which renders inline as
      * "Name: message" on ONE line rather than name-then-text on separate
@@ -426,7 +426,7 @@ public class ChatCaptureRoutine extends DelayedTask {
         row.put("channel", channel);
         row.put("mode", mode);
         row.put("frame", baseDir().relativize(shot).toString().replace('\\', '/'));
-        // matt, 2026-08-06: was a flat "lines" array with no sender/message
+        // Was a flat "lines" array with no sender/message
         // structure at all - that's what the downstream Python summarizer
         // was trying (and failing) to reconstruct with regex. Now the
         // capture itself owns that structure (see parseMessages above).
@@ -550,7 +550,7 @@ public class ChatCaptureRoutine extends DelayedTask {
                     sb.append(',');
                 }
                 first = false;
-                // matt, 2026-08-06: "messages" is now a List<Map<String,Object>>
+                // "messages" is now a List<Map<String,Object>>
                 // (one map per {sender, text} pair) - the old version assumed
                 // every list item was a plain string and would have serialized
                 // each message as its Java toString(), not valid JSON.

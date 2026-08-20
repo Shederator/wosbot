@@ -1194,8 +1194,8 @@ public class MonumentRoutine extends DelayedTask {
             new PointData(360, 545),  // row 2 icon (Tundra Alliance, confirmed by live screenshot)
             new PointData(360, 587),  // legacy candidate, kept for a placeholder-shifted layout
             new PointData(360, 765),  // 3rd visual row, single icon
-            new PointData(355, 590),  // General-Album-empty-shifted row 2 (Rekindled Flames), live 2026-08-19
-            new PointData(355, 800),  // General-Album-empty-shifted row 3 (Divine Weapons), live 2026-08-19
+            new PointData(355, 590),  // General-Album-empty-shifted row 2 (Rekindled Flames), live-verified
+            new PointData(355, 800),  // General-Album-empty-shifted row 3 (Divine Weapons), live-verified
     };
     /** Owned-count badge sits just under each candidate icon; read box is centered on that offset. */
     private static final int BACKPACK_BADGE_Y_OFFSET = 62;

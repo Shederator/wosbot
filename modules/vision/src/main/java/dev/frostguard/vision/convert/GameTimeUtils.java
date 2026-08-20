@@ -40,8 +40,8 @@ private static final ZoneId UTC = ZoneId.of("UTC");
     }
 
     /**
-     * matt/2026-08-13: returns the next occurrence of {@code hhmm} ("HH:mm", local JVM time) --
-     * today if that time hasn't passed yet, otherwise tomorrow. Used for tasks matt wants pinned to
+     * Returns the next occurrence of {@code hhmm} ("HH:mm", local JVM time) --
+     * today if that time hasn't passed yet, otherwise tomorrow. Used for tasks the intent is pinned to
      * a picked local clock time (e.g. "kick Labyrinth off at noon every day") instead of following
      * the game's own UTC reset boundary, which lands at a different local hour depending on DST.
      * Falls back to noon if {@code hhmm} is missing or unparsable.
@@ -214,7 +214,7 @@ private static final DateTimeFormatter FULL_TIME =
 
         try {
             DayTimeSplit split = splitDayQualifier(normalised);
-            // matt, 2026-08-08 / 2026-08-12: single-digit hour ("2:41:07") and OCR's dropped
+            // the operator, 2026-08-08 / 2026-08-12: single-digit hour ("2:41:07") and OCR's dropped
             // middle colon ("0050:19" for "00:50:19") both handled by the one shared
             // normalizer -- see normalizeOcrColonSlip() for why this used to live here only
             // and silently never applied to the isAcceptedFormat() gate.
@@ -433,7 +433,7 @@ private static final DateTimeFormatter STRICT_HMS =
         return m.matches() ? m.group(2).trim() : raw;
     }
 
-    // matt/2026-08-12: OCR on the Storehouse fallback timer read "00:50:19" as "0050:19" --
+    // OCR on the Storehouse fallback timer read "00:50:19" as "0050:19" --
     // the middle colon (between hours and minutes) dropped, leaving 4 digits then a colon
     // then 2 digits. isAcceptedFormat() had no checker for that specific malformed shape
     // (TWO_PART_COLON only matches ONE colon splitting the whole string in two), so a read
@@ -444,7 +444,7 @@ private static final DateTimeFormatter STRICT_HMS =
     // place. Both now route through this one shared normalizer.
     private static final Pattern DROPPED_MIDDLE_COLON = Pattern.compile("(\\d{2})(\\d{2}):(\\d{2})");
 
-    // matt, 2026-08-08 (originally parseDuration-only -- see note above on why that split
+    // the operator, 2026-08-08 (originally parseDuration-only -- see note above on why that split
     // let this same gap reopen for isAcceptedFormat): the game prints short countdowns
     // without a leading zero ("2:41:07"), but the two-digit-hour checkers below don't
     // match a single digit. Tested live 2026-08-12: "2:41:07" failed isAcceptedFormat

@@ -123,7 +123,7 @@ private LocalDateTime computeNextExecutionTime() {
     }
 
 private void redeemAllVisibleRewards() {
-        // matt, 2026-08-10: only claim AND count when unclaimed rewards are actually on screen.
+        // Only claim AND count when unclaimed rewards are actually on screen.
         // This method is called once per tab (3 tabs) plus once per overflow cycle, and it used to
         // tap Claim-All and increment "Mail Rewards Claimed" unconditionally — so an empty mailbox
         // scored ~+3 every run. Gate on the same flag handleOverflowRewards() already trusts.

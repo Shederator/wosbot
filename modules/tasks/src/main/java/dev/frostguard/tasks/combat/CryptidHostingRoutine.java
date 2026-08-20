@@ -87,7 +87,7 @@ public class CryptidHostingRoutine extends DelayedTask {
 
     /**
      * Stamina items to keep in reserve when topping up. Zero means spend
-     * whatever is needed - matt's instruction is to open more Chief Stamina
+     * whatever is needed - the operator's instruction is to open more Chief Stamina
      * cans when the deploy cost shows red.
      */
     private int staminaItemReserve = 0;
@@ -233,7 +233,7 @@ public class CryptidHostingRoutine extends DelayedTask {
                 // the queue for however long the march takes to return - stop
                 // this pass and let the reschedule below bring the task back
                 // once it should be home.
-                // matt/2026-08-09 (troop-slot economy): publish the real slot demand so Gather stands
+                // Publish the real slot demand so Gather stands
                 // down until this rally can actually run, rather than redeploying into the freed slot.
                 TroopSlotPolicy.claim(profile, TpDailyTaskEnum.EVENT_CRYPTID_HOST, 1,
                         LocalDateTime.now().plusMinutes(15));
@@ -252,7 +252,7 @@ public class CryptidHostingRoutine extends DelayedTask {
                 break;
             }
             hosted++;
-            // matt/2026-08-09 (troop-slot economy): a rally is genuinely out holding this slot; publish
+            // A rally is genuinely out holding this slot; publish
             // the demand so Gather won't grab the slot back before the muster completes.
             TroopSlotPolicy.claim(profile, TpDailyTaskEnum.EVENT_CRYPTID_HOST, 1,
                     LocalDateTime.now().plusMinutes(15));
@@ -266,7 +266,7 @@ public class CryptidHostingRoutine extends DelayedTask {
             logInfo("CryptidHostingRoutine | Waiting on a recalled march; checking back in 5 minutes.");
             reschedule(LocalDateTime.now().plusMinutes(5));
         } else {
-            // matt/2026-08-09 (troop-slot economy): done hosting for this pass — release the slot claim
+            // Done hosting for this pass — release the slot claim
             // (also pulls Gather forward) so freed slots go back to gathering until the next pass.
             TroopSlotPolicy.release(profile, TpDailyTaskEnum.EVENT_CRYPTID_HOST);
             // Rally muster plus travel there and back; re-check a little after.

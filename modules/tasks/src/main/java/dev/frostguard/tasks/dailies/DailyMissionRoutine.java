@@ -27,14 +27,14 @@ private static final int MAX_INDIVIDUAL_CLAIMS = 20;
 
 	/**
 	 * How many times a claim may reappear at the same coordinates before it is judged stuck.
-	 * Set well above a normal re-flow run, which matt reports is only a few in a row.
+	 * Set well above a normal re-flow run, which the operator reports is only a few in a row.
 	 */
 	private static final int MAX_SAME_POSITION_CLAIMS = 8;
 
 	/**
 	 * The Growth tab, bottom-left of the Missions dialog, beside the Daily tab.
 	 *
-	 * <p>matt, 2026-08-08: Growth missions were never claimed because this routine only ever
+	 * <p>the operator, 2026-08-08: Growth missions were never claimed because this routine only ever
 	 * knew about the Daily tab — there was no reference to Growth anywhere in it. The two tabs
 	 * sit side by side at the bottom of the same dialog, and Growth carries its own red badge
 	 * when something is claimable. Derived from a 760x1339 capture (Growth centred at x=256,
@@ -88,7 +88,7 @@ public DailyMissionRoutine(AccountDescriptor profile, TpDailyTaskEnum dailyMissi
 			StatisticsService.obtain().addToCounter(profile, "Daily Missions Claimed", dailyMissionsClaimed);
 		}
 
-		// matt, 2026-08-08: Growth missions live behind the second tab of this same dialog and
+		// Growth missions live behind the second tab of this same dialog and
 		// were being left on the table entirely. Claimed after Daily so the existing flow is
 		// untouched, and independently of claimFlowCompleted — a Daily pass that found nothing
 		// says nothing about whether Growth has rewards waiting.
@@ -151,7 +151,7 @@ private boolean switchToDailyMissionsTabFlow() {
 	/**
 	 * Finds the topmost enabled Claim button on screen.
 	 *
-	 * <p>matt, 2026-08-08: <em>"click the top claim button until no claim button exists"</em>. The
+	 * <p>the operator, 2026-08-08: <em>"click the top claim button until no claim button exists"</em>. The
 	 * previous behaviour took whatever single match the template search happened to return, which
 	 * is not necessarily the highest one — and since claiming a row makes the list re-flow upward,
 	 * working from the top down is the only order that stays predictable. Picking the smallest y
@@ -211,7 +211,7 @@ private LocalDateTime queueFinalCheckBeforeReset(LocalDateTime gameReset) {
 		logInfo(routineLogDailyMissionLine("Switching to Growth missions tab at " + GROWTH_TAB_VALUE));
 		tapNear(GROWTH_TAB_VALUE);
 
-		// matt, 2026-08-08: the Growth list animates in, and 800ms was not enough for it to
+		// The Growth list animates in, and 800ms was not enough for it to
 		// settle. Observed live: a pre-check found a claim button and the very next search,
 		// 180ms later, did not — so the routine announced "Claimable Growth mission(s) detected"
 		// and then immediately claimed nothing. The pre-check is gone entirely rather than
@@ -250,9 +250,9 @@ private int redeemRewardsIndividually() {
 			dismissRewardPopupsFlow();
 			sleepTask(500);
 
-			// matt, 2026-08-08: a Claim button reappearing in the SAME spot is the normal case,
+			// A Claim button reappearing in the SAME spot is the normal case,
 			// not a stuck UI. The mission list re-flows upward as rows are claimed, so the next
-			// claimable row slides into the position just vacated — matt confirmed this happens
+			// claimable row slides into the position just vacated — confirmed this happens
 			// several times in a row. The old code treated the second same-position hit as "no
 			// visual progress" and aborted the entire pass, abandoning every remaining reward.
 			// Tolerate a run of them, with MAX_INDIVIDUAL_CLAIMS still bounding the loop, and

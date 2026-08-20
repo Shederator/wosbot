@@ -17,7 +17,7 @@ import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.tasks.exploration.LabyrinthChallengeDecisionPolicy.TroopType;
 
 /**
- * matt/2026-08-14: "the new labyrinth" -- a separate stage-based raid system layered on top of
+ * "the new labyrinth" -- a separate stage-based raid system layered on top of
  * the classic Land of Heroes / Cave of Monsters / Charm Mine zones ({@link DailyLabyrinthRoutine}
  * already owns those). Two zones live-confirmed: Research Center (Tech stats only) and Gear Forge
  * (Chief Gear stats only), each a straight numbered stage ladder (1-1, 1-2, ... 5-4, ...).
@@ -79,9 +79,9 @@ public class LabyrinthRaidRoutine extends DelayedTask {
             .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
             .build();
 
-    /** matt/2026-08-14: every coordinate above is hardcoded on purpose -- these are all STATIC
+    /** Every coordinate above is hardcoded on purpose -- these are all STATIC
      *  UI elements (button positions never move), so there's no reason to burn an OCR/template
-     *  pass finding them, same "hard-code what's static" call matt made on Gem Shop tonight. The
+     *  pass finding them, same "hard-code what's static" call the operator made on Gem Shop tonight. The
      *  ONE thing that genuinely varies is the button's TEXT (Raid vs Challenge), which is the only
      *  thing actually OCR'd. Every tap still goes through a small jitter box rather than the exact
      *  same pixel every time, matching this codebase's standing tap-jitter convention. */
@@ -94,7 +94,7 @@ public class LabyrinthRaidRoutine extends DelayedTask {
     }
 
     // ========== "Tail of the tape" -- stat comparison screen ==========
-    // matt/2026-08-14, live-verified: the magnifying-glass icon next to the stage's enemy portrait
+    // Live-verified: the magnifying-glass icon next to the stage's enemy portrait
     // on the Challenge screen opens "View Details" -- Troops Details (enemy composition) up top,
     // then a 12-row "My Stats" vs "Opponent's Stats" table (Infantry/Lancer/Marksman x
     // Attack/Defense/Lethality/Health), all 12 rows fitting on screen with no scroll needed at this
@@ -161,8 +161,8 @@ public class LabyrinthRaidRoutine extends DelayedTask {
     }
 
     // ========== Deploy screen -- exact troop-count entry ==========
-    // matt/2026-08-14, live-verified, the ONLY reliable lever after the "Balance" button turned out
-    // to just instantly Equalize (no adjustable dialog on this screen, unlike matt's recollection of
+    // Live-verified, the ONLY reliable lever after the "Balance" button turned out
+    // to just instantly Equalize (no adjustable dialog on this screen, unlike the operator's recollection of
     // Gear Forge's own Balance dialog from earlier tonight -- may differ by zone, not assumed here):
     // tapping a type's raw count number opens a real Android EditText + OK button (dumped via
     // uiautomator, confirmed fixed position regardless of which row's field is open). Typing an exact
@@ -174,7 +174,7 @@ public class LabyrinthRaidRoutine extends DelayedTask {
     private static final PointData MARKSMAN_COUNT_FIELD = new PointData(475, 648);
     private static final PointData COUNT_EDIT_OK_BUTTON = new PointData(640, 1216);
     private static final PointData DEPLOY_BUTTON = new PointData(549, 1213);
-    // matt/2026-08-14, live-verified crop (pixel-checked against a real deploy-screen screenshot):
+    // Live-verified crop (pixel-checked against a real deploy-screen screenshot):
     // tight enough to exclude the person-icon and warning-icon glyphs on either side, which
     // otherwise feed Tesseract noise it doesn't need with a digits/comma/slash whitelist.
     private static final PointData ARMY_TOTAL_TL = new PointData(85, 108);
@@ -188,7 +188,7 @@ public class LabyrinthRaidRoutine extends DelayedTask {
             .build();
 
     /**
-     * matt/2026-08-15: "add the research center in the gear forge... where we can start entering
+     * "add the research center in the gear forge... where we can start entering
      * true default troop ratios" -- reads the zone's configured default {Infantry%, Lancer%,
      * Marksman%} instead of the fixed preset table, used for the FIRST Challenge attempt. Returns
      * {@code null} for any zone without matching config keys (falls back to the old OCR-driven
@@ -221,7 +221,7 @@ public class LabyrinthRaidRoutine extends DelayedTask {
     }
 
     /** Which troop type a preset leans into -- the highest of the three percentages. Used so the
-     *  escalation-on-loss step (attempt 2) genuinely tries a different composition than matt's
+     *  escalation-on-loss step (attempt 2) genuinely tries a different composition than the operator's
      *  configured default, not just a different composition than the OCR-derived guess. Delegates
      *  to {@link LabyrinthChallengeDecisionPolicy#leanOf}. */
 
@@ -290,7 +290,7 @@ public class LabyrinthRaidRoutine extends DelayedTask {
     }
 
     // ========== Battle result detection ==========
-    // matt/2026-08-14, live-verified: the post-battle screen shows an unambiguous "Defeat!" or
+    // Live-verified: the post-battle screen shows an unambiguous "Defeat!" or
     // "Victory!" banner -- far more reliable than parsing Battle Report troop-loss numbers.
     private static final PointData RESULT_BANNER_TL = new PointData(90, 320);
     private static final PointData RESULT_BANNER_BR = new PointData(630, 400);
@@ -325,7 +325,7 @@ public class LabyrinthRaidRoutine extends DelayedTask {
     }
 
     /**
-     * matt/2026-08-14, live-verified: "Retry" re-fights with the IDENTICAL deployed ratio -- same
+     * Live-verified: "Retry" re-fights with the IDENTICAL deployed ratio -- same
      * inputs, same deterministic outcome, wastes an attempt for literally nothing (confirmed live:
      * lost twice in a row with no ratio change between). Never used here. Instead, on a loss, this
      * taps "Adjust number of troops" to return to the deploy screen with a fresh preset.
@@ -340,7 +340,7 @@ public class LabyrinthRaidRoutine extends DelayedTask {
     private static final int MAX_CHALLENGE_ATTEMPTS_PER_ZONE_PER_DAY = 2;
 
     /**
-     * matt/2026-08-14: real "tail of the tape" automation. Reads the stat-comparison screen, picks
+     * Real "tail of the tape" automation. Reads the stat-comparison screen, picks
      * a preset that leans into whichever of MY OWN troop types is relatively strongest (live-tested
      * lesson: lean into your own strength, don't try to counter the enemy's composition -- countering
      * made an otherwise-close loss WORSE), deploys, and checks the result:
@@ -355,7 +355,7 @@ public class LabyrinthRaidRoutine extends DelayedTask {
      * regardless of how many the account has left, so a genuinely bad matchup can never burn the
      * whole daily pool on its own.
      *
-     * <p>matt/2026-08-15: attempt 1 now uses {@link #configuredDefaultFor}'s Research Center /
+     * <p>: attempt 1 now uses {@link #configuredDefaultFor}'s Research Center /
      * Gear Forge default ratio (the UI field he can tune) instead of the OCR-derived guess this
      * used to make on its own. The OCR read of the stat comparison still runs first -- an
      * unreadable screen is still a hard stop, and it still supplies the fallback lean when no

@@ -9,7 +9,7 @@ import javafx.scene.control.ComboBox;
 import java.util.List;
 
 /**
- * matt/2026-08-12: dedicated Deals-menu panel, built out one deal type at a time
+ * Dedicated Deals-menu panel, built out one deal type at a time
  * ("let's go slow on this"). Bank is first (moved here from Shop, same config keys,
  * same BankRoutine underneath). Hero Rally and Monthly Card are next, each getting
  * its own card here once its live flow is confirmed against a real screenshot.

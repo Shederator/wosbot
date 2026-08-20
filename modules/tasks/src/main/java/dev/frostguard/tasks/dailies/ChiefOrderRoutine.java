@@ -135,7 +135,7 @@ private void manageTaskFailure(String reason) {
 	/**
 	 * Finds this order on the shelf and opens it when it is actually available.
 	 *
-	 * <p>matt, 2026-08-08, watching a live run: Urgent Mobilization was plainly available — red
+	 * <p>watching a live run: Urgent Mobilization was plainly available — red
 	 * dot, no cooldown banner — and the bot skipped it twice in one pass. Cause was the icon
 	 * template: a 40px crop of dark book art that does not match reliably. Worse, a miss was
 	 * logged as "not detected or currently on cooldown", so a broken template read exactly like
@@ -171,7 +171,7 @@ private void manageTaskFailure(String reason) {
 
 		String cover = readCoverText(slot.coverTopLeft(), slot.coverBottomRight());
 
-		// matt, 2026-08-09: an "Active hh:mm:ss" cover is the order currently running, not one
+		// An "Active hh:mm:ss" cover is the order currently running, not one
 		// waiting to be used. The old check only looked for the word "cooldown", so an active
 		// order read as available: the routine opened the book, found no Enact button (the page
 		// says "On cooldown: 07:35:22"), and logged a failure. Come back when the effect ends —
@@ -187,7 +187,7 @@ private void manageTaskFailure(String reason) {
 		}
 
 		if (cover != null && cover.toLowerCase().contains("cooldown")) {
-			// matt, 2026-08-08: the banner states exactly when this order frees up, so use it
+			// The banner states exactly when this order frees up, so use it
 			// instead of the hard-coded cooldownHours guess. Previously a cooled-down order was
 			// retried every 10 minutes regardless, and an available one could sit behind a stale
 			// fixed interval for hours — the timer was on screen the whole time, unread.

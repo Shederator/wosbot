@@ -21,7 +21,7 @@ import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.vision.ocr.OcrEngine;
 
 /**
- * matt/2026-08-13: the top-right cart-icon Shop panel, being built out tab by tab
+ * The top-right cart-icon Shop panel, being built out tab by tab
  * ("let's go through and tab by tab... putting options like when this shows up you
  * do X/Y/Z"). Custom Armament Chest is the first (default) tab -- a rotating,
  * periodic event that "might not exist for weeks at a time." Its free reward is a
@@ -35,7 +35,7 @@ import dev.frostguard.vision.ocr.OcrEngine;
  * countdown timer, no reward-reveal popup -- confirms it's a silent single-tap claim.
  *
  * <p>
- * Checked once a day per matt's request, since the event itself may not be running
+ * Checked once a day by design's request, since the event itself may not be running
  * at all -- a miss here just means "not currently available," not a failure.
  */
 public class CustomArmamentChestRoutine extends DelayedTask {
@@ -58,7 +58,7 @@ public class CustomArmamentChestRoutine extends DelayedTask {
         return true;
     }
 
-    // matt/2026-08-13: caught live -- "these things always need to be able to [work] even if
+    // Caught live -- "these things always need to be able to [work] even if
     // whatever screen I'm at." A single locatePattern attempt for the cart icon has no recovery if
     // some OTHER task left a popup/panel open (the same class of bug already fixed for Monument
     // tonight) -- it just silently gives up and waits a full day. Real fix: if the cart icon isn't
@@ -102,7 +102,7 @@ public class CustomArmamentChestRoutine extends DelayedTask {
         tapNear(cartBtn.getPoint());
         sleepTask(PANEL_SETTLE_MS);
 
-        // matt/2026-08-13, caught live: the chest icon itself bobs/sparkles continuously (confirmed
+        // Observed live: the chest icon itself bobs/sparkles continuously (confirmed
         // by hand -- template match score swung 0.76-0.85 across 6 rapid frames of the exact same
         // badge, never once clearing the 0.90 threshold, because the icon's position/particles never
         // hold still long enough for a single-frame template to land). Tried OCR against the
@@ -110,7 +110,7 @@ public class CustomArmamentChestRoutine extends DelayedTask {
         // a crop, then as pure garbage "Feeeae" with a verified-correct wider crop -- Tesseract just
         // doesn't land cleanly on this bold outlined font over a busy photo background).
         //
-        // matt/2026-08-13: matt's own fix, proven the right call -- "let's start always looking for
+        // The operator's own fix, proven the right call -- "let's start always looking for
         // the red dot exactly... claimable works too [as a target], but the red dot is the one to
         // lean on app-wide." The little solid-red notification dot on the tab icon itself never
         // animates and isn't a font-rendering problem -- straight pixel-color detection, no OCR, no
@@ -137,11 +137,11 @@ public class CustomArmamentChestRoutine extends DelayedTask {
         reschedule(LocalDateTime.now().plusHours(IDLE_RECHECK_HOURS));
     }
 
-    // matt/2026-08-13: "Claimable" text region, live-calibrated -- sits directly under the bouncing
+    // "Claimable" text region, live-calibrated -- sits directly under the bouncing
     // chest icon and does not itself move. Tap point targets the chest icon's resting center (well
     // within its bounce range either way, and tapping the badge area works regardless of exactly
     // where within it lands).
-    // matt/2026-08-13: first crop (570,275)-(680,302) clipped the leading "C" -- OCR read "laimable"
+    // First crop (570,275)-(680,302) clipped the leading "C" -- OCR read "laimable"
     // instead of "Claimable" and the containsIgnoreCase("claim") check failed on a genuinely-present
     // badge. Re-measured directly off a saved live debug frame (shop-debug/claim_crop_check.png):
     // the real glyph box is roughly x=548-683, y=290-308. Widened with margin on every side.
@@ -155,10 +155,10 @@ public class CustomArmamentChestRoutine extends DelayedTask {
             .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
             .build();
 
-    // matt/2026-08-13: static red notification dot on the Custom Armament Chest tab icon itself --
+    // Static red notification dot on the Custom Armament Chest tab icon itself --
     // live-measured bounding box (216-229, 104-118) via direct pixel scan of a saved debug frame,
     // widened a few px for margin. Solid, near-pure red (#e0202x-ish), never moves, never animates --
-    // exactly the "always look for the red dot" target matt asked for.
+    // exactly the "always look for the red dot" target the request was for.
     private static final int RED_DOT_TL_X = 212;
     private static final int RED_DOT_TL_Y = 100;
     private static final int RED_DOT_BR_X = 233;
@@ -201,7 +201,7 @@ public class CustomArmamentChestRoutine extends DelayedTask {
                 s -> s);
     }
 
-    // matt/2026-08-13: modeled directly on DailyLabyrinthRoutine's saveLabyrinthFrame() -- saves the
+    // Modeled directly on DailyLabyrinthRoutine's saveLabyrinthFrame() -- saves the
     // ACTUAL live frame at the exact moment the claim decision is made, so a failed run leaves real
     // proof on disk instead of forcing a re-chase of whatever screen the emulator has since moved to.
     private void saveDebugFrame(String label) {

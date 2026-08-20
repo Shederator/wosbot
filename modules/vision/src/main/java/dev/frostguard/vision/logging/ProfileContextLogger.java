@@ -24,7 +24,7 @@ public final class ProfileContextLogger {
     private static final Logger rootLog = LoggerFactory.getLogger(ProfileContextLogger.class);
     private static final Map<Long, PrintWriter> writerRegistry = new ConcurrentHashMap<>();
     
-    // matt, 2026-08-19: "make everything EST in logs" -- these previously used SimpleDateFormat's
+    // "make everything EST in logs" -- these previously used SimpleDateFormat's
     // implicit JVM-default timezone with no zone label at all in the output, so a timestamp like
     // "2026-08-19 09:04:50" gave no way to tell what zone it was in without cross-referencing
     // frostguard.log's explicit numeric offset separately. Pinned to America/New_York (so it's

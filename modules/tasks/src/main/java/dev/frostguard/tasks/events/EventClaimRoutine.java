@@ -12,7 +12,7 @@ import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.service.StatisticsService;
 
 /**
- * matt/2026-08-12: "event slop" routine -- rotating limited-time Events-tab events
+ * "event slop" routine -- rotating limited-time Events-tab events
  * (Hall of Chiefs, Defeat Nearby Beasts, and whatever else shows up) where the bot's
  * only job is to notice a ready "Claim" and hit it, over and over, until there's
  * nothing left. The actual PROGRESS toward each target is earned through normal
@@ -44,7 +44,7 @@ public class EventClaimRoutine extends DelayedTask {
     public enum EventKind {
         HALL_OF_CHIEFS("Hall of Chiefs", TemplatesEnum.EVENTS_TAB_HALL_OF_CHIEFS),
         DEFEAT_NEARBY_BEASTS("Defeat Nearby Beasts", TemplatesEnum.EVENTS_TAB_DEFEAT_BEASTS),
-        // matt/2026-08-13: live-verified by hand -- tab icon cropped fresh from the live account,
+        // Live-verified by hand -- tab icon cropped fresh from the live account,
         // Claim buttons already green/ready with a real 1,004,289-point ranking behind them (4 tiers
         // claimable at once: 1,000 / 33,000 / 83,000 / 167,000). Same shared Claim-button skin as
         // Hall of Chiefs, so this reuses the exact same claim loop below -- only the tab template
@@ -147,7 +147,7 @@ public class EventClaimRoutine extends DelayedTask {
         reschedule(next);
     }
 
-    // matt/2026-08-14: "have Hall of Chiefs and other rewards claimed at noon everyday, every
+    // "have Hall of Chiefs and other rewards claimed at noon everyday, every
     // 24h" -- was rescheduling on a rolling "+12h from whenever it last ran" basis, which drifts
     // (a 3:47pm run lands the next check at 3:47am, then 3:47pm again, never settling on a fixed
     // time of day). Anchoring to the next real noon instead so this always lands at the same

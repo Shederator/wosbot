@@ -7,7 +7,7 @@ import javafx.scene.control.CheckBox;
 
 import java.util.List;
 
-// matt/2026-08-13: "General Shop" -- split out of the old combined "Shop" page. Everything here is
+// "General Shop" -- split out of the old combined "Shop" page. Everything here is
 // NOT the top-right cart-icon panel (that split off into GemShopLayoutController) -- Nomadic
 // Merchant and Mystery Shop, to keep the two genuinely different shops from being lumped together.
 public class ShopLayoutController extends AbstractProfileController {

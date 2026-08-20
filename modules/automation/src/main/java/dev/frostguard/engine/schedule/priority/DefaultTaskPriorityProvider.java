@@ -15,7 +15,7 @@ public class DefaultTaskPriorityProvider implements TaskPriorityProvider {
     // Lookup table for built-in task priorities (descending urgency)
     private static final Map<TpDailyTaskEnum, Integer> BUILTIN_SCORES = Map.ofEntries(
             Map.entry(TpDailyTaskEnum.INITIALIZE,     1000),
-            // matt, 2026-08-08: the timer sweep sits directly below Initialize and above every
+            // The timer sweep sits directly below Initialize and above every
             // activity, so the bot has read what is actually due before it does anything at all.
             Map.entry(TpDailyTaskEnum.TIMER_SWEEP,     980),
             Map.entry(TpDailyTaskEnum.SKIP_TUTORIAL,   950),

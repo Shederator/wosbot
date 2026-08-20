@@ -553,7 +553,7 @@ public class TelegramBotService implements BotStateListener {
 
     /**
      * Synchronous queue-running check for WatcherCommandServer's GET /status —
-     * matt, 2026-08-07: the 2h full-capture sync must never resume the queue on
+     * The 2h full-capture sync must never resume the queue on
      * its own; it needs to know whether the queue was ALREADY running before it
      * briefly stopped Bearguard for the scrape, so it only restores what was
      * already there instead of making a fresh start decision.

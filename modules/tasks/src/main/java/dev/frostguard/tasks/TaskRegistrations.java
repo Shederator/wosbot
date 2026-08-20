@@ -54,7 +54,7 @@ public class TaskRegistrations {
             case CITY_UPGRADE_FURNACE -> new UpgradeBuildingsRoutine(profile, type);
             case CITY_UPGRADE_PRIORITISE_FURNACE -> new PrioritiseFurnaceRoutine(profile, type);
             case CITY_SURVIVORS -> new NewSurvivorsRoutine(profile, type);
-            // matt/2026-08-12: TRAINING_TROOPS retired (configKey nulled, never auto-
+            // TRAINING_TROOPS retired (configKey nulled, never auto-
             // scheduled) in favor of the 3 independent tasks below -- kept mapped here
             // only so the switch stays exhaustive / a stray manual construction doesn't NPE.
             case TRAINING_TROOPS -> new TrainingRoutine(profile, type);

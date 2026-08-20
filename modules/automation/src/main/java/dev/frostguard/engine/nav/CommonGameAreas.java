@@ -31,7 +31,7 @@ public final class CommonGameAreas {
     // The cooldown stays in the top banner while Intel markers remain, then moves to the center
     // after every completed Intel reward has been claimed.
     //
-    // matt caught it live, 2026-08-19: this region only ever captured a blank sliver of the
+    // Observed live: this region only ever captured a blank sliver of the
     // banner's right edge (verified: cropping (378,103)-(508,146) from a live 720x1280 Intel
     // screenshot came back empty blue background, not text) -- the real "Refreshes In: HH:MM:SS"
     // banner text sits further left and taller than this box ever covered. Re-measured from a live

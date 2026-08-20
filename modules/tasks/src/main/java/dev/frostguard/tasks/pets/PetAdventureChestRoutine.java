@@ -80,13 +80,13 @@ public class PetAdventureChestRoutine extends DelayedTask {
 	private static final PointData CHEST_CLAIM_POINT = new PointData(370, 800);
 
 	/**
-	 * matt/2026-08-12: the game added a "Select Pet" roster screen between tapping
+	 * The game added a "Select Pet" roster screen between tapping
 	 * Select and the Start/Insufficient-attempts confirmation -- this routine predates
 	 * that change and previously fell through to "unknown state" here every time
 	 * (a single 500ms-then-DEFAULT_SINGLE check never gave the new screen time to
 	 * render). Live-captured coordinates for the up-to-3 pet portrait slots shown on
 	 * that screen; one is pre-selected by default but we tap a random slot explicitly
-	 * per matt's ask ("assign a random pet").
+	 * by design's ask ("assign a random pet").
 	 */
 	private static final PointData[] PET_LIST_SLOTS = new PointData[] {
 			new PointData(110, 655),
@@ -201,7 +201,7 @@ public class PetAdventureChestRoutine extends DelayedTask {
 	 * @return true if navigation succeeded, false if any step failed
 	 */
 	private boolean navigateToPetAdventures() {
-		// matt/2026-08-09: mirror PetSkills.openPetsMenu — a rally / "Assault Squad Invites" popup
+		// Mirror PetSkills.openPetsMenu — a rally / "Assault Squad Invites" popup
 		// often covers the bottom-right Pets button, and SINGLE_WITH_RETRIES can't clear it. A back
 		// press dismisses the modal (and returns world→city), so retry properly instead of shoving
 		// ready-NOW chests 15 min out (and risking lost daily attempts) on a single blocked frame.
@@ -445,10 +445,10 @@ public class PetAdventureChestRoutine extends DelayedTask {
 		}
 
 		tapInside(selectButton);
-		sleepTask(900); // Wait for the Pet List screen to render (matt/2026-08-12: was
+		sleepTask(900); // Wait for the Pet List screen to render (was
 						 // 500ms, too short for the newer intermediate pet-roster screen)
 
-		// matt/2026-08-12: "Select Pet" now opens a Pet List roster screen instead of
+		// "Select Pet" now opens a Pet List roster screen instead of
 		// going straight to Start/Insufficient. Confirm we're actually on it (with
 		// retries -- this is exactly the screen that was silently timing out before),
 		// then explicitly tap a random pet slot rather than trusting the default

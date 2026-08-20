@@ -23,7 +23,7 @@ import dev.frostguard.engine.schedule.LaunchPoint;
  * config for {@link GatherRoutine}'s Smart Gathering and for {@code bg_telemetry}
  * (which reads meat/wood/iron from these config keys).
  *
- * <p><b>Source screen (matt-directed + live-verified 2026-08-10):</b> tapping the
+ * <p><b>Source screen (the operator-directed + live-verified 2026-08-10):</b> tapping the
  * top-bar resource counter (the pouch the HUD rotates to, e.g. "11.4M") opens the
  * <b>Overview → Resource Production</b> panel, which lists all four gather
  * resources with their real "Owned" total on ONE screen (no scrolling). This
@@ -80,13 +80,13 @@ public class ResourceStockpileRoutine extends DelayedTask {
     private static final PointData SUMMARY_CHART_BUTTON = new PointData(682, 40); // chart button (NOT 712 — dead corner)
     private static final PointData SPEEDUP_TAB = new PointData(547, 355);         // "Speedup" tab in the popup
     private static final PointData SUMMARY_CLOSE_X = new PointData(697, 258);     // popup close X
-    // matt/2026-08-15 "fix all": Steel sat dormant (config key never written) because no reader was
+    // "fix all": Steel sat dormant (config key never written) because no reader was
     // ever calibrated for it. The popup's default landing tab is "Resources" (Meat/Wood/Coal/Iron/
     // Steel/Chief Stamina, one screen, no scroll) -- same popup the Speedup tab already reads, just
     // read BEFORE switching tabs. "Total Resources" column crop, verified against a live capture
     // showing "811.71K".
     //
-    // matt/2026-08-15: first two live passes both misread this as "117MK" regardless of settle
+    // First two live passes both misread this as "117MK" regardless of settle
     // delay. Root-caused by replaying TesseractOcrProvider's exact preprocessing in isolation
     // (color-distance-from-target -> grayscale, see cropAndPreprocess): the decimal point's pixels
     // are anti-aliased against the background, so their colour sits far enough from the pure text
@@ -138,7 +138,7 @@ public class ResourceStockpileRoutine extends DelayedTask {
         reschedule(LocalDateTime.now());
     }
 
-    // matt/2026-08-10: intentionally does NOT override getDistinctKey(). A non-null distinct key made
+    // Intentionally does NOT override getDistinctKey(). A non-null distinct key made
     // execution write task-state under key "902:resource_stockpile_scan" while the Control→Tasks UI
     // reads plain "902" (written once at startup by the force-run), so the tile froze at "Ready, last
     // run 1h ago" forever even though the task ran. TIMER_SWEEP is immune precisely because it doesn't
@@ -146,7 +146,7 @@ public class ResourceStockpileRoutine extends DelayedTask {
 
     @Override
     protected LaunchPoint getRequiredStartLocation() {
-        // matt/2026-08-10: WORLD, not HOME. The engine forces this screen before execute()
+        // WORLD, not HOME. The engine forces this screen before execute()
         // (DelayedTask.run → ensureCorrectScreenLocation). The top-bar resource counter + Overview
         // panel live on the World map; declaring HOME parked the game on Base City, so the (480,22)
         // tap missed the panel and the crops OCR'd city pixels (meat=1, coal=12). Every other
@@ -167,7 +167,7 @@ public class ResourceStockpileRoutine extends DelayedTask {
         Map<String, Long> read = readOverviewPanel();
 
         if (read != null) {
-            // matt/2026-08-15: "check the last couple days" turned up meat/wood/iron swinging 10x
+            // "check the last couple days" turned up meat/wood/iron swinging 10x
             // between consecutive hourly reads (e.g. 84.9M then 849M then back) while power/coal
             // trended smoothly the same hours -- an OCR misread of the "." in the abbreviated form
             // (Tesseract dropping the decimal point turns "84.9M" into "849M"), not a real stockpile
@@ -215,7 +215,7 @@ public class ResourceStockpileRoutine extends DelayedTask {
             tapNear(BACKPACK_NAV);
             sleepTask(1600);
             tapNear(SUMMARY_CHART_BUTTON);
-            // matt/2026-08-15: first live pass at 1400ms caught the popup slide-in mid-animation and
+            // First live pass at 1400ms caught the popup slide-in mid-animation and
             // OCR'd a garbled "117MK" for Steel (correctly rejected as unparseable, but still a wasted
             // cycle) -- the manual calibration pass that measured the crop used ~2s and read cleanly.
             sleepTask(2200);
@@ -304,7 +304,7 @@ public class ResourceStockpileRoutine extends DelayedTask {
     private static final double SANITY_BAND_MAX_RATIO = 1.5;
     private static final double SANITY_BAND_MIN_RATIO = 1.0 / SANITY_BAND_MAX_RATIO;
 
-    /** matt/2026-08-16: "this is wrong" -- root-caused live against real telemetry history:
+    /** "this is wrong" -- root-caused live against real telemetry history:
      *  meat froze at exactly 87,700,000 for 4 straight hourly cycles (6+ hours) while the real
      *  in-game HUD showed 5.7M. Unlike bg_telemetry's power/gems check (which compares against
      *  the PREVIOUS SAMPLE and self-heals after one skipped write, since a rejection writes null
@@ -322,7 +322,7 @@ public class ResourceStockpileRoutine extends DelayedTask {
      *  Bearguard restarts) -- that only costs one extra recovery cycle, not a lasting bug. */
     private static final int REJECT_STREAK_TO_TRUST = 3;
 
-    /** matt live, 2026-08-19: caught real -- steel cached at 839,000,000 against a last-known-good
+    /** Observed live: steel cached at 839,000,000 against a last-known-good
      *  of 1,174,000 (ratio ~715x). The streak-to-trust escape hatch above has no upper bound: a
      *  gentle 1.5x drift and a physically-impossible 715x spike need the same 3 consistent reads to
      *  get auto-trusted, because {@link #inBand} only checks readings against EACH OTHER, never
@@ -345,7 +345,7 @@ public class ResourceStockpileRoutine extends DelayedTask {
      * candidate is the latest in a streak of mutually-consistent rejected readings (see field
      * doc above), in which case the streak wins over the stale cache.
      *
-     * <p>matt/2026-08-15: live testing found this ISN'T random noise for Meat/Wood -- a live capture
+     * <p>: live testing found this ISN'T random noise for Meat/Wood -- a live capture
      * showed a crisp, unambiguous "87.4M" in the crop, but OCR reliably read it as "874M" both times
      * (Coal "9.8M" and Iron "1.8M", one digit before the point, read correctly both times; Meat/Wood
      * always have two). Tesseract is dropping the decimal point itself when there are two leading

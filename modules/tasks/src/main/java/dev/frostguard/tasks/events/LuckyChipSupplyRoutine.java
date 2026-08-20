@@ -13,7 +13,7 @@ import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.service.StatisticsService;
 
 /**
- * matt/2026-08-13: the Lucky Wheel tab (under Events) has a "Lucky Chip Supply" icon
+ * The Lucky Wheel tab (under Events) has a "Lucky Chip Supply" icon
  * top-left that opens a "Lucky Chip Pack" shop screen. The top row, "Free Lucky Chip
  * Pack," has a genuinely free "Free" button, once a day. This only ever claims that
  * free row -- it never touches the paid packs below it.
@@ -28,7 +28,7 @@ public class LuckyChipSupplyRoutine extends DelayedTask {
 
     private static final PointData LUCKY_CHIP_SUPPLY_ICON = new PointData(85, 380);
     private static final PointData REWARD_REVEAL_TAP_ANYWHERE = new PointData(358, 1182);
-    /** matt/2026-08-13: same tab-strip swipe BankRoutine already uses -- a fresh app
+    /** Same tab-strip swipe BankRoutine already uses -- a fresh app
      *  launch doesn't reliably reopen Events on the last-viewed tab. */
     private static final PointData TAB_SWIPE_START = new PointData(630, 143);
     private static final PointData TAB_SWIPE_END = new PointData(2, 128);
@@ -76,7 +76,7 @@ public class LuckyChipSupplyRoutine extends DelayedTask {
         tapNear(tab.getPoint());
         sleepTask(PANEL_SETTLE_MS);
 
-        // matt/2026-08-13: Lucky Chip Supply is a fixed-position icon within the
+        // Lucky Chip Supply is a fixed-position icon within the
         // Lucky Wheel screen itself (not a searchable template yet) -- the Lucky
         // Wheel tab match just above already confirms we're on the right screen
         // before this fixed tap fires.
@@ -105,7 +105,7 @@ public class LuckyChipSupplyRoutine extends DelayedTask {
         reschedule(next);
     }
 
-    // matt/2026-08-14: "have Hall of Chiefs and other rewards claimed at noon everyday, every
+    // "have Hall of Chiefs and other rewards claimed at noon everyday, every
     // 24h" -- was rescheduling on a rolling "+24h from whenever it last ran" basis, which drifts
     // across DST/late-night runs. Anchoring to the next real noon instead.
     private LocalDateTime nextNoon() {

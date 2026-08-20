@@ -144,7 +144,7 @@ protected void loadConfiguration() {
         this.trainLancer = profile.getConfig(TRAIN_LANCER_BOOL, Boolean.class);
         this.trainMarksman = profile.getConfig(TRAIN_MARKSMAN_BOOL, Boolean.class);
 
-        // matt/2026-08-12: this routine used to run once and juggle all 3 enabled troop
+        // This routine used to run once and juggle all 3 enabled troop
         // types together, rescheduling itself to the single earliest completion across
         // all of them -- fragile if one camp's OCR/timing drifted from the others. Now
         // TpDailyTaskEnum has 3 independent entries (TRAINING_INFANTRY/LANCER/MARKSMAN),

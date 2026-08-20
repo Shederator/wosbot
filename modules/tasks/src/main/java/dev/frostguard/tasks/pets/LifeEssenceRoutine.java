@@ -151,7 +151,7 @@ public class LifeEssenceRoutine extends DelayedTask {
 	 * 
 	 * @return number of essence items claimed
 	 */
-	// matt/2026-08-14, caught live via screenshot: template matching kept missing real, visible
+	// Caught live via screenshot: template matching kept missing real, visible
 	// claimable badges (0 claimed while 2 badges sat unclaimed on screen). Root cause turned out to
 	// be TWO different badge shapes in play (a white/orange rounded-square badge over buildings, and
 	// a solid-orange speech-bubble/pin badge directly over the tree) -- AND both bounce/animate like
@@ -160,8 +160,8 @@ public class LifeEssenceRoutine extends DelayedTask {
 	// to color-blob detection: both badge shapes share the same solid-orange fill, so scanning the
 	// search area for orange pixel clusters and tapping each cluster's centroid finds every claimable
 	// badge regardless of exact shape or animation phase. Same "always look for the [color], not the
-	// exact frame" philosophy matt asked for with the red-dot fix.
-	// matt/2026-08-14: first cut of the color-blob detection over-fired -- "Claimed 12" when only 2
+	// exact frame" philosophy the request was for with the red-dot fix.
+	// First cut of the color-blob detection over-fired -- "Claimed 12" when only 2
 	// real badges were on screen. Root cause: the search area also catches OTHER orange UI (an event
 	// banner -- "The battle for the Fortress will start in..." -- was live on screen during that
 	// run), and a wide banner sliver can easily clear a bare pixel-count threshold. Fix: also require
@@ -178,20 +178,20 @@ public class LifeEssenceRoutine extends DelayedTask {
 	private static final int BADGE_MAX_DIMENSION = 75;
 	private static final double BADGE_MIN_FILL_RATIO = 0.35;
 
-	// matt/2026-08-15: "My Island" (the personal Life Tree screen reached via the Life Essence
+	// "My Island" (the personal Life Tree screen reached via the Life Essence
 	// menu icon) is a fixed layout -- one tree + two crafting-station badges, nothing that
 	// scrolls or moves -- confirmed live via a screenshot + pixel-level color-blob analysis on the
-	// actual green diamond badge icons (centroids, not eyeballed). Matt's call: hardcoded taps at
+	// actual green diamond badge icons (centroids, not eyeballed). The operator's call: hardcoded taps at
 	// these exact positions are simpler and more predictable here than the dynamic orange-blob
 	// search below, which stays in the file unused rather than deleted in case a future screen
-	// needs it. Tap order per matt: tree first, then left-to-right across the two workbenches.
+	// needs it. Tap order by design: tree first, then left-to-right across the two workbenches.
 	private static final PointData TREE_CLAIM_BADGE = new PointData(362, 488);
 	private static final PointData WORKBENCH1_CLAIM_BADGE = new PointData(501, 501);
 	private static final PointData WORKBENCH2_CLAIM_BADGE = new PointData(570, 550);
 
 	/**
 	 * Taps the three fixed My Island claim spots in order (tree, then left-to-right). Blind taps
-	 * by design -- matt's explicit call: tap all three every run regardless of whether a badge is
+	 * by design -- the explicit call: tap all three every run regardless of whether a badge is
 	 * currently showing there, since an already-claimed spot is just a harmless no-op tap on the
 	 * tree/workbench itself.
 	 */

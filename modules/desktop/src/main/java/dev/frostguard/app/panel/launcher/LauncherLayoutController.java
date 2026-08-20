@@ -210,7 +210,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     private long uptimeStartedAtNanos;
     private int autoStartSecondsRemaining;
     private boolean isStartup = true;
-    // matt, 2026-08-06: "if I want a perma stop, I want it to perma stop" -
+    // "if I want a perma stop, I want it to perma stop" -
     // clicking Stop must never re-arm the auto-start countdown, full stop,
     // regardless of AUTO_START_MODE_STRING. isStartup alone couldn't carry
     // this: onEngineStateTransition sets it false on EVERY stop (including a
@@ -234,7 +234,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     @FXML
     private void initialize() { /* internal */
         initializeDiscordBot();
-        // matt/2026-08-13: initializeLogModule() + scheduleAutoStart() moved ahead of
+        // InitializeLogModule() + scheduleAutoStart() moved ahead of
         // initializeEmulatorController() -- that method can pop a BLOCKING modal Alert
         // (the "Emulator Not Found" manual-picker flow) on the FX thread whenever the
         // saved emulator path doesn't resolve. scheduleAutoStart() used to run after it,
@@ -280,12 +280,12 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         long elapsedSeconds = (System.nanoTime() - uptimeStartedAtNanos) / 1_000_000_000L;
         labelRunTime.setText("Uptime: " + formatUptime(elapsedSeconds));
 
-        // matt, 2026-08-08: while the bot is running, the sleep window is the more useful thing
+        // While the bot is running, the sleep window is the more useful thing
         // to show — "Sleeping 04:12:33" answers "why is nothing happening right now" at a glance,
         // which was the whole point of adding a status readout.
         if (estado) {
             // A live phase (e.g. the timer sweep) outranks both sleep and the generic Active
-            // label — it is the thing matt actually wants to see while it is happening.
+            // label — it is the thing the operator actually wants to see while it is happening.
             String phase = dev.frostguard.engine.schedule.BotPhaseState.current();
             if (phase != null) {
                 setBotStatus(phase);
@@ -532,7 +532,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         Parent taskPane = loadNode("TaskManagerLayout", taskCtrl);
         Parent customTasksPane = loadNode("CustomTasksLayout", customTasksCtrl);
 
-        // matt/2026-08-09: default startup view is set at the end of init (Control → Tasks), so the
+        // Default startup view is set at the end of init (Control → Tasks), so the
         // app opens on the task list rather than the raw log.
 
         TabPane controlTabs = new TabPane();
@@ -546,7 +546,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         controlTabs.setMaxWidth(Double.MAX_VALUE);
         controlTabs.setMaxHeight(Double.MAX_VALUE);
 
-        // Statistics — pinned at the bottom, above Control and Config (matt's layout request:
+        // Statistics — pinned at the bottom, above Control and Config (the operator's layout request:
         // "Statistics then Control then Config"). Wired to profile updates exactly like a module.
         StatisticsLayoutController statsCtrl = new StatisticsLayoutController();
         if (statsCtrl instanceof IProfileObserverInjectable) {
@@ -583,7 +583,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
         addPinnedButton("Config", MaterialDesignC.COG_OUTLINE, configTabs);
 
-        // matt/2026-08-09: open Bearguard on the Tasks view instead of the raw log. Select the first
+        // Open Bearguard on the Tasks view instead of the raw log. Select the first
         // Control tab (Tasks) and fire the Control button so startup lands there with it highlighted.
         controlTabs.getSelectionModel().selectFirst();
         controlButton.fire();
@@ -727,11 +727,11 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         );
         //@formatter:on
 
-        // matt, 2026-08-10: event-type screens are consolidated into ONE "Events" sidebar item.
+        // Event-type screens are consolidated into ONE "Events" sidebar item.
         //
-        // matt, 2026-08-13: extended the pattern to the rest of the sidebar. FIRST attempt crammed
+        // Extended the pattern to the rest of the sidebar. FIRST attempt crammed
         // 10 items into a horizontal TabPane -- overflowed into a dropdown with the leftmost tab
-        // clipped. Splitting them into separate hubs ("Special Events" etc) was matt's rejected
+        // clipped. Splitting them into separate hubs ("Special Events" etc) was the operator's rejected
         // SECOND attempt -- he wants everything back together under Events, just organized better.
         // REAL fix: 10 short horizontal tabs will never fit this sidebar width no matter how they're
         // trimmed (two of the labels alone -- "Alliance Championship" / "Alliance Mobilization" --
@@ -820,7 +820,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     }
 
     /**
-     * matt/2026-08-13: "apply this style to all BG" — every hub (City/Alliance/Economy/Troops/
+     * "apply this style to all BG" — every hub (City/Alliance/Economy/Troops/
      * Account) uses the same side-nav pattern as Events now, not a TabPane. Builds one sidebar
      * button that opens a named list on the left + the selected screen on the right, one entry per
      * screen in {@code order} that actually loaded a root.
@@ -843,9 +843,9 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     }
 
     /**
-     * matt/2026-08-13: "Events" got up to 10 sub-screens (the inner EventsLayout's own 5 -- Myriad
+     * "Events" got up to 10 sub-screens (the inner EventsLayout's own 5 -- Myriad
      * Bazaar / Journey of Light / Mercenary Event / Hero's Mission / Tundra Truck -- plus Alliance
-     * Championship, Alliance Mobilization, Bear Trap, Fishing Tournament, Labyrinth) and matt wants
+     * Championship, Alliance Mobilization, Bear Trap, Fishing Tournament, Labyrinth) and the intent is
      * them ALL under one Events button. A horizontal TabPane can't fit 10 items at this sidebar width
      * without overflowing into a dropdown (tried it -- "ugly"), and splitting them into more hubs
      * wasn't what he wanted either ("move them back to events"). So Events is a vertical side-nav
@@ -879,7 +879,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     }
 
     /**
-     * matt/2026-08-13: shared side-nav builder — a named list on the left (reused `.nav-button` /
+     * Shared side-nav builder — a named list on the left (reused `.nav-button` /
      * `.nav-button.active` styling), the selected screen swapped into a StackPane on the right. The
      * one navigation pattern for every grouped/hub screen in Bearguard now ("apply this style to all
      * BG"), not just Events. Returns null if {@code entries} is empty (caller skips installing).
@@ -1032,7 +1032,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
             if (null != labelWindowTitle) {
                 labelWindowTitle.setText(resolvedTitle);
             }
-            // matt: status bar should always say which profile Start/Stop is
+            // Reported: status bar should always say which profile Start/Stop is
             // about to act on, independent of the window title.
             if (null != labelActiveProfile) {
                 labelActiveProfile.setText("Profile: " + currentProfile.getName());
@@ -1475,7 +1475,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     /**
      * Updates the status readout that replaced the Full Stop button.
      *
-     * <p>matt, 2026-08-08: "somewhere on the page that is, like, what's the current status?
+     * <p>the operator, 2026-08-08: "somewhere on the page that is, like, what's the current status?
      * It could be active. It could be sleeping." Safe to call from any thread — it hops to the
      * FX thread itself, because the engine's state callbacks arrive on worker threads.</p>
      */
@@ -1652,12 +1652,12 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         HashMap<String, String> globalConfig = ConfigService.obtain().loadGlobalSettings();
         if (null == globalConfig) return;
 
-        // matt, 2026-08-08: the AUTO_START_SUPPRESSED_BOOL gate that used to sit here is gone
+        // The AUTO_START_SUPPRESSED_BOOL gate that used to sit here is gone
         // along with the Full Stop button that set it. Leaving the read in place would have been
         // a trap: nothing could ever clear the flag again, so a stale "true" left over from a
         // previous Full Stop press would have silently blocked auto-start forever with no
         // visible cause. A manual Stop already keeps the bot stopped (userInitiatedStop is
-        // consumed in onEngineStateTransition without rescheduling), which is the behaviour matt
+        // consumed in onEngineStateTransition without rescheduling), which is the behaviour the operator
         // confirmed he wanted and the reason the button was redundant.
 
         boolean autoStartEnabled = Boolean.parseBoolean(
@@ -1667,7 +1667,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         String autoStartMode = globalConfig.getOrDefault(ConfigurationKeyEnum.AUTO_START_MODE_STRING.name(), "Continuous");
         if ("Startup Only".equalsIgnoreCase(autoStartMode) && !isStartup) return;
 
-        // matt, 2026-08-08: seconds-based delay (he wants 30s specifically) —
+        // Seconds-based delay (he wants 30s specifically) —
         // takes priority over the older minutes-only key, which stays only
         // for backward compatibility with anything still reading it.
         int delaySeconds;
@@ -1775,7 +1775,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         button.setOnAction(e -> {
             hideSearchOverlay();
             setMainContent(root);
-            // matt/2026-08-12: "More" section buttons stayed highlighted together once
+            // "More" section buttons stayed highlighted together once
             // more than one had been clicked. Root cause -- this deselect pass only
             // walked DIRECT children of buttonsContainer/pinnedButtonsContainer, but
             // installCollapsibleSection() re-parents tucked buttons one level deeper

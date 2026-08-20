@@ -21,7 +21,7 @@ import java.time.Instant;
  * dependency (TelegramBotService's local command server only starts when a
  * real bot token is configured, which is usually not the case).
  *
- * matt, 2026-08-07: "if the application's closed, I do not want it starting
+ * "if the application's closed, I do not want it starting
  * up. And if I manually stop the bot, I do not want it turning on." The
  * 2h full-capture sync (run-full-capture.js) needs a reliable signal for
  * this so it only restores a queue that was ALREADY running before it briefly

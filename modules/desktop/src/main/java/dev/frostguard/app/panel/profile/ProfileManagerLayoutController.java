@@ -1060,7 +1060,7 @@ public class ProfileManagerLayoutController implements IProfileChangeObserver {
 		return profiles;
 	}
 
-	// matt: the main launcher's profile picker only changed which profile's
+	// Reported: the main launcher's profile picker only changed which profile's
 	// settings were being VIEWED - it never touched the `enabled` flag that
 	// actually decides which profile's queue Start Bot launches, which lived
 	// in a separate, easy-to-miss toggle in this table. Selecting a profile
@@ -1139,7 +1139,7 @@ public class ProfileManagerLayoutController implements IProfileChangeObserver {
 					LoggingService.obtain().emit(TpMessageSeverityEnum.INFO, "Profile Manager",
 							String.valueOf(profileId), key.name() + " was saved and applies after the next bot restart");
 				}
-				// matt/2026-08-16: "if I click a box... it doesn't just automatically enable it" --
+				// "if I click a box... it doesn't just automatically enable it" --
 				// toggling a task's enabled-bool checkbox used to only ever take effect on the NEXT
 				// app launch (ScheduleService.prepareQueue reads config once, at boot). Now that the
 				// save above has genuinely persisted, also poke the already-running queue (if the bot

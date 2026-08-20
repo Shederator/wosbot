@@ -22,7 +22,7 @@ import dev.frostguard.vision.convert.GameTimeUtils;
 /**
  * Reads every on-screen countdown and records it, without performing any activity.
  *
- * <p>matt, 2026-08-08, on watching the bot start: <em>"it's just launching into actually trying
+ * <p>on watching the bot start: <em>"it's just launching into actually trying
  * to do tasks... It's not taking its time and refreshing all of the timers. It's just blindly
  * trying to rush through every task it has. That's incorrect. That's not the order of operations
  * you and I talked about."</em> He was right, and this is the missing phase.</p>
@@ -65,7 +65,7 @@ public class TimerSweepRoutine extends DelayedTask {
     /**
      * The rest of the city panel, reachable only by scrolling.
      *
-     * <p>matt, 2026-08-08: <em>"the left menu, you're not scrolling down on it... that'll have all
+     * <p>the operator, 2026-08-08: <em>"the left menu, you're not scrolling down on it... that'll have all
      * your tree timing and rewards and whatever else."</em> He was right — everything below the
      * fold had never been looked at. One swipe reveals Alliance Contribution, both Hero Recruit
      * timers, Pet Adventure, Tree of Life and the Labyrinth, which between them cover most of the
@@ -188,7 +188,7 @@ public class TimerSweepRoutine extends DelayedTask {
     /**
      * Contribution count at which a trip to Alliance Tech is worth making.
      *
-     * <p>matt, 2026-08-09: <em>"When you see fifteen out of twenty five, go ahead and do the
+     * <p>the operator, 2026-08-09: <em>"When you see fifteen out of twenty five, go ahead and do the
      * contribute... you should only be doing it when it says contribute fifteen out of
      * twenty five."</em></p>
      */
@@ -197,7 +197,7 @@ public class TimerSweepRoutine extends DelayedTask {
     /**
      * How fast contributions refill — one roughly every ten minutes.
      *
-     * <p>matt, 2026-08-09: <em>"say I contribute all of them, a new contribution [comes back in
+     * <p>the operator, 2026-08-09: <em>"say I contribute all of them, a new contribution [comes back in
      * about] eight minutes... every ten minutes you get a contribution attempt."</em> So the wait
      * to reach the trigger is {@code (trigger - current) * 10} minutes rather than a blind poll.</p>
      */
@@ -260,7 +260,7 @@ public class TimerSweepRoutine extends DelayedTask {
                         GameTimeUtils.formatCountdown(LocalDateTime.now().plus(remaining))));
 
                 switch (label) {
-                    // matt/2026-08-12: each camp now schedules off its OWN read time, not the
+                    // Each camp now schedules off its OWN read time, not the
                     // soonest of the three — that "shared Training task" design was exactly
                     // why the timing looked wrong for camps that weren't the soonest one.
                     case "Infantry" -> {
@@ -309,7 +309,7 @@ public class TimerSweepRoutine extends DelayedTask {
     /**
      * Opens the city queue panel and confirms it actually rendered before reading.
      *
-     * <p>matt, 2026-08-08: the sweep read nothing on two of four runs and finished in half the
+     * <p>the operator, 2026-08-08: the sweep read nothing on two of four runs and finished in half the
      * usual time. Cause was that it opened the menu, waited a fixed 1200ms and started reading
      * regardless — so whenever the game sat on a screen where the menu did not open (right after
      * a relaunch, for instance) every row came back blank and the sweep reported success having
@@ -349,7 +349,7 @@ public class TimerSweepRoutine extends DelayedTask {
         swipe(SCROLL_FROM, SCROLL_TO);
         sleepTask(PANEL_SETTLE_MS);
 
-        // matt, 2026-08-08: the scrolled rows are only trusted when the panel proves it is
+        // The scrolled rows are only trusted when the panel proves it is
         // aligned. The Alliance Contribution row sits at a known position and has a distinctive
         // "n/25" shape, so parsing it successfully is evidence every other row is where it
         // should be. Without that check a drifted swipe once put the Hero Recruit countdown in
@@ -409,7 +409,7 @@ public class TimerSweepRoutine extends DelayedTask {
                     earliestRecruit = remaining;
                 }
             } else if (label.equals("Pet Adventure")) {
-                // matt/2026-08-13: caught live -- this countdown is the chest-completion timer on
+                // Caught live -- this countdown is the chest-completion timer on
                 // the left-menu panel, not a daily-attempts timer, so it has nothing to do with when
                 // fresh attempts become available. A read taken before daily reset (e.g. "14h36m
                 // remaining" at 19:34) got projected straight through reset into the next day
@@ -443,7 +443,7 @@ public class TimerSweepRoutine extends DelayedTask {
     /**
      * Holds Alliance Tech back until contributions are worth a trip.
      *
-     * <p>matt: <em>"it takes hours to get close to twenty five... when it's twenty, then I do it
+     * <p>the operator: <em>"it takes hours to get close to twenty five... when it's twenty, then I do it
      * once."</em> Contributions accrue slowly, so visiting at 3/25 spends a whole navigation
      * cycle to donate almost nothing. This pushes the task out until the counter is near its cap,
      * scaling the wait to how far away it actually is.</p>
@@ -467,7 +467,7 @@ public class TimerSweepRoutine extends DelayedTask {
     /**
      * Reads the three tracked Chief Orders off the shelf and schedules each from what it says.
      *
-     * <p>matt, 2026-08-08: <em>"from the chief's house, here's what you're gonna do... so as soon
+     * <p>the operator, 2026-08-08: <em>"from the chief's house, here's what you're gonna do... so as soon
      * as I hit zero, motherfucker, you know what you're doing, you're hitting it."</em> The
      * cooldowns were printed on screen the whole time and nothing read them, so these three ran
      * off hard-coded 8/12/24-hour guesses that drifted out of step with reality.</p>
@@ -489,7 +489,7 @@ public class TimerSweepRoutine extends DelayedTask {
         tapNear(menuButton.getPoint());
         sleepTask(2200);
 
-        // matt, 2026-08-08: prove the shelf is actually open before believing a blank cover.
+        // Prove the shelf is actually open before believing a blank cover.
         // The first version treated "read nothing" as "available now" and duly scheduled all
         // three orders immediately — while the screen showed Urgent active for 19 minutes and
         // Rush on a 10-hour cooldown. Blank means unknown, not available; the shelf title is the
@@ -628,7 +628,7 @@ public class TimerSweepRoutine extends DelayedTask {
     /**
      * Nudges a swept deadline a little past the moment it actually expires.
      *
-     * <p>matt, 2026-08-09: <em>"Productive day, cooldown of one hour and thirty three minutes...
+     * <p>the operator, 2026-08-09: <em>"Productive day, cooldown of one hour and thirty three minutes...
      * I'm gonna turn on productive day in one hour and thirty five minutes just so it's not super
      * exact."</em> Arriving on the exact second a timer hits zero, every time, across a dozen
      * different tasks, is a pattern nothing human produces. The pad also clears the moment where

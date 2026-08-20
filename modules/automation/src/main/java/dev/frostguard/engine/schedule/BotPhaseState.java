@@ -3,7 +3,7 @@ package dev.frostguard.engine.schedule;
 /**
  * A short-lived phase label describing what the bot is doing right now.
  *
- * <p>matt, 2026-08-08: the status readout jumped from "Starting up" to "Active" within a couple
+ * <p>the operator, 2026-08-08: the status readout jumped from "Starting up" to "Active" within a couple
  * of seconds, which told him nothing about the phase he actually cares about — the point where
  * the bot is reading every countdown off the screen before it acts. This carries that phase up
  * to the UI so the label reflects the work rather than just the run state.</p>

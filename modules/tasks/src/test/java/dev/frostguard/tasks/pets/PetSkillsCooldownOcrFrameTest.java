@@ -56,7 +56,7 @@ class PetSkillsCooldownOcrFrameTest {
     void distinguishesLearnedSkillTilesFromEmptySlots() throws Exception {
         BufferedImage image = loadFrame();
 
-        // matt/Claude, 2026-08-17: this fixture is a real 3-tile single-row pet layout, not the
+        // the operator/Claude, 2026-08-17: this fixture is a real 3-tile single-row pet layout, not the
         // 2x2 four-skill grid FOOD's original coordinates assumed. Visually confirmed: slot 1
         // (leftmost, where FOOD was repointed on 2026-08-08) shows a highlighted "Lv. 4" tile
         // with the same tool-icon badge as the two real cooldown tiles -- it is occupied, not

@@ -59,7 +59,7 @@ public class TaskQueue {
     private static final long   TICK_INTERVAL_MS = 999L;
 
     /**
-     * Minimum gap between progress-triggered Daily Missions pushes. matt's stated cadence:
+     * Minimum gap between progress-triggered Daily Missions pushes. the operator's stated cadence:
      * daily missions can wait hours, there is no rush. This only bounds the follow-up push —
      * the routine's own schedule still runs it on its normal cycle.
      */
@@ -122,7 +122,7 @@ public class TaskQueue {
     /**
      * Pushes a task that is already waiting in the backlog out to a later time.
      *
-     * <p>matt, 2026-08-09, holding the Chief Order shelf up against the app: <em>"productive day
+     * <p>holding the Chief Order shelf up against the app: <em>"productive day
      * is kicking off in three minutes. Rush job is kicking off in three minutes. Urgent
      * mobilization is kicking off in three minutes... it's like you're not even trying."</em> The
      * sweep had read all three cooldowns correctly and written them to the database — but a
@@ -163,7 +163,7 @@ public class TaskQueue {
      * Moves a queued task to an on-screen time in <em>either</em> direction.
      *
      * <p>The blanket "only ever defer" rule is right for camp/research/order timers, but wrong for
-     * a task whose work is waiting to be collected. matt, 2026-08-09, on Pet Adventure:
+     * a task whose work is waiting to be collected. on Pet Adventure:
      * <em>"two are done and you're not doing anything about it... you should be pushing out pets on
      * new adventures if there are allotted times left."</em> Finished adventures sit unclaimed and
      * daily attempts expire at reset, so when the sweep reads that the soonest adventure is (or is
@@ -551,7 +551,7 @@ public class TaskQueue {
      * Classifies the current idle gap as sleep when the next task is far enough out.
      *
      * <p>Purely observational — it never withholds a task. If something is due it has already
-     * run by the time this is called, which is what makes matt's "why sleep if it is doing
+     * run by the time this is called, which is what makes the operator's "why sleep if it is doing
      * nothing anyway" point the right design: the queue is idle regardless, and this only gives
      * that idleness a name and an end time the UI can show.</p>
      *
@@ -734,7 +734,7 @@ public class TaskQueue {
 
     private boolean shouldRunInitialize() {
         // Changed by pernerch | Date: 2026-07-04 | Why: keep first Initialize mandatory, then fall back to previous worth-check behavior.
-        // matt/2026-08-14: the "mandatory" force ran Initialize even for a profile with ZERO
+        // The "mandatory" force ran Initialize even for a profile with ZERO
         // enabled tasks (Testing, freshly cleared) -- there was nothing to initialize FOR, so
         // it just tapped the screen for no reason. Only force it when there's actually at
         // least one other task queued; an empty backlog means truly do nothing.
@@ -814,11 +814,11 @@ public class TaskQueue {
     private void checkDailyMissionFollow(DelayedTask task) {
         if (!profile.getConfig(ConfigurationKeyEnum.DAILY_MISSION_AUTO_SCHEDULE_BOOL, Boolean.class) || !task.provideDailyMissionProgress()) return;
 
-        // matt, 2026-08-08: rate-limit this. It fires after EVERY completed task reporting daily
+        // Rate-limit this. It fires after EVERY completed task reporting daily
         // mission progress, and a great many of them do, so Daily Missions was dragged back to
         // "now" about once a minute — measured at 4 runs in under 4 minutes, and 52 runs across
         // three hours, the busiest task on the board. Each run now also walks the Growth tab, so
-        // the cost per push went up. matt's call on cadence: "that could be checked every, like,
+        // the cost per push went up. the decision on cadence: "that could be checked every, like,
         // three hours. There's no rush on that at all." The rewards do not expire; only the
         // daily reset matters, and the routine's own scheduling already covers that.
         LocalDateTime now = LocalDateTime.now();

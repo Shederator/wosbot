@@ -47,7 +47,7 @@ public class OcrSettingsData {
     private final String allowedGlyphs;
     private final RecognitionEngine recognitionEngine;
     private final boolean reuseFrame;
-    // matt, 2026-08-06: was always hardcoded to "eng" in TesseractOcrProvider
+    // Was always hardcoded to "eng" in TesseractOcrProvider
     // regardless of what any caller configured - Whiteout's Alliance/World
     // chat is genuinely multilingual (Arabic/Chinese/Russian/Portuguese/
     // Czech/French all seen live), and an English-only model cannot read

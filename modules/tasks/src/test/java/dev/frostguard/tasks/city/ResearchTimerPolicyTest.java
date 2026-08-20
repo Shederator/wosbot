@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 
 class ResearchTimerPolicyTest {
 
-    // matt/Claude, 2026-08-17: this test predated ResearchTimerPolicy's third revision
+    // the operator/Claude, 2026-08-17: this test predated ResearchTimerPolicy's third revision
     // (see the class doc comment) and still asserted the FIRST, deliberately-abandoned
     // "half the remaining time" behavior -- the one the comment says left a 19h58m
     // research unlooked-at for ~10h. The policy itself was already correct; only the

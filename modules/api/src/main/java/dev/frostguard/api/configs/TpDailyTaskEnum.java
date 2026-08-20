@@ -84,7 +84,7 @@ public enum TpDailyTaskEnum {
 
     /* ── military ── */
 
-    // matt/2026-08-12: retired as a live task -- one combined task juggling all 3 troop
+    // Retired as a live task -- one combined task juggling all 3 troop
     // camps rescheduled to the single earliest completion across all of them, which meant
     // OCR/timing state for one camp could get tangled with another's. Split into 3
     // independent tasks below (TRAINING_INFANTRY/LANCER/MARKSMAN), each scheduling itself
@@ -129,16 +129,16 @@ public enum TpDailyTaskEnum {
     // No category here is a clean fit - closest existing bucket is ALLIANCE,
     // since Alliance chat is one of the three captured channels.
     CHAT_CAPTURE           (901, "Chat Capture",                 ConfigurationKeyEnum.CHAT_CAPTURE_ENABLED_BOOL,              RoutineCategory.ALLIANCE),
-    // matt/2026-08-06: deliberately gated on the SAME bool as Smart Gathering
-    // (GATHER_SMART_PRIORITY_BOOL), not a separate flag - matt shouldn't need to find and
+    // Deliberately gated on the SAME bool as Smart Gathering
+    // (GATHER_SMART_PRIORITY_BOOL), not a separate flag - the operator shouldn't need to find and
     // check a second, unrelated-looking checkbox just to make the one he actually checked
     // do anything. Enabling Smart Gathering is enabling this scan; there is no standalone toggle.
     RESOURCE_STOCKPILE_SCAN (902, "Resource Stockpile Scan",     ConfigurationKeyEnum.GATHER_SMART_PRIORITY_BOOL,             RoutineCategory.RESOURCE),
-    // matt/2026-08-08: read-only timer sweep. Runs first at startup and hourly thereafter,
+    // Read-only timer sweep. Runs first at startup and hourly thereafter,
     // reading every on-screen countdown and writing schedules WITHOUT performing any activity.
     TIMER_SWEEP             (903, "Timer Sweep",                  ConfigurationKeyEnum.TIMER_SWEEP_ENABLED_BOOL,               RoutineCategory.LIFECYCLE),
 
-    // matt/2026-08-12: split out of the old combined TRAINING_TROOPS task. Each camp now
+    // Split out of the old combined TRAINING_TROOPS task. Each camp now
     // schedules independently off its own OCR'd completion time instead of all 3 sharing
     // one reschedule-to-earliest. Reuses the same three checkboxes/config keys the combined
     // task already read per-type -- no UI change needed, they just each drive their own task now.
@@ -146,35 +146,35 @@ public enum TpDailyTaskEnum {
     TRAINING_LANCER         (905, "Training: Lancer",             ConfigurationKeyEnum.TRAIN_LANCER_BOOL,                      RoutineCategory.MILITARY),
     TRAINING_MARKSMAN       (906, "Training: Marksman",           ConfigurationKeyEnum.TRAIN_MARKSMAN_BOOL,                    RoutineCategory.MILITARY),
 
-    // matt/2026-08-12: World map "Heal Injured" panel (over My City) -- Quick Select + Heal
+    // World map "Heal Injured" panel (over My City) -- Quick Select + Heal
     // the highest-priority injured troop queue, then tap Help to speed it via alliance
     // assistance (measured live: cut a 14:21 timer down to 1:45). Idle re-check every 30
-    // minutes per matt when there's nothing currently injured.
+    // minutes by design when there's nothing currently injured.
     HEAL_INJURED_TROOPS     (907, "Heal Injured Troops",          ConfigurationKeyEnum.HEAL_INJURED_ENABLED_BOOL,              RoutineCategory.MILITARY),
 
-    // matt/2026-08-12: "Explore the World" Atlas/Monument -- claims ready quest rows,
+    // "Explore the World" Atlas/Monument -- claims ready quest rows,
     // opens owned Scene Fragment Packs, runs daily Alliance Trade requests/sends.
     MONUMENT                (908, "Monument",                    ConfigurationKeyEnum.MONUMENT_ENABLED_BOOL,                  RoutineCategory.MILITARY),
 
-    // matt/2026-08-12: "event slop" -- rotating limited-time Events-tab events where
+    // "event slop" -- rotating limited-time Events-tab events where
     // the bot's only job is finding a ready Claim and hitting it. Twice-a-day recheck.
     EVENT_HALL_OF_CHIEFS    (909, "Event: Hall of Chiefs",        ConfigurationKeyEnum.EVENT_HALL_OF_CHIEFS_CLAIM_BOOL,        RoutineCategory.MILITARY),
     EVENT_DEFEAT_BEASTS     (910, "Event: Defeat Nearby Beasts",  ConfigurationKeyEnum.EVENT_DEFEAT_BEASTS_CLAIM_BOOL,         RoutineCategory.MILITARY),
     EVENT_HERO_RALLY_CLAIM  (911, "Event: Hero Rally Claim All",  ConfigurationKeyEnum.EVENT_HERO_RALLY_CLAIM_BOOL,            RoutineCategory.MILITARY),
     EVENT_LUCKY_CHIP_SUPPLY (912, "Event: Lucky Chip Supply",     ConfigurationKeyEnum.EVENT_LUCKY_CHIP_SUPPLY_CLAIM_BOOL,     RoutineCategory.MILITARY),
 
-    // matt/2026-08-13: live-verified by hand -- tab icon cropped fresh from a live account, real
+    // Live-verified by hand -- tab icon cropped fresh from a live account, real
     // ranking (15th, 1,004,289 points) with 4 tiers already green/ready to claim.
     EVENT_BROTHERS_IN_ARMS (915, "Event: Brothers in Arms",       ConfigurationKeyEnum.EVENT_BROTHERS_IN_ARMS_CLAIM_BOOL,      RoutineCategory.MILITARY),
 
-    // matt/2026-08-13: top-right cart-icon Shop panel, built tab by tab. Custom
+    // Top-right cart-icon Shop panel, built tab by tab. Custom
     // Armament Chest's free Claimable badge is periodic -- once-a-day recheck.
-    // matt/2026-08-13, Part 2: "Gem Shop" prefix on both -- this is the top-right cart-icon panel,
+    // Part 2: "Gem Shop" prefix on both -- this is the top-right cart-icon panel,
     // distinct from the bottom-nav "Shop" (Backpack/Recycle Shop/etc, a completely different feature).
     SHOP_CUSTOM_ARMAMENT_CHEST (913, "Gem Shop - Custom Armament Chest", ConfigurationKeyEnum.SHOP_CUSTOM_ARMAMENT_CHEST_CLAIM_BOOL, RoutineCategory.MILITARY),
     SHOP_DAILY_DEALS_FREE_CHEST (914, "Gem Shop - Daily Deals Free Chest", ConfigurationKeyEnum.SHOP_DAILY_DEALS_FREE_CHEST_CLAIM_BOOL, RoutineCategory.MILITARY),
 
-    // matt/2026-08-14: "the new labyrinth" -- Research Center (Tech stats) + Gear Forge (Chief
+    // "the new labyrinth" -- Research Center (Tech stats) + Gear Forge (Chief
     // Gear stats), the stage-ladder raid system distinct from the classic Land of Heroes/Cave of
     // Monsters/Charm Mine zones (LABYRINTH, id 11, above). Raid-claim only -- Challenge (real
     // battle, limited daily attempts) deliberately not automated yet.

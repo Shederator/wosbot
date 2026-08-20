@@ -397,7 +397,7 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
     public void pressBack() {
         checkPreemption();
         emuManager.pressBack(EMULATOR_NUMBER);
-        // matt/2026-08-14: "quit game screen still happening with intel, anywhere" -- a bare
+        // "quit game screen still happening with intel, anywhere" -- a bare
         // screen with nothing open responds to this game's own back-button handling by popping a
         // native "Quit game?" confirmation, one accidental tap from actually exiting mid-run. This
         // is the single shared pressBack() every routine in the codebase calls, so checking here
@@ -502,12 +502,12 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
      * Schedules the next run, nudged by a small random amount so wake-ups do not land on
      * mechanically exact times.
      *
-     * <p>matt, 2026-08-08: every routine funnels its reschedule through here, so this is the one
+     * <p>the operator, 2026-08-08: every routine funnels its reschedule through here, so this is the one
      * place that can scatter the bot's clock. Without it Intel fires at exactly 15:00.00 after
      * every run, hourly tasks land on the same second forever, and the whole schedule is a
      * metronome.</p>
      *
-     * <p>The jitter is a percentage <em>with an absolute ceiling</em>, which is matt's
+     * <p>The jitter is a percentage <em>with an absolute ceiling</em>, which is the operator's
      * requirement and the part that matters: 15% of a 16-hour research timer would be nearly
      * two and a half hours of dead waiting, which trades a cosmetic tell for real lost progress.
      * Capping at {@link ConfigurationKeyEnum#SCHEDULE_JITTER_MAX_SECONDS_INT} (default 150s)

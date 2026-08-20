@@ -13,7 +13,7 @@ import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.service.StatisticsService;
 
 /**
- * matt/2026-08-13: top-right cart-icon Shop panel, "Daily Deals" tab (second tab,
+ * Top-right cart-icon Shop panel, "Daily Deals" tab (second tab,
  * next to Custom Armament Chest). Has a genuinely free "Free" chest badge on the
  * left side of the banner, once a day -- everything else on this tab is a paid
  * pack ($0.99-$4.99). This routine ONLY ever taps the free badge.
@@ -45,7 +45,7 @@ public class DailyDealsFreeChestRoutine extends DelayedTask {
         return true;
     }
 
-    // matt/2026-08-13: same fix as CustomArmamentChestRoutine -- a single locatePattern attempt for
+    // Same fix as CustomArmamentChestRoutine -- a single locatePattern attempt for
     // the cart icon had no recovery if some other task left a popup/panel open, so it silently gave
     // up and waited a full day instead of clearing back to a known screen and retrying.
     private static final int MAX_NAV_RETRIES = 3;

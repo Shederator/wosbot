@@ -516,7 +516,7 @@ public class BankRoutine extends DelayedTask {
 
 		confirmDeposit();
 
-		// matt/2026-08-12: 24h + 5min buffer so the recheck lands a hair after the deposit
+		// 24h + 5min buffer so the recheck lands a hair after the deposit
 		// actually matures in-game, instead of possibly a few seconds early against
 		// server-side timing drift.
 		LocalDateTime nextCheck = LocalDateTime.now().plusDays(config.durationDays).plusMinutes(5);

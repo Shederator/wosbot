@@ -63,7 +63,7 @@ public class StorehouseChestRoutine extends DelayedTask {
     private static final PointData STAMINA_CLAIM_BUTTON_BOTTOM_RIGHT = new PointData(450, 950);
 
     // ========== Fallback Timer OCR ==========
-    // matt, 2026-08-08: only ~15px wider than the long-standing (285,642)-(430,666) box, which
+    // Only ~15px wider than the long-standing (285,642)-(430,666) box, which
     // was very nearly right. Verified against a real frame captured mid-routine (Storehouse
     // selected, timer showing 00:53:16): the old box read it correctly, and the extra width
     // just stops the last digit clipping when the label sits slightly right of centre.
@@ -107,7 +107,7 @@ public class StorehouseChestRoutine extends DelayedTask {
     private static final long POST_CLAIM_SETTLE_MS = 1500L;
 
     /**
-     * matt, 2026-08-08: return a little after the chest is actually ready, never exactly on it.
+     * Return a little after the chest is actually ready, never exactly on it.
      * Proportional rather than fixed so a thirty-second interval slips by a second or two while
      * an hour-long one slips by a few minutes — arriving on the same round number every cycle is
      * the tell worth avoiding, and being slightly late costs nothing because the chest waits.
@@ -115,7 +115,7 @@ public class StorehouseChestRoutine extends DelayedTask {
     private static final int RETURN_JITTER_MIN_PERCENT = 1;
     private static final int RETURN_JITTER_MAX_PERCENT = 8;
 
-    // matt, 2026-08-08: he asked "without OCRing, how much is left on the storehouse?" and the
+    // He asked "without OCRing, how much is left on the storehouse?" and the
     // honest answer was that the stored number could not be trusted — a measured 1h31m read and
     // an invented +1h fallback were both persisted as plain timestamps, indistinguishable after
     // the fact. These track provenance so the log says which is which.
@@ -218,7 +218,7 @@ public class StorehouseChestRoutine extends DelayedTask {
             // was claimed this pass. Count only here, never on the not-found/fallback path below.
             StatisticsService.obtain().addToCounter(profile, "Storehouse Chests Opened", 1);
 
-            // matt, 2026-08-08: the next chest interval is not fixed — he has seen it come back
+            // The next chest interval is not fixed — he has seen it come back
             // in thirty seconds and in an hour — so the timer printed immediately after claiming
             // is the only thing that knows when to return. 500ms was not enough for the reward
             // screen to settle and repaint it, which is why this read intermittently came back
@@ -384,7 +384,7 @@ public class StorehouseChestRoutine extends DelayedTask {
                 staminaTimeMeasured = true;
             }
         } else if (chestTimerRead) {
-            // matt, 2026-08-08: a successful chest-timer OCR this same pass proves we were
+            // A successful chest-timer OCR this same pass proves we were
             // actually looking at the Storehouse, so a missing stamina icon means it is already
             // claimed for this cycle — not that navigation failed. Claiming again is impossible
             // until the cycle rolls, so the blind 1-hour retry here was ~20 pointless trips to

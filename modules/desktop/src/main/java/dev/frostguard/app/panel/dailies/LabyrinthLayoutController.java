@@ -26,7 +26,7 @@ public class LabyrinthLayoutController extends AbstractProfileController {
     @FXML private TextField tfSquad2Mrk;
     @FXML private Label labelRatioHint;
 
-    // matt/2026-08-13: "we're up to like three now" -- Cave of Monsters + Charm Mine get the same
+    // "we're up to like three now" -- Cave of Monsters + Charm Mine get the same
     // per-squad ratio controls as Land of Heroes.
     @FXML private TextField tfCaveSquad1Inf;
     @FXML private TextField tfCaveSquad1Lan;
@@ -44,7 +44,7 @@ public class LabyrinthLayoutController extends AbstractProfileController {
     @FXML private TextField tfCharmSquad2Mrk;
     @FXML private Label labelCharmRatioHint;
 
-    // matt/2026-08-15: "add the research center in the gear forge... where we can start entering
+    // "add the research center in the gear forge... where we can start entering
     // true default troop ratios" -- Research Center and Gear Forge are single-composition Challenge
     // fights (no Squad1/Squad2 split), so one Inf/Lan/Mrk row each instead of the two-squad layout
     // above. LabyrinthRaidRoutine.challengeZone() reads these as the first attempt's preset.
@@ -58,10 +58,10 @@ public class LabyrinthLayoutController extends AbstractProfileController {
     @FXML private TextField tfGearForgeMrk;
     @FXML private Label labelGearForgeRatioHint;
 
-    // matt/2026-08-16: "once you add Gaia, I should be able to put in both formation percentages" --
+    // "once you add Gaia, I should be able to put in both formation percentages" --
     // Gaia Heart is a real two-squad zone (Squad Config, same shape as Land of Heroes), not a
     // single-composition Challenge fight like Research Center/Gear Forge. Squad 3 scaffolded too
-    // (locked until Stage 15-10 on matt's account) -- ready the moment it unlocks.
+    // (locked until Stage 15-10 on this account) -- ready the moment it unlocks.
     @FXML private TextField tfGaiaSquad1Inf;
     @FXML private TextField tfGaiaSquad1Lan;
     @FXML private TextField tfGaiaSquad1Mrk;

@@ -90,7 +90,7 @@ public class ArenaRoutine extends DelayedTask {
     private static final int OPPONENT_SCORE_STAR_COMPACT_LAYOUT_Y_OFFSET = -4;
     private static final int MIN_STAR_YELLOW_PIXELS = 20;
 
-    // matt, 2026-08-08: the star icon position/threshold above was already
+    // The star icon position/threshold above was already
     // calibrated (used for layout detection), but nobody ever OCR'd the
     // NUMBER next to it — the routine could tell an opponent was beatable but
     // had no idea how many Arena points they were worth. This region picks
@@ -574,7 +574,7 @@ public class ArenaRoutine extends DelayedTask {
                 if (serverPolicy != ServerPolicy.ANY && profileServer != null) {
                     server = readServer(opponentY, opponentNumber, layout);
                 }
-                // matt, 2026-08-08: only worth OCR'ing stars for opponents we'd
+                // Only worth OCR'ing stars for opponents we'd
                 // actually be willing to attack — this is what "safe but
                 // maximize points" targeting sorts on instead of raw power.
                 stars = readStars(opponentY, opponentNumber, layout);
@@ -1100,7 +1100,7 @@ public class ArenaRoutine extends DelayedTask {
         logInfo(String.format("Challenging opponent %d (%s)", opponent.number(), opponent.selectionSummary()));
 
         if (!isChallengeButtonEnabled(opponent)) {
-            // matt, 2026-08-08: a disabled button on THIS opponent does not
+            // A disabled button on THIS opponent does not
             // necessarily mean the whole daily challenge pool is exhausted —
             // it could just be a per-target state (already faced this round,
             // a cooldown, etc.) while other opponents in the list remain
@@ -1743,7 +1743,7 @@ public class ArenaRoutine extends DelayedTask {
             return new OpponentCandidate(number, opponentY, power, alliance, server, stars, false, "skip:" + reason);
         }
 
-        // matt, 2026-08-08: "match the highest-star SAFE (weaker-power) opponent
+        // "match the highest-star SAFE (weaker-power) opponent
         // instead of just the weakest one" — the +9/+10/+11/+12 Arena point
         // payout is keyed off relative Arena points (stars), not power, so
         // among opponents we're already willing to fight, more stars is
