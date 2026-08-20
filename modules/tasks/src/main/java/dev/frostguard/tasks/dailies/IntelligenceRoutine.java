@@ -1344,16 +1344,46 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 				// unattended. Cap the backoff at the same 15-minute recheck interval whenever
 				// Beast/Fire Beast hunting is enabled, regardless of how far out the real board refresh
 				// reads.
-				if (beastsEnabled || fireBeastsEnabled) {
+				// matt/2026-08-20, caught live and stated directly: "Intel is running in sixteen
+				// minutes instead of what is it like, four hours. So wrong again." The cap above was
+				// firing even when the board's own countdown had been read successfully, so the whole
+				// point of reading it -- "I OCR how much time is left, I get the exact number, and I
+				// run this again that amount of time plus five minutes" (his words) -- was thrown away
+				// on the very next line. Two cases, and they are genuinely different:
+				//
+				//   Timer READ  -> honor it. This is matt's explicit, repeated instruction, and he is
+				//                  the one watching the board live. Note the tradeoff being accepted:
+				//                  the 2026-08-14 note below recorded fire beasts spawning ~10 min
+				//                  apart INSIDE a refresh window, so a long honored backoff can miss a
+				//                  new winnable spawn. That is his call to make, not this code's.
+				//   Timer UNREAD -> keep the 15-minute cap. Here the backoff is the blind 8h ceiling,
+				//                  not a real reading, and parking Intel 8 hours out on a guess is the
+				//                  case that actually does damage. This is also the branch that used to
+				//                  hammer the same stuck mission every 3 minutes, so it stays capped.
+				//
+				// Original 2026-08-14 rationale, kept because the observation behind it is still true:
+				// this branch was scheduling straight off the full board-refresh cooldown (confirmed
+				// live jumping from a 12:00 to a 20:00 UTC read), ignoring MAX_BEAST_RECHECK_MINUTES
+				// entirely -- that constant was only ever applied to the march-slot claim expiry, never
+				// to this reschedule() call, so a board stuck on one unbeatable beast could sit
+				// unrechecked for hours while new, winnable spawns went unattended.
+				if ((beastsEnabled || fireBeastsEnabled) && cooldown == null) {
 					LocalDateTime beastRecheckCeiling = LocalDateTime.now().plusMinutes(MAX_BEAST_RECHECK_MINUTES);
 					if (backoffTime.isAfter(beastRecheckCeiling)) {
 						logWarning(routineLogIntelligenceLine(String.format(
-								"Backoff of %s is beyond the %d-minute Beast/Fire Beast recheck cap -- capping "
-										+ "there so a new spawn is never missed by more than that, regardless of "
-										+ "how far out the board's own full refresh reads.",
-								backoffTime.format(DATETIME_FORMATTER), MAX_BEAST_RECHECK_MINUTES)));
+								"Backoff of %s came from the blind %d-minute ceiling, not a real reading, and is "
+										+ "beyond the %d-minute Beast/Fire Beast recheck cap -- capping there so a "
+										+ "new spawn is never missed by more than that while we're guessing.",
+								backoffTime.format(DATETIME_FORMATTER), MAX_INTEL_REFRESH_MINUTES,
+								MAX_BEAST_RECHECK_MINUTES)));
 						backoffTime = beastRecheckCeiling;
 					}
+				} else if (cooldown != null) {
+					logInfo(routineLogIntelligenceLine(String.format(
+							"Honoring the board's own refresh countdown -- next Intel run at %s. Not applying the "
+									+ "%d-minute Beast/Fire Beast recheck cap: the timer was actually read this "
+									+ "time, so there is nothing to find until the board refreshes.",
+							backoffTime.format(DATETIME_FORMATTER), MAX_BEAST_RECHECK_MINUTES)));
 				}
 
 				reschedule(backoffTime);
