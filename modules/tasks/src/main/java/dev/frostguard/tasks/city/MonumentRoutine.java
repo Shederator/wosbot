@@ -1231,7 +1231,14 @@ public class MonumentRoutine extends DelayedTask {
             Integer requestsLeft = leftText == null ? null : RegexNumberParser.extractByPattern(
                     leftText, Pattern.compile("\\((\\d+)\\s*/"));
             if (requestsLeft == null || requestsLeft <= 0) {
-                logInfo(logLine("No My Requests left today (or couldn't read the counter). Moving on."));
+                // matt/2026-08-20: same discipline as everywhere else tonight -- report the raw text
+                // and the screen, never just "couldn't read it". A null here is ambiguous between a
+                // genuinely exhausted counter, an OCR miss, and the post-Claim reward reveal not
+                // having closed back to the panel yet, and those need different fixes.
+                logInfo(logLine("Not filing a new request: counter parsed as " + requestsLeft
+                        + " from raw text '" + (leftText == null ? "<null>" : leftText.replace("\n", " ").trim())
+                        + "' (region " + MY_REQUESTS_LEFT_TL + "->" + MY_REQUESTS_LEFT_BR + "). "
+                        + dumpDiagnosticFrame("my-requests-counter-unparsed")));
                 return;
             }
 
