@@ -32,6 +32,7 @@ import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.emulator.QueuePositionListener;
 import dev.frostguard.engine.error.ADBConnectionException;
 import dev.frostguard.engine.error.HomeNotFoundException;
+import dev.frostguard.engine.error.ProfileCooldownException;
 import dev.frostguard.engine.error.ProfileInReconnectStateException;
 import dev.frostguard.engine.error.StopExecutionException;
 import dev.frostguard.engine.input.TapInteractionService;
@@ -73,6 +74,7 @@ public class TaskQueue {
     private volatile AccountDescriptor profile;
     private volatile ExecutionContext   runningContext;
     private volatile LocalDateTime      sessionOrigin;
+    private volatile String             profileCooldownStatus;
     // Changed by pernerch | Date: 2026-07-04 | Why: ensure first startup cycle runs Initialize regardless of idle heuristics.
     private volatile boolean    forceInitialInitialize = true;
     private volatile boolean    shuttingDown = false;
@@ -119,6 +121,7 @@ public class TaskQueue {
 
     public LocalDateTime     getScheduledUntil() { return statusModel.getDelayUntil(); }
     public boolean           isActive()          { return statusModel.isRunning(); }
+    public boolean           isPaused()          { return statusModel.isPaused(); }
     public AccountDescriptor getProfile()        { return profile; }
 
     public synchronized void applyProfileUpdate(AccountDescriptor updatedProfile) {
@@ -314,6 +317,7 @@ public class TaskQueue {
         forceInitialInitialize = true;
         shuttingDown = false;
         stoppedCleanly = false;
+        profileCooldownStatus = null;
         statusModel.setRunning(true);
         executor.start(this::mainLoop, "TaskQueue-" + profile.getName());
     }
@@ -374,6 +378,7 @@ public class TaskQueue {
 
     public void pause()  { statusModel.userPause(); broadcastStatus("PAUSE REQUESTED"); emitInfo("Queue paused"); }
     public void resume() {
+        profileCooldownStatus = null;
         statusModel.setPaused(false);
         statusModel.setUserPaused(false);
         statusModel.setDelayUntil(LocalDateTime.now());
@@ -418,36 +423,55 @@ public class TaskQueue {
     private void mainLoop() {
         acquireSlot();
         while (statusModel.isRunning() && !shuttingDown) {
-            statusModel.loopStarted();
-            profile = ProfileService.obtain().fetchAllAccounts().stream()
-                    .filter(p -> p.getId().equals(profile.getId())).findFirst().orElse(profile);
+            runSchedulerTick();
+        }
+    }
 
-            if (statusModel.isPaused())                { onPausedTick(); continue; }
-            if (statusModel.isReadyToReconnect() && !deviceBridge.isRunning(profile.getEmulatorNumber())) {
-                emitInfo("Device offline - re-acquiring slot"); acquireSlot();
-            }
-            if (enforceSessionCap()) continue;
+    void runSchedulerTick() {
+        statusModel.loopStarted();
+        profile = ProfileService.obtain().fetchAllAccounts().stream()
+                .filter(p -> p.getId().equals(profile.getId())).findFirst().orElse(profile);
 
-            DelayedTask chosen = selectNextTask();
+        if (statusModel.isPaused()) {
+            onPausedTick();
+            return;
+        }
+        if (requiresSlotAcquisition(sessionOrigin)) {
+            emitInfo("No active device lease - re-acquiring slot");
+            acquireSlot();
+        } else if (statusModel.isReadyToReconnect()
+                && !deviceBridge.isRunning(profile.getEmulatorNumber())) {
+            emitInfo("Device offline - re-acquiring slot");
+            acquireSlot();
+        }
+        if (enforceSessionCap()) return;
 
-            if (chosen != null) {
-                statusModel.getLoopState().setExecutedTask(executeTask(chosen));
-                statusModel.setIdleTimeExceeded(false);
-            } else if (!statusModel.isPaused()) {
-                tryIdleInjection();
-            }
+        DelayedTask chosen = selectNextTask();
 
-            handleIdleTransitions();
+        if (chosen != null) {
+            statusModel.getLoopState().setExecutedTask(executeTask(chosen));
+            statusModel.setIdleTimeExceeded(false);
+        } else if (!statusModel.isPaused()) {
+            tryIdleInjection();
+        }
 
-            if (!statusModel.getLoopState().isExecutedTask() && !statusModel.isPaused()) {
-                String nextLabel = taskBacklog.isEmpty() ? "None" : taskBacklog.peek().getTaskName();
-                broadcastStatus("Idle " + formatCountdown(statusModel.getDelayUntil()) + "\nNext: " + nextLabel);
-                statusModel.getLoopState().endLoop();
-                long nap = Math.max(0, TICK_INTERVAL_MS - statusModel.getLoopState().getDuration());
-                try { Thread.sleep(nap); } catch (InterruptedException ie) { 
-                    if (shuttingDown) break; // Exit immediately on shutdown
-                    Thread.currentThread().interrupt(); 
-                }
+        if (shouldHandleIdleTransitions(statusModel)) handleIdleTransitions();
+
+        if (!statusModel.getLoopState().isExecutedTask() && !statusModel.isPaused()) {
+            String nextLabel = taskBacklog.isEmpty() ? "None" : taskBacklog.peek().getTaskName();
+            broadcastStatus("Idle " + formatCountdown(statusModel.getDelayUntil()) + "\nNext: " + nextLabel);
+            statusModel.getLoopState().endLoop();
+            long nap = Math.max(0, TICK_INTERVAL_MS - statusModel.getLoopState().getDuration());
+            sleepSchedulerTick(nap);
+        }
+    }
+
+    protected void sleepSchedulerTick(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException exception) {
+            if (!shuttingDown) {
+                Thread.currentThread().interrupt();
             }
         }
     }
@@ -514,8 +538,10 @@ public class TaskQueue {
             AnalyticsService.getInstance().trackTaskStarted(task.getTaskName());
             task.setLastExecutionTime(LocalDateTime.now());
             task.run();
-            // Changed by pernerch | Date: 2026-07-04 | Why: clear forced-Initialize mode once Initialize completed successfully.
-            if (task.getTpTask() == TpDailyTaskEnum.INITIALIZE) {
+            // Initialize can return normally while requesting one bounded recovery retry.
+            // Keep the initial force flag until the routine reports a non-recurring success;
+            // otherwise the no-imminent-task guard would discard that recovery attempt.
+            if (task.getTpTask() == TpDailyTaskEnum.INITIALIZE && !task.isRecurring()) {
                 forceInitialInitialize = false;
             }
             long elapsed = (System.currentTimeMillis() - t0) / 1000;
@@ -647,8 +673,10 @@ public class TaskQueue {
         else emitInfoTask(task, "Task removed from queue");
     }
 
-    private void routeError(DelayedTask task, Exception ex) {
-        if (ex instanceof HomeNotFoundException) {
+    void routeError(DelayedTask task, Exception ex) {
+        if (ex instanceof ProfileCooldownException cooldown) {
+            pauseForProfileCooldown(task, cooldown);
+        } else if (ex instanceof HomeNotFoundException) {
             emitErrorTask(task, "Home not found: " + ex.getMessage());
             enqueue(DelayedTaskRegistry.create(TpDailyTaskEnum.INITIALIZE, profile));
         } else if (ex instanceof StopExecutionException) {
@@ -661,6 +689,54 @@ public class TaskQueue {
         } else {
             emitErrorTask(task, "Unexpected error: " + ex.getMessage());
         }
+    }
+
+    private void pauseForProfileCooldown(DelayedTask task, ProfileCooldownException cooldown) {
+        LocalDateTime retryAt = cooldown.getRetryAt();
+        emitErrorTask(task, "Profile cooldown requested: " + cooldown.getMessage()
+                + "; queue paused until " + retryAt.format(TS_FMT));
+        applyProfileCooldown(task, statusModel, retryAt);
+        profileCooldownStatus = "ACTION REQUIRED - " + cooldown.getMessage()
+                + " - retry " + retryAt.format(TS_FMT);
+
+        boolean gameStopped = stopBlockedGameProcess(task);
+        boolean slotReleased = releaseBlockedProfileSlot(task);
+        emitInfoTask(task, "Cooldown resources settled: gameStopped=" + gameStopped
+                + ", slotReleased=" + slotReleased
+                + ", retryAt=" + retryAt.format(TS_FMT));
+        broadcastStatus(profileCooldownStatus);
+    }
+
+    protected boolean stopBlockedGameProcess(DelayedTask task) {
+        try {
+            deviceBridge.forceStopApp(profile.getEmulatorNumber(), EmulatorController.GAME.getPackageName());
+            return true;
+        } catch (RuntimeException ex) {
+            emitWarnTask(task, "Could not stop blocked game process before cooldown: " + ex.getMessage());
+            return false;
+        }
+    }
+
+    protected boolean releaseBlockedProfileSlot(DelayedTask task) {
+        try {
+            releaseEmulatorSlotLease();
+            sessionOrigin = null;
+            return true;
+        } catch (RuntimeException ex) {
+            emitWarnTask(task, "Could not release emulator slot for cooldown: " + ex.getMessage());
+            return false;
+        }
+    }
+
+    protected void releaseEmulatorSlotLease() {
+        deviceBridge.releaseEmulatorSlot(profile);
+    }
+
+    static void applyProfileCooldown(DelayedTask task, TaskQueueStatusData status, LocalDateTime retryAt) {
+        task.setRecurring(true);
+        task.reschedule(retryAt);
+        status.setDelayUntil(retryAt);
+        status.setPaused(true);
     }
 
     private void onReconnectNeeded(ProfileInReconnectStateException ex) {
@@ -691,7 +767,7 @@ public class TaskQueue {
         else { ref.reschedule(LocalDateTime.now()); ref.setRecurring(false); taskBacklog.offer(ref); }
     }
 
-    private void handleIdleTransitions() {
+    protected void handleIdleTransitions() {
         if (Thread.currentThread().isInterrupted()) return;
         if (statusModel.getLoopState().isExecutedTask() || taskBacklog.isEmpty()) return;
         IdleBehaviorEnum idleBehavior = resolveIdleBehavior();
@@ -865,13 +941,17 @@ public class TaskQueue {
         }
     }
 
-    private void acquireSlot() {
+    protected void acquireSlot() {
         broadcastStatus("Waiting for device slot");
         try {
             QueuePositionListener cb = (t, pos) -> broadcastStatus("Queue position: " + pos);
             deviceBridge.adquireEmulatorSlot(profile, cb);
-            sessionOrigin = LocalDateTime.now();
+            markSlotAcquired();
         } catch (InterruptedException ie) { emitError("Interrupted waiting for slot"); Thread.currentThread().interrupt(); }
+    }
+
+    protected final void markSlotAcquired() {
+        sessionOrigin = LocalDateTime.now();
     }
 
     private void onPausedTick() {
@@ -879,14 +959,36 @@ public class TaskQueue {
             boolean reconnect = statusModel.needsReconnect();
             if (reconnect) statusModel.setNeedsReconnect(false);
             broadcastStatus(reconnect ? "RESUMING AFTER PAUSE" : "RESUMING");
+            profileCooldownStatus = null;
             statusModel.setPaused(false);
-            if (!deviceBridge.isRunning(profile.getEmulatorNumber())) acquireSlot();
+            if (requiresSlotAcquisition(sessionOrigin)) acquireSlot();
             if (reconnect) attemptReconnect();
             return;
         }
-        broadcastStatus("PAUSED");
-        if (LocalDateTime.now().getSecond() % 10 == 0) emitInfo("Queue paused");
-        try { Thread.sleep(1000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+        String cooldownStatus = profileCooldownStatus;
+        broadcastStatus(cooldownStatus != null ? cooldownStatus : "PAUSED");
+        if (cooldownStatus == null && LocalDateTime.now().getSecond() % 10 == 0) emitInfo("Queue paused");
+        sleepPausedTick();
+    }
+
+    protected void sleepPausedTick() {
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    static boolean requiresSlotAcquisition(LocalDateTime sessionOrigin) {
+        return sessionOrigin == null;
+    }
+
+    static boolean shouldHandleIdleTransitions(TaskQueueStatusData status) {
+        return !status.isPaused();
+    }
+
+    String getProfileCooldownStatus() {
+        return profileCooldownStatus;
     }
 
     private void triggerPcSleep(LocalDateTime wakeAt) {
