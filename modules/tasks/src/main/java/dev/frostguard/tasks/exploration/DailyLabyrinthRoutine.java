@@ -308,6 +308,11 @@ public class DailyLabyrinthRoutine extends DelayedTask {
             "([0-9]+(?:\\.[0-9]+)?)\\s*%?\\s*(Infantry|Lancer|Marksman)\\s+(Attack|Defense|Lethality|Health)\\s*\\+?\\s*([0-9]+(?:\\.[0-9]+)?)\\s*%?",
             java.util.regex.Pattern.CASE_INSENSITIVE);
 
+    /** "The Labyrinth" title on the zone map -- how we confirm we're back on the map between zones. */
+    private static final PointData MAP_ANCHOR_TL = new PointData(85, 18);
+    private static final PointData MAP_ANCHOR_BR = new PointData(365, 64);
+    private static final String    MAP_ANCHOR_TEXT = "labyrinth";
+
     // Stage screen: the "Challenge" button (white text, blue button).
     private static final PointData STAGE_ANCHOR_TL = new PointData(255, 1195);
     private static final PointData STAGE_ANCHOR_BR = new PointData(465, 1245);
@@ -380,6 +385,9 @@ public class DailyLabyrinthRoutine extends DelayedTask {
                 // Monsters, THEN Charm Mine, each independently gated by its own open/locked check.
                 for (ZoneFormation zone : ZONE_FORMATIONS) {
                     setupZoneFormation(zone);
+                    // Every zone's setup STARTS by OCR'ing its label off the map, so every zone must
+                    // end back on the map. See returnToLabyrinthMap().
+                    returnToLabyrinthMap(zone.zoneName() + " formation");
                 }
                 reschedule(nextLabyrinthStartTime());
                 return;
@@ -936,6 +944,36 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     private static String capitalize(String s) {
         if (s == null || s.isEmpty()) return s;
         return Character.toUpperCase(s.charAt(0)) + s.substring(1).toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /**
+     * Presses back until the Labyrinth map is showing again.
+     *
+     * <p>matt/2026-08-20: the zone loop calls setupZoneFormation() once per zone and each call
+     * STARTS by OCR'ing that zone's label off the map, so every call must END on the map. Nothing
+     * used to do that deliberately -- the old flow got back purely as a side effect of the
+     * save-dialog navStep pressing back while failing to find a dialog that never existed. Removing
+     * that dead wait (and adding the Equalize early-return) removed the accident with it, and the
+     * very next run read Charm Mine's label as 'SO000' -- the "50,000" troop count on Cave of
+     * Monsters' deployment screen, because it was still sitting there. The zone gate caught it and
+     * skipped rather than tapping blind, but Charm and Gaia were then skipped for the wrong reason.
+     * Navigate back on purpose instead of relying on a failure's side effects.
+     */
+    private void returnToLabyrinthMap(String tag) {
+        for (int i = 0; i < 4; i++) {
+            String title = readStringValue(MAP_ANCHOR_TL, MAP_ANCHOR_BR, ZONE_LABEL_SETTINGS);
+            if (title != null && title.toLowerCase(java.util.Locale.ROOT).contains(MAP_ANCHOR_TEXT)) {
+                return;
+            }
+            pressBack();
+            sleepTask(LABYRINTH_LOAD_DELAY);
+        }
+        String title = readStringValue(MAP_ANCHOR_TL, MAP_ANCHOR_BR, ZONE_LABEL_SETTINGS);
+        if (title == null || !title.toLowerCase(java.util.Locale.ROOT).contains(MAP_ANCHOR_TEXT)) {
+            logWarning(tag + ": couldn't get back to the Labyrinth map after 4 back presses (title "
+                    + "reads '" + title + "'). Remaining zones this pass will likely be skipped by "
+                    + "their own label check, which is the safe outcome.");
+        }
     }
 
     private void setupZoneFormation(ZoneFormation zone) {
