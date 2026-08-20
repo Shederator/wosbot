@@ -156,9 +156,27 @@ public class MonumentRoutine extends DelayedTask {
     //     below before anything downstream is trusted.
     // (2) MONUMENT_PUZZLE_OVERVIEW_FRAGMENT_BACKPACK_ICON (used inside handlePuzzleReadyChain)
     //     IS a real native ADB template, cropped live the same day -- normal confidence.
-    private static final PointData PUZZLE_OVERVIEW_ASSEMBLE_REGION_TL = new PointData(450, 220);
-    private static final PointData PUZZLE_OVERVIEW_ASSEMBLE_REGION_BR = new PointData(660, 300);
-    private static final PointData PUZZLE_OVERVIEW_ASSEMBLE_NOW_BTN = new PointData(549, 264);
+    // matt/2026-08-20: "it's clicking the red book, but it's missing the assemble now button in the
+    // top right." The screen is finally captured --
+    // ocr-debug/monument-puzzle-overview-no-assemble-2026-08-20T08-51-10 -- and everything he
+    // described is on it: the "Assemble Now" button top-right, the six-sided blue reward hexagon
+    // beside it, and the green-ticked album thumbnails along the bottom.
+    //
+    // The (450,220)-(660,300) region above was an explicit ESTIMATE (see the note above) that was
+    // never checked against a real frame. Measured against the actual capture with the bundled
+    // tesseract:
+    //     (270,100)-(640,138) banner -> "All fragments found! Assemble to obtain"   clean
+    //     (450,220)-(660,300) old    -> "m Assemble"                                marginal
+    //     the button itself          -> "oe"     white-on-blue, dies in stripBackground
+    // So gate on the banner. It sits on flat orange with dark text, reads perfectly, and states
+    // outright that the puzzle is complete -- a better signal than the button's own label.
+    private static final PointData PUZZLE_OVERVIEW_ASSEMBLE_REGION_TL = new PointData(270, 100);
+    private static final PointData PUZZLE_OVERVIEW_ASSEMBLE_REGION_BR = new PointData(640, 138);
+    /** Kept as a secondary read: it does contain "Assemble", just less reliably than the banner. */
+    private static final PointData PUZZLE_OVERVIEW_ASSEMBLE_FALLBACK_TL = new PointData(450, 220);
+    private static final PointData PUZZLE_OVERVIEW_ASSEMBLE_FALLBACK_BR = new PointData(660, 300);
+    /** Button measured at x 485-632, y 258-315 on the live frame; (549,264) sat near its top edge. */
+    private static final PointData PUZZLE_OVERVIEW_ASSEMBLE_NOW_BTN = new PointData(558, 286);
     /** Live-verified today: a center-body tap closes the "Well done, you assembled the
      *  Puzzle!" congrats screen. */
     private static final PointData PUZZLE_ASSEMBLED_TAP_ANYWHERE = new PointData(350, 640);
@@ -663,9 +681,28 @@ public class MonumentRoutine extends DelayedTask {
                 s -> s != null && !s.isBlank(),
                 s -> s);
         if (overviewText == null || !overviewText.toLowerCase().contains("assemble")) {
+            String fallback = stringHelper.attemptRecognition(
+                    PUZZLE_OVERVIEW_ASSEMBLE_FALLBACK_TL, PUZZLE_OVERVIEW_ASSEMBLE_FALLBACK_BR,
+                    2, 150L, PANEL_TITLE_OCR_SETTINGS,
+                    s -> s != null && !s.isBlank(),
+                    s -> s);
+            logInfo(logLine("Assemble banner read as '" + overviewText + "'; button-area fallback read as '"
+                    + fallback + "'."));
+            if (fallback != null && fallback.toLowerCase().contains("assemble")) {
+                overviewText = fallback;
+            }
+        }
+        if (overviewText == null || !overviewText.toLowerCase().contains("assemble")) {
+            // matt/2026-08-20: "it's clicking the red book, but it's missing the assemble now button
+            // in the top right." This region was an ESTIMATE that has never once been checked against
+            // a real capture of this screen -- it failed six times overnight reading 'null',
+            // 'WP neseraie', 'WP ncceraie', 'WP reverie'. Dump the frame so the button's actual
+            // position can be measured instead of estimated a second time.
             logInfo(logLine("Puzzle-ready icon opened, but no 'Assemble Now' text confirmed via OCR "
-                    + "(read: '" + overviewText + "') -- either the puzzle isn't actually complete yet, "
-                    + "or the estimated OCR region is off. Not tapping blind; recovering toward Home."));
+                    + "(read: '" + overviewText + "') in region " + PUZZLE_OVERVIEW_ASSEMBLE_REGION_TL
+                    + "->" + PUZZLE_OVERVIEW_ASSEMBLE_REGION_BR + " -- either the puzzle isn't actually "
+                    + "complete yet, or the estimated OCR region is off. Not tapping blind; recovering "
+                    + "toward Home. " + dumpDiagnosticFrame("puzzle-overview-no-assemble")));
             recoverTowardHome();
             return;
         }
