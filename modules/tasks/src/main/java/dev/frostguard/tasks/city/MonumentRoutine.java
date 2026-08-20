@@ -177,6 +177,13 @@ public class MonumentRoutine extends DelayedTask {
     private static final PointData PUZZLE_OVERVIEW_ASSEMBLE_FALLBACK_BR = new PointData(660, 300);
     /** Button measured at x 485-632, y 258-315 on the live frame; (549,264) sat near its top edge. */
     private static final PointData PUZZLE_OVERVIEW_ASSEMBLE_NOW_BTN = new PointData(558, 286);
+    /** The hexagonal blue commit button on the jigsaw screen -- see isAssembleConfirmHexPresent(). */
+    private static final PointData PUZZLE_ASSEMBLE_CONFIRM_BTN = new PointData(654, 1193);
+    private static final PointData ASSEMBLE_HEX_BOX_TL = new PointData(612, 1155);
+    private static final PointData ASSEMBLE_HEX_BOX_BR = new PointData(697, 1232);
+    private static final int ASSEMBLE_HEX_MIN_BLUE = 2200;
+    private static final int ASSEMBLE_HEX_MIN_GREEN = 300;
+
     /** Live-verified today: a center-body tap closes the "Well done, you assembled the
      *  Puzzle!" congrats screen. */
     private static final PointData PUZZLE_ASSEMBLED_TAP_ANYWHERE = new PointData(350, 640);
@@ -711,6 +718,24 @@ public class MonumentRoutine extends DelayedTask {
         tapNear(PUZZLE_OVERVIEW_ASSEMBLE_NOW_BTN);
         sleepTask(PUZZLE_ASSEMBLE_ANIM_SETTLE_MS);
 
+        // matt/2026-08-20, describing this from memory before it was ever captured: "there should be
+        // [a] six sided blue [button] with a puzzle in it with a green checkbox maybe in the bottom
+        // right." Exactly right. Tapping Assemble Now does not finish anything -- it opens an
+        // interactive jigsaw screen with the pieces scattered on a wooden board, and the assembly is
+        // only committed by a hexagonal blue button carrying a 4-piece puzzle and a green tick, at
+        // (654,1193). The chain never tapped it: it went straight to a blind "tap anywhere" at
+        // (350,640), which on that screen just prods the board, so the puzzle was never assembled
+        // and the run ended at "Fragment Backpack icon not found".
+        if (isAssembleConfirmHexPresent()) {
+            logInfo(logLine("Assemble confirm hexagon present -- tapping it to commit the assembly."));
+            tapNear(PUZZLE_ASSEMBLE_CONFIRM_BTN);
+            sleepTask(PUZZLE_ASSEMBLE_ANIM_SETTLE_MS);
+        } else {
+            logInfo(logLine("No assemble-confirm hexagon on screen after tapping Assemble Now -- either "
+                    + "this album commits without the jigsaw step, or the tap didn't land. Continuing to "
+                    + "the congrats/lore-card sequence, which re-anchors on a real template below."));
+        }
+
         tapNear(PUZZLE_ASSEMBLED_TAP_ANYWHERE);
         sleepTask(ACTION_SETTLE_MS);
 
@@ -891,6 +916,58 @@ public class MonumentRoutine extends DelayedTask {
         logInfo(logLine("Claim-button colour check: " + matched + " green pixels in "
                 + CLAIM_BTN_BOX_TL + "->" + CLAIM_BTN_BOX_BR + " (need " + CLAIM_GREEN_MIN_PIXELS
                 + ") -- " + (present ? "Claim is present" : "no Claim button")));
+        return present;
+    }
+
+    /**
+     * The hexagonal blue "commit the assembly" button on the jigsaw screen: a 4-piece puzzle glyph
+     * with a green tick, measured at x 616-693, y 1158-1228 on a live frame.
+     *
+     * <p>Detected on TWO signals together, because neither alone separates it cleanly. Measured
+     * across four real captured screens:
+     * <pre>
+     *                        blue-hex px   green-tick px
+     *   jigsaw screen            2768           409      <- the button
+     *   puzzle overview             0           192      (album thumbnails carry green ticks)
+     *   city map                 1538             0      (the mail/scales icons are blue)
+     *   alliance trade panel        -             0
+     * </pre>
+     * Blue alone would fire on the city map at 1538; green alone would fire on the puzzle overview
+     * at 192. Requiring both leaves a wide gap on either side and makes each threshold non-critical.
+     *
+     * <p>Fails closed on a missing or non-32bpp frame, since the caller taps on a true.
+     */
+    private boolean isAssembleConfirmHexPresent() {
+        RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+        if (frame == null || frame.getBpp() != 32) {
+            return false;
+        }
+
+        byte[] px = frame.getFrameBytes();
+        int stride = frame.getWidth() * 4;
+        int blue = 0, green = 0;
+        for (int y = ASSEMBLE_HEX_BOX_TL.getY(); y < ASSEMBLE_HEX_BOX_BR.getY() && y < frame.getHeight(); y++) {
+            for (int x = ASSEMBLE_HEX_BOX_TL.getX(); x < ASSEMBLE_HEX_BOX_BR.getX() && x < frame.getWidth(); x++) {
+                int offset = y * stride + x * 4;
+                if (offset + 2 >= px.length) continue;
+                int c0 = px[offset] & 0xFF, g = px[offset + 1] & 0xFF, c2 = px[offset + 2] & 0xFF;
+                // Green is the middle byte in both RGBA and BGRA, so "green dominates both others"
+                // is channel-order safe. The hexagon body is the opposite case -- green sits BETWEEN
+                // the other two -- which is equally order-safe to test.
+                if (g >= 150 && g - c0 >= 50 && g - c2 >= 50) {
+                    green++;
+                } else {
+                    int hi = Math.max(c0, c2), lo = Math.min(c0, c2);
+                    if (hi > 150 && hi - lo > 40 && hi - g > 20) {
+                        blue++;
+                    }
+                }
+            }
+        }
+        boolean present = blue >= ASSEMBLE_HEX_MIN_BLUE && green >= ASSEMBLE_HEX_MIN_GREEN;
+        logInfo(logLine("Assemble-confirm hexagon check: " + blue + " blue px (need "
+                + ASSEMBLE_HEX_MIN_BLUE + ") and " + green + " green-tick px (need "
+                + ASSEMBLE_HEX_MIN_GREEN + ") -- " + (present ? "present" : "absent")));
         return present;
     }
 
