@@ -74,6 +74,19 @@ private static final int SURVIVOR_BATCH_LIMIT = 2;
 	// headroom above the genuine ~7h refresh while catching any misread that lands implausibly far.
 	private static final int MAX_INTEL_REFRESH_MINUTES = 8 * 60;
 
+	// matt caught it live, 2026-08-19: the "3 consecutive cycles processed nothing" branch read the
+	// empty-map OCR area (378,580)-(530,640) and came back with a cooldown of essentially RIGHT NOW
+	// (read at 23:18:39, parsed value 23:18:44 -- 5 seconds later) instead of the real ~6.5h board
+	// refresh, then rescheduled for cooldown+3min, kicking the whole routine off again in under 3
+	// minutes flat. Only an upper-bound ceiling existed on this read; nothing rejected an
+	// implausibly-SOON value. That empty-map region is meant for a fully empty board's central
+	// countdown -- here the board still has a stuck mission on it, so it's very likely OCRing
+	// unrelated on-screen text (a mob timer, a stray digit) that happens to parse as a valid
+	// near-zero time. Reject any read under this floor as a misread, matching the ceiling's existing
+	// "OCR misread -- don't trust it" logic, and fall through to the couldn't-read branch instead
+	// (which the Beast/Fire Beast recheck cap below already turns into a sane ~15min retry anyway).
+	private static final int MIN_PLAUSIBLE_INTEL_REFRESH_MINUTES = 2;
+
 	/** Safety bound on the Claim All loop so a stuck button cannot spin the routine forever. */
 	private static final int CLAIM_ALL_MAX_PRESSES = 4;
 
@@ -1207,6 +1220,17 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 						CommonGameAreas.INTEL_COOLDOWN_WITH_MARKERS_OCR_AREA, "marker-map");
 				if (cooldown == null) {
 					cooldown = readCooldownFlow(CommonGameAreas.INTEL_COOLDOWN_EMPTY_MAP_OCR_AREA, "empty-map");
+				}
+				if (cooldown != null) {
+					LocalDateTime refreshFloor = LocalDateTime.now().plusMinutes(MIN_PLAUSIBLE_INTEL_REFRESH_MINUTES);
+					if (cooldown.isBefore(refreshFloor)) {
+						logWarning(routineLogIntelligenceLine(String.format(
+								"Refresh timer read as %s -- under the %d-minute plausible floor (board still has a "
+										+ "stuck mission on it, not actually empty); treating as an OCR misread "
+										+ "instead of trusting it.",
+								cooldown.format(DATETIME_FORMATTER), MIN_PLAUSIBLE_INTEL_REFRESH_MINUTES)));
+						cooldown = null;
+					}
 				}
 				if (cooldown != null) {
 					LocalDateTime refreshCeiling = LocalDateTime.now().plusMinutes(MAX_INTEL_REFRESH_MINUTES);
