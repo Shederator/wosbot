@@ -565,13 +565,21 @@ private void tryRescheduleFromCooldownFlow() {
 	 * evidence that would have ended this days ago has been invisible the whole time. Capture
 	 * the raw text here, on the routine's own logger, and always log it.
 	 *
-	 * <p>Second change, the actual fix attempt: INTEL_COOLDOWN_SETTINGS colour-isolates PURE
-	 * WHITE (255,255,255). If the header countdown is any other shade -- the game's headers are
-	 * commonly pale blue/grey, not pure white -- isolation erases every glyph before Tesseract
-	 * ever sees it, which reads exactly like "the region is wrong" but isn't. So on failure,
-	 * retry the SAME region with no colour isolation at all and a permissive layout, then pull
-	 * the first H:MM:SS out of whatever text comes back. That is the simple thing: look at the
-	 * top, take the number, use it.
+	 * <p>That diagnostic immediately disproved the colour theory it was added alongside. Live at
+	 * 00:06:59 the strict pass read {@code ':03:53:02'}, and a pixel sample of the live banner
+	 * found 1923 EXACT (255,255,255) pixels -- the glyphs really are pure white and the isolation
+	 * works fine. The real cause is the region: it spans the whole banner, which reads
+	 * "Refreshes In: 03:53:37", and the whitelist is "0123456789:". The label's own trailing colon
+	 * survives that whitelist and lands in front of the timer, so the string starts with a stray
+	 * ':' and {@link GameTimeUtils#isAcceptedFormat} rejects the entire read. Every earlier fix
+	 * here guessed at coordinates; the coordinates were never the problem.
+	 *
+	 * <p>So don't demand the region contain nothing but a timer -- pull the first H:MM:SS out of
+	 * whatever text comes back, which is exactly what matt asked for ("I go to the top, I OCR how
+	 * much time is left, I get the exact number"). The relaxed no-isolation pass is kept as a
+	 * second attempt for the case where isolation genuinely does erase the glyphs on some other
+	 * screen, but it should now be rare -- the first pass handles the label-colon case cleanly
+	 * instead of logging a scary "OCR failed" warning on every single successful read.
 	 */
 	private static final OcrSettingsData INTEL_COOLDOWN_RELAXED_SETTINGS = OcrSettingsData.builder()
 			.allowedGlyphs("0123456789:dhms ")
@@ -592,12 +600,19 @@ private void tryRescheduleFromCooldownFlow() {
 				CommonOCRSettings.INTEL_COOLDOWN_SETTINGS,
 				text -> {
 					strictRaw[0] = text;
-					return GameTimeUtils.isAcceptedFormat(text);
+					// Accept the game's own exact formats first, but also accept a line that merely
+					// CONTAINS a timer -- "Refreshes In:" contributes a stray leading colon that
+					// would otherwise throw away a perfectly good read. See this method's header.
+					return GameTimeUtils.isAcceptedFormat(text)
+							|| (text != null && ANY_HMS.matcher(text).find());
 				},
-				text -> LocalDateTime.now().plus(GameTimeUtils.parseDuration(text)));
+				text -> GameTimeUtils.isAcceptedFormat(text)
+						? LocalDateTime.now().plus(GameTimeUtils.parseDuration(text))
+						: extractHms(text));
 		if (cooldown != null) {
 			logInfo(routineLogIntelligenceLine("Cooldown timer read from " + where
-					+ " (white-isolated) -- raw text '" + flatten(strictRaw[0]) + "'."));
+					+ " -- raw text '" + flatten(strictRaw[0]) + "' -> "
+					+ cooldown.format(DATETIME_FORMATTER) + "."));
 			return cooldown;
 		}
 
@@ -615,15 +630,7 @@ private void tryRescheduleFromCooldownFlow() {
 					relaxedRaw[0] = text;
 					return text != null && ANY_HMS.matcher(text).find();
 				},
-				text -> {
-					Matcher m = ANY_HMS.matcher(text);
-					if (!m.find()) {
-						return null;
-					}
-					return LocalDateTime.now().plus(Duration.ofHours(Long.parseLong(m.group(1)))
-							.plusMinutes(Long.parseLong(m.group(2)))
-							.plusSeconds(Long.parseLong(m.group(3))));
-				});
+				IntelligenceRoutine::extractHms);
 
 		if (relaxed != null) {
 			logInfo(routineLogIntelligenceLine("Cooldown timer recovered from " + where
@@ -636,6 +643,23 @@ private void tryRescheduleFromCooldownFlow() {
 				+ " with colour isolation OFF too. Raw text the engine actually saw: '"
 				+ flatten(relaxedRaw[0]) + "'. Region or screen is genuinely wrong, not a colour problem."));
 		return null;
+	}
+
+	/**
+	 * Pulls the first H:MM:SS out of a noisy OCR line and turns it into an absolute time.
+	 * Returns null when there isn't one, so a caller's acceptor/transformer pair can't disagree.
+	 */
+	private static LocalDateTime extractHms(String text) {
+		if (text == null) {
+			return null;
+		}
+		Matcher m = ANY_HMS.matcher(text);
+		if (!m.find()) {
+			return null;
+		}
+		return LocalDateTime.now().plus(Duration.ofHours(Long.parseLong(m.group(1)))
+				.plusMinutes(Long.parseLong(m.group(2)))
+				.plusSeconds(Long.parseLong(m.group(3))));
 	}
 
 	/** Raw OCR text is multi-line and noisy; keep it on one log line so it's greppable. */
