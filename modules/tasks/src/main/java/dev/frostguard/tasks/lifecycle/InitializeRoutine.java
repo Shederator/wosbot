@@ -87,6 +87,8 @@ public class InitializeRoutine extends DelayedTask {
 	private static final String GOOGLE_PLAY_PACKAGE = "com.android.vending";
 	private static final int MAX_WELCOME_BACK_DISMISSALS = 1;
 	private static final int STARTUP_PATTERN_THRESHOLD = 90;
+	private static final int MAX_CHARACTER_VERIFICATION_RETRIES = 1;
+	private static final int CHARACTER_VERIFICATION_RETRY_DELAY_MS = 5000;
 
 	// ========== Instance State ==========
 	/**
@@ -96,6 +98,7 @@ public class InitializeRoutine extends DelayedTask {
 	boolean isStarted = false;
 	private int emulatorRestartAttempts = 0;
 	private int welcomeBackDismissals = 0;
+	private int characterVerificationRetries = 0;
 	private String lastVerifiedStartupState = "initialization started";
 
 	/**
@@ -722,9 +725,23 @@ public class InitializeRoutine extends DelayedTask {
 		}
 		
 		// Verify current character
-		boolean characterMatches = characterSwitchHelper.verifyCurrentCharacter(profile);
+		CharacterSwitchHelper.CharacterVerificationResult verification =
+				characterSwitchHelper.verifyCurrentCharacter(profile);
 		
-		if (!characterMatches) {
+		if (verification == CharacterSwitchHelper.CharacterVerificationResult.UNREADABLE
+				&& characterVerificationRetries < MAX_CHARACTER_VERIFICATION_RETRIES) {
+			characterVerificationRetries++;
+			setRecurring(true);
+			reschedule(LocalDateTime.now().plusSeconds(
+					CHARACTER_VERIFICATION_RETRY_DELAY_MS / 1000));
+			logWarning("Character verification was unreadable. Retrying initialization after a short delay.");
+			return false;
+		}
+
+		if (verification != CharacterSwitchHelper.CharacterVerificationResult.MATCHED) {
+			if (verification == CharacterSwitchHelper.CharacterVerificationResult.UNREADABLE) {
+				logWarning("Character verification remained unreadable. Attempting the configured character switch.");
+			}
 			logInfo("Current character does not match profile configuration. Switching character...");
 			
 			// Switch to correct character
@@ -740,18 +757,16 @@ public class InitializeRoutine extends DelayedTask {
 				return false;
 			}
 			
-			// Character switch successful, wait for game to reload
-			logInfo("Character switch successful. Waiting for game to reload...");
-			sleepTask(CharacterSwitchHelper.CHARACTER_SWITCH_RELOAD_DELAY_MS);
-			
 			// Re-check home screen after character switch
 			if (!waitForHomeScreen()) {
 				// Home screen not found after character switch
 				return false;
 			}
 			
+			characterVerificationRetries = 0;
 			logInfo("Home screen verified after character switch.");
 		} else {
+			characterVerificationRetries = 0;
 			logInfo("Character verification passed - correct character is active.");
 		}
 		
