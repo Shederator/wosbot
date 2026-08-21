@@ -92,7 +92,7 @@ public final class TesseractOcrProvider implements OcrProvider {
     /**
      * Builds an engine whose behaviour is controlled by {@code cfg}.
      *
-     * <p>the operator, 2026-08-06: language used to be hardcoded to "eng" here
+     * <p>Language used to be hardcoded to "eng" here
      * regardless of what any caller configured - fine for HUD numbers, but
      * silently corrupted anything non-Latin-script (chat is genuinely
      * multilingual). Honours {@link OcrSettingsData#language()}, falling
@@ -142,7 +142,7 @@ public final class TesseractOcrProvider implements OcrProvider {
     /**
      * Same as {@link #executeRecognition}, but keeps line breaks intact.
      *
-     * <p>the operator, 2026-08-06: multi-message reads (chat) NEED the line
+     * <p>Multi-message reads (chat) NEED the line
      * structure Tesseract already produces - flattening was silently
      * destroying it, a real reason chat capture was coming back as one
      * giant run-on blob instead of one line per message.

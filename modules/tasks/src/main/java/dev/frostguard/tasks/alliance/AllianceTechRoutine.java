@@ -60,7 +60,7 @@ private static final int ERROR_RETRY_MINUTES_VALUE = 10;
 	/**
 	 * Minutes to wait after emptying the pool before another visit is worthwhile.
 	 *
-	 * <p>the operator, 2026-08-09: only donate when ~15 contributions have banked, and they refill about
+	 * <p>Only donate when ~15 contributions have banked, and they refill about
 	 * one every ten minutes — so a full donation leaves the pool empty and the next useful visit is
 	 * ~150 minutes out, not the old blind 60. The hourly timer sweep still re-reads the live
 	 * counter and trues this up; this just stops the routine from coming back on its own to donate

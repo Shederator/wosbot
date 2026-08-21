@@ -214,7 +214,7 @@ private static final DateTimeFormatter FULL_TIME =
 
         try {
             DayTimeSplit split = splitDayQualifier(normalised);
-            // the operator, 2026-08-08 / 2026-08-12: single-digit hour ("2:41:07") and OCR's dropped
+            // Single-digit hour ("2:41:07") and OCR's dropped
             // middle colon ("0050:19" for "00:50:19") both handled by the one shared
             // normalizer -- see normalizeOcrColonSlip() for why this used to live here only
             // and silently never applied to the isAcceptedFormat() gate.

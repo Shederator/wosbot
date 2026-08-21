@@ -65,7 +65,7 @@ public class TimerSweepRoutine extends DelayedTask {
     /**
      * The rest of the city panel, reachable only by scrolling.
      *
-     * <p>the operator, 2026-08-08: <em>"the left menu, you're not scrolling down on it... that'll have all
+     * <p><em>"the left menu, you're not scrolling down on it... that'll have all
      * your tree timing and rewards and whatever else."</em> He was right — everything below the
      * fold had never been looked at. One swipe reveals Alliance Contribution, both Hero Recruit
      * timers, Pet Adventure, Tree of Life and the Labyrinth, which between them cover most of the
@@ -188,7 +188,7 @@ public class TimerSweepRoutine extends DelayedTask {
     /**
      * Contribution count at which a trip to Alliance Tech is worth making.
      *
-     * <p>the operator, 2026-08-09: <em>"When you see fifteen out of twenty five, go ahead and do the
+     * <p><em>"When you see fifteen out of twenty five, go ahead and do the
      * contribute... you should only be doing it when it says contribute fifteen out of
      * twenty five."</em></p>
      */
@@ -197,7 +197,7 @@ public class TimerSweepRoutine extends DelayedTask {
     /**
      * How fast contributions refill — one roughly every ten minutes.
      *
-     * <p>the operator, 2026-08-09: <em>"say I contribute all of them, a new contribution [comes back in
+     * <p><em>"say I contribute all of them, a new contribution [comes back in
      * about] eight minutes... every ten minutes you get a contribution attempt."</em> So the wait
      * to reach the trigger is {@code (trigger - current) * 10} minutes rather than a blind poll.</p>
      */
@@ -309,7 +309,7 @@ public class TimerSweepRoutine extends DelayedTask {
     /**
      * Opens the city queue panel and confirms it actually rendered before reading.
      *
-     * <p>the operator, 2026-08-08: the sweep read nothing on two of four runs and finished in half the
+     * <p>The sweep read nothing on two of four runs and finished in half the
      * usual time. Cause was that it opened the menu, waited a fixed 1200ms and started reading
      * regardless — so whenever the game sat on a screen where the menu did not open (right after
      * a relaunch, for instance) every row came back blank and the sweep reported success having
@@ -467,7 +467,7 @@ public class TimerSweepRoutine extends DelayedTask {
     /**
      * Reads the three tracked Chief Orders off the shelf and schedules each from what it says.
      *
-     * <p>the operator, 2026-08-08: <em>"from the chief's house, here's what you're gonna do... so as soon
+     * <p><em>"from the chief's house, here's what you're gonna do... so as soon
      * as I hit zero, motherfucker, you know what you're doing, you're hitting it."</em> The
      * cooldowns were printed on screen the whole time and nothing read them, so these three ran
      * off hard-coded 8/12/24-hour guesses that drifted out of step with reality.</p>
@@ -628,7 +628,7 @@ public class TimerSweepRoutine extends DelayedTask {
     /**
      * Nudges a swept deadline a little past the moment it actually expires.
      *
-     * <p>the operator, 2026-08-09: <em>"Productive day, cooldown of one hour and thirty three minutes...
+     * <p><em>"Productive day, cooldown of one hour and thirty three minutes...
      * I'm gonna turn on productive day in one hour and thirty five minutes just so it's not super
      * exact."</em> Arriving on the exact second a timer hits zero, every time, across a dozen
      * different tasks, is a pattern nothing human produces. The pad also clears the moment where

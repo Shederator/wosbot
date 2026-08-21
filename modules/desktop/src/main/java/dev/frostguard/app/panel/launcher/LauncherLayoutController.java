@@ -1475,7 +1475,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     /**
      * Updates the status readout that replaced the Full Stop button.
      *
-     * <p>the operator, 2026-08-08: "somewhere on the page that is, like, what's the current status?
+     * <p>"somewhere on the page that is, like, what's the current status?
      * It could be active. It could be sleeping." Safe to call from any thread — it hops to the
      * FX thread itself, because the engine's state callbacks arrive on worker threads.</p>
      */

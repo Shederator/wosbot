@@ -205,7 +205,7 @@ public class PetSkillsRoutine extends DelayedTask {
      * When the opportunistic GATHERING deploy should be retried, tracked separately from
      * {@link #earliestCooldown}.
      *
-     * <p>the operator, 2026-08-09: the GATHERING skill deploys a gather march, which fails whenever there
+     * <p>The GATHERING skill deploys a gather march, which fails whenever there
      * is no free march or the tile is occupied — a near-constant state. Every failure used to feed
      * a 5-minute time into {@code earliestCooldown}, and because the task reschedules to the
      * <em>earliest</em> cooldown, that 5 minutes always beat the real 19-hour STAMINA/TREASURE

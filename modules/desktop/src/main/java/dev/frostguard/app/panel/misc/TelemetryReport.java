@@ -23,7 +23,7 @@ import dev.frostguard.api.runtime.WorkspacePaths;
  * {@code data/telemetry/profiles/<id>/history.jsonl} and turns it into the "what did the bot
  * earn" reports the Statistics tab shows.
  *
- * <p>the operator, 2026-08-09: he wants the Statistics page to answer real questions —
+ * <p>He wants the Statistics page to answer real questions —
  * "how many resources did I gather overnight", "how much power / how many gems
  * did botting earn me today / this week / total" — instead of run counts. Each
  * report is a delta between the snapshot at the start of a window and the most

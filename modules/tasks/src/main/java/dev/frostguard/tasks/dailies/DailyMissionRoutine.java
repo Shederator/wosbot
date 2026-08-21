@@ -34,7 +34,7 @@ private static final int MAX_INDIVIDUAL_CLAIMS = 20;
 	/**
 	 * The Growth tab, bottom-left of the Missions dialog, beside the Daily tab.
 	 *
-	 * <p>the operator, 2026-08-08: Growth missions were never claimed because this routine only ever
+	 * <p>Growth missions were never claimed because this routine only ever
 	 * knew about the Daily tab — there was no reference to Growth anywhere in it. The two tabs
 	 * sit side by side at the bottom of the same dialog, and Growth carries its own red badge
 	 * when something is claimable. Derived from a 760x1339 capture (Growth centred at x=256,
@@ -151,7 +151,7 @@ private boolean switchToDailyMissionsTabFlow() {
 	/**
 	 * Finds the topmost enabled Claim button on screen.
 	 *
-	 * <p>the operator, 2026-08-08: <em>"click the top claim button until no claim button exists"</em>. The
+	 * <p><em>"click the top claim button until no claim button exists"</em>. The
 	 * previous behaviour took whatever single match the template search happened to return, which
 	 * is not necessarily the highest one — and since claiming a row makes the list re-flow upward,
 	 * working from the top down is the only order that stays predictable. Picking the smallest y

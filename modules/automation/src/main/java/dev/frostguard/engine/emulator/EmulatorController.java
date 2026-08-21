@@ -107,7 +107,7 @@ public class EmulatorController {
     /**
      * Taps a point, scattered by a few pixels so repeat taps never land identically.
      *
-     * <p>the operator, 2026-08-08: this used to pass {@code (pt, pt)} — a zero-area box — so every tap
+     * <p>This used to pass {@code (pt, pt)} — a zero-area box — so every tap
      * on a given control hit the exact same pixel forever. A human cannot do that, and it is
      * one of the cheapest behavioural tells to remove. Because every routine in the codebase
      * funnels through here, widening the box in this one place jitters the whole bot.</p>

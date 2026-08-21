@@ -502,7 +502,7 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
      * Schedules the next run, nudged by a small random amount so wake-ups do not land on
      * mechanically exact times.
      *
-     * <p>the operator, 2026-08-08: every routine funnels its reschedule through here, so this is the one
+     * <p>Every routine funnels its reschedule through here, so this is the one
      * place that can scatter the bot's clock. Without it Intel fires at exactly 15:00.00 after
      * every run, hourly tasks land on the same second forever, and the whole schedule is a
      * metronome.</p>
