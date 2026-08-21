@@ -397,7 +397,6 @@ public class MonumentRoutine extends DelayedTask {
         // whichever way we got here, the chest track, a completed album and the Fragment Backpack
         // all get handled.
         logInfo(logLine("On Tundra Albums. Running the hub sweep."));
-        backpackSweptThisRun = true;
         sweepAlbumsHub();
 
         // Alliance Trade Sends (giving pieces TO allies) deliberately not run
@@ -743,6 +742,13 @@ public class MonumentRoutine extends DelayedTask {
                     + "->" + PUZZLE_OVERVIEW_ASSEMBLE_REGION_BR + " -- either the puzzle isn't actually "
                     + "complete yet, or the estimated OCR region is off. Not tapping blind; recovering "
                     + "toward Home. " + dumpDiagnosticFrame("puzzle-overview-no-assemble")));
+            // Standing rule: the Fragment Backpack is checked on EVERY visit. A frame captured here
+            // 2026-08-21 shows exactly why that matters -- the album detail screen (Rekindled Flames,
+            // 9/9, every card Complete) carries its OWN Fragment Backpack button, and it was wearing a
+            // count of 8. Walking away because the assemble step could not be confirmed left eight
+            // packs sitting in plain sight. The backpack is worth sweeping from wherever it is
+            // reachable, not only from the hub.
+            sweepFragmentBackpackIfVisible();
             recoverTowardHome();
             return;
         }
@@ -1158,7 +1164,6 @@ public class MonumentRoutine extends DelayedTask {
             return;
         }
 
-        backpackSweptThisRun = true;
         sweepAlbumsHub();
         recoverTowardHome();
     }
@@ -1494,6 +1499,34 @@ public class MonumentRoutine extends DelayedTask {
         processFragmentBackpack();
     }
 
+    /**
+     * Sweeps the Fragment Backpack from whatever screen we are on, if its button is visible.
+     *
+     * <p>The backpack button is not unique to the Tundra Albums hub -- an album's own detail screen
+     * carries one too, in a different place (the hub has four bottom buttons, the album screen two).
+     * Locating it by its real template rather than by a fixed coordinate means the sweep works from
+     * either, which is what makes "check the backpack on every visit" actually hold.
+     *
+     * @return true if a backpack panel was opened and processed
+     */
+    private boolean sweepFragmentBackpackIfVisible() {
+        if (backpackSweptThisRun) {
+            return false;
+        }
+        ImageSearchResultData icon = templateSearchHelper.locatePattern(
+                TemplatesEnum.MONUMENT_PUZZLE_OVERVIEW_FRAGMENT_BACKPACK_ICON,
+                SearchConfigConstants.SINGLE_WITH_RETRIES);
+        if (!icon.isFound()) {
+            logInfo(logLine("No Fragment Backpack button visible on this screen -- nothing to sweep "
+                    + "from here."));
+            return false;
+        }
+        logInfo(logLine("Fragment Backpack button visible at " + icon.getPoint()
+                + " -- sweeping it before leaving."));
+        processFragmentBackpack(icon.getPoint());
+        return true;
+    }
+
     private void processFragmentBackpack() {
         processFragmentBackpack(ALBUMS_FRAGMENT_BACKPACK_BTN);
     }
@@ -1540,6 +1573,11 @@ public class MonumentRoutine extends DelayedTask {
             recoverTowardHome();
             return;
         }
+
+        // The panel is confirmed open, so this run has genuinely swept the backpack. Recorded here
+        // rather than at the call sites: an intent to sweep is not a sweep, and marking it early is
+        // what would let a later, reachable backpack be skipped.
+        backpackSweptThisRun = true;
 
         int opened = 0;
         while (opened < BACKPACK_MAX_TOTAL_OPENS) {
