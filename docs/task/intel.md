@@ -14,7 +14,11 @@ route through City or the Lighthouse.
 below them. Navigation must not change that account preference. A missing
 Lighthouse Intel icon after the bounded icon scan is treated as unavailable,
 because the completed Intel row may have been hidden; it is not a reason to tap
-an assumed coordinate.
+an assumed coordinate. When the gate reports unavailable, the routine still
+enters Intel once through the Wilderness shortcut to read the "Refreshes In"
+cooldown banner and schedule the next run precisely, instead of guessing a
+fixed retry delay that would otherwise hold the emulator slot from sibling
+profiles.
 
 When completed Intel markers expose the stable green `Claim All` control, claim
 them with that single detected action and verify that the control disappears.
