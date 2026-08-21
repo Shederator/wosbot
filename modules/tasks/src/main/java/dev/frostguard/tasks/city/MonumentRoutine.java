@@ -1142,12 +1142,50 @@ public class MonumentRoutine extends DelayedTask {
         logInfo(logLine("No badge, but the Monument building is on screen at " + building.getPoint()
                 + " -- opening it anyway to check the milestone chest, any completed album, and the "
                 + "Fragment Backpack."));
-        backpackSweptThisRun = true;
         tapNear(building.getPoint());
         sleepTask(PANEL_SETTLE_MS);
 
+        // Confirm the hub before touching anything on it. The first live run of this path tapped
+        // the building anchor and landed on HERO RECRUITMENT, then swept anyway: the album-book
+        // detector duly fired on that screen's glowing Points Chest (7076 px) and the chain opened a
+        // recruitment panel looking for "Assemble Now". A tap that opens the wrong screen has to
+        // stop here, not cascade -- which is the same rule the badge path already follows.
+        if (!isOnAlbumsHub()) {
+            logWarning(logLine("Tapping the Monument building did not land on the Tundra Albums hub "
+                    + "-- not sweeping a screen this code hasn't identified. "
+                    + dumpDiagnosticFrame("no-badge-tap-missed-hub")));
+            recoverTowardHome();
+            return;
+        }
+
+        backpackSweptThisRun = true;
         sweepAlbumsHub();
         recoverTowardHome();
+    }
+
+    /** The hub's own "Tundra Albums" title, top-left. Measured on a native 720x1280 capture and
+     *  read back clean with the bundled tesseract ("Tundra Albums", psm 7). */
+    private static final PointData ALBUMS_HUB_TITLE_TL = new PointData(80, 16);
+    private static final PointData ALBUMS_HUB_TITLE_BR = new PointData(400, 66);
+
+    /**
+     * Confirms the Tundra Albums hub is really on screen.
+     *
+     * <p>Gates on the panel's own title rather than on the presence of some button, because the
+     * failure this exists to stop was landing on a completely different screen (Hero Recruitment)
+     * that happens to carry glowing artwork and orange buttons of its own. Matching "albums" alone
+     * keeps it tolerant of the OCR dropping a character from "Tundra".
+     */
+    private boolean isOnAlbumsHub() {
+        String title = stringHelper.attemptRecognition(
+                ALBUMS_HUB_TITLE_TL, ALBUMS_HUB_TITLE_BR,
+                3, 200L, PANEL_TITLE_OCR_SETTINGS,
+                s -> s != null && !s.isBlank(),
+                s -> s);
+        boolean onHub = title != null && title.toLowerCase().contains("album");
+        logInfo(logLine("Albums hub check: title read as '" + title + "' -- "
+                + (onHub ? "on the hub" : "NOT the hub")));
+        return onHub;
     }
 
     private boolean isScreenClear() {
@@ -1438,7 +1476,18 @@ public class MonumentRoutine extends DelayedTask {
             tapNear(readyBook);
             sleepTask(PANEL_SETTLE_MS);
             handlePuzzleReadyChain();
-            return;
+
+            // The assemble chain leaves the screen wherever it ended -- including recovered to Home
+            // on a failure -- so the backpack cannot just be run next. Come back to the hub first,
+            // and only sweep it if we are genuinely back. The standing rule is that the Fragment
+            // Backpack is checked on every visit; an earlier version of this method returned here
+            // and silently skipped it whenever an album was ready, which is precisely backwards --
+            // an assembled album is when new fragments are most likely to be waiting.
+            if (!isOnAlbumsHub()) {
+                logInfo(logLine("Not back on the Albums hub after the assemble chain -- skipping the "
+                        + "Fragment Backpack this pass rather than tapping an unidentified screen."));
+                return;
+            }
         }
 
         logInfo(logLine("Processing the shared Fragment Backpack."));
