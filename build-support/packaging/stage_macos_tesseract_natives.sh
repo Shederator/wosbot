@@ -55,6 +55,29 @@ dest.mkdir(parents=True, exist_ok=True)
 seen: set[Path] = set()
 queue: list[Path] = [root]
 
+search_roots = [
+    Path("/opt/homebrew/lib"),
+    Path("/usr/local/lib"),
+    Path("/opt/homebrew/opt/webp/lib"),
+    Path("/usr/local/opt/webp/lib"),
+    Path("/opt/homebrew/opt/leptonica/lib"),
+    Path("/usr/local/opt/leptonica/lib"),
+    Path("/opt/homebrew/opt/tesseract/lib"),
+    Path("/usr/local/opt/tesseract/lib"),
+]
+
+def resolve_dep(dep: str, current: Path) -> Path | None:
+    if dep.startswith("/opt/homebrew/") or dep.startswith("/usr/local/"):
+        candidate = Path(dep)
+        return candidate if candidate.is_file() else None
+    if dep.startswith("@rpath/") or dep.startswith("@loader_path/"):
+        name = Path(dep).name
+        for root in [current.parent, dest, *search_roots]:
+            candidate = root / name
+            if candidate.is_file():
+                return candidate
+    return None
+
 def deps(path: Path) -> list[Path]:
     try:
         out = subprocess.check_output(["otool", "-L", str(path)], text=True, stderr=subprocess.DEVNULL)
@@ -63,8 +86,9 @@ def deps(path: Path) -> list[Path]:
     found: list[Path] = []
     for line in out.splitlines()[1:]:
         dep = line.strip().split(" (", 1)[0].strip()
-        if dep.startswith("/opt/homebrew/") or dep.startswith("/usr/local/"):
-            found.append(Path(dep))
+        resolved = resolve_dep(dep, path)
+        if resolved is not None:
+            found.append(resolved)
     return found
 
 while queue:
@@ -91,7 +115,10 @@ for src in sorted(seen):
         (dest / "liblept.dylib").symlink_to(src.name)
 
 # Rewrite install names to @loader_path so the bundle works without Homebrew.
+# Also mirror libs into ../lib for dylibs whose remaining @rpath still points there.
 names = {path.name for path in copied}
+sidecar = dest.parent / "lib"
+sidecar.mkdir(parents=True, exist_ok=True)
 for binary in copied:
     try:
         out = subprocess.check_output(["otool", "-L", str(binary)], text=True, stderr=subprocess.DEVNULL)
@@ -118,6 +145,8 @@ for binary in copied:
         )
     except Exception:
         pass
+    # Keep a sibling ../lib copy for consumers that still resolve @rpath via ../lib.
+    shutil.copy2(binary, sidecar / binary.name)
 
 print(f"Staged {len(copied)} tesseract native libraries into {dest}")
 PY
