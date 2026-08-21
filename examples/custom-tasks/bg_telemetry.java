@@ -241,7 +241,7 @@ public class bg_telemetry extends DelayedTask implements CustomTaskConfigurable 
     }
 
     /**
-     * matt, 2026-08-09: the "Last night" report needs clean bookends, so always take an inventory
+     * The "Last night" report needs clean bookends, so always take an inventory
      * snapshot exactly at 23:00 (bedtime) and 08:30 (wake) local, on top of the normal interval.
      * Next run is the soonest of those two anchors or now+interval.
      *

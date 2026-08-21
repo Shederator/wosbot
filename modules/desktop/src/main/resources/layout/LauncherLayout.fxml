@@ -157,7 +157,7 @@
                         styleClass="action-button-start" prefHeight="38" prefWidth="140"
                         minWidth="-Infinity" />
 
-                <!-- matt, 2026-08-08: the Full Stop button lived here and has been removed.
+                <!-- The Full Stop button lived here and has been removed.
                      It existed to suppress auto-start across restarts, but auto-start only
                      ever fires on a fresh app launch — a manual Stop already keeps the bot
                      stopped — so the button solved a problem that does not occur. Replaced

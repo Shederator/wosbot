@@ -14,12 +14,12 @@ REM    the property. Custom tasks would fail to compile against DelayedTask.
 REM    Listing the dependencies explicitly puts them on java.class.path, which
 REM    is what a bundle install gets naturally by having lib\ beside the jar.
 REM
-REM matt/Claude, 2026-08-17: updated for the upstream module restructure. The old
+REM Updated for the upstream module restructure. The old
 REM fg-app\target\frostguard-2.1.1.jar + fg-app\target\lib\ layout is gone -- run
 REM fg-build.bat first, which now packages via packaging/desktop and produces the
 REM real jar + lib\ classpath under packaging\desktop\target\input\.
 REM
-REM matt/Claude, 2026-08-17 (later): Dave's upstream restructure added
+REM Dave's upstream restructure added
 REM WorkspacePaths, which auto-detects a "development workspace" whenever
 REM the app's working directory sits inside a source checkout (finds pom.xml
 REM + modules/desktop) and NO explicit -Dfrostguard.workspace is passed --

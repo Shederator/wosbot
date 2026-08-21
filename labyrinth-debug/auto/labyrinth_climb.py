@@ -17,7 +17,7 @@ Counter formula (pure rock-paper-scissors rotation):
     our_lancer_%    = enemy_marksman_%    (Lancer counters Marksman)
     our_marksman_%  = enemy_infantry_%    (Marksman counters Infantry)
 
-Stop condition (matt, 2026-08-12): if the SAME stage is lost twice in a row -- even after
+Stop condition (Observed live ): if the SAME stage is lost twice in a row -- even after
 reading the post-loss report and applying the computed counter -- stop. That's a genuine
 power wall (pet/chief-charm level), not a comp-fixable loss.
 

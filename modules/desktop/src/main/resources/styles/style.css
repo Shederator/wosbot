@@ -177,7 +177,7 @@
     -fx-background-color: rgba(255, 255, 255, 0.08);
 }
 
-/* matt/2026-08-13: Events hub's internal vertical side-nav (many sub-screens, no room to
+/* Events hub's internal vertical side-nav (many sub-screens, no room to
    overflow horizontally as tabs) -- reuses .nav-button styling for each entry. */
 .events-side-nav {
     -fx-padding: 10 8 10 8;
@@ -288,7 +288,7 @@
     -fx-padding: 0 4 0 0;
 }
 
-/* matt, 2026-08-08: Full Stop — visually distinct (red) from Start/Pause so
+/* Full Stop — visually distinct (red) from Start/Pause so
    it reads as the harder, persistent action it is. */
 .action-button-stop {
     -fx-background-color: #c0392b;
@@ -1834,7 +1834,7 @@
     -fx-background-color: #37d47f;
 }
 
-/* matt, 2026-08-08: status readout that replaced the Full Stop button in the bottom bar.
+/* Status readout that replaced the Full Stop button in the bottom bar.
    Shows what the bot is actually doing right now — Stopped / Starting up / Active /
    Paused / Auto-start countdown, and Sleeping once the sleep window lands. */
 .bot-status-label {

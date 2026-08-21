@@ -43,7 +43,7 @@ import dev.frostguard.engine.service.CustomTaskService;
  */
 public class bg_powerpriorities extends DelayedTask implements CustomTaskConfigurable {
 
-    // Standing cadence policy (matt, 2026-08-05): anything live-checkable
+    // Standing cadence policy: anything live-checkable
     // runs every 2 hours; only the real-money shop walkthrough (not yet
     // built) gets the slower 24-hour cadence.
     private static final Duration DEFAULT_INTERVAL = Duration.ofHours(2);

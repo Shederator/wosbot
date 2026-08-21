@@ -19,7 +19,7 @@ Coordinates below come from the already-live-validated Java routine
 -- formation setup + Save-and-Exit were driven live 2026-08-10 and work. The Deploy
 button and the post-battle result screen were NEVER reached in that session (the test
 flow deliberately stopped before Deploy to avoid burning attempts) and Land of Heroes is
-NOT open this rotation ("was from yesterday" per matt, 2026-08-12) -- so those two pieces
+NOT open this rotation (observed live: "was from yesterday") -- so those two pieces
 are UNCALIBRATED. climb() refuses to run past formation setup until a human confirms
 the Deploy point live, rather than guess and risk a misclick burning a real attempt.
 """

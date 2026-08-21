@@ -1,10 +1,10 @@
 @echo off
-REM matt, 2026-08-09: paths corrected after the toolchain moved out of OneDrive. Maven and the
+REM Paths corrected after the toolchain moved out of OneDrive. Maven and the
 REM bundled Temurin JDK both live under C:\Frostguard-tools now; the old C:\apache-maven-3.9.12
 REM path never existed on this machine, so `call mvn` below failed with "not recognized". JAVA_HOME
 REM is set explicitly too, because there is no system-wide Java install for mvn to fall back on.
 REM
-REM matt/Claude, 2026-08-17: updated for the upstream module restructure (fg-app -> modules/desktop,
+REM Updated for the upstream module restructure (fg-app -> modules/desktop,
 REM packaged via packaging/desktop). The old fg-app\target\frostguard-*.jar path is gone -- the real
 REM launchable jar + lib/ classpath now live under packaging\desktop\target\input\, produced by the
 REM new packaging module's dependency-copy step, not modules/desktop's own package phase.

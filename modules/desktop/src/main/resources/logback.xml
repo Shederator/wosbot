@@ -4,7 +4,7 @@
 
     <property name="LOG_DIR" value="${frostguard.log.dir:-log}"/>
     <property name="LOG_FILE" value="${LOG_DIR}/frostguard.log"/>
-    <!-- matt, 2026-08-19: "make everything EST in logs" -- FILE_PATTERN's numeric offset (XXX,
+    <!-- "make everything EST in logs" -- FILE_PATTERN's numeric offset (XXX,
          e.g. -04:00) was correct but not obviously a timezone at a glance, and APP_PATTERN carried
          no zone info at all. Both pinned to America/New_York (so it reads EST/EDT correctly across
          the DST boundary, not a fixed always-wrong-half-the-year offset) with the abbreviation

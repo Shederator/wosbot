@@ -17,7 +17,7 @@ Design (corrected live 2026-08-12, twice):
   3-8, 2026-08-12) and a blind OCR-failure fallback exited all the way to the City
   screen. Never guess past a timeout -- stop and report.
 
-Stop rule (matt, 2026-08-12, refined): don't hard-cap at a fixed 2 losses -- go up to
+Stop rule (Observed live refined): don't hard-cap at a fixed 2 losses -- go up to
 the real daily attempt ceiling (default 5) IF trying a different comp still makes sense.
 But stop the moment the diagnosis says it doesn't, even if attempts remain:
   - the freshly-computed counter is identical to the ratio we just lost with (nothing
@@ -60,7 +60,7 @@ FLOOR_TAPS = 105
 
 ENEMY_PCT_X = {"inf": (385, 490), "lan": (495, 600), "mrk": (605, 715)}
 
-DEFAULT_MAX_ATTEMPTS_PER_STAGE = 5  # matt, 2026-08-12: "max attempts... if it makes sense"
+DEFAULT_MAX_ATTEMPTS_PER_STAGE = 5  # "max attempts... if it makes sense"
 
 
 def _raw_tap(x, y):
@@ -196,7 +196,7 @@ def climb(zone_name, max_stages=50, max_attempts_per_stage=DEFAULT_MAX_ATTEMPTS_
     screen (caller must already have navigated into the zone, and the stage screen --
     with a visible Challenge button -- must be showing right now).
 
-    Per-stage retry policy (matt, 2026-08-12): keep adjusting and retrying up to
+    Per-stage retry policy (Observed live ): keep adjusting and retrying up to
     max_attempts_per_stage IF each retry has genuinely new comp information to act on.
     Stop early -- before the attempt cap -- the moment the diagnosis shows it doesn't
     (enemy comp is uniform, or the freshly-computed counter matches what we already

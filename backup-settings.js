@@ -2,7 +2,7 @@
 /**
  * Bearguard settings backup.
  *
- * matt, 2026-08-08, after losing his configuration twice in one evening: "we can't have this
+ * Observed live after losing his configuration twice in one evening: "we can't have this
  * keep happening."
  *
  * Why it happens: Bearguard keeps SQLite in WAL mode, so recent writes live in database.db-wal
@@ -40,7 +40,7 @@ const LOG_FILE = path.join(ROOT, 'settings-backup.log');
 /**
  * Logs to stdout AND to its own file.
  *
- * matt, 2026-08-08: "just make sure seriously next time you fucking get a backup log." The first
+ * "just make sure seriously next time you fucking get a backup log." The first
  * scheduled run failed silently because a bad path made the guard clause return before anything
  * ran, and nothing anywhere recorded that. A dedicated log means the backup's own history does
  * not depend on the supervisor's output being captured.
