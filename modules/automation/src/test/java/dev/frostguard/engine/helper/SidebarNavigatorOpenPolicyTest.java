@@ -1,52 +1,30 @@
 package dev.frostguard.engine.helper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-
-import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
-import dev.frostguard.engine.nav.SidebarSection;
+import dev.frostguard.api.configs.TemplatesEnum;
+import dev.frostguard.engine.nav.CommonGameAreas;
+import dev.frostguard.engine.nav.SidebarDestination;
 
 class SidebarNavigatorOpenPolicyTest {
 
     @Test
-    void opensOnlyWhenThePanelIsClosed() {
-        assertEquals(SidebarNavigator.NextOpenAction.OPEN_PANEL,
-                SidebarNavigator.nextOpenAction(Optional.empty(), SidebarSection.CITY, false, false));
+    void downwardScanUsesShortOverlappingGesturesAndWaitsForTheList() {
+        assertEquals(SidebarNavigator.SCROLL_DISTANCE_PX,
+                Math.abs(CommonGameAreas.SIDEBAR_SCROLL_TOWARD_BOTTOM_FROM.getY()
+                        - CommonGameAreas.SIDEBAR_SCROLL_TOWARD_BOTTOM_TO.getY()));
+        assertEquals(2_000, SidebarNavigator.SCROLL_SETTLE_MS);
     }
 
     @Test
-    void reusesAnAlreadySelectedSectionWithoutInteractions() {
-        assertEquals(SidebarNavigator.NextOpenAction.DONE,
-                SidebarNavigator.nextOpenAction(
-                        Optional.of(SidebarSection.WILDERNESS), SidebarSection.WILDERNESS, false, false));
-    }
-
-    @Test
-    void selectsOnlyWhenAnotherSectionIsVisible() {
-        assertEquals(SidebarNavigator.NextOpenAction.SELECT_SECTION,
-                SidebarNavigator.nextOpenAction(
-                        Optional.of(SidebarSection.DAILY), SidebarSection.CITY, false, false));
-    }
-
-    @Test
-    void resetsOnlyWhenTheCallerRequiresAKnownOrigin() {
-        assertEquals(SidebarNavigator.NextOpenAction.RESET_TO_TOP,
-                SidebarNavigator.nextOpenAction(
-                        Optional.of(SidebarSection.DAILY), SidebarSection.DAILY, true, false));
-        assertEquals(SidebarNavigator.NextOpenAction.DONE,
-                SidebarNavigator.nextOpenAction(
-                        Optional.of(SidebarSection.DAILY), SidebarSection.DAILY, true, true));
-    }
-
-    @Test
-    void openingOrSelectingASectionEstablishesItsTopPosition() {
-        assertTrue(SidebarNavigator.establishesKnownTop(SidebarNavigator.NextOpenAction.OPEN_PANEL));
-        assertTrue(SidebarNavigator.establishesKnownTop(SidebarNavigator.NextOpenAction.SELECT_SECTION));
-        assertFalse(SidebarNavigator.establishesKnownTop(SidebarNavigator.NextOpenAction.RESET_TO_TOP));
-        assertFalse(SidebarNavigator.establishesKnownTop(SidebarNavigator.NextOpenAction.DONE));
+    void everyDestinationUsesARealLeftIconRatherThanTheSharedGoArrow() {
+        for (SidebarDestination destination : SidebarDestination.values()) {
+            assertNotEquals(TemplatesEnum.GAME_HOME_SHORTCUTS_GO, destination.rowIcon(), destination.name());
+            assertTrue(destination.actions().length > 0, destination.name());
+        }
     }
 }
