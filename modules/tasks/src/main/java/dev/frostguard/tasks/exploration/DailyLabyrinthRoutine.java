@@ -705,9 +705,26 @@ public class DailyLabyrinthRoutine extends DelayedTask {
             return true;
         }
 
-        // Try raid challenge
+        // Raid is a free rewards claim, NOT this zone's attempt -- see attemptRaidChallenge's own
+        // note. Claiming it also JUMPS the zone forward to the furthest stage the raid covers.
+        // Observed live 2026-08-21: a claim on Research Center moved it from Stage 1-1 to Stage 4-4
+        // and left "Remaining attempts today: 5" with the Challenge button on screen. Returning here
+        // spent the zone's whole turn on that free claim and walked away from five real attempts --
+        // reported as "it claimed the initial reward to jump to later stages... then didn't do the
+        // later stages". So claim it, re-read the stage it moved us to, and carry on into the real
+        // challenge below.
         if (attemptRaidChallenge(dungeonNumber)) {
-            return true;
+            String stageAfterRaid = readCurrentStage();
+            Integer attemptsAfterRaid = readRemainingAttempts();
+            logInfo("Dungeon " + dungeonNumber + ": raid claim moved the zone from stage "
+                    + stageBeforeBattle + " to " + stageAfterRaid + ", attempts left: "
+                    + attemptsAfterRaid + ". Continuing into the real challenge.");
+            if (stageAfterRaid != null) {
+                stageBeforeBattle = stageAfterRaid;
+            }
+            if (attemptsAfterRaid != null) {
+                lastAttemptsRemaining = attemptsAfterRaid;
+            }
         }
 
         // Try normal challenge
@@ -771,7 +788,11 @@ public class DailyLabyrinthRoutine extends DelayedTask {
             sleepTask(500);
             saveLabyrinthFrame("raid_claimed", dungeonNumber);
 
-            pressBack();
+            // No pressBack() here. Claiming the reward closes the popup by itself and leaves the
+            // zone's own stage screen showing -- verified on the frame saved immediately above,
+            // which shows Research Center at Stage 4-4 with "Remaining attempts today: 5" and the
+            // Challenge button on screen. Backing out threw that away and ended the zone's turn on
+            // a free claim.
             return true;
         }
         return false;
