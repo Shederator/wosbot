@@ -34,7 +34,11 @@
                                 </tooltip>
                             </CheckBox>
                             <CheckBox fx:id="checkBoxPrioritiseFurnace" mnemonicParsing="false"
-                                      text="Prioritise Furnace" />
+                                      text="Prioritise Furnace (Not recommended — under construction)">
+                                <tooltip>
+                                    <Tooltip text="This routine is still under construction and is not recommended for normal automation." />
+                                </tooltip>
+                            </CheckBox>
                         </VBox>
 
                         <Separator style="-fx-opacity: 0.25;" />
