@@ -34,8 +34,6 @@
                             <Label text="Intel Categories" />
                         </HBox>
                         <VBox spacing="10" styleClass="task-section-inner">
-                            <CheckBox fx:id="checkBoxFireCrystalEra" mnemonicParsing="false"
-                                      text="Fire Crystal Era" />
                             <CheckBox fx:id="checkBoxFireBeast" mnemonicParsing="false"
                                       text="Fire Beast" />
                             <CheckBox fx:id="checkBoxBeast" mnemonicParsing="false"

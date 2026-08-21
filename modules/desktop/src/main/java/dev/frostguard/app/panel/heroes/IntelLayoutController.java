@@ -24,8 +24,6 @@ public class IntelLayoutController extends AbstractProfileController {
     @FXML
     private CheckBox checkBoxSurvivors;
     @FXML
-    private CheckBox checkBoxFireCrystalEra;
-    @FXML
     private CheckBox checkBoxSmartIntel;
     @FXML
     private CheckBox checkBoxRecallGatherTroops;
@@ -52,7 +50,6 @@ public class IntelLayoutController extends AbstractProfileController {
             new IntelSwitch(checkBoxFireBeast, ConfigurationKeyEnum.INTEL_FIRE_BEAST_BOOL),
             new IntelSwitch(checkBoxJourney, ConfigurationKeyEnum.INTEL_EXPLORATION_BOOL),
             new IntelSwitch(checkBoxSurvivors, ConfigurationKeyEnum.INTEL_CAMP_BOOL),
-            new IntelSwitch(checkBoxFireCrystalEra, ConfigurationKeyEnum.INTEL_FC_ERA_BOOL),
             new IntelSwitch(checkBoxUseFlag, ConfigurationKeyEnum.INTEL_USE_FLAG_BOOL),
             new IntelSwitch(checkBoxSmartIntel, ConfigurationKeyEnum.INTEL_SMART_PROCESSING_BOOL),
             new IntelSwitch(checkBoxRecallGatherTroops, ConfigurationKeyEnum.INTEL_RECALL_GATHER_TROOPS_BOOL)

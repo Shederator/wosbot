@@ -192,7 +192,7 @@ public enum ConfigurationKeyEnum {
     INTEL_BOOL                                  ("false",   Boolean.class,  ConfigCategory.INTEL),
     INTEL_CAMP_BOOL                             ("false",   Boolean.class,  ConfigCategory.INTEL),
     INTEL_EXPLORATION_BOOL                      ("false",   Boolean.class,  ConfigCategory.INTEL),
-    INTEL_FC_ERA_BOOL                           ("false",   Boolean.class,  ConfigCategory.INTEL),
+    INTEL_FC_ERA_BOOL                           ("false",   Boolean.class,  ConfigCategory.INTEL, true),
     INTEL_FIRE_BEAST_BOOL                       ("false",   Boolean.class,  ConfigCategory.INTEL),
     INTEL_RECALL_GATHER_TROOPS_BOOL             ("false",   Boolean.class,  ConfigCategory.INTEL),
     INTEL_SMART_PROCESSING_BOOL                 ("false",   Boolean.class,  ConfigCategory.INTEL),

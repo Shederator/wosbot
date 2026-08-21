@@ -48,6 +48,18 @@ class SidebarNavigatorFrameTest {
     }
 
     @Test
+    void detectsDynamicLighthouseIntelRowFromItsLeftIcon() throws IOException {
+        byte[] frame = resource("/navigation/sidebar-update-20260821/daily-dynamic-intel.png");
+
+        assertDestination(frame, TemplatesEnum.SIDEBAR_DAILY_LIGHTHOUSE_INTEL, 46, 720);
+    }
+
+    @Test
+    void waitsTwoSecondsAfterEverySidebarScanSwipe() {
+        assertEquals(2_000, SidebarNavigator.SCROLL_SETTLE_MS);
+    }
+
+    @Test
     void detectsResearchCenterInTheRealCityFrame() throws IOException {
         byte[] frame = resource("/navigation/sidebar-update-20260817/city.png");
 

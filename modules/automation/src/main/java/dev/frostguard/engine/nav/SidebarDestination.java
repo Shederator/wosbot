@@ -13,6 +13,8 @@ public enum SidebarDestination {
             SidebarRowAction.CLAIM, SidebarRowAction.GO),
     LIFE_ESSENCE(SidebarSection.DAILY, TemplatesEnum.SIDEBAR_DAILY_LIFE_ESSENCE,
             SidebarRowAction.CLAIM, SidebarRowAction.GO),
+    LIGHTHOUSE_INTEL(SidebarSection.DAILY, TemplatesEnum.SIDEBAR_DAILY_LIGHTHOUSE_INTEL,
+            SidebarRowAction.GO),
     TUNDRA_TREK_SUPPLIES(SidebarSection.DAILY, TemplatesEnum.TUNDRA_TREK_SUPPLIES,
             SidebarRowAction.CLAIM, SidebarRowAction.GO);
 

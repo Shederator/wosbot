@@ -8,25 +8,30 @@ import dev.frostguard.api.domain.PointData;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.error.HomeNotFoundException;
 import dev.frostguard.engine.input.TapInteractionService;
-import dev.frostguard.engine.nav.CommonGameAreas;
-import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.engine.nav.SearchConfigConstants;
-import dev.frostguard.engine.nav.SidebarSection;
+import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.vision.color.GameColors;
+import dev.frostguard.vision.color.PixelStats;
+import dev.frostguard.vision.convert.ImageConverter;
 import dev.frostguard.vision.logging.ProfileContextLogger;
-import dev.frostguard.vision.ocr.OcrException;
 
-import java.io.IOException;
-import java.util.OptionalInt;
-import java.util.function.BooleanSupplier;
-import java.util.regex.Matcher;
+import java.awt.image.BufferedImage;
 
-// Verifies the Intel panel is on-screen; navigates there when it is not.
+/** Verifies the Intel panel and reaches it through the Wilderness shortcut. */
 public class IntelScreenHelper {
 
     private static final int MAX_NAV_PASSES = 3;
-    private static final int LIGHTHOUSE_ROW_X = 46;
-    private static final int LIGHTHOUSE_ROW_Y = 649;
+    private static final int INTEL_AVAILABLE_GREEN_MIN = 150;
+    private static final long MISSION_RETURN_SETTLE_MILLIS = 1_000L;
+    private static final AreaData WORLD_INTEL_BUTTON_AREA = AreaData.of(615, 800, 715, 930);
+    private static final TemplateSearchHelper.SearchConfig WORLD_INTEL_BUTTON_SEARCH =
+            TemplateSearchHelper.SearchConfig.builder()
+                    .withMaxAttempts(2)
+                    .withDelay(250)
+                    .withThreshold(88)
+                    .withArea(WORLD_INTEL_BUTTON_AREA)
+                    .build();
 
     private final EmulatorController emu;
     private final String dev;
@@ -46,165 +51,137 @@ public class IntelScreenHelper {
         this.log = new ProfileContextLogger(IntelScreenHelper.class, profile);
     }
 
+    /** Uses Daily only as an OCR-free availability gate, then enters Intel from Wilderness. */
+    public boolean enterIntelFromDailyIfAvailable() {
+        nav.ensureCorrectScreenLocation(LaunchPoint.ANY);
+        ImageSearchResultData lighthouseRow = nav.findSidebarDestinationRow(
+                SidebarDestination.LIGHTHOUSE_INTEL);
+        if (lighthouseRow == null || !lighthouseRow.isFound()) {
+            log.info("Lighthouse Intel row icon is absent after the bounded Daily scan; "
+                    + "the completed row may be hidden, so Intel is unavailable.");
+            if (!nav.closeSidebar()) {
+                throw new HomeNotFoundException(
+                        "Failed to close Daily after the Lighthouse Intel row was absent");
+            }
+            return false;
+        }
+
+        ImageSearchResultData availablePattern = tpl.locatePattern(TemplatesEnum.INTEL_GAIN_AVAILABLE,
+                dailyIntelGainSearch(lighthouseRow));
+        boolean available = false;
+        if (availablePattern != null && availablePattern.isFound()) {
+            BufferedImage frame = ImageConverter.toBufferedImage(emu.captureScreen(dev));
+            int greenPixels = availableGreenPixels(frame, availablePattern);
+            available = greenPixels >= INTEL_AVAILABLE_GREEN_MIN;
+            log.info("Daily Intel availability evidence: greenGainPattern=true, greenPixels=" + greenPixels
+                    + ", available=" + available);
+        } else {
+            log.info("Daily Intel availability evidence: greenGainPattern=false, available=false");
+        }
+
+        if (!nav.closeSidebar()) {
+            throw new HomeNotFoundException("Failed to close Daily sidebar after Intel availability check");
+        }
+        if (!available) {
+            return false;
+        }
+
+        enterIntelFromWilderness();
+        return true;
+    }
+
+    /** Returns from a mission's Wilderness end state without routing through City or Daily. */
     public void ensureOnIntelScreen() {
-        ensureOnIntelScreenAndReadGain();
+        pause(300);
+        if (!isIntelScreenActive()) {
+            enterIntelFromWilderness();
+        }
     }
 
-    /**
-     * Opens Intel through the Daily sidebar and returns its advertised mission count when readable.
-     * The sidebar value is captured before entering Intel, because the marker map alone is not a
-     * reliable availability signal across Furnace eras.
-     */
-    public OptionalInt ensureOnIntelScreenAndReadGain() {
-        pause(500);
-        log.info("Checking Intel screen");
-        if (isIntelScreenActive()) {
-            log.info("Already on Intel");
-            return OptionalInt.empty();
-        }
-
-        nav.ensureCorrectScreenLocation(LaunchPoint.HOME);
-
-
-        log.info("Not on Intel - checking for the Lighthouse Intel bubble in City");
-        if (tryOpenIntelBubble()) {
-            log.info("Intel reached directly from the City Lighthouse bubble");
-            return OptionalInt.empty();
-        }
-
-        log.info("Lighthouse Intel bubble not available in City - routing through Daily sidebar");
-        return enterIntelFromOpenSidebarAndReadGain();
+    /** Re-enters Intel after a mission transition known to finish in Wilderness. */
+    public void returnToIntelFromWilderness() {
+        pause(MISSION_RETURN_SETTLE_MILLIS);
+        enterIntelFromWilderness();
     }
 
-    /** Continues Intel navigation while the sidebar is already open after a March Queue scan. */
-    public OptionalInt enterIntelFromOpenSidebarAndReadGain() {
-        if (!nav.openSidebarSection(SidebarSection.DAILY)) {
-            throw new HomeNotFoundException("Failed to open Daily sidebar for Intel navigation");
-        }
-
-        log.info("Scrolling Daily sidebar to its bottom position");
-        emu.swipeScreen(dev, CommonGameAreas.SIDEBAR_SCROLL_FROM,
-                CommonGameAreas.SIDEBAR_SCROLL_TO, 400);
-        pause(600);
-
-        ImageSearchResultData lighthouseRow = lighthouseRowAtBottom();
-
-        OptionalInt advertisedGain = readAdvertisedGain(lighthouseRow);
-        advertisedGain.ifPresent(value -> log.info("Daily sidebar reports Intel Gain: " + value));
-        if (advertisedGain.isEmpty()) {
-            log.warn("Daily sidebar Intel Gain was not readable; marker detection will remain the fallback");
-        }
-
-        AreaData go = SidebarNavigator.goButtonFor(lighthouseRow);
-        log.info("Opening Lighthouse from Daily sidebar");
-        taps.tapInside(go);
-        pause(1_500);
-
-        log.info("Clearing Lighthouse tutorial state with two Android Back presses");
-        emu.pressBack(dev);
-        pause(500);
-        emu.pressBack(dev);
-        pause(700);
-
-        if (tryOpenIntelBubble()) {
-            log.info("Intel reached");
-            return advertisedGain;
-        }
-        log.error("Intel unreachable after " + MAX_NAV_PASSES + " passes");
-        throw new HomeNotFoundException("Failed to navigate to Intel screen");
-    }
-
-    private boolean tryOpenIntelBubble() {
-        for (int i = 1; i <= MAX_NAV_PASSES; i++) {
-            ImageSearchResultData hit = tpl.locatePattern(TemplatesEnum.LIGHTHOUSE_INTEL_BUBBLE,
-                    SearchConfigConstants.DEFAULT_SINGLE);
-            if (!hit.isFound()) { log.debug("Intel button absent, pass " + i); pause(300); continue; }
-
-            log.info("Tapping Intel button");
-            taps.tapInside(hit);
-            pause(1000);
-            if (isIntelScreenActive()) {
-                return true;
+    private void enterIntelFromWilderness() {
+        nav.ensureCorrectScreenLocation(LaunchPoint.WORLD);
+        for (int pass = 1; pass <= MAX_NAV_PASSES; pass++) {
+            ImageSearchResultData button = tpl.locatePattern(TemplatesEnum.GAME_HOME_INTEL,
+                    WORLD_INTEL_BUTTON_SEARCH);
+            if (button == null || !button.isFound()) {
+                log.warn("Wilderness Intel shortcut absent, pass " + pass);
+                pause(350);
+                continue;
             }
 
-            log.warn("Intel bubble tap did not open the Intel map, pass " + i);
-            pause(500);
+            log.info("Opening Intel from the Wilderness shortcut");
+            taps.tapInside(button);
+            pause(800);
+            if (isIntelScreenActive()) {
+                return;
+            }
+            log.warn("Wilderness Intel shortcut did not open the Intel map, pass " + pass);
+            pause(400);
         }
-        return false;
+        throw new HomeNotFoundException("Failed to open Intel from the Wilderness shortcut");
     }
 
-    static AreaData gainAreaFor(ImageSearchResultData rowIcon) {
-        PointData center = rowIcon.getPoint();
+    static AreaData availabilityAreaFor(ImageSearchResultData gainPattern) {
+        PointData center = gainPattern.getPoint();
         if (center == null) {
-            throw new IllegalArgumentException("A located Lighthouse row icon is required");
+            throw new IllegalArgumentException("A located Intel Gain pattern is required");
         }
-        return AreaData.of(center.getX() + 70, center.getY() - 5,
-                center.getX() + 310, center.getY() + 38);
+        AreaData matchedArea = gainPattern.getMatchedArea();
+        return matchedArea != null ? matchedArea : AreaData.of(
+                center.getX() - 50, center.getY() - 18,
+                center.getX() + 49, center.getY() + 17);
     }
 
-    static ImageSearchResultData lighthouseRowAtBottom() {
-        return ImageSearchResultData.hit(LIGHTHOUSE_ROW_X, LIGHTHOUSE_ROW_Y, 100.0, 44, 44);
+    static int availableGreenPixels(BufferedImage frame, ImageSearchResultData gainPattern) {
+        return PixelStats.count(frame, availabilityAreaFor(gainPattern), GameColors::isVividGreen);
     }
 
-    static OptionalInt parseAdvertisedGain(String text) {
-        if (text == null) {
-            return OptionalInt.empty();
+    static AreaData intelGainRowArea(ImageSearchResultData lighthouseRow) {
+        PointData center = lighthouseRow.getPoint();
+        if (center == null) {
+            throw new IllegalArgumentException("A located Lighthouse Intel row icon is required");
         }
-        Matcher matcher = CommonOCRSettings.NUMBER_PATTERN.matcher(text.replaceAll("\\s+", ""));
-        if (!matcher.matches()) {
-            return OptionalInt.empty();
-        }
-        try {
-            return OptionalInt.of(Integer.parseInt(matcher.group(1)));
-        } catch (NumberFormatException ignored) {
-            return OptionalInt.empty();
-        }
+        return AreaData.of(80, Math.max(300, center.getY() - 8),
+                360, Math.min(880, center.getY() + 45));
     }
 
-    private OptionalInt readAdvertisedGain(ImageSearchResultData rowIcon) {
-        AreaData area = gainAreaFor(rowIcon);
-        try {
-            return parseAdvertisedGain(emu.readText(dev, area.topLeft(), area.bottomRight(),
-                    CommonOCRSettings.INTEL_GAIN_SETTINGS));
-        } catch (IOException | OcrException e) {
-            log.warn("Intel Gain OCR failed: " + e.getMessage());
-            return OptionalInt.empty();
-        }
+    private static TemplateSearchHelper.SearchConfig dailyIntelGainSearch(
+            ImageSearchResultData lighthouseRow) {
+        return TemplateSearchHelper.SearchConfig.builder()
+                .withMaxAttempts(2)
+                .withDelay(250)
+                .withThreshold(88)
+                .withArea(intelGainRowArea(lighthouseRow))
+                .build();
     }
 
     public boolean isIntelScreenActive() {
-        // Two quick probes with a short gap
         for (int i = 0; i < 2; i++) {
-            if (screenMatchesIntel()) { log.debug("Intel confirmed, probe " + (i + 1)); return true; }
-            if (i == 0) pause(300);
+            if (tpl.locatePattern(TemplatesEnum.INTEL_SCREEN_1,
+                    SearchConfigConstants.DEFAULT_SINGLE).isFound()
+                    || tpl.locatePattern(TemplatesEnum.INTEL_SCREEN_2,
+                            SearchConfigConstants.DEFAULT_SINGLE).isFound()) {
+                log.debug("Intel confirmed, probe " + (i + 1));
+                return true;
+            }
+            if (i == 0) {
+                pause(300);
+            }
         }
         return false;
-    }
-
-    // Merged: checks both template variants and OCR fallback in one pass
-    private boolean screenMatchesIntel() {
-        BooleanSupplier[] checks = {
-                () -> tpl.locatePattern(TemplatesEnum.INTEL_SCREEN_1, SearchConfigConstants.DEFAULT_SINGLE).isFound(),
-                () -> tpl.locatePattern(TemplatesEnum.INTEL_SCREEN_2, SearchConfigConstants.DEFAULT_SINGLE).isFound(),
-                this::ocrShowsIntel
-        };
-        for (BooleanSupplier check : checks) {
-            if (check.getAsBoolean()) return true;
-        }
-        return false;
-    }
-
-    private boolean ocrShowsIntel() {
-        try {
-            String txt = emu.readText(dev, new PointData(85, 15), new PointData(171, 62));
-            return txt != null && txt.toLowerCase().contains("intel");
-        } catch (IOException | OcrException e) {
-            log.warn("OCR check failed: " + e.getMessage());
-            return false;
-        }
     }
 
     private static void pause(long ms) {
-        try { Thread.sleep(ms); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

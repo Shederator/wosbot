@@ -14,12 +14,12 @@ class IntelDeploymentPreflightTest {
 
     @Test
     void rejectsImplausiblyLongIntelTravelTime() {
-        assertFalse(IntelDeploymentPreflight.assess(36_020).allowed());
+        assertFalse(IntelDeploymentPreflight.assess(300).allowed());
     }
 
     @Test
-    void acceptsTravelTimeAtTheConservativeBoundary() {
+    void acceptsTravelTimeBelowFiveMinutes() {
         assertTrue(IntelDeploymentPreflight.assess(
-                IntelDeploymentPreflight.MAX_TRAVEL_SECONDS).allowed());
+                IntelDeploymentPreflight.MAX_TRAVEL_SECONDS_EXCLUSIVE - 1).allowed());
     }
 }

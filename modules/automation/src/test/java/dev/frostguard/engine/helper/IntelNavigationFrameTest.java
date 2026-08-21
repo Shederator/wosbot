@@ -1,6 +1,6 @@
 package dev.frostguard.engine.helper;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.awt.image.BufferedImage;
@@ -14,14 +14,10 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import dev.frostguard.api.configs.TemplatesEnum;
-import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
-import dev.frostguard.api.domain.RawImageData;
-import dev.frostguard.engine.nav.CommonOCRSettings;
+import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.vision.match.OpenCvPatternLocator;
-import dev.frostguard.vision.ocr.OcrEngine;
-import dev.frostguard.vision.ocr.OcrException;
 
 class IntelNavigationFrameTest {
 
@@ -37,16 +33,61 @@ class IntelNavigationFrameTest {
     }
 
     @Test
-    void detectsLighthouseRowAndReadsAdvertisedIntelGain() throws IOException, OcrException {
-        ImageSearchResultData row = IntelScreenHelper.lighthouseRowAtBottom();
-        assertEquals(new PointData(46, 649), row.getPoint());
+    void detectsIntelRowAndGreenAvailabilityWithoutOcr() throws IOException {
+        byte[] frame = resource("daily-sidebar-gain.png");
+        ImageSearchResultData lighthouseRow = OpenCvPatternLocator.locatePattern(frame,
+                TemplatesEnum.SIDEBAR_DAILY_LIGHTHOUSE_INTEL,
+                CommonGameAreas.SIDEBAR_ROW_ICON_COLUMN.topLeft(),
+                CommonGameAreas.SIDEBAR_ROW_ICON_COLUMN.bottomRight(), 88);
 
-        AreaData gainArea = IntelScreenHelper.gainAreaFor(row);
-        String text = OcrEngine.recognizeText(rgbaFrame("daily-sidebar-gain.png"),
-                gainArea.topLeft(), gainArea.bottomRight(), CommonOCRSettings.INTEL_GAIN_SETTINGS);
+        assertTrue(lighthouseRow.isFound(), "Expected the Lighthouse Intel row icon");
+        ImageSearchResultData gain = OpenCvPatternLocator.locatePattern(frame,
+                TemplatesEnum.INTEL_GAIN_AVAILABLE,
+                IntelScreenHelper.intelGainRowArea(lighthouseRow).topLeft(),
+                IntelScreenHelper.intelGainRowArea(lighthouseRow).bottomRight(), 88);
 
-        assertEquals(8, IntelScreenHelper.parseAdvertisedGain(text).orElseThrow(),
-                () -> "OCR text was: " + text);
+        assertTrue(gain.isFound(), "Expected green Intel Gain only in the icon-anchored row");
+        assertTrue(IntelScreenHelper.availableGreenPixels(bufferedFrame("daily-sidebar-gain.png"), gain) >= 150,
+                "Expected the located Intel Gain pattern to retain its green active state");
+    }
+
+    @Test
+    void anchorsIntelGainToTheShiftedIconRowInTheReportedFrame() throws IOException {
+        byte[] frame = absoluteResource(
+                "/navigation/sidebar-update-20260821/daily-dynamic-intel.png");
+        ImageSearchResultData lighthouseRow = OpenCvPatternLocator.locatePattern(frame,
+                TemplatesEnum.SIDEBAR_DAILY_LIGHTHOUSE_INTEL,
+                CommonGameAreas.SIDEBAR_ROW_ICON_COLUMN.topLeft(),
+                CommonGameAreas.SIDEBAR_ROW_ICON_COLUMN.bottomRight(), 88);
+
+        assertTrue(lighthouseRow.isFound());
+        ImageSearchResultData gain = OpenCvPatternLocator.locatePattern(frame,
+                TemplatesEnum.INTEL_GAIN_AVAILABLE,
+                IntelScreenHelper.intelGainRowArea(lighthouseRow).topLeft(),
+                IntelScreenHelper.intelGainRowArea(lighthouseRow).bottomRight(), 88);
+
+        assertTrue(gain.isFound(), "Expected Intel Gain inside the dynamically located row");
+    }
+
+    @Test
+    void rejectsDailyAvailabilityWhenTheIntelIdentityIsMissing() throws IOException {
+        byte[] frame = resource("intel-map.png");
+        ImageSearchResultData row = OpenCvPatternLocator.locatePattern(frame,
+                TemplatesEnum.INTEL_GAIN_AVAILABLE,
+                CommonGameAreas.SIDEBAR_CONTENT.topLeft(),
+                CommonGameAreas.SIDEBAR_CONTENT.bottomRight(), 88);
+
+        assertFalse(row.isFound());
+    }
+
+    @Test
+    void detectsDirectIntelShortcutOnWildernessFrame() throws IOException {
+        byte[] frame = resource("daily-sidebar-gain.png");
+        ImageSearchResultData shortcut = OpenCvPatternLocator.locatePattern(frame,
+                TemplatesEnum.GAME_HOME_INTEL,
+                new PointData(615, 800), new PointData(715, 930), 88);
+
+        assertTrue(shortcut.isFound(), "Expected the direct Intel shortcut at the right side of Wilderness");
     }
 
     @Test
@@ -89,20 +130,14 @@ class IntelNavigationFrameTest {
         }
     }
 
-    private static RawImageData rgbaFrame(String name) throws IOException {
-        BufferedImage image = ImageIO.read(Objects.requireNonNull(
-                IntelNavigationFrameTest.class.getResourceAsStream(FIXTURE_ROOT + name)));
-        byte[] rgba = new byte[image.getWidth() * image.getHeight() * 4];
-        int offset = 0;
-        for (int y = 0; y < image.getHeight(); y++) {
-            for (int x = 0; x < image.getWidth(); x++) {
-                int argb = image.getRGB(x, y);
-                rgba[offset++] = (byte) ((argb >> 16) & 0xff);
-                rgba[offset++] = (byte) ((argb >> 8) & 0xff);
-                rgba[offset++] = (byte) (argb & 0xff);
-                rgba[offset++] = (byte) ((argb >> 24) & 0xff);
-            }
+    private static byte[] absoluteResource(String path) throws IOException {
+        try (InputStream stream = IntelNavigationFrameTest.class.getResourceAsStream(path)) {
+            return Objects.requireNonNull(stream, "Missing test resource: " + path).readAllBytes();
         }
-        return RawImageData.capture(rgba, image.getWidth(), image.getHeight(), 4);
+    }
+
+    private static BufferedImage bufferedFrame(String name) throws IOException {
+        return ImageIO.read(Objects.requireNonNull(
+                IntelNavigationFrameTest.class.getResourceAsStream(FIXTURE_ROOT + name)));
     }
 }
