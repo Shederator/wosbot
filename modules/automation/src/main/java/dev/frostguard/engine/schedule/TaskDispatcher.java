@@ -266,7 +266,7 @@ public class TaskDispatcher implements PreemptionListener, StaminaChangeListener
             TaskQueue queue = entry.getValue();
             AccountDescriptor p = queue.getProfile();
             String label = (p != null) ? p.getName() : String.valueOf(id);
-            boolean paused = pauseFlags.getOrDefault(id, Boolean.FALSE);
+            boolean paused = pauseFlags.getOrDefault(id, Boolean.FALSE) || queue.isPaused();
             snapshot.add(new QueueProfileStateData(id, label, paused));
         }
         snapshot.sort(Comparator.comparing(

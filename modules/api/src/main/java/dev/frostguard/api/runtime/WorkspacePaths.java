@@ -82,6 +82,11 @@ public record WorkspacePaths(Path root, RuntimeChannel channel) {
     public Path database() { return root.resolve("frostguard.db"); }
     public Path config() { return root.resolve("config"); }
     public Path logs() { return root.resolve("logs"); }
+    public Path accountLog(String profileName, long profileId) {
+        String safeName = Optional.ofNullable(profileName).orElse("profile")
+                .replaceAll("[^a-zA-Z0-9._-]", "_");
+        return logs().resolve("account_" + safeName + "_" + profileId + ".log");
+    }
     public Path customTasks() { return root.resolve("custom-tasks"); }
     public Path cache() { return root.resolve("cache"); }
     public Path watcher() { return root.resolve("watcher"); }

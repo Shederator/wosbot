@@ -71,8 +71,7 @@ public final class ProfileContextLogger {
     private synchronized void initWriter(AccountDescriptor acc) throws IOException {
         if (writerRegistry.containsKey(acc.getId())) return;
 
-        File handle = WorkspacePaths.current().logs()
-                .resolve(String.format("account_%s_%d.log", cleanPath(acc.getName()), acc.getId())).toFile();
+        File handle = WorkspacePaths.current().accountLog(acc.getName(), acc.getId()).toFile();
 
         if (handle.exists() && handle.length() > MAX_BYTES) {
             rollover(handle);
@@ -132,10 +131,6 @@ public final class ProfileContextLogger {
         new FileWriter(current, false).close(); // Purge original
     }
 
-    private static String cleanPath(String raw) {
-        return (raw == null) ? "null" : raw.replaceAll("[^a-zA-Z0-9._-]", "_");
-    }
-
     private String decorate(String level, String msg) {
         return String.format("%s [%s] %s: %s", 
             logTimestamp.format(new Date()), level, sourceName, msg);
@@ -186,8 +181,7 @@ public final class ProfileContextLogger {
     private void enforceSizeLimit() {
         if (profile == null) return;
         
-        File handle = WorkspacePaths.current().logs()
-                .resolve(String.format("account_%s_%d.log", cleanPath(profile.getName()), profile.getId())).toFile();
+        File handle = WorkspacePaths.current().accountLog(profile.getName(), profile.getId()).toFile();
         
         if (handle.exists() && handle.length() > MAX_BYTES) {
             try {

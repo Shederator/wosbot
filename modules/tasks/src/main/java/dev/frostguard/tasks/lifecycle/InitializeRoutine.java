@@ -3,14 +3,22 @@ package dev.frostguard.tasks.lifecycle;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.engine.error.ActionRequiredContext;
+import dev.frostguard.engine.error.ProfileCooldownException;
 import dev.frostguard.engine.error.ProfileInReconnectStateException;
+import dev.frostguard.engine.error.StartupCaptureException;
 import dev.frostguard.engine.error.StopExecutionException;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.api.domain.PointData;
+import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.helper.CharacterSwitchHelper;
-import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
+import dev.frostguard.vision.convert.ImageConverter;
+import dev.frostguard.vision.match.OpenCvPatternLocator;
+
+import java.time.LocalDateTime;
 
 /**
  * Initialize task that starts the bot and prepares the game for automation.
@@ -31,7 +39,8 @@ import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
  * <ul>
  * <li>This task does NOT reschedule after execution</li>
  * <li>Sets recurring=false on start to prevent re-execution</li>
- * <li>Exception on failure: Sets recurring=true to retry immediately</li>
+ * <li>Unknown startup failures receive one immediate emulator restart</li>
+ * <li>Persistent blockers pause the profile until a conservative retry time</li>
  * <li>Exception on success: Task completes without rescheduling</li>
  * </ul>
  * 
@@ -40,8 +49,9 @@ import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
  * <ul>
  * <li>Game not installed: Throws StopExecutionException (stops queue)</li>
  * <li>Reconnect state detected: Throws ProfileInReconnectStateException</li>
- * <li>Home screen not found: Restarts emulator and sets recurring=true
- * (retry)</li>
+ * <li>Home screen not found: Performs one bounded emulator restart</li>
+ * <li>Verified Google Play redirect: Requires operator action and releases the
+ * emulator slot during a profile cooldown</li>
  * </ul>
  * 
  * <p>
@@ -60,6 +70,23 @@ public class InitializeRoutine extends DelayedTask {
 	private static final int MAX_RESOURCE_DOWNLOAD_ATTEMPTS =
 			RESOURCE_DOWNLOAD_TIMEOUT_MINUTES * 60_000 / RESOURCE_DOWNLOAD_POLL_DELAY_MS;
 	private static final int RESOURCE_DOWNLOAD_PROGRESS_LOG_INTERVAL = 12;
+	private static final PointData WELCOME_BACK_TITLE_AREA_TOP_LEFT = new PointData(170, 170);
+	private static final PointData WELCOME_BACK_TITLE_AREA_BOTTOM_RIGHT = new PointData(550, 340);
+	private static final PointData WELCOME_BACK_CONFIRM_AREA_TOP_LEFT = new PointData(150, 880);
+	private static final PointData WELCOME_BACK_CONFIRM_AREA_BOTTOM_RIGHT = new PointData(570, 1140);
+	private static final PointData UPDATE_TITLE_AREA_TOP_LEFT = new PointData(250, 250);
+	private static final PointData UPDATE_TITLE_AREA_BOTTOM_RIGHT = new PointData(470, 350);
+	private static final PointData UPDATE_BUTTON_AREA_TOP_LEFT = new PointData(200, 850);
+	private static final PointData UPDATE_BUTTON_AREA_BOTTOM_RIGHT = new PointData(520, 1050);
+	private static final int UPDATE_PATTERN_THRESHOLD = 90;
+	private static final int UPDATE_POSTCONDITION_TIMEOUT_MINUTES = 10;
+	private static final int UPDATE_POSTCONDITION_POLL_DELAY_MS = 5000;
+	private static final int MAX_UPDATE_POSTCONDITION_ATTEMPTS =
+			UPDATE_POSTCONDITION_TIMEOUT_MINUTES * 60_000 / UPDATE_POSTCONDITION_POLL_DELAY_MS;
+	private static final int UPDATE_PROGRESS_LOG_INTERVAL = 12;
+	private static final String GOOGLE_PLAY_PACKAGE = "com.android.vending";
+	private static final int MAX_WELCOME_BACK_DISMISSALS = 1;
+	private static final int STARTUP_PATTERN_THRESHOLD = 90;
 
 	// ========== Instance State ==========
 	/**
@@ -67,6 +94,9 @@ public class InitializeRoutine extends DelayedTask {
 	 * This persists across task executions (when recurring=true triggers retry).
 	 */
 	boolean isStarted = false;
+	private int emulatorRestartAttempts = 0;
+	private int welcomeBackDismissals = 0;
+	private String lastVerifiedStartupState = "initialization started";
 
 	/**
 	 * Helper for character switching operations.
@@ -152,6 +182,7 @@ public class InitializeRoutine extends DelayedTask {
 		while (!isStarted) {
 			if (emuManager.isRunning(EMULATOR_NUMBER)) {
 				isStarted = true;
+				lastVerifiedStartupState = "emulator running";
 				logInfo("Emulator is running.");
 			} else {
 				logInfo("Emulator not found. Attempting to start it...");
@@ -176,6 +207,7 @@ public class InitializeRoutine extends DelayedTask {
 			logError("Whiteout Survival is not installed. Stopping the task queue.");
 			throw new StopExecutionException("Game not installed");
 		}
+		lastVerifiedStartupState = "game installed";
 	}
 
 	/**
@@ -190,9 +222,26 @@ public class InitializeRoutine extends DelayedTask {
 			logInfo("Whiteout Survival is not running. Launching the game...");
 			emuManager.launchApp(EMULATOR_NUMBER, EmulatorController.GAME.getPackageName());
 			sleepTask(10000); // Wait for game to launch
+			lastVerifiedStartupState = "game launch requested and settle delay completed";
 		} else {
+			lastVerifiedStartupState = "game foreground package verified";
 			logInfo("Whiteout Survival is already running.");
 		}
+	}
+
+	private RawImageData captureStartupFrame(String inspection) {
+		String serial;
+		try {
+			serial = emuManager.getDeviceSerial(EMULATOR_NUMBER);
+		} catch (RuntimeException failure) {
+			serial = "unavailable (" + failure.getClass().getSimpleName() + ")";
+		}
+		return StartupCaptureRetry.capture(
+				new StartupCaptureRetry.CaptureContext(
+						EMULATOR_NUMBER, serial, inspection, lastVerifiedStartupState),
+				() -> emuManager.captureScreen(EMULATOR_NUMBER),
+				this::logWarning,
+				this::sleepTask);
 	}
 
 	/**
@@ -204,7 +253,17 @@ public class InitializeRoutine extends DelayedTask {
 	 * ProfileInReconnectStateException.
 	 * 
 	 * <p>
-	 * If home screen is not found after all attempts:
+	 * If home screen is not found after all attempts, the first failure restarts
+	 * the emulator. A subsequent failure enters a profile cooldown and releases
+	 * the emulator slot.
+	 *
+	 * <p>
+	 * A verified update dialog uses only its detected button, then waits for a
+	 * fresh known postcondition. Only a proven Google Play foreground redirect bypasses the
+	 * restart and escalates immediately.
+	 *
+	 * <p>
+	 * The bounded-restart path:
 	 * <ul>
 	 * <li>Closes the emulator</li>
 	 * <li>Resets isStarted flag</li>
@@ -225,6 +284,7 @@ public class InitializeRoutine extends DelayedTask {
 		while (attempts < MAX_HOME_SCREEN_ATTEMPTS) {
 			if (searchForHomeScreen()) {
 				homeScreenFound = true;
+				lastVerifiedStartupState = "home/world screen";
 				logInfo("Home screen found.");
 				break;
 			}
@@ -242,9 +302,23 @@ public class InitializeRoutine extends DelayedTask {
 				return false;
 			}
 
-			logWarning("Home screen not found. Waiting 5 seconds before retrying...");
-			pressBack(); // Try to dismiss any overlays
-			sleepTask(5000); // Wait before retry
+			if (dismissWelcomeBackIfPresent()) {
+				logInfo("Verified Welcome back dialog dismissed. Waiting for home/world postcondition.");
+				sleepTask(2000);
+				attempts++;
+				continue;
+			}
+
+			MandatoryUpdateResult updateResult = followMandatoryUpdateIfPresent();
+			if (updateResult == MandatoryUpdateResult.COMPLETED) {
+				homeScreenFound = true;
+				logInfo("Home screen found after the game update flow.");
+				break;
+			}
+
+			logWarning("Home screen not found on an unsupported startup screen. "
+					+ "Waiting 5 seconds for a passive state change before retrying...");
+			sleepTask(5000);
 			attempts++;
 		}
 
@@ -256,23 +330,228 @@ public class InitializeRoutine extends DelayedTask {
 		return true;
 	}
 
+	private MandatoryUpdateResult followMandatoryUpdateIfPresent() {
+		MandatoryUpdateInspection inspection;
+		try {
+			RawImageData capture = captureStartupFrame("mandatory-update dialog inspection");
+			if (capture == null) {
+				return MandatoryUpdateResult.NOT_PRESENT;
+			}
+			inspection = inspectMandatoryUpdate(capture);
+		} catch (StartupCaptureException ex) {
+			throw ex;
+		} catch (RuntimeException ex) {
+			logDebug("Mandatory-update screen inspection unavailable: " + ex.getMessage());
+			return MandatoryUpdateResult.NOT_PRESENT;
+		}
+
+		MandatoryUpdateScreenClassifier.Evidence evidence = inspection.evidence();
+		if (!evidence.detected()) {
+			return MandatoryUpdateResult.NOT_PRESENT;
+		}
+
+		logInfo("Mandatory game update dialog and its action were verified. "
+				+ evidence.technicalSummary());
+		lastVerifiedStartupState = "mandatory in-game update dialog and button";
+		if (!tapInside(inspection.updateButton())) {
+			deferUnverifiedUpdatePostcondition(
+					"The detected Update button could not be tapped safely.",
+					evidence.technicalSummary());
+		}
+		logInfo("Tapped the detected in-game Update button. Waiting for a verified fresh postcondition.");
+		lastVerifiedStartupState = "mandatory in-game Update action sent";
+		return observeUpdatePostcondition(evidence);
+	}
+
+	private MandatoryUpdateResult observeUpdatePostcondition(
+			MandatoryUpdateScreenClassifier.Evidence updateEvidence) {
+		for (int attempt = 1; attempt <= MAX_UPDATE_POSTCONDITION_ATTEMPTS; attempt++) {
+			sleepTask(UPDATE_POSTCONDITION_POLL_DELAY_MS);
+
+			if (searchForHomeScreen()) {
+				lastVerifiedStartupState = "home/world screen after update";
+				logInfo("Game update flow returned to the home/world screen without operator action.");
+				return MandatoryUpdateResult.COMPLETED;
+			}
+			checkForReconnectState();
+
+			ResourceDownloadResult downloadResult = downloadRequiredResources();
+			if (downloadResult == ResourceDownloadResult.COMPLETED) {
+				return MandatoryUpdateResult.COMPLETED;
+			}
+			if (downloadResult == ResourceDownloadResult.TIMED_OUT) {
+				deferUnverifiedUpdatePostcondition(
+						"Required resources did not finish after the game update action.",
+						updateEvidence.technicalSummary());
+			}
+
+			if (dismissWelcomeBackIfPresent()) {
+				logInfo("Verified Welcome back dialog dismissed during the game update flow.");
+				continue;
+			}
+
+			RawImageData freshFrame = captureStartupFrame("post-update foreground screen inspection");
+			StoreRedirectEvidence storeRedirect = inspectStoreRedirect(freshFrame);
+			if (storeRedirect.detected()) {
+				lastVerifiedStartupState = "Google Play foreground after in-game Update action";
+				deferPlayStoreRedirect(updateEvidence, storeRedirect);
+			}
+
+			if (attempt % UPDATE_PROGRESS_LOG_INTERVAL == 0) {
+				logInfo("Game update postcondition is still pending ("
+						+ attempt * UPDATE_POSTCONDITION_POLL_DELAY_MS / 1000
+						+ " seconds elapsed). No unverified screen input was sent.");
+			}
+		}
+
+		deferUnverifiedUpdatePostcondition(
+				"The Update action did not reach a known safe postcondition within "
+						+ UPDATE_POSTCONDITION_TIMEOUT_MINUTES + " minutes.",
+				updateEvidence.technicalSummary());
+		return MandatoryUpdateResult.NOT_PRESENT;
+	}
+
+	private MandatoryUpdateInspection inspectMandatoryUpdate(RawImageData capture) {
+		if (capture == null) {
+			return new MandatoryUpdateInspection(
+					MandatoryUpdateScreenClassifier.inspect(null, false, 0, false, 0),
+					new ImageSearchResultData());
+		}
+		ImageSearchResultData title = OpenCvPatternLocator.locatePattern(
+				capture,
+				TemplatesEnum.GAME_START_MANDATORY_UPDATE_TITLE.getTemplate(),
+				UPDATE_TITLE_AREA_TOP_LEFT,
+				UPDATE_TITLE_AREA_BOTTOM_RIGHT,
+				UPDATE_PATTERN_THRESHOLD);
+		ImageSearchResultData updateButton = OpenCvPatternLocator.locatePattern(
+				capture,
+				TemplatesEnum.GAME_START_MANDATORY_UPDATE_BUTTON.getTemplate(),
+				UPDATE_BUTTON_AREA_TOP_LEFT,
+				UPDATE_BUTTON_AREA_BOTTOM_RIGHT,
+				UPDATE_PATTERN_THRESHOLD);
+		return new MandatoryUpdateInspection(
+				MandatoryUpdateScreenClassifier.inspect(
+						ImageConverter.toBufferedImage(capture),
+						title.isFound(), title.getMatchScore(),
+						updateButton.isFound(), updateButton.getMatchScore()),
+				updateButton);
+	}
+
+	private boolean dismissWelcomeBackIfPresent() {
+		if (welcomeBackDismissals >= MAX_WELCOME_BACK_DISMISSALS) {
+			return false;
+		}
+
+		RawImageData capture = captureStartupFrame("Welcome back dialog inspection");
+		if (capture == null) {
+			return false;
+		}
+		ImageSearchResultData title = OpenCvPatternLocator.locatePattern(
+				capture,
+				TemplatesEnum.GAME_START_WELCOME_BACK_TITLE.getTemplate(),
+				WELCOME_BACK_TITLE_AREA_TOP_LEFT,
+				WELCOME_BACK_TITLE_AREA_BOTTOM_RIGHT,
+				UPDATE_PATTERN_THRESHOLD);
+		ImageSearchResultData confirm = OpenCvPatternLocator.locatePattern(
+				capture,
+				TemplatesEnum.GAME_START_WELCOME_BACK_CONFIRM_BUTTON.getTemplate(),
+				WELCOME_BACK_CONFIRM_AREA_TOP_LEFT,
+				WELCOME_BACK_CONFIRM_AREA_BOTTOM_RIGHT,
+				UPDATE_PATTERN_THRESHOLD);
+		if (!title.isFound() || !confirm.isFound()) {
+			return false;
+		}
+
+		welcomeBackDismissals++;
+		lastVerifiedStartupState = "Welcome back dialog and Confirm button";
+		logInfo("Welcome back startup dialog and Confirm action verified from one fresh frame"
+				+ "; titlePattern=" + String.format(java.util.Locale.ROOT, "%.1f", title.getMatchScore())
+				+ "%"
+				+ "; confirmPattern=" + String.format(java.util.Locale.ROOT, "%.1f", confirm.getMatchScore())
+				+ "%");
+		if (!tapInside(confirm)) {
+			logWarning("Verified Welcome back Confirm area was unavailable for a safe tap; no fallback input sent.");
+			return false;
+		}
+		lastVerifiedStartupState = "Welcome back Confirm action sent";
+		return true;
+	}
+
+	private StoreRedirectEvidence inspectStoreRedirect(RawImageData capture) {
+		boolean playStoreForeground = emuManager.isPackageRunning(EMULATOR_NUMBER, GOOGLE_PLAY_PACKAGE);
+		return new StoreRedirectEvidence(
+				isVerifiedPlayStoreRedirect(playStoreForeground, capture != null),
+				playStoreForeground,
+				capture != null);
+	}
+
+	static boolean isVerifiedPlayStoreRedirect(
+			boolean playStoreForeground, boolean freshFrameCaptured) {
+		return playStoreForeground && freshFrameCaptured;
+	}
+
+	private record StoreRedirectEvidence(boolean detected,
+			boolean playStoreForeground, boolean freshFrameCaptured) {
+	}
+
+	private record MandatoryUpdateInspection(
+			MandatoryUpdateScreenClassifier.Evidence evidence,
+			ImageSearchResultData updateButton) {
+	}
+
+	private void deferPlayStoreRedirect(MandatoryUpdateScreenClassifier.Evidence updateEvidence,
+			StoreRedirectEvidence storeRedirect) {
+		LocalDateTime retryAt = LocalDateTime.now().plus(StartupRecoveryPolicy.PLAY_STORE_REDIRECT_COOLDOWN);
+		ProfileCooldownException cooldown = playStoreRedirectCooldown(retryAt);
+		logError("Initialization requires operator action for profile=" + profile.getName()
+				+ ", expected=update completed outside Frostguard or home/world"
+				+ ", observed=Google Play foreground package"
+				+ ", lastAction=tapped verified in-game Update button"
+				+ ", fallback=stop-game-and-release-slot, retryAt=" + retryAt
+				+ ". Technical evidence: " + updateEvidence.technicalSummary()
+				+ "; foreground package " + GOOGLE_PLAY_PACKAGE + ": "
+				+ storeRedirect.playStoreForeground()
+				+ "; fresh post-click frame captured: " + storeRedirect.freshFrameCaptured() + ".");
+		throw cooldown;
+	}
+
+	static ProfileCooldownException playStoreRedirectCooldown(LocalDateTime retryAt) {
+		String reason = "Google Play is waiting for the game update to be completed.";
+		return new ProfileCooldownException(reason, retryAt, new ActionRequiredContext(
+				"startup.play-store-redirect",
+				"Complete the game update in Google Play",
+				"Game update completed outside Frostguard or home/world screen",
+				"Google Play foreground package after the in-game update action",
+				"Tapped the detected in-game Update button, then captured a fresh frame while Google Play was foreground",
+				"Stop the game, release the slot, and retry initialization after one hour"));
+	}
+
+	private void deferUnverifiedUpdatePostcondition(String reason, String technicalEvidence) {
+		LocalDateTime retryAt = LocalDateTime.now().plus(StartupRecoveryPolicy.UPDATE_FOLLOW_UP_COOLDOWN);
+		logError("Initialization paused for profile=" + profile.getName()
+				+ ", expected=automatic update, resource download, Play Store redirect, or home/world"
+				+ ", observed=unsupported update follow-up, lastAction=tapped verified Update button"
+				+ ", fallback=stop-game-and-release-slot, retryAt=" + retryAt
+				+ ", reason=" + reason + " Technical evidence: " + technicalEvidence + ".");
+		throw new ProfileCooldownException(reason, retryAt);
+	}
+
+	private enum MandatoryUpdateResult {
+		NOT_PRESENT,
+		COMPLETED
+	}
+
 	/**
 	 * Searches for home or world screen indicators.
 	 * 
 	 * @return true if home or world screen is found, false otherwise
 	 */
 	private boolean searchForHomeScreen() {
-		ImageSearchResultData home = templateSearchHelper.locatePattern(
-				TemplatesEnum.GAME_HOME_FURNACE,
-				SearchConfig.builder()
-						.withMaxAttempts(1)
-						.build());
-
-		ImageSearchResultData world = templateSearchHelper.locatePattern(
-				TemplatesEnum.GAME_HOME_WORLD,
-				SearchConfig.builder()
-						.withMaxAttempts(1)
-						.build());
+		RawImageData frame = captureStartupFrame("home/world pattern inspection");
+		ImageSearchResultData home = emuManager.locatePattern(
+				EMULATOR_NUMBER, frame, TemplatesEnum.GAME_HOME_FURNACE, STARTUP_PATTERN_THRESHOLD);
+		ImageSearchResultData world = emuManager.locatePattern(
+				EMULATOR_NUMBER, frame, TemplatesEnum.GAME_HOME_WORLD, STARTUP_PATTERN_THRESHOLD);
 
 		return home.isFound() || world.isFound();
 	}
@@ -285,18 +564,18 @@ public class InitializeRoutine extends DelayedTask {
 	 * @return the observed prompt/download outcome
 	 */
 	private ResourceDownloadResult downloadRequiredResources() {
-		ImageSearchResultData downloadNow = templateSearchHelper.locatePattern(
-				TemplatesEnum.GAME_START_DOWNLOAD_NOW,
-				SearchConfig.builder()
-						.withMaxAttempts(1)
-						.build());
+		RawImageData frame = captureStartupFrame("resource-download prompt inspection");
+		ImageSearchResultData downloadNow = emuManager.locatePattern(
+				EMULATOR_NUMBER, frame, TemplatesEnum.GAME_START_DOWNLOAD_NOW, STARTUP_PATTERN_THRESHOLD);
 
 		if (!downloadNow.isFound()) {
 			return ResourceDownloadResult.NOT_PRESENT;
 		}
 
 		logInfo("Resource download prompt detected. Downloading required resources before entering the game.");
+		lastVerifiedStartupState = "resource-download prompt and Download Now button";
 		tapInside(downloadNow);
+		lastVerifiedStartupState = "resource-download action sent";
 
 		for (int attempt = 1; attempt <= MAX_RESOURCE_DOWNLOAD_ATTEMPTS; attempt++) {
 			sleepTask(RESOURCE_DOWNLOAD_POLL_DELAY_MS);
@@ -305,6 +584,9 @@ public class InitializeRoutine extends DelayedTask {
 				return ResourceDownloadResult.COMPLETED;
 			}
 			checkForReconnectState();
+			if (dismissWelcomeBackIfPresent()) {
+				logInfo("Verified Welcome back dialog dismissed after the required resource download.");
+			}
 			if (attempt % RESOURCE_DOWNLOAD_PROGRESS_LOG_INTERVAL == 0) {
 				logInfo("Required resource download still in progress ("
 						+ attempt * RESOURCE_DOWNLOAD_POLL_DELAY_MS / 1000 + " seconds elapsed).");
@@ -333,11 +615,9 @@ public class InitializeRoutine extends DelayedTask {
 	 * @throws ProfileInReconnectStateException if reconnect popup is found
 	 */
 	private void checkForReconnectState() {
-		ImageSearchResultData reconnect = templateSearchHelper.locatePattern(
-				TemplatesEnum.GAME_HOME_RECONNECT,
-				SearchConfig.builder()
-						.withMaxAttempts(2)
-						.build());
+		RawImageData frame = captureStartupFrame("reconnect-state inspection");
+		ImageSearchResultData reconnect = emuManager.locatePattern(
+				EMULATOR_NUMBER, frame, TemplatesEnum.GAME_HOME_RECONNECT, STARTUP_PATTERN_THRESHOLD);
 
 		if (reconnect.isFound()) {
 			throw new ProfileInReconnectStateException(
@@ -359,11 +639,20 @@ public class InitializeRoutine extends DelayedTask {
 	 * </ol>
 	 * 
 	 * <p>
-	 * When the task re-executes (due to recurring=true), it will go through
-	 * the full initialization flow again, including relaunching the emulator.
+	 * When the task re-executes after the one permitted restart, it will go
+	 * through the full initialization flow again. If startup is still blocked,
+	 * it enters a visible profile cooldown instead of restarting again.
 	 */
 	private void handleHomeScreenNotFound() {
-		logError("Home screen not found after multiple attempts. Restarting emulator.");
+		if (StartupRecoveryPolicy.forUnknownBlocker(emulatorRestartAttempts)
+				== StartupRecoveryPolicy.UnknownBlockerAction.COOLDOWN_AND_RELEASE_SLOT) {
+			deferUnknownStartupBlocker();
+		}
+
+		emulatorRestartAttempts++;
+		logError("Home screen not found after " + MAX_HOME_SCREEN_ATTEMPTS
+				+ " attempts. Performing bounded emulator recovery " + emulatorRestartAttempts
+				+ "/" + StartupRecoveryPolicy.MAX_EMULATOR_RESTART_ATTEMPTS + ".");
 
 		// Perform ADB health check before closing emulator
 		// This may restart the ADB bridge if it's degraded
@@ -379,6 +668,24 @@ public class InitializeRoutine extends DelayedTask {
 		emuManager.closeEmulator(EMULATOR_NUMBER);
 		isStarted = false;
 		setRecurring(true); // Trigger immediate retry
+	}
+
+	private void deferUnknownStartupBlocker() {
+		LocalDateTime retryAt = LocalDateTime.now().plus(StartupRecoveryPolicy.UNKNOWN_BLOCKER_COOLDOWN);
+		String reason = "home/world remained unavailable after bounded emulator recovery";
+		logError("Initialization blocked for profile=" + profile.getName()
+				+ ", expected=home/world, observed=unknown-startup-blocker"
+				+ ", lastAction=emulator-restart, recoveryAttempts=" + emulatorRestartAttempts
+				+ "/" + StartupRecoveryPolicy.MAX_EMULATOR_RESTART_ATTEMPTS
+				+ ", fallback=stop-game-and-release-slot, retryAt=" + retryAt
+				+ ", reason=" + reason + ".");
+		throw new ProfileCooldownException(reason, retryAt, new ActionRequiredContext(
+				"startup.home-unavailable-after-restart",
+				"Startup remains blocked after automatic recovery",
+				"home/world",
+				"unsupported startup screen",
+				"One bounded emulator restart; no speculative screen input",
+				"Stop the game, release the slot, and retry initialization after fifteen minutes"));
 	}
 
 	/**

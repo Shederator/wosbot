@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import dev.frostguard.app.ApplicationTitle;
 import dev.frostguard.app.BuildMetadata;
@@ -39,6 +40,7 @@ import dev.frostguard.app.panel.misc.GiftcodeLayoutController;
 import dev.frostguard.app.panel.heroes.IntelLayoutController;
 import dev.frostguard.app.panel.dailies.MobilizationLayoutController;
 import dev.frostguard.api.domain.BotStateData;
+import dev.frostguard.api.domain.ActionRequiredIncidentData;
 import dev.frostguard.api.domain.LogMessageData;
 import dev.frostguard.api.domain.QueueProfileStateData;
 import dev.frostguard.app.panel.pets.PetsLayoutController;
@@ -51,6 +53,7 @@ import dev.frostguard.app.panel.profile.ProfileManagerLayoutController;
 import dev.frostguard.api.domain.QueueStateData;
 import dev.frostguard.engine.listener.StaminaChangeListener;
 import dev.frostguard.engine.service.ConfigService;
+import dev.frostguard.engine.service.ActionRequiredIncidentService;
 import dev.frostguard.engine.service.ScheduleService;
 import dev.frostguard.engine.service.StaminaService;
 import dev.frostguard.app.panel.economy.ShopLayoutController;
@@ -85,6 +88,7 @@ import dev.frostguard.app.panel.misc.TelegramLayoutController;
 import dev.frostguard.app.bootstrap.ApplicationLifecycle;
 import dev.frostguard.app.bootstrap.WindowsWindowManager;
 import dev.frostguard.app.panel.update.UpdateLayoutController;
+import dev.frostguard.app.panel.notification.NotificationCenterController;
 import dev.frostguard.engine.service.TelegramBotService;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignT;
@@ -124,6 +128,16 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     private AnchorPane mainContentPane;
     @FXML
     private Label labelRunTime;
+    @FXML
+    private StackPane notificationButtonContainer;
+    @FXML
+    private Button buttonNotifications;
+    @FXML
+    private Label labelNotificationBadge;
+    @FXML
+    private FontIcon iconNotifications;
+    @FXML
+    private StackPane notificationDrawerHost;
     @FXML
     private Label labelVersion;
     @FXML
@@ -205,6 +219,9 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     private long uptimeStartedAtNanos;
     private int autoStartSecondsRemaining;
     private boolean isStartup = true;
+    private NotificationCenterController notificationCenterController;
+    private final Consumer<List<ActionRequiredIncidentData>> notificationListener =
+            this::onNotificationSnapshot;
 
     public LauncherLayoutController(Stage stage) {
         this.stage = stage;
@@ -230,6 +247,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         showVersion();
         updateWindowTitle();
         initializeUptime();
+        initializeNotificationCenter();
         buttonStartStop.setDisable(false);
         buttonPauseResume.setDisable(true);
         configurePauseMenu();
@@ -263,6 +281,65 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         long minutes = elapsedSeconds % 3_600 / 60;
         long seconds = elapsedSeconds % 60;
         return String.format("%02d:%02d:%02d", hours, minutes, seconds);
+    }
+
+    private void initializeNotificationCenter() {
+        if (notificationDrawerHost == null) {
+            return;
+        }
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/layout/NotificationCenter.fxml"));
+            Parent drawer = loader.load();
+            notificationCenterController = loader.getController();
+            notificationCenterController.setCloseAction(this::hideNotificationCenter);
+            notificationDrawerHost.getChildren().setAll(drawer);
+            if (iconNotifications != null) {
+                iconNotifications.setIconCode(MaterialDesignB.BELL_OUTLINE);
+            }
+            ActionRequiredIncidentService service = ActionRequiredIncidentService.obtain();
+            service.registerListener(notificationListener);
+            updateNotificationBadge(service.findAll());
+        } catch (IOException exception) {
+            throw new IllegalStateException("Could not load the notification center", exception);
+        }
+    }
+
+    @FXML
+    private void handleNotifications(ActionEvent event) {
+        if (notificationDrawerHost == null) {
+            return;
+        }
+        boolean show = !notificationDrawerHost.isVisible();
+        notificationDrawerHost.setManaged(show);
+        notificationDrawerHost.setVisible(show);
+        if (show) {
+            notificationDrawerHost.toFront();
+            notificationCenterController.refreshFromStore();
+        }
+    }
+
+    private void hideNotificationCenter() {
+        notificationDrawerHost.setVisible(false);
+        notificationDrawerHost.setManaged(false);
+    }
+
+    private void onNotificationSnapshot(List<ActionRequiredIncidentData> incidents) {
+        if (Platform.isFxApplicationThread()) {
+            updateNotificationBadge(incidents);
+        } else {
+            Platform.runLater(() -> updateNotificationBadge(incidents));
+        }
+    }
+
+    private void updateNotificationBadge(List<ActionRequiredIncidentData> incidents) {
+        long unread = incidents.stream().filter(ActionRequiredIncidentData::isUnread).count();
+        boolean visible = unread > 0;
+        labelNotificationBadge.setText(unread > 99 ? "99+" : Long.toString(unread));
+        labelNotificationBadge.setVisible(visible);
+        labelNotificationBadge.setManaged(visible);
+        buttonNotifications.setAccessibleText(visible
+                ? "Notifications, " + unread + " unread action required"
+                : "Notifications");
     }
 
     private void setupSocialIcons() { /* internal */

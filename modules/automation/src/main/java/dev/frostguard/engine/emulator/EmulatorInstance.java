@@ -246,12 +246,12 @@ public abstract class EmulatorInstance {
     public RawImageData captureScreenshot(String idx) {
         String serial = getDeviceSerial(idx);
         if (serial == null) throw new ADBConnectionException("No serial for dev " + idx);
-        IDevice d;
-        try { d = getCachedDevice(idx); } catch (Exception e) { throw new RuntimeException(e); }
-        if (d == null || !d.isOnline()) throw new ADBConnectionException("Dev " + serial + " offline");
-
+        ByteArrayOutputStream buf = new ByteArrayOutputStream(720 * 1280 * 4 + 64);
         try {
-            ByteArrayOutputStream buf = new ByteArrayOutputStream(720 * 1280 * 4 + 64);
+            IDevice d = getCachedDevice(idx);
+            if (d == null || !d.isOnline()) {
+                throw new ADBConnectionException("Device is offline");
+            }
             d.executeShellCommand("screencap", new CollectingOutputReceiver() {
                 @Override public void addOutput(byte[] data, int off, int len) { buf.write(data, off, len); }
             }, 2000, TimeUnit.MILLISECONDS);
@@ -269,8 +269,26 @@ public abstract class EmulatorInstance {
             RawImageData frame = RawImageData.capture(px, w, h, bitsPerPixel);
             lastFrame.put(idx, frame);
             return frame;
-        } catch (com.android.ddmlib.TimeoutException e) { throw new RuntimeException("screencap timeout", e); }
-          catch (Exception e) { throw new RuntimeException("capture error", e); }
+        } catch (Exception e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            throw new RuntimeException(captureFailureMessage(idx, serial, buf.size(), e), e);
+        }
+    }
+
+    static String captureFailureMessage(String idx, String serial, int receivedBytes, Exception failure) {
+        String timeout = failure instanceof com.android.ddmlib.TimeoutException
+                ? "commandTimeoutMs=2000"
+                : "commandTimeoutMs=2000 (not reached or not identified as timeout)";
+        return "ADB screencap failed; emulator=" + idx
+                + "; serial=" + serial
+                + "; command=screencap"
+                + "; " + timeout
+                + "; receivedBytes=" + receivedBytes
+                + "; exitDetail=ddmlib shell capture exposes no process exit code"
+                + "; cause=" + failure.getClass().getSimpleName() + ": "
+                + Objects.requireNonNullElse(failure.getMessage(), "no message");
     }
 
     private static int le32(byte[] b, int o) {

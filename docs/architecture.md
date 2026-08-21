@@ -125,6 +125,11 @@ Task-facing code should usually call `TemplateSearchHelper` or `BotOcrEngine` fr
 - `DelayedTask` is the base class for all Java automation tasks.
 - Helper classes such as `NavigationHelper`, `MarchHelper`, `StaminaHelper`, and `TemplateSearchHelper` provide reusable game operations.
 - Services such as `ProfileService`, `ConfigService`, `TaskManagementService`, `LoggingService`, and `StatisticsService` coordinate shared state.
+- `ActionRequiredIncidentService` persists deduplicated operator-action failures
+  for both headless and desktop runs; JavaFX observes it but is not a dependency.
+- `TaskFailureIncidentService` persists consecutive stable task-failure streaks,
+  escalates them after a caller-owned retry budget, and recovers incidents after
+  a successful execution.
 - `EmulatorController` is the gateway for ADB/device actions, screenshots, taps, swipes, process checks, and emulator lifecycle operations.
 
 ### Task Layer
@@ -148,6 +153,8 @@ To add a built-in task, add the routine in `modules/tasks`, add or reuse a `TpDa
 - Task Builder UI creates `AutomationStep` graphs and delegates generation/import/save to `TaskBuilderService`.
 
 FXML and CSS resources live in `modules/desktop/src/main/resources/layout` and `modules/desktop/src/main/resources/styles`.
+The launcher status bar owns the notification bell and hosts the in-window
+notification drawer; incident lifecycle and storage remain below the UI layer.
 
 ## Runtime Decomposition
 
