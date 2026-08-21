@@ -910,7 +910,9 @@ public class TaskQueue {
                     // Changed by pernerch | Date: 2026-07-02 | Why: force immediate activation of the
                     // selected peer queue after slot handover to eliminate idle dead time.
             statusModel.setIdleTimeExceeded(true);
-        } else if (statusModel.isIdleTimeExceeded() && LocalDateTime.now().plusMinutes(1).isAfter(statusModel.getDelayUntil())) {
+        } else if (statusModel.isIdleTimeExceeded()
+                && !requiresSlotAcquisition(sessionOrigin)
+                && LocalDateTime.now().plusMinutes(1).isAfter(statusModel.getDelayUntil())) {
             emitInfo("Next task approaching - re-acquiring slot"); acquireSlot();
             enqueue(DelayedTaskRegistry.create(TpDailyTaskEnum.INITIALIZE, profile));
             statusModel.setIdleTimeExceeded(false);
