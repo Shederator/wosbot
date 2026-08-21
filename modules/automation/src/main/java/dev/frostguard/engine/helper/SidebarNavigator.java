@@ -8,12 +8,15 @@ import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
+import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.nav.SidebarFrameClassifier;
+import dev.frostguard.engine.nav.SidebarRowAction;
 import dev.frostguard.engine.nav.SidebarSection;
+import dev.frostguard.engine.nav.SidebarViewportChangeDetector;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.vision.convert.ImageConverter;
 import dev.frostguard.vision.logging.ProfileContextLogger;
@@ -22,12 +25,16 @@ import dev.frostguard.vision.logging.ProfileContextLogger;
 public final class SidebarNavigator {
 
     private static final int SECTION_SETTLE_MS = 400;
-    private static final int SCROLL_SETTLE_MS = 500;
+    static final int SCROLL_SETTLE_MS = 2_000;
+    static final int SCROLL_DISTANCE_PX = 120;
+    private static final int SCROLL_DURATION_MS = 500;
+    private static final int MAX_BOUNDARY_STEPS = 10;
     private static final int DESTINATION_SETTLE_MS = 2_000;
     private static final int ROW_ICON_THRESHOLD = 88;
-    private static final int GO_LEFT_OFFSET = 337;
-    private static final int GO_RIGHT_OFFSET = 383;
-    private static final int GO_HALF_HEIGHT = 25;
+    private static final int ROW_ACTION_THRESHOLD = 88;
+    private static final int GO_LEFT_OFFSET = 315;
+    private static final int GO_RIGHT_OFFSET = 394;
+    private static final int GO_HALF_HEIGHT = 30;
 
     private final EmulatorController emu;
     private final String device;
@@ -44,41 +51,59 @@ public final class SidebarNavigator {
     }
 
     public boolean openSection(SidebarSection target) {
-        return openSection(target, false);
+        return openSectionInternal(target);
     }
 
     public boolean navigateTo(SidebarDestination destination) {
-        if (!openSectionAtTop(destination.section())) {
+        ImageSearchResultData locatedRow = findRow(destination);
+        if (locatedRow == null || !locatedRow.isFound()) {
             return false;
         }
-        for (int swipe = 0; swipe <= destination.scanSwipes(); swipe++) {
-            ImageSearchResultData rowIcon = locateRowIcon(destination);
-            if (rowIcon != null && rowIcon.isFound()) {
-                AreaData go = goButtonFor(rowIcon);
-                log.info("Sidebar destination found: " + destination + " icon=" + rowIcon
-                        + " go=" + go);
-                taps.tapInside(go, 1, DESTINATION_SETTLE_MS);
-                if (selectedSection().isEmpty()) {
-                    return true;
-                }
-                log.warn("Sidebar stayed open after tapping destination " + destination);
-                return false;
-            }
 
-            if (swipe < destination.scanSwipes()) {
-                emu.swipeScreen(device, CommonGameAreas.SIDEBAR_SCROLL_FROM,
-                        CommonGameAreas.SIDEBAR_SCROLL_TO, 400);
-                interruptibleWait(SCROLL_SETTLE_MS);
-                if (selectedSection().orElse(null) != destination.section()) {
-                    log.warn("Sidebar state changed while scanning for " + destination);
-                    return false;
-                }
-            }
+        RawImageData actionFrame = emu.captureScreen(device);
+        ImageSearchResultData rowIcon = locateRowIcon(destination, actionFrame);
+        if (!rowIcon.isFound()) {
+            log.info("Sidebar row moved before its action could be verified: " + destination);
+            return false;
         }
 
-        log.warn("Sidebar destination not found within bounded scan: " + destination
-                + " swipes=" + destination.scanSwipes());
+        AreaData actionArea = rowActionAreaFor(rowIcon);
+        ImageSearchResultData action = locateRowAction(destination, actionArea, actionFrame);
+        if (action == null || !action.isFound()) {
+            log.info("Sidebar row found without an expected action: " + destination
+                    + " icon=" + rowIcon + " actionArea=" + actionArea);
+            return false;
+        }
+
+        log.info("Sidebar destination found: " + destination + " icon=" + rowIcon
+                + " action=" + action);
+        taps.tapInside(action, 1, DESTINATION_SETTLE_MS);
+        if (selectedSection().isEmpty()) {
+            return true;
+        }
+        log.warn("Sidebar stayed open after tapping destination " + destination);
         return false;
+    }
+
+    /** Finds a row from its left icon in the current viewport and after every settled scroll. */
+    public ImageSearchResultData findRow(SidebarDestination destination) {
+        if (!openSection(destination.section())) {
+            return ImageSearchResultData.miss();
+        }
+
+        RawImageData frame = emu.captureScreen(device);
+        ImageSearchResultData current = locateRowIcon(destination, frame);
+        if (current.isFound()) {
+            return current;
+        }
+
+        ScrollScanResult bottomScan = scan(destination, ScrollDirection.TOWARD_BOTTOM, frame);
+        if (bottomScan.rowIcon().isFound()) {
+            return bottomScan.rowIcon();
+        }
+        log.info("Sidebar destination unavailable after bounded icon scan: " + destination
+                + " bottomBoundary=" + bottomScan.boundaryReached());
+        return ImageSearchResultData.miss();
     }
 
     public boolean close() {
@@ -93,81 +118,38 @@ public final class SidebarNavigator {
         return closed;
     }
 
-    public boolean openSectionAtTop(SidebarSection section) {
-        return openSection(section, true);
-    }
-
-    static NextOpenAction nextOpenAction(Optional<SidebarSection> current, SidebarSection target,
-                                         boolean resetRequested, boolean resetComplete) {
-        if (current.isEmpty()) {
-            return NextOpenAction.OPEN_PANEL;
-        }
-        if (current.get() != target) {
-            return NextOpenAction.SELECT_SECTION;
-        }
-        if (resetRequested && !resetComplete) {
-            return NextOpenAction.RESET_TO_TOP;
-        }
-        return NextOpenAction.DONE;
-    }
-
-    static boolean establishesKnownTop(NextOpenAction action) {
-        return action == NextOpenAction.OPEN_PANEL || action == NextOpenAction.SELECT_SECTION;
-    }
-
-    private boolean openSection(SidebarSection target, boolean resetRequested) {
+    private boolean openSectionInternal(SidebarSection target) {
         Optional<SidebarSection> current = selectedSection();
-        boolean resetComplete = false;
 
-        while (true) {
-            NextOpenAction action = nextOpenAction(current, target, resetRequested, resetComplete);
-            switch (action) {
-                case OPEN_PANEL -> {
-                    if (!isRootScreen()) {
-                        log.warn("Refusing to tap the sidebar trigger without a Home or World anchor");
-                        return false;
-                    }
-                    log.debug("Sidebar closed; opening it once before selecting " + target);
-                    taps.tapInside(CommonGameAreas.LEFT_MENU_TRIGGER, 1, SECTION_SETTLE_MS);
-                    current = selectedSection();
-                    if (current.isEmpty()) {
-                        log.warn("Sidebar did not open after one verified trigger tap");
-                        return false;
-                    }
-                    if (resetRequested && establishesKnownTop(action)) {
-                        resetComplete = true;
-                    }
-                }
-                case SELECT_SECTION -> {
-                    taps.tapInside(CommonGameAreas.sidebarTab(target), 1, SECTION_SETTLE_MS);
-                    current = selectedSection();
-                    if (current.orElse(null) != target) {
-                        log.warn("Sidebar section selection failed: requested=" + target
-                                + " observed=" + current.map(Enum::name).orElse("closed/unknown"));
-                        return false;
-                    }
-                    log.debug("Sidebar section selected: " + target);
-                    if (resetRequested && establishesKnownTop(action)) {
-                        resetComplete = true;
-                    }
-                }
-                case RESET_TO_TOP -> {
-                    if (!resetToTop(target)) {
-                        return false;
-                    }
-                    resetComplete = true;
-                    current = Optional.of(target);
-                }
-                case DONE -> {
-                    log.debug("Sidebar section ready: " + target
-                            + (resetRequested ? " at top" : " without scroll reset"));
-                    return true;
-                }
+        if (current.isEmpty()) {
+            if (!isRootScreen()) {
+                log.warn("Refusing to tap the sidebar trigger without a Home or World anchor");
+                return false;
+            }
+            log.debug("Sidebar closed; opening it once before selecting " + target);
+            taps.tapInside(CommonGameAreas.LEFT_MENU_TRIGGER, 1, SECTION_SETTLE_MS);
+            current = selectedSection();
+            if (current.isEmpty()) {
+                log.warn("Sidebar did not open after one verified trigger tap");
+                return false;
             }
         }
+
+        if (current.orElse(null) != target) {
+            taps.tapInside(CommonGameAreas.sidebarTab(target), 1, SECTION_SETTLE_MS);
+            current = selectedSection();
+            if (current.orElse(null) != target) {
+                log.warn("Sidebar section selection failed: requested=" + target
+                        + " observed=" + current.map(Enum::name).orElse("closed/unknown"));
+                return false;
+            }
+        }
+
+        log.debug("Sidebar section ready without assuming a scroll origin: " + target);
+        return true;
     }
 
-    static AreaData goButtonFor(ImageSearchResultData rowIcon) {
+    static AreaData rowActionAreaFor(ImageSearchResultData rowIcon) {
         PointData center = rowIcon.getPoint();
         if (center == null) {
             throw new IllegalArgumentException("A located row icon is required");
@@ -179,30 +161,64 @@ public final class SidebarNavigator {
                 new PointData(center.getX() + GO_RIGHT_OFFSET, bottom));
     }
 
-    private ImageSearchResultData locateRowIcon(SidebarDestination destination) {
-        return searcher.locatePattern(destination.rowIcon(),
-                TemplateSearchHelper.SearchConfig.builder()
-                        .withMaxAttempts(1)
-                        .withThreshold(ROW_ICON_THRESHOLD)
-                        .withArea(CommonGameAreas.SIDEBAR_ROW_ICON_COLUMN)
-                        .build());
+    static AreaData goButtonFor(ImageSearchResultData rowIcon) {
+        return rowActionAreaFor(rowIcon);
     }
 
-    private boolean resetToTop(SidebarSection expected) {
-        log.debug("Reopening sidebar section to establish its top position: " + expected);
-        if (!close()) {
-            return false;
+    private ScrollScanResult scan(SidebarDestination destination, ScrollDirection direction,
+                                  RawImageData initialFrame) {
+        RawImageData before = initialFrame;
+        for (int step = 1; step <= MAX_BOUNDARY_STEPS; step++) {
+            RawImageData after = scrollAndCapture(direction);
+            if (after == null || selectedSection(after).orElse(null) != destination.section()) {
+                log.warn("Sidebar state changed while scanning for " + destination
+                        + " direction=" + direction + " step=" + step);
+                return new ScrollScanResult(ImageSearchResultData.miss(), before, false);
+            }
+
+            ImageSearchResultData rowIcon = locateRowIcon(destination, after);
+            boolean changed = SidebarViewportChangeDetector.materiallyChanged(
+                    ImageConverter.toBufferedImage(before), ImageConverter.toBufferedImage(after));
+            log.debug("Sidebar icon scan: destination=" + destination + " direction=" + direction
+                    + " step=" + step + "/" + MAX_BOUNDARY_STEPS
+                    + " changed=" + changed + " found=" + rowIcon.isFound());
+            if (rowIcon.isFound()) {
+                return new ScrollScanResult(rowIcon, after, false);
+            }
+            if (!changed) {
+                return new ScrollScanResult(ImageSearchResultData.miss(), after, true);
+            }
+            before = after;
         }
-        if (!isRootScreen()) {
-            log.warn("Refusing to reopen the sidebar without a Home or World anchor");
-            return false;
+        return new ScrollScanResult(ImageSearchResultData.miss(), before, false);
+    }
+
+    private RawImageData scrollAndCapture(ScrollDirection direction) {
+        emu.swipeScreen(device, direction.from(), direction.to(), SCROLL_DURATION_MS);
+        if (!interruptibleWait(SCROLL_SETTLE_MS)) {
+            return null;
         }
-        taps.tapInside(CommonGameAreas.LEFT_MENU_TRIGGER, 1, SECTION_SETTLE_MS);
-        if (selectedSection().orElse(null) != expected) {
-            log.warn("Sidebar did not reopen on the expected section: " + expected);
-            return false;
+        return emu.captureScreen(device);
+    }
+
+    private ImageSearchResultData locateRowIcon(SidebarDestination destination, RawImageData frame) {
+        return emu.locatePattern(device, frame, destination.rowIcon(),
+                CommonGameAreas.SIDEBAR_ROW_ICON_COLUMN.topLeft(),
+                CommonGameAreas.SIDEBAR_ROW_ICON_COLUMN.bottomRight(), ROW_ICON_THRESHOLD);
+    }
+
+    private ImageSearchResultData locateRowAction(SidebarDestination destination, AreaData area,
+                                                  RawImageData frame) {
+        for (SidebarRowAction action : destination.actions()) {
+            for (TemplatesEnum template : action.templates()) {
+                ImageSearchResultData result = emu.locatePattern(device, frame, template,
+                        area.topLeft(), area.bottomRight(), ROW_ACTION_THRESHOLD);
+                if (result.isFound()) {
+                    return result;
+                }
+            }
         }
-        return true;
+        return ImageSearchResultData.miss();
     }
 
     private boolean isRootScreen() {
@@ -213,22 +229,44 @@ public final class SidebarNavigator {
     }
 
     private Optional<SidebarSection> selectedSection() {
-        BufferedImage frame = ImageConverter.toBufferedImage(emu.captureScreen(device));
-        return SidebarFrameClassifier.selectedSection(frame);
+        return selectedSection(emu.captureScreen(device));
     }
 
-    private void interruptibleWait(long milliseconds) {
+    private Optional<SidebarSection> selectedSection(RawImageData frame) {
+        return SidebarFrameClassifier.selectedSection(ImageConverter.toBufferedImage(frame));
+    }
+
+    private boolean interruptibleWait(long milliseconds) {
         try {
             Thread.sleep(milliseconds);
+            return true;
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
+            return false;
         }
     }
 
-    enum NextOpenAction {
-        OPEN_PANEL,
-        SELECT_SECTION,
-        RESET_TO_TOP,
-        DONE
+    private record ScrollScanResult(ImageSearchResultData rowIcon, RawImageData frame,
+                                    boolean boundaryReached) {}
+
+    private enum ScrollDirection {
+        TOWARD_BOTTOM(CommonGameAreas.SIDEBAR_SCROLL_TOWARD_BOTTOM_FROM,
+                CommonGameAreas.SIDEBAR_SCROLL_TOWARD_BOTTOM_TO);
+
+        private final PointData from;
+        private final PointData to;
+
+        ScrollDirection(PointData from, PointData to) {
+            this.from = from;
+            this.to = to;
+        }
+
+        PointData from() {
+            return from;
+        }
+
+        PointData to() {
+            return to;
+        }
     }
 }

@@ -89,7 +89,7 @@ public class NavigationHelper {
     }
 
     public boolean openSidebarSection(SidebarSection section) {
-        return sidebar.openSectionAtTop(section);
+        return sidebar.openSection(section);
     }
 
     public boolean navigateToSidebarDestination(SidebarDestination destination) {

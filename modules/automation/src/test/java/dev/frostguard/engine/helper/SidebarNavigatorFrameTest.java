@@ -16,6 +16,8 @@ import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.engine.nav.CommonGameAreas;
+import dev.frostguard.engine.nav.SidebarDestination;
+import dev.frostguard.engine.nav.SidebarRowAction;
 import dev.frostguard.vision.match.OpenCvPatternLocator;
 
 class SidebarNavigatorFrameTest {
@@ -56,7 +58,37 @@ class SidebarNavigatorFrameTest {
     void derivesTheGoControlFromTheDetectedRowInsteadOfMatchingAnAmbiguousArrow() {
         ImageSearchResultData icon = ImageSearchResultData.hit(46, 373, 99.0, 44, 44);
 
-        assertEquals(AreaData.of(383, 348, 429, 398), SidebarNavigator.goButtonFor(icon));
+        assertEquals(AreaData.of(361, 343, 440, 403), SidebarNavigator.rowActionAreaFor(icon));
+    }
+
+    @Test
+    void detectsCurrentDailyRowsFromTheirLeftIcons() throws IOException {
+        byte[] top = resource("/navigation/sidebar-dynamic-20260821/daily-top.png");
+
+        assertDestination(top, TemplatesEnum.SIDEBAR_DAILY_ARENA, 46, 373);
+        assertDestination(top, TemplatesEnum.SIDEBAR_DAILY_PET_ADVENTURE, 46, 487);
+        assertDestination(top, TemplatesEnum.SIDEBAR_DAILY_LIFE_ESSENCE, 46, 712);
+    }
+
+    @Test
+    void verifiesTheExpectedActionInsideTheIconAnchoredRow() throws IOException {
+        byte[] frame = resource("/navigation/sidebar-dynamic-20260821/daily-top.png");
+
+        assertRowAction(frame, SidebarDestination.ARENA, SidebarRowAction.GO);
+        assertRowAction(frame, SidebarDestination.LAND_OF_HEROES, SidebarRowAction.CLAIM);
+        assertRowAction(frame, SidebarDestination.LIFE_ESSENCE, SidebarRowAction.CLAIM);
+    }
+
+    @Test
+    void verifiesGoActionsAcrossEarlierDailyAndCityFrames() throws IOException {
+        byte[] daily = resource("/navigation/sidebar-update-20260817/daily-top.png");
+        byte[] city = resource("/navigation/sidebar-update-20260817/city.png");
+
+        assertRowAction(daily, SidebarDestination.ARENA, SidebarRowAction.GO);
+        assertRowAction(daily, SidebarDestination.PET_ADVENTURE, SidebarRowAction.GO);
+        assertRowAction(daily, SidebarDestination.LAND_OF_HEROES, SidebarRowAction.GO);
+        assertRowAction(daily, SidebarDestination.LIFE_ESSENCE, SidebarRowAction.GO);
+        assertRowAction(city, SidebarDestination.RESEARCH_CENTER, SidebarRowAction.GO);
     }
 
     @Test
@@ -73,13 +105,30 @@ class SidebarNavigatorFrameTest {
     }
 
     private void assertDestination(byte[] frame, TemplatesEnum template, int expectedX, int expectedY) {
-        ImageSearchResultData hit = OpenCvPatternLocator.locatePattern(frame, template,
-                CommonGameAreas.SIDEBAR_ROW_ICON_COLUMN.topLeft(),
-                CommonGameAreas.SIDEBAR_ROW_ICON_COLUMN.bottomRight(), 88);
+        ImageSearchResultData hit = locate(frame, template, CommonGameAreas.SIDEBAR_ROW_ICON_COLUMN);
 
         assertTrue(hit.isFound(), () -> "Expected sidebar destination template " + template);
         assertTrue(Math.abs(hit.getPoint().getX() - expectedX) <= 2, () -> template + " x=" + hit.getPoint());
         assertTrue(Math.abs(hit.getPoint().getY() - expectedY) <= 2, () -> template + " y=" + hit.getPoint());
+    }
+
+    private void assertRowAction(byte[] frame, SidebarDestination destination, SidebarRowAction action) {
+        ImageSearchResultData icon = locate(frame, destination.rowIcon(), CommonGameAreas.SIDEBAR_ROW_ICON_COLUMN);
+        assertTrue(icon.isFound(), () -> "Missing row icon for " + destination);
+        AreaData rowActionArea = SidebarNavigator.rowActionAreaFor(icon);
+        boolean found = false;
+        for (TemplatesEnum template : action.templates()) {
+            if (locate(frame, template, rowActionArea).isFound()) {
+                found = true;
+                break;
+            }
+        }
+        assertTrue(found, () -> "Missing " + action + " in row " + destination);
+    }
+
+    private ImageSearchResultData locate(byte[] frame, TemplatesEnum template, AreaData area) {
+        return OpenCvPatternLocator.locatePattern(frame, template,
+                area.topLeft(), area.bottomRight(), 88);
     }
 
     private byte[] resource(String path) throws IOException {

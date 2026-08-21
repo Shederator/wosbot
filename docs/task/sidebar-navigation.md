@@ -18,16 +18,21 @@ scrolls, and close taps likewise require the expected panel state.
 
 Queue inspection opens or reuses its verified City or Wilderness section without changing the
 scroll position. This avoids unconditional reset gestures and allows one logical operation to
-inspect and act on the same frame. Callers that scan destination rows still request a known top
-origin explicitly; only those calls perform the bounded three-swipe reset.
+inspect and act on the same frame.
 
-Daily destination icons provide row identity. The identical Go arrows do not. The navigator
-therefore finds the destination icon and derives the Go area from the detected row geometry.
-Opening the panel and changing its section both establish the current UI's top position, so those
-transitions do not issue reset gestures. Reuse of an already-open section with an explicitly
-requested known origin closes and reopens the panel instead, relying on the same verified top
-position without momentum-sensitive swipes. Destination scans remain bounded and require the
-panel to disappear after the Go tap.
+The left City and Daily icons provide row identity. Row order, text, height, and right-side
+controls do not: completed rows may disappear when `Hide after mission completion` is enabled,
+and a row can expose either Go or Claim. The navigator first matches the destination icon, derives
+that row's action area, and only then accepts an allowed Go or Claim pattern inside the same row.
+Go has saved variants with and without the notification badge.
+
+Opening the collapsed sidebar or changing its section resets the game's list to the top. A
+destination scan therefore checks that initial viewport and then moves only toward the bottom in
+short overlapping 120-pixel gestures. It waits two seconds for the list to settle and scans the
+icon column after every gesture. An unchanged settled icon column establishes the bottom boundary.
+The scan is bounded, and a destination action must close the sidebar to confirm the transition.
+Code that deliberately reuses an already-open section preserves its current position; March Queue
+recovery closes and reopens Wilderness once when no visible row contains reliable queue evidence.
 
 City destination icons use the same row-relative Go association. Research Center is migrated
 through its detected Center Research icon. After the Go transition, the building's detected
@@ -41,7 +46,9 @@ icon identifies its row; the routine then accepts either direct claim-panel entr
 entry followed by the supply counter.
 
 Saved evidence lives under
-`modules/automation/src/test/resources/navigation/sidebar-update-20260817`. It covers City,
-Wilderness, three Daily scroll positions, the active-tab classifier, Research Center, Arena, Land of Heroes,
-Life Essence, and relative Go-area association. Other destinations must not be migrated to a
-guessed section or reused icon without a real post-update frame.
+`modules/automation/src/test/resources/navigation/sidebar-update-20260817` and
+`modules/automation/src/test/resources/navigation/sidebar-dynamic-20260821`. It covers City,
+Wilderness, multiple Daily positions, notification and non-notification Go actions, Claim,
+the active-tab classifier, Research Center, Arena, Pet Adventure, Land of Heroes, Life Essence,
+and the dynamic shift caused by hiding completed rows. Other destinations must not be migrated
+to a guessed section or reused icon without a real post-update frame.

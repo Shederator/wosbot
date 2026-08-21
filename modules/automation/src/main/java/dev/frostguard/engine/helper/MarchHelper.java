@@ -107,8 +107,8 @@ public class MarchHelper {
     }
 
     /**
-     * Reads the already-open wilderness March Queue panel. A reset is used only when every row lacks
-     * queue evidence, which indicates that the preserved scroll position cannot be trusted.
+     * Reads the already-open wilderness March Queue panel. The section is reopened only when every
+     * row lacks queue evidence, which indicates that the preserved scroll position cannot be trusted.
      */
     public List<MarchSlotState> readVisibleMarchQueue() {
         List<MarchSlotState> slots = readVisibleMarchQueueOnce();
@@ -116,8 +116,8 @@ public class MarchHelper {
             return slots;
         }
 
-        log.warn("March Queue rows were not visible at the preserved position; resetting Wilderness once");
-        if (!sidebar.openSectionAtTop(SidebarSection.WILDERNESS)) {
+        log.warn("March Queue rows were not visible at the preserved position; reopening Wilderness once");
+        if (!sidebar.close() || !sidebar.openSection(SidebarSection.WILDERNESS)) {
             return List.of();
         }
         return readVisibleMarchQueueOnce();
@@ -330,8 +330,8 @@ public class MarchHelper {
     }
 
     public void openLeftMenuCitySection(boolean cityTab) {
-        log.debug("Left menu at top - " + (cityTab ? "city" : "wilderness"));
-        if (!sidebar.openSectionAtTop(cityTab ? SidebarSection.CITY : SidebarSection.WILDERNESS)) {
+        log.debug("Opening left menu section - " + (cityTab ? "city" : "wilderness"));
+        if (!sidebar.openSection(cityTab ? SidebarSection.CITY : SidebarSection.WILDERNESS)) {
             throw new IllegalStateException("Could not open the requested sidebar section");
         }
     }
