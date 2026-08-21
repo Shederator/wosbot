@@ -78,6 +78,8 @@ public class InitializeRoutine extends DelayedTask {
 	private static final PointData UPDATE_TITLE_AREA_BOTTOM_RIGHT = new PointData(470, 350);
 	private static final PointData UPDATE_BUTTON_AREA_TOP_LEFT = new PointData(200, 850);
 	private static final PointData UPDATE_BUTTON_AREA_BOTTOM_RIGHT = new PointData(520, 1050);
+	private static final PointData CLOSEABLE_OVERLAY_AREA_TOP_LEFT = new PointData(540, 65);
+	private static final PointData CLOSEABLE_OVERLAY_AREA_BOTTOM_RIGHT = new PointData(680, 200);
 	private static final int UPDATE_PATTERN_THRESHOLD = 90;
 	private static final int UPDATE_POSTCONDITION_TIMEOUT_MINUTES = 10;
 	private static final int UPDATE_POSTCONDITION_POLL_DELAY_MS = 5000;
@@ -86,6 +88,7 @@ public class InitializeRoutine extends DelayedTask {
 	private static final int UPDATE_PROGRESS_LOG_INTERVAL = 12;
 	private static final String GOOGLE_PLAY_PACKAGE = "com.android.vending";
 	private static final int MAX_WELCOME_BACK_DISMISSALS = 1;
+	private static final int MAX_CLOSEABLE_OVERLAY_DISMISSALS = 3;
 	private static final int STARTUP_PATTERN_THRESHOLD = 90;
 
 	// ========== Instance State ==========
@@ -96,6 +99,7 @@ public class InitializeRoutine extends DelayedTask {
 	boolean isStarted = false;
 	private int emulatorRestartAttempts = 0;
 	private int welcomeBackDismissals = 0;
+	private int closeableOverlayDismissals = 0;
 	private String lastVerifiedStartupState = "initialization started";
 
 	/**
@@ -316,6 +320,13 @@ public class InitializeRoutine extends DelayedTask {
 				break;
 			}
 
+			if (dismissCloseableStartupOverlayIfPresent()) {
+				logInfo("Verified closeable startup overlay dismissed. Waiting for home/world postcondition.");
+				sleepTask(2000);
+				attempts++;
+				continue;
+			}
+
 			logWarning("Home screen not found on an unsupported startup screen. "
 					+ "Waiting 5 seconds for a passive state change before retrying...");
 			sleepTask(5000);
@@ -387,6 +398,10 @@ public class InitializeRoutine extends DelayedTask {
 
 			if (dismissWelcomeBackIfPresent()) {
 				logInfo("Verified Welcome back dialog dismissed during the game update flow.");
+				continue;
+			}
+			if (dismissCloseableStartupOverlayIfPresent()) {
+				logInfo("Verified closeable startup overlay dismissed during the game update flow.");
 				continue;
 			}
 
@@ -474,6 +489,41 @@ public class InitializeRoutine extends DelayedTask {
 			return false;
 		}
 		lastVerifiedStartupState = "Welcome back Confirm action sent";
+		return true;
+	}
+
+	private boolean dismissCloseableStartupOverlayIfPresent() {
+		if (closeableOverlayDismissals >= MAX_CLOSEABLE_OVERLAY_DISMISSALS) {
+			return false;
+		}
+
+		RawImageData capture = captureStartupFrame("closeable startup overlay inspection");
+		if (capture == null) {
+			return false;
+		}
+		ImageSearchResultData close = OpenCvPatternLocator.locatePattern(
+				capture,
+				TemplatesEnum.GAME_START_CLOSEABLE_OVERLAY_CLOSE.getTemplate(),
+				CLOSEABLE_OVERLAY_AREA_TOP_LEFT,
+				CLOSEABLE_OVERLAY_AREA_BOTTOM_RIGHT,
+				STARTUP_PATTERN_THRESHOLD);
+		if (!close.isFound()) {
+			return false;
+		}
+
+		closeableOverlayDismissals++;
+		lastVerifiedStartupState = "closeable startup overlay and concrete close control";
+		logInfo("Closeable startup overlay verified from a fresh frame"
+				+ "; closePattern="
+				+ String.format(java.util.Locale.ROOT, "%.1f", close.getMatchScore())
+				+ "%"
+				+ "; dismissal=" + closeableOverlayDismissals
+				+ "/" + MAX_CLOSEABLE_OVERLAY_DISMISSALS + ".");
+		if (!tapInside(close)) {
+			logWarning("Verified startup-overlay close area was unavailable for a safe tap; no fallback input sent.");
+			return false;
+		}
+		lastVerifiedStartupState = "closeable startup overlay close action sent";
 		return true;
 	}
 
@@ -586,6 +636,9 @@ public class InitializeRoutine extends DelayedTask {
 			checkForReconnectState();
 			if (dismissWelcomeBackIfPresent()) {
 				logInfo("Verified Welcome back dialog dismissed after the required resource download.");
+			}
+			if (dismissCloseableStartupOverlayIfPresent()) {
+				logInfo("Verified closeable startup overlay dismissed after the required resource download.");
 			}
 			if (attempt % RESOURCE_DOWNLOAD_PROGRESS_LOG_INTERVAL == 0) {
 				logInfo("Required resource download still in progress ("
