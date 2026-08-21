@@ -32,6 +32,7 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertIn("  contents: read", ci)
         self.assertIn("Build and test Maven reactor", ci)
         self.assertIn("fetch-depth: 0", ci)
+        self.assertIn("fetch-tags: true", ci)
         self.assertIn("verify_development_version.py", ci)
         self.assertNotIn("contents: write", ci)
 
@@ -217,6 +218,7 @@ class ChannelPackagingTest(unittest.TestCase):
             workflow.count("for ($attempt = 1; $attempt -le 6; $attempt++)"), 2)
         self.assertIn("--changes-unchanged", workflow)
         self.assertIn("fetch-depth: 0", workflow)
+        self.assertIn("fetch-tags: true", workflow)
         self.assertIn("Remove an abandoned draft release", workflow)
         self.assertIn('java-version: "21.0.12+8.0"', workflow)
         for launcher_hash in (
