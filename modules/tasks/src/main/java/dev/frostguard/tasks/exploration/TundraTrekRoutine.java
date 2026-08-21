@@ -4,17 +4,20 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 
 import dev.frostguard.vision.convert.GameTimeUtils;
-import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 
 public class TundraTrekRoutine extends DelayedTask {
+
+    private static final PointData SUPPLY_COUNTER_TOP_LEFT = new PointData(500, 29);
+    private static final PointData SUPPLY_COUNTER_BOTTOM_RIGHT = new PointData(590, 49);
 
     public TundraTrekRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDailyTask) {
         super(profile, tpDailyTask);
@@ -22,7 +25,7 @@ public class TundraTrekRoutine extends DelayedTask {
 
     @Override
     public LaunchPoint getRequiredStartLocation() {
-        return LaunchPoint.ANY;
+        return LaunchPoint.HOME;
     }
 
     @Override
@@ -68,29 +71,22 @@ public class TundraTrekRoutine extends DelayedTask {
     private boolean navigateToTrekSupplies() {
         logInfo("Navigating to Tundra Trek Supplies...");
 
-        // Open left menu on city section
-        marchHelper.openLeftMenuCitySection(true);
-
-        for (int i = 0; i < 5; i++) { // Try up to 5 times (swipes)
-            ImageSearchResultData trekSupplies = templateSearchHelper.locatePattern(
-                    TemplatesEnum.TUNDRA_TREK_SUPPLIES,
-                    SearchConfigConstants.DEFAULT_SINGLE);
-
-            if (trekSupplies.isFound()) {
-                logInfo("Found the Tundra Trek Supplies button.");
-                tapInside(trekSupplies);
-                sleepTask(1000);
-
-                // Open supplies claim screen
-                tapInside(new PointData(500, 29), new PointData(590, 49));
-                sleepTask(2000);
-                return true;
-            } else {
-                logInfo("Tundra Trek Supplies not visible. Swiping down to search... (Attempt " + (i + 1) + "/5)");
-                swipe(new PointData(320, 765), new PointData(50, 500));
-                sleepTask(1000);
-            }
+        if (!navigationHelper.navigateToSidebarDestination(SidebarDestination.TUNDRA_TREK_SUPPLIES)) {
+            logWarning("Trek Supplies destination is not available in the Daily sidebar");
+            return false;
         }
-        return false;
+
+        // The Daily shortcut may open either Dawn Academy or the claim panel directly.
+        if (!isClaimButtonVisible()) {
+            tapInside(SUPPLY_COUNTER_TOP_LEFT, SUPPLY_COUNTER_BOTTOM_RIGHT);
+            sleepTask(2000);
+        }
+        return true;
+    }
+
+    private boolean isClaimButtonVisible() {
+        return templateSearchHelper.locatePattern(
+                TemplatesEnum.TUNDRA_TREK_CLAIM_BUTTON,
+                SearchConfigConstants.DEFAULT_SINGLE).isFound();
     }
 }

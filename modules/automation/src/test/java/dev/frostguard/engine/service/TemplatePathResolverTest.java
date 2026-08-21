@@ -40,6 +40,7 @@ class TemplatePathResolverTest {
         assertTrue(TemplatePathResolver.isFileReference("/opt/frostguard/tpl.png"));
         assertTrue(TemplatePathResolver.isFileReference("C:\\Users\\op\\tpl.png"));
         assertTrue(TemplatePathResolver.isFileReference("templates\\deals\\event_tab.png"));
+        assertTrue(TemplatePathResolver.isFileReference("event_tab.png"));
     }
 
     @Test
@@ -80,6 +81,20 @@ class TemplatePathResolverTest {
         System.setProperty(TemplatePathResolver.ROOT_PROPERTY, tempDir.toString());
 
         String resolved = TemplatePathResolver.resolveFileReference("/templates/event_tab.png");
+
+        assertEquals(template.toAbsolutePath().normalize().toString(), resolved);
+    }
+
+    @Test
+    void resolvesRelativeReferenceAgainstImportedDefinitionDirectoryFirst() throws Exception {
+        Path importedDirectory = tempDir.resolve("shared-task");
+        Path template = importedDirectory.resolve("event_tab.png");
+        Files.createDirectories(importedDirectory);
+        Files.writeString(template, "png");
+        System.setProperty(TemplatePathResolver.ROOT_PROPERTY, tempDir.resolve("install").toString());
+
+        String resolved = TemplatePathResolver.resolveFileReference(
+                "event_tab.png", importedDirectory);
 
         assertEquals(template.toAbsolutePath().normalize().toString(), resolved);
     }

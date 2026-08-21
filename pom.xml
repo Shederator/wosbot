@@ -9,12 +9,19 @@
 	<version>${revision}</version>
 	<packaging>pom</packaging>
 	<name>Frostguard Automation Platform</name>
+	<licenses>
+		<license>
+			<name>GNU Affero General Public License v3.0 only</name>
+			<url>https://www.gnu.org/licenses/agpl-3.0.html</url>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
 
 	<!-- ──────────────────────────────────────────────
 	     Build-wide property declarations
 	     ────────────────────────────────────────────── -->
 	<properties>
-		<revision>2.1.0</revision>
+		<revision>3.0.2</revision>
 		<frostguard.pull-request-build>false</frostguard.pull-request-build>
 		<frostguard.update.manifest.stable></frostguard.update.manifest.stable>
 		<frostguard.update.manifest.nightly></frostguard.update.manifest.nightly>

@@ -6,6 +6,7 @@ import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.DelayedTaskRegistry;
 
 import dev.frostguard.tasks.alliance.*;
+import dev.frostguard.tasks.analytics.GameAnalyticsRoutine;
 import dev.frostguard.tasks.city.*;
 import dev.frostguard.tasks.combat.*;
 import dev.frostguard.tasks.dailies.*;
@@ -28,6 +29,8 @@ public class TaskRegistrations {
 
     private static DelayedTask createTask(TpDailyTaskEnum type, AccountDescriptor profile) {
         return switch (type) {
+            case GAME_ANALYTICS_LABYRINTH, GAME_ANALYTICS_POWER ->
+                    new GameAnalyticsRoutine(profile, type);
             // Heroes
             case HERO_RECRUITMENT -> new HeroRecruitmentRoutine(profile, type);
             case EXPERT_AGNES_INTEL -> new ExpertsAgnesIntelRoutine(profile, type);

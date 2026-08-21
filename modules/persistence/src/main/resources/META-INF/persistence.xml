@@ -13,6 +13,7 @@
         <provider>org.hibernate.jpa.HibernatePersistenceProvider</provider>
 
         <!-- Registered entity classes (alphabetical; no classpath scanning) -->
+        <class>dev.frostguard.data.entity.ActionRequiredIncident</class>
         <class>dev.frostguard.data.entity.Config</class>
         <class>dev.frostguard.data.entity.ConfigTemplate</class>
         <class>dev.frostguard.data.entity.DailyTask</class>
@@ -21,6 +22,7 @@
         <class>dev.frostguard.data.entity.Profile</class>
         <class>dev.frostguard.data.entity.ProfileBuilding</class>
         <class>dev.frostguard.data.entity.ProfileTag</class>
+        <class>dev.frostguard.data.entity.TaskFailureStreak</class>
 
         <exclude-unlisted-classes>true</exclude-unlisted-classes>
         <shared-cache-mode>NONE</shared-cache-mode>

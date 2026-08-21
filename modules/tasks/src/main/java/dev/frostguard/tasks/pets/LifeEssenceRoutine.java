@@ -1,6 +1,7 @@
 package dev.frostguard.tasks.pets;
 
 import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -18,6 +19,7 @@ import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 
 public class LifeEssenceRoutine extends DelayedTask {
@@ -27,31 +29,23 @@ public class LifeEssenceRoutine extends DelayedTask {
 	private static final PointData SHOP_TAB_BUTTON = new PointData(670, 195);
 	private static final PointData EXIT_BUTTON = new PointData(40, 30);
 
-	// Scroll coordinates
-	private static final PointData MENU_SCROLL_START = new PointData(220, 845);
-	private static final PointData MENU_SCROLL_END = new PointData(220, 94);
-
 	// Search areas
 	private static final AreaData LIFE_ESSENCE_SEARCH_AREA = new AreaData(
 			new PointData(0, 65),
 			new PointData(720, 1280));
 
 	// Retry limits
-	private static final int MAX_NAVIGATION_FAILURES = 5;
 	private static final int MAX_CLAIM_SEARCH_ATTEMPTS = 5;
 	private static final int MAX_CLAIM_RESULTS = 5;
 
 	// Default configuration values
 	private static final int DEFAULT_OFFSET_MINUTES = Integer.parseInt(
 			ConfigurationKeyEnum.LIFE_ESSENCE_OFFSET_INT.getDefaultValue());
-	private static final int BACKOFF_MULTIPLIER = 5;
-	private static final int MAX_BACKOFF_MINUTES = 30;
-
 	// Configuration (loaded fresh each execution)
 	private int offsetMinutes;
 	private boolean buyWeeklyScroll;
 
-	// Execution state (reset each execution)
+	// Persisted retry state loaded at the start of each execution
 	private int consecutiveFailures = 0;
 
 	public LifeEssenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDailyTask) {
@@ -64,10 +58,7 @@ public class LifeEssenceRoutine extends DelayedTask {
 		// Load configuration
 		loadConfiguration();
 
-		// Check if we should stop trying after too many failures
-		if (shouldStopRetrying()) {
-			return;
-		}
+		loadFailureState();
 
 		// Navigate to Life Essence menu
 		if (!navigateToLifeEssenceMenu()) {
@@ -126,77 +117,25 @@ public class LifeEssenceRoutine extends DelayedTask {
 				", buyWeeklyScroll=" + buyWeeklyScroll);
 	}
 
-	/**
-	 * Check if task should stop retrying after consecutive failures
-	 */
-	private boolean shouldStopRetrying() {
-		// Get consecutive failure count from profile config (persisted)
+	private void loadFailureState() {
 		Integer failures = profile.getConfig(
 				ConfigurationKeyEnum.LIFE_ESSENCE_CONSECUTIVE_FAILURES_INT,
 				Integer.class);
-
-		consecutiveFailures = (failures != null) ? failures : 0;
-
-		if (consecutiveFailures >= MAX_NAVIGATION_FAILURES) {
-			logWarning("Maximum consecutive failures (" + MAX_NAVIGATION_FAILURES +
-					") reached. Disabling task. Re-enable in configs to retry.");
-			setRecurring(false);
-			return true;
-		}
-
-		return false;
+		consecutiveFailures = failures == null ? 0 : Math.max(0, failures);
 	}
 
 	/**
 	 * Navigate to the Life Essence menu
 	 * 
 	 * Navigation flow:
-	 * 1. Open side menu shortcut
-	 * 2. Switch to City tab
-	 * 3. Scroll down to reveal Life Essence option
-	 * 4. Tap Life Essence menu
+	 * Uses the shared sidebar navigator to select Daily, locate the Life Essence row,
+	 * and tap the Go control associated with that detected row.
 	 * 
 	 * @return true if navigation successful, false otherwise
 	 */
 	private boolean navigateToLifeEssenceMenu() {
 		logInfo("Navigating to Life Essence menu");
-
-		// Open side menu
-		marchHelper.openLeftMenuCitySection(true);
-
-		// Scroll down to reveal Life Essence menu
-		logDebug("Scrolling to reveal Life Essence menu");
-		swipe(MENU_SCROLL_START, MENU_SCROLL_END);
-		sleepTask(1000); // Wait for scroll to settle
-
-		// Search for Life Essence menu option
-		ImageSearchResultData lifeEssenceMenu = templateSearchHelper.locatePattern(
-				TemplatesEnum.LIFE_ESSENCE_MENU,
-				SearchConfig.builder().build());
-
-		// Try second swipe if not found
-		if (!lifeEssenceMenu.isFound()) {
-			logDebug("Life Essence menu not visible. Trying second swipe.");
-			swipe(MENU_SCROLL_START, MENU_SCROLL_END);
-			sleepTask(1000); // Wait for scroll
-
-			lifeEssenceMenu = templateSearchHelper.locatePattern(
-					TemplatesEnum.LIFE_ESSENCE_MENU,
-					SearchConfig.builder().build());
-		}
-
-		if (!lifeEssenceMenu.isFound()) {
-			logWarning("Life Essence menu not found after scrolling");
-			return false;
-		}
-
-		// Open Life Essence menu
-		logInfo("Life Essence menu found. Opening.");
-		tapInside(lifeEssenceMenu);
-		sleepTask(3000); // Wait for menu to fully load
-
-		logInfo("Successfully navigated to Life Essence area");
-		return true;
+		return navigationHelper.navigateToSidebarDestination(SidebarDestination.LIFE_ESSENCE);
 	}
 
 	/**
@@ -217,15 +156,11 @@ public class LifeEssenceRoutine extends DelayedTask {
 			logDebug("Claim search attempt " + searchAttempt + "/" + MAX_CLAIM_SEARCH_ATTEMPTS);
 
 			// Search for claimable essence in the defined area
-			List<ImageSearchResultData> essenceList = templateSearchHelper.locateAllPatterns(
-					TemplatesEnum.LIFE_ESSENCE_CLAIM,
-					SearchConfig.builder()
-							.withArea(new AreaData(LIFE_ESSENCE_SEARCH_AREA.topLeft(),
-									LIFE_ESSENCE_SEARCH_AREA.bottomRight()))
-							.withThreshold(90)
-							.withMaxAttempts(1)
-							.withMaxResults(MAX_CLAIM_RESULTS)
-							.build());
+			List<ImageSearchResultData> essenceList = locateClaimableEssence(
+					TemplatesEnum.LIFE_ESSENCE_CLAIM_CURRENT);
+			if (essenceList.isEmpty()) {
+				essenceList = locateClaimableEssence(TemplatesEnum.LIFE_ESSENCE_CLAIM);
+			}
 
 			if (essenceList.isEmpty()) {
 				emptySearches++;
@@ -259,6 +194,18 @@ public class LifeEssenceRoutine extends DelayedTask {
 
 		logInfo("Claimed " + totalClaimed + " Life Essence items");
 		return totalClaimed;
+	}
+
+	private List<ImageSearchResultData> locateClaimableEssence(TemplatesEnum template) {
+		return templateSearchHelper.locateAllPatterns(
+				template,
+				SearchConfig.builder()
+						.withArea(new AreaData(LIFE_ESSENCE_SEARCH_AREA.topLeft(),
+								LIFE_ESSENCE_SEARCH_AREA.bottomRight()))
+						.withThreshold(90)
+						.withMaxAttempts(1)
+						.withMaxResults(MAX_CLAIM_RESULTS)
+						.build());
 	}
 
 	/**
@@ -371,21 +318,20 @@ public class LifeEssenceRoutine extends DelayedTask {
 	 * Handle navigation failure by incrementing failure count and rescheduling
 	 */
 	private void handleNavigationFailure() {
-		consecutiveFailures++;
+		LifeEssenceRetryPolicy.Decision decision =
+				LifeEssenceRetryPolicy.afterFailure(consecutiveFailures);
+		consecutiveFailures = decision.persistedFailures();
 
 		writeProfileSetting(ConfigurationKeyEnum.LIFE_ESSENCE_CONSECUTIVE_FAILURES_INT, consecutiveFailures);
 
-		logWarning("Navigation failed. Consecutive failures: " + consecutiveFailures +
-				"/" + MAX_NAVIGATION_FAILURES);
-
-		// Calculate backoff time: 5, 10, 15, 20, 25 minutes (max 30)
-		int backoffMinutes = Math.min(BACKOFF_MULTIPLIER * consecutiveFailures, MAX_BACKOFF_MINUTES);
-		LocalDateTime nextAttempt = LocalDateTime.now().plusMinutes(backoffMinutes);
+		Duration retryDelay = decision.retryDelay();
+		LocalDateTime nextAttempt = LocalDateTime.now().plus(retryDelay);
 
 		reschedule(nextAttempt);
 
-		logInfo("Rescheduling with " + backoffMinutes + " minute backoff. Next attempt: " +
-				GameTimeUtils.formatCountdown(nextAttempt));
+		logWarning("Navigation failed. Consecutive failures: " + consecutiveFailures
+				+ ". Task remains enabled and will retry in " + retryDelay.toMinutes()
+				+ " minutes at " + GameTimeUtils.formatCountdown(nextAttempt));
 	}
 
 	/**

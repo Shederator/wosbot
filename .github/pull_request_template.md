@@ -19,6 +19,10 @@ List exact commands and results. Keep automated tests, saved-frame checks, and
 live evidence distinct. Do not imply that an unperformed check passed.
 -->
 
+## Contributor certification
+
+- [ ] Every commit includes a valid DCO `Signed-off-by` trailer.
+
 ## Risks
 
 <!-- Remaining risk or missing validation; use "None known." when appropriate. -->

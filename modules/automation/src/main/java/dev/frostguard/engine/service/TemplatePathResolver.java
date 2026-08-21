@@ -44,6 +44,8 @@ public final class TemplatePathResolver {
     public static final String ROOT_PROPERTY = "frostguard.templates.root";
 
     private static final Pattern WINDOWS_ABSOLUTE = Pattern.compile("^[A-Za-z]:[\\\\/].*");
+    private static final Pattern IMAGE_FILE = Pattern.compile(
+            ".*\\.(?:png|jpe?g|bmp|gif|webp)$", Pattern.CASE_INSENSITIVE);
 
     private TemplatePathResolver() {
     }
@@ -63,7 +65,8 @@ public final class TemplatePathResolver {
         return value.startsWith(FILE_PREFIX)
                 || value.indexOf('/') >= 0
                 || value.indexOf('\\') >= 0
-                || WINDOWS_ABSOLUTE.matcher(value).matches();
+                || WINDOWS_ABSOLUTE.matcher(value).matches()
+                || IMAGE_FILE.matcher(value).matches();
     }
 
     /**
@@ -74,6 +77,19 @@ public final class TemplatePathResolver {
      * @throws IllegalArgumentException when the reference is blank or unusable
      */
     public static String resolveFileReference(String templatePath) {
+        return resolveFileReference(templatePath, null);
+    }
+
+    /**
+     * Converts a file reference into an absolute path, checking the directory
+     * that owns the imported builder file before global installation roots.
+     * This lets a shared directory keep its JSON and templates together.
+     *
+     * @param templatePath the stored {@code templatePath} attribute
+     * @param definitionDirectory parent directory of the imported JSON, or null
+     * @return an absolute, normalized path for the vision layer to read
+     */
+    public static String resolveFileReference(String templatePath, Path definitionDirectory) {
         if (templatePath == null || templatePath.isBlank()) {
             throw new IllegalArgumentException("Template path is blank");
         }
@@ -98,7 +114,7 @@ public final class TemplatePathResolver {
         }
 
         Path fallback = null;
-        for (Path root : lookupRoots()) {
+        for (Path root : lookupRoots(definitionDirectory)) {
             Path resolved = root.resolve(candidate).normalize();
             if (Files.isRegularFile(resolved)) {
                 return resolved.toString();
@@ -121,8 +137,11 @@ public final class TemplatePathResolver {
     }
 
     /** Installation roots to probe for a relative template reference, in order. */
-    private static List<Path> lookupRoots() {
+    private static List<Path> lookupRoots(Path definitionDirectory) {
         List<Path> roots = new ArrayList<>();
+        if (definitionDirectory != null) {
+            addRoot(roots, definitionDirectory.toString());
+        }
         addRoot(roots, System.getProperty(ROOT_PROPERTY));
         addRoot(roots, System.getProperty("user.dir"));
         addRoot(roots, launcherDirectory());

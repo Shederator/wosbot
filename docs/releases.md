@@ -7,7 +7,7 @@ are permanent even though the versioned installers behind them change.
 | Type | Permanent entry | Versioned tag | Lifetime |
 |---|---|---|---|
 | Stable | [`releases/latest`](https://github.com/Shederator/wosbot/releases/latest) | `vX.Y.Z` | Permanent |
-| Nightly | [`releases/tag/nightly`](https://github.com/Shederator/wosbot/releases/tag/nightly) | `vX.Y.Z-nightly.YYYYMMDD.N` | Current immutable prerelease plus rolling channel |
+| Nightly | [`releases/tag/nightly`](https://github.com/Shederator/wosbot/releases/tag/nightly) | `vX.Y.Z-nightly.YYYYMMDD.N` | Two newest immutable prereleases plus rolling channel |
 | PR test | Discord `/build-pr` | `pr-test-*` | Temporary |
 
 Do not add a separate `stable` rolling release. GitHub's built-in `latest`
@@ -25,20 +25,18 @@ European local time shown below shifts when daylight-saving time changes.
 | Workflow | Runs | Purpose and side effects |
 |---|---|---|
 | **CI — Java Build and Tests** | Automatically for every pull request and every push to `main` | Builds and tests the complete reactor on Linux. It publishes only short-lived test-report artifacts, never a release. |
-| **CI — Windows Installers** | Automatically for pull requests that touch packaging-related paths | Builds and smoke-tests the Stable and Nightly MSI packages. It uploads short-lived Actions artifacts, never a GitHub Release. |
+| **CI — Windows Installers** | Automatically for pull requests that touch packaging-related paths | Always builds and smoke-tests the Stable MSI; channel-sensitive changes also test Nightly. PR runs upload short-lived MSI artifacts, never a GitHub Release. |
 | **CI — Windows Installers** | Manually with prerelease application and numeric MSI versions | Produces an unpublished Stable release candidate for upgrade testing. It does not change `releases/latest`. |
 | **PR Build — Create Test Release** | Manually in Actions or dispatched through Discord `/build-pr` | Combines selected open pull requests and publishes a temporary `pr-test-*` prerelease. A Discord-originated request receives the result in Discord. |
 | **PR Build — Clean Up Test Releases** | Daily at 04:43 UTC (06:43 CEST / 05:43 CET), or manually | Deletes expired `pr-test-*` releases and their tags, including builds whose selected pull requests are all closed. It never touches Nightly or permanent releases. |
 | **Release — Windows Stable or Nightly** | Daily at 03:17 UTC (05:17 CEST / 04:17 CET) | Builds and publishes the next authenticated Nightly from `main`, promotes its signed feed, and updates the maintained Nightly Discord message. |
 | **Release — Windows Stable or Nightly** | Manually from `main` with channel, version, and minimum updater version | Publishes a current 3.x Stable or an additional Nightly. This is the only current Windows release workflow. |
-| **Legacy 2.x — Build ZIP Candidate** | Manually | Builds a legacy 2.x ZIP as an Actions artifact. It does not publish a release or update Discord. |
-| **Legacy 2.x — Publish Stable ZIP** | Manually with a version and successful candidate run ID | Verifies and publishes one selected legacy 2.x candidate as Stable, then updates the maintained Stable Discord message. It rejects Frostguard 3.x. |
 | **Discord — Deploy /build-pr Worker** | Manually | Tests and deploys the Cloudflare Worker that receives Discord interactions. |
 | **Discord — Sync /build-pr Command** | Manually | Registers the guild-scoped `/build-pr` command and removes duplicate global commands. |
 | **Discord — Refresh Nightly Message** | Manually | Re-resolves the current signed Nightly release and refreshes its maintained Discord message without building or publishing a release. |
 | **Discord — Refresh Stable Message** | Manually | Re-resolves GitHub's latest Stable release and refreshes its maintained Discord message without building or publishing a release. |
 
-Manual release, legacy publication, cleanup, deployment, synchronization, and
+Manual release, cleanup, deployment, synchronization, and
 repair workflows can modify GitHub Releases or external services. Inspect their
 inputs and the relevant section below before selecting **Run workflow**.
 
@@ -90,6 +88,22 @@ Nightly builds embed only the permanent `nightly` endpoint. The temporary feed
 used by pre-release development builds has been retired and must not be
 recreated.
 
+After a new Nightly is public, its rolling manifest is promoted, and its
+changelog is collected, the release workflow retains the two newest public
+immutable Nightly releases and deletes older matching releases together with
+their tags. The permanent `nightly` release, Stable releases, drafts, PR-test
+releases, and unrelated tags never match this retention policy. A failed or
+unpromoted Nightly does not run retention, and a cleanup failure fails the
+release job visibly.
+
+GitHub release publication can be eventually consistent. Before promoting the
+rolling feed, the workflow therefore waits until the immutable Nightly is
+visible as a public prerelease with exactly its signed manifest and installer.
+Once that public state has been confirmed, later failure cleanup must never
+delete the release or tag, even if a subsequent API read temporarily reports
+stale draft metadata. Retention separately retries its release-history read
+before failing closed.
+
 ### Unpublished Stable release candidates
 
 Before promoting a new Stable major or minor version, manually run **CI —
@@ -97,38 +111,15 @@ Windows Installers** with a prerelease application version such as
 `3.0.0-rc.1` and a numeric Windows Installer version below the final release,
 such as `2.99.1`.
 The workflow validates that ordering, builds with release updates disabled,
-verifies the pinned Stable launcher hashes, smoke-tests the image, and uploads
-the MSI only as a short-lived Actions artifact. It does not create a GitHub
-Release or change `releases/latest`.
+injects and verifies the pinned accepted Nightly bootstrap bytes, smoke-tests
+the Stable runtime identity, and uploads the MSI only as a short-lived Actions
+artifact. It does not create a GitHub Release or change `releases/latest`.
 
 Use the artifact to prove a real upgrade from the current Stable installation.
 The candidate's numeric MSI version must be newer than the installed Stable but
 lower than the final release, so the final `3.0.0` installer can still upgrade
 it. The application displays the prerelease version from its JAR independently
 of the numeric MSI version.
-
-## Legacy 2.x ZIP promotion
-
-The manual-only **Legacy 2.x — Build ZIP Candidate** workflow can still produce
-an Actions artifact for an intentional 2.x maintenance release. It no longer
-publishes a Nightly, has no schedule, and does not update Discord. The legacy
-Stable ZIP workflow promotes one of those successful runs from `main`; it does
-not rebuild a different tree. Run **Legacy 2.x — Publish Stable ZIP** manually
-with:
-
-- `version`: the `X.Y.Z` value declared in `pom.xml`;
-- `daily_run_id`: a successful manually triggered legacy candidate run from
-  `main` after the intended release commit.
-
-This workflow rejects Frostguard 3.x. Installed 3.x releases must use the
-authenticated channel workflow so an unsigned ZIP can never become the latest Stable
-product accidentally.
-
-The workflow pins the run's exact commit, downloads its versioned artifact,
-re-runs structural and launch verification, creates the immutable `vX.Y.Z`
-release, verifies its public download URL and then updates the maintained
-Stable download without mentioning users. Existing stable tags are never
-replaced.
 
 ## Discord `#download`
 
@@ -277,14 +268,17 @@ installer must match it exactly.
 
 ### Publication order
 
-1. Build and smoke-test the native application image.
-2. Build the channel-specific installer with its stable upgrade identity.
-3. Optionally Authenticode-sign the final installer and verify its exact subject.
-4. Calculate the final byte size and SHA-256.
-5. Upload and re-download the installer at its immutable versioned HTTPS URL.
-6. Generate the schema-1 payload from that verified file.
-7. Ed25519-sign the exact payload and verify the resulting envelope.
-8. Publish the signed envelope atomically as the final step.
+1. Build the channel-specific native application image.
+2. For Stable, inject the pinned accepted Nightly bootstrap bytes while keeping
+   the Stable JVM configuration and verify both bootstrap hashes.
+3. Smoke-test the application image and its runtime channel identity.
+4. Build the channel-specific installer with its stable upgrade identity.
+5. Optionally Authenticode-sign the final installer and verify its exact subject.
+6. Calculate the final byte size and SHA-256.
+7. Upload and re-download the installer at its immutable versioned HTTPS URL.
+8. Generate the schema-1 payload from that verified file.
+9. Ed25519-sign the exact payload and verify the resulting envelope.
+10. Publish the signed envelope atomically as the final step.
 
 Never publish a PR artifact, unsigned manifest payload, mutable installer
 filename, or envelope whose artifact has not completed the same verification

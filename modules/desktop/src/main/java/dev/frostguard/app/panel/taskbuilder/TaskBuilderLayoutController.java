@@ -1718,16 +1718,20 @@ public class TaskBuilderLayoutController {
             new FileChooser.ExtensionFilter("Image Files", "*.png", "*.jpg", "*.jpeg", "*.bmp"));
         File chosen = fc.showOpenDialog(rootPane.getScene().getWindow());
         if (chosen != null) {
-            String sentinel = CUSTOM_TEMPLATE_PREFIX + chosen.getAbsolutePath();
-            if (!templateComboBox.getItems().contains(sentinel)) {
-                templateComboBox.getItems().add(sentinel);
-            }
-            templateComboBox.setValue(sentinel);
-            String fname = chosen.getName();
-            if (templateCustomPathLabel != null) {
-                templateCustomPathLabel.setText("📁 Custom: " + fname);
-                templateCustomPathLabel.setVisible(true);
-                templateCustomPathLabel.setManaged(true);
+            try {
+                String reference = builderService.stageCustomTemplate(chosen.toPath());
+                if (!templateComboBox.getItems().contains(reference)) {
+                    templateComboBox.getItems().add(reference);
+                }
+                templateComboBox.setValue(reference);
+                if (templateCustomPathLabel != null) {
+                    templateCustomPathLabel.setText("📁 Custom: " + Path.of(reference).getFileName());
+                    templateCustomPathLabel.setVisible(true);
+                    templateCustomPathLabel.setManaged(true);
+                }
+                setStatus("Copied template into the custom task workspace");
+            } catch (Exception ex) {
+                setStatus("Template import failed: " + ex.getMessage());
             }
         }
     }

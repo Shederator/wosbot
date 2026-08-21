@@ -24,7 +24,7 @@ class DeploymentHelperTest {
         assertEquals(36, read.travelTimeSeconds());
         assertEquals(9, read.staminaCost());
         assertFalse(read.staminaCostFallback());
-        assertEquals(TextLayout.SINGLE_WORD, CommonOCRSettings.SPENT_STAMINA_SETTINGS.textLayout());
+        assertEquals(TextLayout.SINGLE_LINE, CommonOCRSettings.SPENT_STAMINA_SETTINGS.textLayout());
     }
 
     @Test

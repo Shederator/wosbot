@@ -42,6 +42,13 @@ REQUIRED_FILES = [
     "lib/tesseract/chi_sim.traineddata",
     "docs/README.md",
     "docs/PRIVACY.md",
+    "custom_tasks/README.md",
+    "custom_tasks/dead_shot.json",
+    "custom_tasks/dead_shot.txt",
+    "custom_tasks/expert_idle_exploration.json",
+    "custom_tasks/expert_idle_exploration.txt",
+    "custom_tasks/shield.java",
+    "custom_tasks/templates/deals/deadshot/event_tab.png",
 ]
 
 # Regular expressions that must each match at least one entry name.

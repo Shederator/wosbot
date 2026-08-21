@@ -1,11 +1,16 @@
 Title: Empty the Exploration bag using idle mode
-When: Execute at startup, twice a day.
+Status: Editable Task Builder example.
+When: Run at startup and then twice a day after validation on your account.
+
+How to test:
+1. Stop the normal task queue after initialization.
+2. Open Task Builder and import expert_idle_exploration.json.
+3. Inspect or execute each node, then save and re-import the JSON.
 
 Flow:
-- Expand Dashboard.
+- Expand the dashboard.
 - Swipe up twice.
-- Click go to trek supplies.
-- Open bag and close bag preview.
-- Click Tundra Trek panel.
-- Click idle.
-- Confirm quantity; this should return to the world screen automatically.
+- Go to Trek Supplies.
+- Open and close the bag preview.
+- Open Tundra Trek and select Idle.
+- Confirm the quantity and return to the world screen.

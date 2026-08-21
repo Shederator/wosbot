@@ -125,6 +125,11 @@ Task-facing code should usually call `TemplateSearchHelper` or `BotOcrEngine` fr
 - `DelayedTask` is the base class for all Java automation tasks.
 - Helper classes such as `NavigationHelper`, `MarchHelper`, `StaminaHelper`, and `TemplateSearchHelper` provide reusable game operations.
 - Services such as `ProfileService`, `ConfigService`, `TaskManagementService`, `LoggingService`, and `StatisticsService` coordinate shared state.
+- `ActionRequiredIncidentService` persists deduplicated operator-action failures
+  for both headless and desktop runs; JavaFX observes it but is not a dependency.
+- `TaskFailureIncidentService` persists consecutive stable task-failure streaks,
+  escalates them after a caller-owned retry budget, and recovers incidents after
+  a successful execution.
 - `EmulatorController` is the gateway for ADB/device actions, screenshots, taps, swipes, process checks, and emulator lifecycle operations.
 
 ### Task Layer
@@ -148,6 +153,8 @@ To add a built-in task, add the routine in `modules/tasks`, add or reuse a `TpDa
 - Task Builder UI creates `AutomationStep` graphs and delegates generation/import/save to `TaskBuilderService`.
 
 FXML and CSS resources live in `modules/desktop/src/main/resources/layout` and `modules/desktop/src/main/resources/styles`.
+The launcher status bar owns the notification bell and hosts the in-window
+notification drawer; incident lifecycle and storage remain below the UI layer.
 
 ## Runtime Decomposition
 
@@ -237,7 +244,7 @@ flowchart TD
     RootPom --> UpdateJar[modules/update jar]
     RootPom --> AppJar[modules/desktop executable jar]
 
-    ApiJar --> AppBundle[desktop bundle zip]
+    ApiJar --> AppBundle[PR-test bundle zip]
     DataJar --> AppBundle
     VisionJar --> AppBundle
     EngineJar --> AppBundle
@@ -256,7 +263,7 @@ with `./mvnw javafx:run`; its versioned JAR is not a standalone distribution.
 `packaging/desktop` consumes that artifact and the watcher artifact:
 
 - executable jar: `modules/desktop/target/frostguard-desktop-<version>.jar`
-- transitional desktop zip: `packaging/desktop/target/frostguard-<version>-desktop-bundle.zip`
+- portable PR-test zip: `packaging/desktop/target/frostguard-<version>-desktop-bundle.zip`
 - packaging inputs staged under `packaging/desktop/target/input`
 - Windows application images: `packaging/desktop/target/app-image/Frostguard`
   and `app-image/Frostguard Nightly`
@@ -270,17 +277,19 @@ The native Windows image contains the desktop and watcher launchers plus a
 `jlink` runtime. Each launcher receives its Stable or Nightly channel and
 workspace contract through packaged JVM options. The watcher and Task Scheduler launch
 the native executables when those packaged launcher paths are present, with
-the Java/JAR paths retained only as the source and transitional-ZIP fallback.
+the Java/JAR paths retained only for source and temporary PR-test bundles.
 Native packaging is opt-in through Maven profiles so the normal reactor build
 stays platform-neutral.
 
-The Nightly MSI product version remains monotonic for Windows Installer, while
-the unchanged native bootstrap launchers retain the last known-good launcher
-file version until Authenticode signing is enabled. This keeps their bytes and
-Smart App Control reputation stable across Java-only Nightly updates. The
-application reports its release version from packaged build metadata, not from
-the bootstrap file version. A bootstrap, icon, or JDK change still requires a
-new launcher identity and must pass the Windows signing/reputation gate.
+The Nightly MSI product version remains monotonic for Windows Installer. Until
+Authenticode signing is enabled, both channels reuse the unchanged, accepted
+Nightly bootstrap launcher bytes so Smart App Control reputation stays stable
+across Java-only updates. Stable behavior still comes from its separate
+packaged JVM configuration; only the PE bootstrap metadata retains the Nightly
+product name. The application reports its release version from packaged build
+metadata, not from the bootstrap file version. A bootstrap, icon, or JDK change
+still requires a new launcher identity and must pass the Windows
+signing/reputation gate.
 
 The watcher launcher is channel-specific internal infrastructure and does not
 receive Start-menu or desktop shortcuts. The installer exposes only the desktop

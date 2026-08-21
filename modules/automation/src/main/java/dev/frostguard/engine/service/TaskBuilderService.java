@@ -22,8 +22,10 @@ import org.slf4j.LoggerFactory;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 
 /**
  * Service that manages a Task Builder recording session.
@@ -44,15 +46,18 @@ public class TaskBuilderService {
     private final Path customTasksDir;
     private final ObjectMapper mapper;
     private AutomationBlueprint currentDefinition;
+    private Path currentDefinitionDirectory;
     private String activeEmulatorNumber;
     private TapInteractionService tapService;
 
     public TaskBuilderService() {
+        this(defaultMapper());
+    }
+
+    TaskBuilderService(ObjectMapper mapper) {
         this.emuManager = EmulatorController.getInstance();
         this.customTasksDir = WorkspacePaths.current().customTasks();
-        this.mapper = new ObjectMapper()
-                .enable(SerializationFeature.INDENT_OUTPUT)
-                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+        this.mapper = mapper;
         try {
             Files.createDirectories(customTasksDir);
         } catch (IOException e) {
@@ -61,6 +66,12 @@ public class TaskBuilderService {
     }
 
     public record CustomTaskSaveResult(Path javaFile, Path builderFile, String className) {}
+
+    private static ObjectMapper defaultMapper() {
+        return new ObjectMapper()
+                .enable(SerializationFeature.INDENT_OUTPUT)
+                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+    }
 
     // ========================================================================
     // Session management
@@ -74,6 +85,7 @@ public class TaskBuilderService {
      */
     public void startSession(String taskName, String emulatorNumber) {
         this.currentDefinition = new AutomationBlueprint(taskName);
+        this.currentDefinitionDirectory = customTasksDir;
         this.activeEmulatorNumber = emulatorNumber;
         this.tapService = TapInteractionService.forController(emuManager, emulatorNumber);
         logger.info("Task Builder session started: '{}' on emulator {}", taskName, emulatorNumber);
@@ -94,6 +106,7 @@ public class TaskBuilderService {
             loaded.setStartLocation("ANY");
         }
         this.currentDefinition = loaded;
+        this.currentDefinitionDirectory = file.toPath().toAbsolutePath().normalize().getParent();
         this.activeEmulatorNumber = emulatorNumber;
         logger.info("Task Builder definition imported: '{}' from {}", loaded.getName(), file.getAbsolutePath());
         return loaded;
@@ -145,9 +158,22 @@ public class TaskBuilderService {
         String className = toJavaIdentifier(stripBuilderExtension(absoluteBuilderPath.getFileName().toString()));
         Path javaPath = parentDir.resolve(className + ".java");
 
+        copyRelativeTemplates(parentDir);
+
         TaskCodeGenerator generator = new TaskCodeGenerator();
-        Files.writeString(javaPath, generator.generate(currentDefinition, className, displayName));
-        mapper.writeValue(absoluteBuilderPath.toFile(), currentDefinition);
+        String javaSource = generator.generate(currentDefinition, className, displayName);
+        Path jsonTemp = Files.createTempFile(parentDir, "." + className + "-", ".json.tmp");
+        Path javaTemp = Files.createTempFile(parentDir, "." + className + "-", ".java.tmp");
+        try {
+            mapper.writeValue(jsonTemp.toFile(), currentDefinition);
+            Files.writeString(javaTemp, javaSource);
+            replaceAtomically(jsonTemp, absoluteBuilderPath);
+            replaceAtomically(javaTemp, javaPath);
+        } finally {
+            Files.deleteIfExists(jsonTemp);
+            Files.deleteIfExists(javaTemp);
+        }
+        currentDefinitionDirectory = parentDir;
 
         logger.info("Saved custom task '{}' to {} and {}", className, javaPath, absoluteBuilderPath);
         return new CustomTaskSaveResult(javaPath, absoluteBuilderPath, className);
@@ -155,6 +181,84 @@ public class TaskBuilderService {
 
     public Path getCustomTasksDirectory() {
         return customTasksDir;
+    }
+
+    /**
+     * Copies a template selected in the editor into workspace-owned storage and
+     * returns the portable reference that should be persisted in the blueprint.
+     */
+    public String stageCustomTemplate(Path source) throws IOException {
+        if (source == null || !Files.isRegularFile(source)) {
+            throw new IOException("Selected template file does not exist: " + source);
+        }
+        Path templatesDir = customTasksDir.resolve("templates");
+        Files.createDirectories(templatesDir);
+
+        String originalName = source.getFileName().toString();
+        String safeName = originalName.replaceAll("[^a-zA-Z0-9._-]", "_");
+        if (safeName.isBlank() || safeName.equals(".") || safeName.equals("..")) {
+            safeName = "template.png";
+        }
+        Path destination = availableDestination(templatesDir, safeName, source);
+        if (!Files.exists(destination)) {
+            Files.copy(source, destination);
+        }
+        return "templates/" + destination.getFileName();
+    }
+
+    private Path availableDestination(Path directory, String fileName, Path source) throws IOException {
+        Path candidate = directory.resolve(fileName);
+        if (!Files.exists(candidate) || Files.mismatch(source, candidate) == -1) {
+            return candidate;
+        }
+        int dot = fileName.lastIndexOf('.');
+        String stem = dot > 0 ? fileName.substring(0, dot) : fileName;
+        String extension = dot > 0 ? fileName.substring(dot) : "";
+        for (int suffix = 2; ; suffix++) {
+            candidate = directory.resolve(stem + "-" + suffix + extension);
+            if (!Files.exists(candidate) || Files.mismatch(source, candidate) == -1) {
+                return candidate;
+            }
+        }
+    }
+
+    private void copyRelativeTemplates(Path targetDirectory) throws IOException {
+        if (currentDefinitionDirectory == null || currentDefinitionDirectory.equals(targetDirectory)) {
+            return;
+        }
+        for (AutomationStep step : currentDefinition.getNodes()) {
+            if (step.getType() != FlowStepKind.TEMPLATE_SEARCH) {
+                continue;
+            }
+            String reference = step.getParam("templatePath");
+            if (!TemplatePathResolver.isFileReference(reference)
+                    || reference == null || reference.startsWith(TemplatePathResolver.FILE_PREFIX)) {
+                continue;
+            }
+            Path relative = Path.of(reference.replace('\\', '/'));
+            if (relative.isAbsolute()) {
+                continue;
+            }
+            Path destination = targetDirectory.resolve(relative).normalize();
+            if (!destination.startsWith(targetDirectory.normalize())) {
+                throw new IOException("Template path escapes the task directory: " + reference);
+            }
+            Path source = Path.of(TemplatePathResolver.resolveFileReference(
+                    reference, currentDefinitionDirectory));
+            if (Files.isRegularFile(source) && !source.normalize().equals(destination)) {
+                Files.createDirectories(destination.getParent());
+                Files.copy(source, destination, StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
+    }
+
+    private void replaceAtomically(Path source, Path destination) throws IOException {
+        try {
+            Files.move(source, destination, StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException ex) {
+            Files.move(source, destination, StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     /**
@@ -434,7 +538,8 @@ public class TaskBuilderService {
     private ImageSearchResultData searchCustomTemplate(String templateName, boolean grayscale,
                                                        boolean hasArea, PointData topLeft, PointData bottomRight,
                                                        double thresholdPct) {
-        String absolutePath = TemplatePathResolver.resolveFileReference(templateName);
+        String absolutePath = TemplatePathResolver.resolveFileReference(
+                templateName, currentDefinitionDirectory);
 
         if (hasArea) {
             return grayscale

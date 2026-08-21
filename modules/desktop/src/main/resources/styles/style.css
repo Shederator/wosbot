@@ -213,7 +213,193 @@
     -fx-spacing: 16;
     -fx-alignment: CENTER_LEFT;
     -fx-min-height: 48;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.4), 10, 0, 0, -2);
+}
+
+.notification-button-container {
+    -fx-min-width: 38;
+    -fx-min-height: 38;
+}
+
+.notification-button {
+    -fx-background-color: #151922;
+    -fx-border-color: #2b313d;
+    -fx-border-width: 1;
+    -fx-border-radius: 5;
+    -fx-background-radius: 5;
+    -fx-min-width: 38;
+    -fx-min-height: 38;
+    -fx-padding: 0;
+}
+
+.notification-button:hover {
+    -fx-background-color: #202632;
+    -fx-border-color: #465063;
+}
+
+.notification-badge {
+    -fx-background-color: #e5484d;
+    -fx-background-radius: 12;
+    -fx-text-fill: white;
+    -fx-font-size: 9px;
+    -fx-font-weight: bold;
+    -fx-alignment: CENTER;
+    -fx-min-width: 18;
+    -fx-min-height: 18;
+    -fx-padding: 1 4;
+    -fx-translate-x: 5;
+    -fx-translate-y: -5;
+}
+
+/* ---------------------------------------------------------------------------
+ * NOTIFICATION CENTER
+ * --------------------------------------------------------------------------- */
+.notification-drawer {
+    -fx-background-color: #151922;
+    -fx-border-color: #323946 transparent transparent #323946;
+    -fx-border-width: 1 0 0 1;
+    -fx-padding: 18 16 14 16;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.55), 20, 0.15, -5, 0);
+}
+
+.notification-drawer-title {
+    -fx-text-fill: -fg-text-primary;
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+}
+
+.notification-drawer-close {
+    -fx-background-color: transparent;
+    -fx-text-fill: -fg-text-secondary;
+    -fx-font-size: 23px;
+    -fx-padding: 0 4;
+}
+
+.notification-drawer-close:hover {
+    -fx-text-fill: white;
+    -fx-background-color: rgba(255, 255, 255, 0.06);
+}
+
+.notification-scroll,
+.notification-scroll > .viewport {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+}
+
+.notification-scroll {
+    -fx-padding: 0 3 0 0;
+}
+
+.notification-card {
+    -fx-background-color: #1b2029;
+    -fx-border-color: #303846;
+    -fx-border-width: 1;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-padding: 14;
+}
+
+.notification-card.recovered {
+    -fx-opacity: 0.86;
+}
+
+.notification-state-active,
+.notification-state-recovered {
+    -fx-background-radius: 4;
+    -fx-padding: 3 7;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+
+.notification-state-active {
+    -fx-background-color: rgba(229, 72, 77, 0.25);
+    -fx-text-fill: #ff7277;
+}
+
+.notification-state-recovered {
+    -fx-background-color: rgba(61, 195, 195, 0.20);
+    -fx-text-fill: #67d4d4;
+}
+
+.notification-occurrences,
+.notification-card-context,
+.notification-time-key,
+.notification-drawer-footer {
+    -fx-text-fill: -fg-text-secondary;
+    -fx-font-size: 11px;
+}
+
+.notification-card-title {
+    -fx-text-fill: -fg-text-primary;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+.notification-card-cause {
+    -fx-text-fill: #cdd6e0;
+    -fx-font-size: 12px;
+}
+
+.notification-time-value {
+    -fx-text-fill: #d9e0e8;
+    -fx-font-size: 11px;
+}
+
+.notification-diagnostics-preview {
+    -fx-background-color: #101319;
+    -fx-background-radius: 5;
+    -fx-border-color: #2b323f;
+    -fx-border-radius: 5;
+    -fx-padding: 10;
+    -fx-text-fill: #d4dbe5;
+    -fx-font-family: "Cascadia Mono", "Consolas", monospace;
+    -fx-font-size: 10px;
+}
+
+.notification-copy-button {
+    -fx-background-color: -fg-yellow;
+    -fx-text-fill: #11141a;
+    -fx-font-weight: bold;
+    -fx-padding: 9 12;
+}
+
+.notification-copy-button:hover {
+    -fx-background-color: #ffe197;
+}
+
+.notification-secondary-button {
+    -fx-background-color: transparent;
+    -fx-border-color: #3a4352;
+    -fx-border-width: 1;
+    -fx-text-fill: #dbe3ec;
+    -fx-font-weight: bold;
+    -fx-padding: 8 12;
+}
+
+.notification-secondary-button:hover {
+    -fx-background-color: rgba(255, 255, 255, 0.05);
+}
+
+.notification-acknowledge-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: #cbd3dc;
+    -fx-font-weight: bold;
+    -fx-padding: 7 12;
+}
+
+.notification-acknowledge-button:hover {
+    -fx-text-fill: white;
+    -fx-background-color: rgba(255, 255, 255, 0.04);
+}
+
+.notification-empty,
+.notification-action-status {
+    -fx-text-fill: -fg-text-secondary;
+    -fx-padding: 8;
+}
+
+.notification-action-status {
+    -fx-background-color: #202632;
+    -fx-background-radius: 4;
 }
 
 /* Base button defaults */

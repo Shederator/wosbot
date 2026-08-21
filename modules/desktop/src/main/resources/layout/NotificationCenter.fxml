@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<VBox xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="dev.frostguard.app.panel.notification.NotificationCenterController"
+      styleClass="notification-drawer" maxHeight="Infinity" maxWidth="Infinity" spacing="14">
+    <HBox alignment="CENTER_LEFT">
+        <Label text="Notifications" styleClass="notification-drawer-title" HBox.hgrow="ALWAYS" />
+        <Button fx:id="buttonClose" text="×" accessibleText="Close notifications"
+                onAction="#handleClose" styleClass="notification-drawer-close" />
+    </HBox>
+
+    <ComboBox fx:id="filterIncidents" maxWidth="Infinity" onAction="#handleFilterChanged" />
+
+    <ScrollPane fitToWidth="true" hbarPolicy="NEVER" vbarPolicy="AS_NEEDED"
+                VBox.vgrow="ALWAYS" styleClass="notification-scroll">
+        <VBox fx:id="incidentCards" spacing="10" fillWidth="true" />
+    </ScrollPane>
+
+    <Label fx:id="labelEmpty" text="No notifications match this filter."
+           visible="false" managed="false" wrapText="true"
+           styleClass="notification-empty" />
+    <Label fx:id="labelActionStatus" visible="false" managed="false"
+           wrapText="true" styleClass="notification-action-status" />
+    <Label text="Grouped by profile, task, and stable failure signature."
+           wrapText="true" styleClass="notification-drawer-footer" />
+</VBox>

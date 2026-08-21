@@ -32,14 +32,48 @@ public final class CommonGameAreas {
     // after every completed Intel reward has been claimed.
     public static final AreaData INTEL_COOLDOWN_WITH_MARKERS_OCR_AREA = region(378, 103, 508, 146);
     public static final AreaData INTEL_COOLDOWN_EMPTY_MAP_OCR_AREA    = region(378, 580, 530, 640);
+    public static final AreaData INTEL_CLAIM_ALL_AREA                 = region(190, 1050, 530, 1200);
 
     // ── side panel navigation ────────────────────────────────────────
 
-    public static final AreaData LEFT_MENU_TRIGGER        = region(1, 538, 3, 560);
-    public static final AreaData LEFT_MENU_CITY_TAB       = region(100, 270, 120, 270);
-    public static final AreaData LEFT_MENU_WILDERNESS_TAB = region(320, 270, 340, 270);
-    public static final PointData LEFT_MENU_CLOSE_CITY    = point(110, 270);
-    public static final PointData LEFT_MENU_CLOSE_OUTSIDE = point(463, 548);
+    // The collapsed panel exposes only a thin handle at the left edge. A trigger tap is allowed only
+    // after the caller has proved that no selected tab is visible, and the result is then verified.
+    public static final AreaData LEFT_MENU_TRIGGER        = region(0, 520, 22, 580);
+    public static final AreaData LEFT_MENU_CITY_TAB       = region(9, 246, 146, 293);
+    public static final AreaData LEFT_MENU_WILDERNESS_TAB = region(155, 246, 293, 293);
+    public static final AreaData LEFT_MENU_DAILY_TAB      = region(302, 246, 438, 293);
+    public static final AreaData LEFT_MENU_CLOSE          = region(450, 510, 482, 594);
+
+    // Interior samples intentionally avoid rounded borders. The selected tab is substantially
+    // brighter than both unselected tabs in every supplied post-update frame.
+    private static final AreaData LEFT_MENU_CITY_TAB_SAMPLE       = region(20, 252, 135, 288);
+    private static final AreaData LEFT_MENU_WILDERNESS_TAB_SAMPLE = region(165, 252, 286, 288);
+    private static final AreaData LEFT_MENU_DAILY_TAB_SAMPLE      = region(310, 252, 430, 288);
+
+    public static final AreaData SIDEBAR_CONTENT = region(10, 300, 440, 880);
+    public static final AreaData SIDEBAR_ROW_ICON_COLUMN = region(15, 300, 80, 880);
+    public static final PointData SIDEBAR_RESET_FROM = point(360, 350);
+    public static final PointData SIDEBAR_RESET_TO = point(360, 820);
+    public static final PointData SIDEBAR_SCROLL_FROM = point(360, 800);
+    public static final PointData SIDEBAR_SCROLL_TO = point(360, 350);
+    public static final PointData SIDEBAR_SCROLL_TOWARD_BOTTOM_FROM = point(360, 720);
+    public static final PointData SIDEBAR_SCROLL_TOWARD_BOTTOM_TO = point(360, 600);
+
+    public static AreaData sidebarTab(SidebarSection section) {
+        return switch (section) {
+            case CITY -> LEFT_MENU_CITY_TAB;
+            case WILDERNESS -> LEFT_MENU_WILDERNESS_TAB;
+            case DAILY -> LEFT_MENU_DAILY_TAB;
+        };
+    }
+
+    public static AreaData sidebarTabSample(SidebarSection section) {
+        return switch (section) {
+            case CITY -> LEFT_MENU_CITY_TAB_SAMPLE;
+            case WILDERNESS -> LEFT_MENU_WILDERNESS_TAB_SAMPLE;
+            case DAILY -> LEFT_MENU_DAILY_TAB_SAMPLE;
+        };
+    }
 
     // ── march slot grid (top-left / bottom-right, slot 6→1) ─────────
 
@@ -123,9 +157,9 @@ public final class CommonGameAreas {
     public static final AreaData STAMINA_DIALOG_ITEM_COUNT  = region(116, 535, 154, 570);
     public static final AreaData STAMINA_DIALOG_USE_BUTTON  = region(490, 480, 670, 565);
     public static final PointData STAMINA_DIALOG_CLOSE      = point(665, 135);
-    // Starts right of the clock icon (its right edge sits at x 505-507): a sliver of the dial reads
-    // as a leading "1" and turns "00:00:39" into an unparsable "100:00:39".
-    public static final AreaData TRAVEL_TIME_OCR_AREA   = region(510, 1134, 622, 1162);
+    // Includes the complete first digit. Starting at x=510 clipped its left half on the Intel
+    // formation layout, turning "00:00:15" into the valid but false ten-hour value "10:00:15".
+    public static final AreaData TRAVEL_TIME_OCR_AREA   = region(500, 1134, 622, 1162);
 
     // ── character identity ───────────────────────────────────────────
 

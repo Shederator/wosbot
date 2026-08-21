@@ -2,9 +2,6 @@ package dev.frostguard.app.panel.launcher;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -13,9 +10,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
+import dev.frostguard.app.ApplicationTitle;
+import dev.frostguard.app.BuildMetadata;
 import dev.frostguard.vision.match.OpenCvPatternLocator;
 import dev.frostguard.app.panel.alliance.AllianceLayoutController;
+import dev.frostguard.app.panel.analytics.GameAnalyticsLayoutController;
 import dev.frostguard.app.shared.AbstractProfileController;
 import dev.frostguard.app.panel.alliance.AllianceChampionshipLayoutController;
 import dev.frostguard.app.panel.combat.BearTrapLayoutController;
@@ -39,6 +40,7 @@ import dev.frostguard.app.panel.misc.GiftcodeLayoutController;
 import dev.frostguard.app.panel.heroes.IntelLayoutController;
 import dev.frostguard.app.panel.dailies.MobilizationLayoutController;
 import dev.frostguard.api.domain.BotStateData;
+import dev.frostguard.api.domain.ActionRequiredIncidentData;
 import dev.frostguard.api.domain.LogMessageData;
 import dev.frostguard.api.domain.QueueProfileStateData;
 import dev.frostguard.app.panel.pets.PetsLayoutController;
@@ -49,10 +51,9 @@ import dev.frostguard.app.panel.profile.IProfileObserverInjectable;
 import dev.frostguard.app.panel.profile.ProfileAux;
 import dev.frostguard.app.panel.profile.ProfileManagerLayoutController;
 import dev.frostguard.api.domain.QueueStateData;
-import dev.frostguard.api.runtime.RuntimeChannel;
-import dev.frostguard.api.runtime.WorkspacePaths;
 import dev.frostguard.engine.listener.StaminaChangeListener;
 import dev.frostguard.engine.service.ConfigService;
+import dev.frostguard.engine.service.ActionRequiredIncidentService;
 import dev.frostguard.engine.service.ScheduleService;
 import dev.frostguard.engine.service.StaminaService;
 import dev.frostguard.app.panel.economy.ShopLayoutController;
@@ -86,7 +87,9 @@ import javafx.util.Duration;
 import dev.frostguard.app.panel.alliance.AllianceShopController;
 import dev.frostguard.app.panel.misc.TelegramLayoutController;
 import dev.frostguard.app.bootstrap.ApplicationLifecycle;
+import dev.frostguard.app.bootstrap.WindowsWindowManager;
 import dev.frostguard.app.panel.update.UpdateLayoutController;
+import dev.frostguard.app.panel.notification.NotificationCenterController;
 import dev.frostguard.engine.service.TelegramBotService;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignT;
@@ -127,6 +130,16 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     @FXML
     private Label labelRunTime;
     @FXML
+    private StackPane notificationButtonContainer;
+    @FXML
+    private Button buttonNotifications;
+    @FXML
+    private Label labelNotificationBadge;
+    @FXML
+    private FontIcon iconNotifications;
+    @FXML
+    private StackPane notificationDrawerHost;
+    @FXML
     private Label labelVersion;
     @FXML
     private ComboBox<ProfileAux> profileComboBox;
@@ -148,6 +161,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
     private double xOffset = 0;
     private double yOffset = 0;
+    private WindowsWindowManager windowsWindowManager;
     // Window snap state tracking
     private boolean isCustomMaximized = false;
     private double restoreX, restoreY, restoreW, restoreH;
@@ -206,6 +220,9 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     private long uptimeStartedAtNanos;
     private int autoStartSecondsRemaining;
     private boolean isStartup = true;
+    private NotificationCenterController notificationCenterController;
+    private final Consumer<List<ActionRequiredIncidentData>> notificationListener =
+            this::onNotificationSnapshot;
 
     public LauncherLayoutController(Stage stage) {
         this.stage = stage;
@@ -229,7 +246,9 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         initializeExternalLibraries();
         initializeTelegramBot();
         showVersion();
+        updateWindowTitle();
         initializeUptime();
+        initializeNotificationCenter();
         buttonStartStop.setDisable(false);
         buttonPauseResume.setDisable(true);
         configurePauseMenu();
@@ -237,6 +256,12 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         initializeQuickNav();
         initializeSearch();
         setupSocialIcons();
+        stage.maximizedProperty().addListener((observable, oldValue, maximized) -> updateMaximizeButton(maximized));
+        updateMaximizeButton(stage.isMaximized());
+    }
+
+    public void enableNativeWindowing(WindowsWindowManager windowManager) {
+        this.windowsWindowManager = Objects.requireNonNull(windowManager);
     }
 
     private void initializeUptime() { /* internal */
@@ -257,6 +282,65 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
         long minutes = elapsedSeconds % 3_600 / 60;
         long seconds = elapsedSeconds % 60;
         return String.format("%02d:%02d:%02d", hours, minutes, seconds);
+    }
+
+    private void initializeNotificationCenter() {
+        if (notificationDrawerHost == null) {
+            return;
+        }
+        try {
+            FXMLLoader loader = new FXMLLoader(getClass().getResource("/layout/NotificationCenter.fxml"));
+            Parent drawer = loader.load();
+            notificationCenterController = loader.getController();
+            notificationCenterController.setCloseAction(this::hideNotificationCenter);
+            notificationDrawerHost.getChildren().setAll(drawer);
+            if (iconNotifications != null) {
+                iconNotifications.setIconCode(MaterialDesignB.BELL_OUTLINE);
+            }
+            ActionRequiredIncidentService service = ActionRequiredIncidentService.obtain();
+            service.registerListener(notificationListener);
+            updateNotificationBadge(service.findAll());
+        } catch (IOException exception) {
+            throw new IllegalStateException("Could not load the notification center", exception);
+        }
+    }
+
+    @FXML
+    private void handleNotifications(ActionEvent event) {
+        if (notificationDrawerHost == null) {
+            return;
+        }
+        boolean show = !notificationDrawerHost.isVisible();
+        notificationDrawerHost.setManaged(show);
+        notificationDrawerHost.setVisible(show);
+        if (show) {
+            notificationDrawerHost.toFront();
+            notificationCenterController.refreshFromStore();
+        }
+    }
+
+    private void hideNotificationCenter() {
+        notificationDrawerHost.setVisible(false);
+        notificationDrawerHost.setManaged(false);
+    }
+
+    private void onNotificationSnapshot(List<ActionRequiredIncidentData> incidents) {
+        if (Platform.isFxApplicationThread()) {
+            updateNotificationBadge(incidents);
+        } else {
+            Platform.runLater(() -> updateNotificationBadge(incidents));
+        }
+    }
+
+    private void updateNotificationBadge(List<ActionRequiredIncidentData> incidents) {
+        long unread = incidents.stream().filter(ActionRequiredIncidentData::isUnread).count();
+        boolean visible = unread > 0;
+        labelNotificationBadge.setText(unread > 99 ? "99+" : Long.toString(unread));
+        labelNotificationBadge.setVisible(visible);
+        labelNotificationBadge.setManaged(visible);
+        buttonNotifications.setAccessibleText(visible
+                ? "Notifications, " + unread + " unread action required"
+                : "Notifications");
     }
 
     private void setupSocialIcons() { /* internal */
@@ -304,36 +388,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     }
 
     private void showVersion() { /* internal */
-        String version = getVersion();
-        labelVersion.setText("Version: " + version);
-    }
-
-    private String getVersion() { /* internal */
-        Package pkg = getClass().getPackage();
-        if (pkg != null && pkg.getImplementationVersion() != null) {
-            return pkg.getImplementationVersion();
-        }
-        try {
-            Path parentPomPath = Paths.get("..", "pom.xml");
-            if (!Files.exists(parentPomPath)) {
-                parentPomPath = Paths.get("pom.xml");
-            }
-            List<String> lines = Files.readAllLines(parentPomPath);
-            String revision = null;
-            for (String line : lines) {
-                line = line.trim();
-                if (line.startsWith("<revision>") && line.endsWith("</revision>")) {
-                    revision = line.replace("<revision>", "").replace("</revision>", "").trim();
-                    break;
-                }
-            }
-            if (null != revision) {
-                return revision;
-            }
-        } catch (Exception e) {
-            // Ignore error
-        }
-        return "Unknown";
+        labelVersion.setText("Version: " + BuildMetadata.current().version());
     }
 
     private void initializeEmulatorController() { /* internal */
@@ -715,6 +770,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
                 new ModuleDefinition("SkipTutorialLayout",       "Skip Tutorial",        MaterialDesignS.SKIP_NEXT_OUTLINE,          SkipTutorialLayoutController::new),
                 new ModuleDefinition("CharacterLayout",          "Character",            MaterialDesignA.ACCOUNT_OUTLINE,            CharacterLayoutController::new),
+                new ModuleDefinition("GameAnalyticsLayout",      "Game Data",            MaterialDesignV.VIEW_LIST_OUTLINE,          GameAnalyticsLayoutController::new),
                 new ModuleDefinition("StatisticsLayout",         "Statistics",           MaterialDesignV.VIEW_DASHBOARD_OUTLINE,     StatisticsLayoutController::new)
         );
         //@formatter:on
@@ -750,26 +806,23 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
     }
 
     private void updateWindowTitle() { /* internal */
-        if (null == currentProfile) {
-            return;
+        String title = ApplicationTitle.current();
+        if (currentProfile != null) {
+            int stamina = StaminaService.getServices().getCurrentStamina(currentProfile.getId());
+            title = formatWindowTitle(title, currentProfile.getName(), stamina);
         }
-
-        String version = getVersion();
-        int stamina = StaminaService.getServices().getCurrentStamina(currentProfile.getId());
-        String title = formatWindowTitle(WorkspacePaths.current().channel(), version,
-                currentProfile.getName(), stamina);
+        String resolvedTitle = title;
 
         Platform.runLater(() -> {
-            stage.setTitle(title);
+            stage.setTitle(resolvedTitle);
             if (null != labelWindowTitle) {
-                labelWindowTitle.setText(title);
+                labelWindowTitle.setText(resolvedTitle);
             }
         });
     }
 
-    static String formatWindowTitle(RuntimeChannel channel, String version, String profileName, int stamina) {
-        return String.format("%s v%s - %s [Stamina: %d]",
-                channel.productName(), version, profileName, stamina);
+    static String formatWindowTitle(String applicationTitle, String profileName, int stamina) {
+        return String.format("%s - %s [Stamina: %d]", applicationTitle, profileName, stamina);
     }
 
     public void onEngineStateTransition(BotStateData botState) { /* bind */
@@ -884,11 +937,16 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
     @FXML
     private void handleTitleBarMouseDragged(javafx.scene.input.MouseEvent event) { /* internal */
+        if (windowsWindowManager != null) {
+            return;
+        }
+
         // If currently maximized/snapped, un-snap first, then start dragging
         if (isCustomMaximized) {
             double oldW = stage.getWidth();
             isCustomMaximized = false;
             btnMaximize.setText("☐");
+            stage.setMaximized(false);
             // Reposition so the cursor stays proportionally in the restored window
             double ratio = xOffset / oldW;
             stage.setWidth(restoreW);
@@ -934,6 +992,8 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
     @FXML
     private void handleTitleBarMouseReleased(javafx.scene.input.MouseEvent event) { /* internal */
+        if (windowsWindowManager != null) return;
+
         hideSnapPreview();
         if (isCustomMaximized) return; // already snapped, don't re-snap
         double screenX = event.getScreenX();
@@ -1010,19 +1070,26 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
     @FXML
     private void handleTitleBarMouseClicked(javafx.scene.input.MouseEvent event) { /* internal */
-        if (event.getClickCount() == 2) {
+        if (event.getClickCount() == 2 && !isWindowControl(event.getTarget())) {
             handleMaximize(null);
         }
     }
 
+    private boolean isWindowControl(Object target) {
+        Node node = target instanceof Node ? (Node) target : null;
+        while (node != null && node != titleBar) {
+            if (node instanceof ButtonBase) {
+                return true;
+            }
+            node = node.getParent();
+        }
+        return false;
+    }
+
     /** Snap window to fill the entire visual bounds (respects taskbar). */
     private void snapToFull(javafx.geometry.Rectangle2D bounds) { /* internal */
-        stage.setX(bounds.getMinX());
-        stage.setY(bounds.getMinY());
-        stage.setWidth(bounds.getWidth());
-        stage.setHeight(bounds.getHeight());
+        stage.setMaximized(true);
         isCustomMaximized = true;
-        btnMaximize.setText("❐");
     }
 
     /** Snap window to fill the left half of the screen. */
@@ -1105,9 +1172,15 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
 
     @FXML
     private void handleMaximize(ActionEvent event) { /* internal */
+        if (windowsWindowManager != null) {
+            stage.setMaximized(!stage.isMaximized());
+            return;
+        }
+
         if (isCustomMaximized) {
             // Restore from snap/maximize
             isCustomMaximized = false;
+            stage.setMaximized(false);
             stage.setX(restoreX);
             stage.setY(restoreY);
             stage.setWidth(restoreW);
@@ -1124,6 +1197,12 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
                 stage.getY() + stage.getHeight() / 2
             );
             snapToFull(bounds);
+        }
+    }
+
+    private void updateMaximizeButton(boolean maximized) {
+        if (btnMaximize != null) {
+            btnMaximize.setText(maximized ? "❐" : "☐");
         }
     }
 

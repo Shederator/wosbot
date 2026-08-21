@@ -20,6 +20,13 @@ WINDOWS_STATIC_REQUIRED_FILES = (
     "app/lib/tesseract/eng.traineddata",
     "app/lib/tesseract/osd.traineddata",
     "app/lib/tesseract/chi_sim.traineddata",
+    "app/custom_tasks/README.md",
+    "app/custom_tasks/dead_shot.json",
+    "app/custom_tasks/dead_shot.txt",
+    "app/custom_tasks/expert_idle_exploration.json",
+    "app/custom_tasks/expert_idle_exploration.txt",
+    "app/custom_tasks/shield.java",
+    "app/custom_tasks/templates/deals/deadshot/event_tab.png",
 )
 MACOS_STATIC_REQUIRED_FILES = (
     "Contents/runtime/Contents/Home/lib/server/libjvm.dylib",
@@ -211,10 +218,17 @@ def inspect_image(
                     metadata_values = {}
                     break
                 metadata_values[key] = value
-            if (set(metadata_values) != {"pullRequestBuild", "authenticodePublisher"}
+            if (set(metadata_values) != {"version", "pullRequestBuild", "authenticodePublisher"}
                     or metadata_values["pullRequestBuild"] not in {"true", "false"}):
-                problems.append("Desktop JAR has an invalid PR-build update identity")
+                problems.append("Desktop JAR has invalid build metadata")
             else:
+                jar_version = re.fullmatch(
+                    r"frostguard-desktop-(.+)\.jar", desktop_jars[0].name
+                ).group(1)
+                if metadata_values["version"] != jar_version:
+                    problems.append(
+                        "Desktop JAR build metadata version does not match its filename"
+                    )
                 embedded_identity = metadata_values["pullRequestBuild"]
                 for config_path, config_identity in config_identities.items():
                     if config_identity != embedded_identity:

@@ -1,0 +1,25 @@
+Title: Dead Shot tutorial
+Status: Incomplete tutorial and manual regression sample; do not use unattended.
+
+Purpose:
+- Import an editable JSON flow into Task Builder.
+- Exercise enum-backed and file-backed template searches.
+- Demonstrate search areas, conditional branches, taps, swipes, and waits.
+
+How to test:
+1. Let Frostguard finish initialization, then stop the normal task queue.
+2. Open Task Builder and import dead_shot.json.
+3. Inspect the nodes and run them individually with the green play button.
+4. Save the task and confirm the JSON can be imported again.
+
+Current flow:
+- Find and open Deals.
+- Swipe to the Dead Shot event tab.
+- Find the bundled Dead Shot tab image and open the event.
+- Open the arrow screen and tap through the first row into row two.
+- Branch when the opened-chest image is found.
+
+Known limitations:
+- Chest detection should run after each arrow, beginning after row 1 column 2.
+- The exploration stops after row 2 column 1.
+- The flow is intended for Task Builder learning and testing, not production automation.

@@ -13,6 +13,7 @@ import dev.frostguard.api.domain.ResearchBadgeData;
 import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.config.PriorityConfigResolver;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
+import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -35,9 +36,23 @@ private static final int HAND_CLICK_OFFSET_X_VALUE = -73;
 
 private static final int HAND_CLICK_OFFSET_Y_VALUE = 88;
 
-private static final int MAX_SCROLL_ATTEMPTS_LIMIT = 10;
+private static final int RESEARCH_SCROLL_SETTLE_MILLIS = 2000;
 
-private static final int RESEARCH_SCROLL_SETTLE_MILLIS = 1000;
+private static final int RESEARCH_DRAG_DURATION_MILLIS = 750;
+
+private static final int RESEARCH_TOP_RESET_SWIPE_COUNT = 4;
+
+private static final int RESEARCH_TOP_RESET_GAP_MILLIS = 2000;
+
+private static final PointData RESEARCH_TOP_RESET_FROM = new PointData(489, 300);
+
+private static final PointData RESEARCH_TOP_RESET_TO = new PointData(489, 1050);
+
+private static final int RESEARCH_TOP_RESET_DURATION_MILLIS = 100;
+
+private static final PointData RESEARCH_SCROLL_DOWN_FROM = new PointData(489, 980);
+
+private static final PointData RESEARCH_SCROLL_DOWN_TO = new PointData(489, 380);
 
 private static final int RESEARCH_ENTRY_ATTEMPTS = 2;
 
@@ -358,33 +373,33 @@ private boolean openResearchTree() {
                 pressBack();
                 sleepTask(500);
                 navigationHelper.ensureCorrectScreenLocation(LaunchPoint.HOME);
-                marchHelper.openLeftMenuCitySection(true);
             }
 
-            ImageSearchResultData researchCenter = templateSearchHelper.locatePattern(
-                    TemplatesEnum.GAME_HOME_SHORTCUTS_RESEARCH_CENTER,
+            if (!navigationHelper.navigateToSidebarDestination(SidebarDestination.RESEARCH_CENTER)) {
+                logWarning(routineLogResearchLine("Research Center destination was not reached during entry attempt "
+                        + attempt + "/" + RESEARCH_ENTRY_ATTEMPTS + "."));
+                continue;
+            }
+
+            ImageSearchResultData researchButton = templateSearchHelper.locatePattern(
+                    TemplatesEnum.BUILDING_BUTTON_RESEARCH,
                     SearchConfigConstants.DEFAULT_SINGLE);
-            if (!isFound(researchCenter)) {
-                logWarning(routineLogResearchLine("Research Center shortcut not detected during entry attempt "
-                        + attempt + "/" + RESEARCH_ENTRY_ATTEMPTS + "."));
-                continue;
+            if (isFound(researchButton)) {
+                logInfo(routineLogResearchLine("Research building button detected. Entering Research tree."));
+                tapInside(researchButton);
+            } else {
+                PointData handTarget = findResearchEntryHandTarget();
+                if (handTarget == null) {
+                    logWarning(routineLogResearchLine("Neither Research building button nor entry hand was detected "
+                            + "on attempt " + attempt + "/" + RESEARCH_ENTRY_ATTEMPTS + "."));
+                    continue;
+                }
+
+                logInfo(routineLogResearchLine(
+                        "Research entry hand detected over the button. Entering at its relative target."));
+                tapNear(handTarget);
             }
-
-            logDebug(routineLogResearchLine("Pressing Research Center (entry attempt "
-                    + attempt + "/" + RESEARCH_ENTRY_ATTEMPTS + ")"));
-            tapInside(researchCenter);
-            sleepTask(1000);
-
-            PointData handTarget = findResearchEntryHandTarget();
-            if (handTarget == null) {
-                logWarning(routineLogResearchLine("Research entry hand was not detected on attempt "
-                        + attempt + "/" + RESEARCH_ENTRY_ATTEMPTS + "."));
-                continue;
-            }
-
-            logInfo(routineLogResearchLine("Research entry hand detected. Pressing it with offset."));
-            tapNear(handTarget);
-            sleepTask(300);
+            sleepTask(500);
 
             if (isResearchTreeVisible()) {
                 logInfo(routineLogResearchLine("Research tree screen verified."));
@@ -464,7 +479,7 @@ private ImageSearchResultData findResearchInPriorityCategories() {
             tapCategoryTab(category);
             sleepTask(500);
 
-            ImageSearchResultData candidate = findStartableResearchNode();
+            ImageSearchResultData candidate = findStartableResearchNode(category);
             if (!isFound(candidate)) {
                 logInfo(routineLogResearchLine("No available tech node in '" + category.label()
                         + "'. Trying next category."));
@@ -485,17 +500,18 @@ private void tapCategoryTab(ResearchCategoryEnum category) {
         }
     }
 
-private ImageSearchResultData findStartableResearchNode() {
-        logDebug(routineLogResearchLine("Normalizing research menu with swipes..."));
-        for (int i = 0; i < 3; i++) {
-            swipe(new PointData(489, 320), new PointData(489, 1156));
-            sleepTask(500);
+private ImageSearchResultData findStartableResearchNode(ResearchCategoryEnum category) {
+        logDebug(routineLogResearchLine("Resetting research menu to the top with fast momentum swipes..."));
+        for (int i = 0; i < RESEARCH_TOP_RESET_SWIPE_COUNT; i++) {
+            swipe(RESEARCH_TOP_RESET_FROM, RESEARCH_TOP_RESET_TO,
+                    RESEARCH_TOP_RESET_DURATION_MILLIS);
+            sleepTask(RESEARCH_TOP_RESET_GAP_MILLIS);
         }
 
         boolean topRowRepositioned = false;
-        for (int scrollAttempt = 0; scrollAttempt < MAX_SCROLL_ATTEMPTS_LIMIT; scrollAttempt++) {
+        int maximumDownSwipes = maximumDownSwipes(category);
+        for (int scrollPosition = 0; scrollPosition <= maximumDownSwipes; scrollPosition++) {
             checkPreemption();
-            sleepTask(RESEARCH_SCROLL_SETTLE_MILLIS);
 
             RawImageData researchScreenshot = emuManager.captureScreen(EMULATOR_NUMBER);
             if (researchScreenshot == null) {
@@ -517,7 +533,8 @@ private ImageSearchResultData findStartableResearchNode() {
                 }
                 logInfo(routineLogResearchLine(
                         "Top incomplete row is partially hidden; repositioning it below the category header."));
-                swipe(new PointData(489, 400), new PointData(489, 650));
+                swipe(new PointData(489, 430), new PointData(489, 650), RESEARCH_DRAG_DURATION_MILLIS);
+                sleepTask(RESEARCH_SCROLL_SETTLE_MILLIS);
                 topRowRepositioned = true;
                 continue;
             }
@@ -567,11 +584,24 @@ private ImageSearchResultData findStartableResearchNode() {
                 }
             }
 
-            logDebug(routineLogResearchLine("No startable research in the visible frontier, scrolling down (attempt "
-                    + (scrollAttempt + 1) + "/" + MAX_SCROLL_ATTEMPTS_LIMIT + ")"));
-            swipe(new PointData(489, 800), new PointData(489, 300));
+            if (scrollPosition == maximumDownSwipes) {
+                break;
+            }
+
+            logDebug(routineLogResearchLine("No startable research in the visible frontier, scrolling down (swipe "
+                    + (scrollPosition + 1) + "/" + maximumDownSwipes + ")"));
+            swipe(RESEARCH_SCROLL_DOWN_FROM, RESEARCH_SCROLL_DOWN_TO, RESEARCH_DRAG_DURATION_MILLIS);
+            sleepTask(RESEARCH_SCROLL_SETTLE_MILLIS);
         }
         return null;
+    }
+
+static int maximumDownSwipes(ResearchCategoryEnum category) {
+        return switch (category) {
+            case GROWTH -> 9;
+            case ECONOMY -> 8;
+            case BATTLE -> 15;
+        };
     }
 
 private List<ResearchNode> detectResearchNodes(RawImageData screenshot) {

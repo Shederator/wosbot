@@ -50,6 +50,12 @@ OTHER_FILES = [
     "docs/README.md",
     "docs/PRIVACY.md",
     "templates/city/cityIcon.png",
+    "custom_tasks/templates/deals/deadshot/event_tab.png",
+    "custom_tasks/README.md",
+    "custom_tasks/dead_shot.json",
+    "custom_tasks/dead_shot.txt",
+    "custom_tasks/expert_idle_exploration.json",
+    "custom_tasks/expert_idle_exploration.txt",
     "custom_tasks/shield.java",
 ]
 

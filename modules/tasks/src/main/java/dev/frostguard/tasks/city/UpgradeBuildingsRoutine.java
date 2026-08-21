@@ -1,9 +1,11 @@
 package dev.frostguard.tasks.city;
 
 import dev.frostguard.api.configs.TpDailyTaskEnum;
+import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.domain.*;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.nav.SearchConfigConstants;
+import dev.frostguard.engine.nav.SidebarSection;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.vision.convert.GameTimeUtils;
@@ -26,19 +28,21 @@ import static dev.frostguard.api.configs.TemplatesEnum.BUILDING_BUTTON_UPGRADE;
 import static dev.frostguard.api.configs.TemplatesEnum.BUILDING_SURVIVOR_BUTTON_UPGRADE;
 import static dev.frostguard.api.configs.TemplatesEnum.GAME_HOME_SHORTCUTS_HELP_REQUEST4;
 import static dev.frostguard.api.configs.TemplatesEnum.GAME_HOME_SHORTCUTS_OBTAIN;
+import static dev.frostguard.api.configs.TemplatesEnum.GAME_HOME_SHORTCUTS_UPGRADE_TEXT;
+import static dev.frostguard.api.configs.TemplatesEnum.GAME_HOME_FURNACE;
 import static dev.frostguard.api.configs.TemplatesEnum.REPLENISH_ALL_BUTTON;
-import static dev.frostguard.engine.nav.ButtonConstants.*;
 import static dev.frostguard.engine.nav.LeftMenuTextSettings.*;
 
 public class UpgradeBuildingsRoutine extends DelayedTask {
 
-private static final AreaData QUEUE_AREA_1_VALUE = new AreaData(new PointData(95, 377), new PointData(358, 398));
+private static final AreaData QUEUE_AREA_1_VALUE = new AreaData(new PointData(95, 370), new PointData(358, 407));
 
-private static final AreaData QUEUE_AREA_2_VALUE = new AreaData(new PointData(95, 450), new PointData(358, 474));
+private static final AreaData QUEUE_AREA_2_VALUE = new AreaData(new PointData(95, 443), new PointData(358, 480));
 
 private static final AreaData BUILDING_ACTION_BUTTON_AREA_VALUE = new AreaData(new PointData(190, 1160), new PointData(530, 1250));
 
-private static final AreaData BUILDING_CONFIRM_BUTTON_AREA_VALUE = new AreaData(new PointData(489, 1034), new PointData(500, 1050));
+private static final AreaData BUILDING_CONFIRM_UPGRADE_SEARCH_AREA_VALUE =
+        new AreaData(new PointData(350, 900), new PointData(700, 1255));
 
 private static final AreaData BUILDING_NAME_AREA_VALUE = new AreaData(new PointData(260, 510), new PointData(510, 575));
 
@@ -59,6 +63,19 @@ private static final SearchConfig REPLENISH_BUTTON_RECHECK = SearchConfig.builde
         .withDelay(300)
         .withThreshold(90)
         .withCoordinates(new PointData(180, 1070), new PointData(535, 1195))
+        .build();
+
+private static final SearchConfig BUILDING_CONFIRM_UPGRADE_SEARCH = SearchConfig.builder()
+        .withMaxAttempts(3)
+        .withDelay(300)
+        .withThreshold(90)
+        .withArea(BUILDING_CONFIRM_UPGRADE_SEARCH_AREA_VALUE)
+        .build();
+
+private static final SearchConfig BUILDING_CONFIRM_UPGRADE_POSTCONDITION = SearchConfig.builder()
+        .withMaxAttempts(1)
+        .withThreshold(90)
+        .withArea(BUILDING_CONFIRM_UPGRADE_SEARCH_AREA_VALUE)
         .build();
 
 private final List<AreaData> queues = new ArrayList<>(Arrays.asList(QUEUE_AREA_1_VALUE, QUEUE_AREA_2_VALUE));
@@ -135,7 +152,7 @@ public UpgradeBuildingsRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDail
                 return;
             }
 
-            if (rescheduleForRetainedReservation(attemptedQueues)) {
+            if (rescheduleForRetainedReservation(attemptedQueues, updatedResults)) {
                 marchHelper.closeLeftMenu();
                 return;
             }
@@ -144,7 +161,7 @@ public UpgradeBuildingsRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDail
             deferBasedOnBusyQueues(updatedResults);
             marchHelper.closeLeftMenu();
         } else {
-            if (rescheduleForRetainedReservation(Set.of())) {
+            if (rescheduleForRetainedReservation(Set.of(), queueResults)) {
                 marchHelper.closeLeftMenu();
                 return;
             }
@@ -157,7 +174,7 @@ public UpgradeBuildingsRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDail
         return LaunchPoint.HOME;
     }
 
-private enum QueueMood {
+enum QueueMood {
         IDLE,
 
         BUSY,
@@ -454,31 +471,30 @@ private void reserveConsumers(Set<ConstructionBlockerRegistry.Consumer> consumer
 }
 
 private void clearConstructionReservationWhenStarted(List<QueueReadout> queueResults) {
-        boolean hasIdleQueue = queueResults.stream()
-                .anyMatch(result -> result.state().status() == QueueMood.IDLE
-                        || result.state().status() == QueueMood.IDLE_TEMP);
-        Optional<QueueReadout> busyQueue = queueResults.stream()
-                .filter(result -> result.state().status() == QueueMood.BUSY)
-                .findFirst();
-        if (!shouldReleaseReservation(hasIdleQueue, busyQueue.isPresent())) {
-            return;
-        }
-
-        ConstructionBlockerRegistry.reservation(profile).ifPresent(reservation -> busyQueue
+        ConstructionBlockerRegistry.reservation(profile).ifPresent(reservation -> queueResults.stream()
+                .filter(result -> result.queueNumber() == reservation.constructionQueue())
+                .filter(result -> shouldReleaseReservation(result.state().status()))
+                .findFirst()
                 .ifPresent(result -> {
                     logInfo(routineLogUpgradeBuildingsLine(
-                            "No construction queue is free and queue " + result.queueNumber()
+                            "Reserved construction queue " + result.queueNumber()
                                     + " is BUSY; clearing production consumer lock "
                                     + reservation.consumers()));
                     ConstructionBlockerRegistry.clear(profile);
                 }));
     }
 
-static boolean shouldReleaseReservation(boolean hasIdleQueue, boolean hasBusyQueue) {
-        return !hasIdleQueue && hasBusyQueue;
+static boolean shouldReleaseReservation(QueueMood reservedQueueState) {
+        return reservedQueueState == QueueMood.BUSY;
 }
 
-private boolean rescheduleForRetainedReservation(Set<Integer> attemptedQueues) {
+static boolean shouldClearRetainedReservation(QueueMood reservedQueueState, boolean attempted, boolean expired) {
+        return reservedQueueState == QueueMood.NOT_PURCHASED
+                || attempted && (reservedQueueState == QueueMood.IDLE || reservedQueueState == QueueMood.IDLE_TEMP)
+                || expired;
+}
+
+private boolean rescheduleForRetainedReservation(Set<Integer> attemptedQueues, List<QueueReadout> queueResults) {
         Optional<ConstructionBlockerRegistry.Reservation> retainedReservation =
                 ConstructionBlockerRegistry.reservation(profile);
         if (retainedReservation.isEmpty()) {
@@ -487,20 +503,33 @@ private boolean rescheduleForRetainedReservation(Set<Integer> attemptedQueues) {
 
         ConstructionBlockerRegistry.Reservation reservation = retainedReservation.get();
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime retryAt = reservation.retryAt().isAfter(now)
-                ? reservation.retryAt()
-                : now.plusMinutes(BLOCKER_RELEASE_GRACE_MINUTES);
-        if (!retryAt.equals(reservation.retryAt())) {
-            ConstructionBlockerRegistry.reserve(profile, reservation.consumers(),
-                    reservation.constructionQueue(), retryAt);
+        QueueMood reservedQueueState = queueResults.stream()
+                .filter(result -> result.queueNumber() == reservation.constructionQueue())
+                .map(result -> result.state().status())
+                .findFirst()
+                .orElse(QueueMood.UNKNOWN);
+
+        boolean attempted = attemptedQueues.contains(reservation.constructionQueue());
+        boolean expired = !reservation.retryAt().isAfter(now);
+        if (shouldClearRetainedReservation(reservedQueueState, attempted, expired)) {
+            String reason = reservedQueueState == QueueMood.NOT_PURCHASED
+                    ? "reserved queue is not purchased"
+                    : attempted && (reservedQueueState == QueueMood.IDLE || reservedQueueState == QueueMood.IDLE_TEMP)
+                            ? "construction did not start on the reserved queue"
+                            : "the reservation expired without construction start evidence";
+            logWarning(routineLogUpgradeBuildingsLine(
+                    "Clearing production consumer lock for queue " + reservation.constructionQueue()
+                            + " because " + reason));
+            ConstructionBlockerRegistry.clear(profile);
+            return false;
         }
-        String attemptEvidence = attemptedQueues.contains(reservation.constructionQueue())
+        String attemptEvidence = attempted
                 ? "the construction attempt did not make the queue BUSY"
                 : "the reserved queue did not provide start evidence";
         logWarning(routineLogUpgradeBuildingsLine(
                 "Keeping production consumer lock because " + attemptEvidence
-                        + ". Retrying construction at " + retryAt));
-        this.reschedule(retryAt);
+                        + ". Retrying construction at " + reservation.retryAt()));
+        this.reschedule(reservation.retryAt());
         return true;
 }
 
@@ -593,7 +622,7 @@ private long decodeTimeToMinutes(String timeString) {
         }
     }
 
-private void handleCityBuilding() {
+private boolean handleCityBuilding() {
         logInfo(routineLogUpgradeBuildingsLine("Handling City Building"));
 
 
@@ -603,28 +632,28 @@ private void handleCityBuilding() {
         if (!upgradeButton.isFound()) {
             logWarning(routineLogUpgradeBuildingsLine("Upgrade button not detected"));
             this.setRecurring(false);
-            return;
+            return false;
         }
 
 
         PointData center = upgradeButton.getPoint();
-        startBuildingAction("upgrade",
+        return startBuildingAction("upgrade",
                 new PointData(center.getX() - TEMPLATE_TAP_RADIUS, center.getY() - TEMPLATE_TAP_RADIUS),
                 new PointData(center.getX() + TEMPLATE_TAP_RADIUS, center.getY() + TEMPLATE_TAP_RADIUS));
     }
 
-private void handleNewBuilding() {
+private boolean handleNewBuilding() {
         logInfo(routineLogUpgradeBuildingsLine("Handling New Building"));
 
         if (!isBuildButtonVisible()) {
             logWarning(routineLogUpgradeBuildingsLine("Build button not detected"));
-            return;
+            return false;
         }
 
-        startBuildingAction("build", BUILDING_ACTION_BUTTON_AREA_VALUE.topLeft(), BUILDING_ACTION_BUTTON_AREA_VALUE.bottomRight());
+        return startBuildingAction("build", BUILDING_ACTION_BUTTON_AREA_VALUE.topLeft(), BUILDING_ACTION_BUTTON_AREA_VALUE.bottomRight());
     }
 
-private void startBuildingAction(String actionName, PointData buttonTopLeft, PointData buttonBottomRight) {
+private boolean startBuildingAction(String actionName, PointData buttonTopLeft, PointData buttonBottomRight) {
         logInfo(routineLogUpgradeBuildingsLine("Starting building " + actionName + "..."));
 
         tapInside(buttonTopLeft, buttonBottomRight);
@@ -632,14 +661,73 @@ private void startBuildingAction(String actionName, PointData buttonTopLeft, Poi
 
 
         if (!refillResourcesIfNeededFlow()) {
-            return;
+            return false;
         }
 
 
-        tapInside(BUILDING_CONFIRM_BUTTON_AREA_VALUE.topLeft(), BUILDING_CONFIRM_BUTTON_AREA_VALUE.bottomRight());
+        boolean confirmed = "upgrade".equals(actionName)
+                ? confirmDetectedBuildingUpgrade()
+                : confirmNewBuilding();
+        if (!confirmed) {
+            return false;
+        }
 
 
         tapAllianceHelp();
+        return true;
+    }
+
+private boolean confirmDetectedBuildingUpgrade() {
+        BuildingUpgradeConfirmationFlow.Outcome outcome = BuildingUpgradeConfirmationFlow.run(
+                new BuildingUpgradeConfirmationFlow.Ui() {
+                    @Override
+                    public boolean tapDetectedUpgrade() {
+                        ImageSearchResultData upgrade = templateSearchHelper.locatePattern(
+                                GAME_HOME_SHORTCUTS_UPGRADE_TEXT, BUILDING_CONFIRM_UPGRADE_SEARCH);
+                        if (!upgrade.isFound()) {
+                            return false;
+                        }
+                        logInfo(routineLogUpgradeBuildingsLine(
+                                "Upgrade confirmation detected at " + upgrade.getPoint()
+                                        + " with score " + String.format(Locale.ROOT, "%.2f", upgrade.getMatchScore()) + "%"));
+                        return tapInside(upgrade);
+                    }
+
+                    @Override
+                    public void waitForTransition() {
+                        sleepTask(500);
+                    }
+
+                    @Override
+                    public boolean isConfirmationPending() {
+                        boolean upgradeActionVisible = templateSearchHelper.locatePattern(
+                                GAME_HOME_SHORTCUTS_UPGRADE_TEXT,
+                                BUILDING_CONFIRM_UPGRADE_POSTCONDITION).isFound();
+                        if (upgradeActionVisible) {
+                            return true;
+                        }
+                        return !templateSearchHelper.locatePattern(
+                                GAME_HOME_FURNACE,
+                                SearchConfigConstants.DEFAULT_SINGLE).isFound();
+                    }
+                },
+                3);
+
+        if (outcome == BuildingUpgradeConfirmationFlow.Outcome.CONFIRMED) {
+            logInfo(routineLogUpgradeBuildingsLine("Building upgrade confirmed; upgrade dialog closed"));
+            return true;
+        }
+
+        logWarning(routineLogUpgradeBuildingsLine(
+                outcome == BuildingUpgradeConfirmationFlow.Outcome.BUTTON_NOT_FOUND
+                        ? "Upgrade confirmation button not detected in the building dialog"
+                        : "Upgrade confirmation did not return to the Home screen after the detected tap"));
+        return false;
+    }
+
+private boolean confirmNewBuilding() {
+        tapInside(new PointData(489, 1034), new PointData(500, 1050));
+        return true;
     }
 
 private boolean isBuildButtonVisible() {
@@ -686,6 +774,16 @@ private void logQueueStateFlow(int queueIndex, UpgradeBuildingsRoutine.QueueSnap
 
 private UpgradeBuildingsRoutine.QueueSnapshot inspectQueueState(AreaData queueArea) {
         try {
+            ImageSearchResultData idle = templateSearchHelper.locatePattern(
+                    TemplatesEnum.MARCH_QUEUE_STATUS_IDLE,
+                    SearchConfig.builder()
+                            .withArea(queueArea)
+                            .withThreshold(88)
+                            .withMaxAttempts(1)
+                            .build());
+            if (idle.isFound()) {
+                return new UpgradeBuildingsRoutine.QueueSnapshot(UpgradeBuildingsRoutine.QueueMood.IDLE, null);
+            }
 
 
             OcrSettingsData[] settingsToTry = {
@@ -832,9 +930,9 @@ private boolean tapAllianceHelp() {
     }
 
 private void reachCityView() {
-        tapInside(LEFT_MENU.topLeft(), LEFT_MENU.bottomRight(), 1, 1000);
-        tapInside(LEFT_MENU_CITY_TAB.topLeft(), LEFT_MENU_CITY_TAB.bottomRight(), 1,
-                1000);
+        if (!navigationHelper.openSidebarSection(SidebarSection.CITY)) {
+            throw new IllegalStateException("Could not open the City sidebar section");
+        }
     }
 
 private QueueHandlingResult handleQueue(UpgradeBuildingsRoutine.QueueReadout queueResult) {
@@ -884,13 +982,15 @@ private QueueAttemptResult handleQueueAttempt(UpgradeBuildingsRoutine.QueueReado
                     SearchConfigConstants.RESILIENT);
 
             if (upgradeButton.isFound()) {
-                handleCityBuilding();
-                return QueueAttemptResult.completed();
+                return handleCityBuilding()
+                        ? QueueAttemptResult.completed()
+                        : QueueAttemptResult.unresolved();
             } else {
 
                 if (isBuildButtonVisible()) {
-                    handleNewBuilding();
-                    return QueueAttemptResult.completed();
+                    return handleNewBuilding()
+                            ? QueueAttemptResult.completed()
+                            : QueueAttemptResult.unresolved();
                 }
 
                 ProductionBlocker blocker = handleProductionBlocker(queueResult.queueNumber());

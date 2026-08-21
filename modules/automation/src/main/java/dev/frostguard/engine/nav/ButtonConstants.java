@@ -15,8 +15,5 @@ public final class ButtonConstants {
         return new AreaData(new PointData(x1, y1), new PointData(x2, y2));
     }
 
-    public static final AreaData LEFT_MENU                  = area(6, 535, 6, 565);
-    public static final AreaData LEFT_MENU_CITY_TAB         = area(90, 260, 140, 280);
-    public static final AreaData LEFT_MENU_WILDERNESS_TAB   = area(280, 260, 390, 280);
     public static final AreaData BOTTOM_MENU_ALLIANCE_BUTTON = area(512, 1202, 547, 1230);
 }

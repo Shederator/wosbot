@@ -4,10 +4,9 @@ Pull requests and `main` are built and tested by
 [`ci.yml`](../../.github/workflows/ci.yml) with read-only repository access.
 The authenticated
 [`signed-windows-channel-release.yml`](../../.github/workflows/signed-windows-channel-release.yml)
-publishes the native Nightly once per day. The old
-[`daily-windows-bundle.yml`](../../.github/workflows/daily-windows-bundle.yml)
-is manual-only and produces a private Actions artifact solely for an intentional
-legacy 2.x promotion.
+publishes the native Nightly once per day. Temporary combined-PR test releases
+are built by [`pr-test-build.yml`](../../.github/workflows/pr-test-build.yml)
+without changing Stable, Nightly, or `main`.
 
 ## When it runs
 
@@ -17,9 +16,9 @@ legacy 2.x promotion.
 | CI: `push` to `main` | Rechecks the integrated tree |
 | Native channel: `schedule` (daily) | Publishes an authenticated immutable MSI, advances `nightly`, and updates Discord |
 | Native channel: `workflow_dispatch` | Publishes an explicit Stable or additional Nightly from `main` |
-| Legacy bundle: `workflow_dispatch` | Produces a 2.x ZIP candidate as an Actions artifact; never publishes it |
+| PR test: `workflow_dispatch` | Combines selected open PRs and publishes an expiring test-only ZIP |
 
-## What the legacy ZIP verifier does
+## What the PR-test ZIP verifier does
 
 1. Checks out the repository **with Git LFS**, then asserts that every LFS asset
    was really materialised. The check fails if `git lfs ls-files` returns nothing
@@ -46,10 +45,10 @@ legacy 2.x promotion.
    [`smoke_test_bundle.sh`](smoke_test_bundle.sh): resolves the real entry points
    off the real bundle classpath, checks `java -jar` resolves the manifest
    `Class-Path`, and boots the shaded Telegram watcher for real.
-8. Uploads the bundle (version-tagged, no re-compression) and the Surefire
-   reports, and writes a job summary with size, JAR count and test count.
-9. Retains the verified ZIP only as a short-lived Actions artifact. It does not
-   own any public channel or Discord message.
+8. Uploads the untrusted build output for a fresh trusted runner, which repeats
+   the structural and launch checks before publication.
+9. Publishes only a clearly labelled, expiring `pr-test-*` prerelease and sends
+   the result back to the originating Discord request when applicable.
 
 ## Discord notifications
 
@@ -155,13 +154,7 @@ substitution really took effect in both directions.
   build-support/verification/smoke_test_bundle.sh packaging/desktop/target/frostguard-*-desktop-bundle.zip
   ```
 
-## Stable Windows releases
-
-[`stable-windows-release.yml`](../../.github/workflows/stable-windows-release.yml)
-is retained only for 2.x ZIP maintenance. It promotes a successful manual
-Legacy Windows Bundle Candidate run from `main` instead of rebuilding a
-potentially different tree. Frostguard 3 Stable releases use the authenticated
-Windows Channel Release workflow.
+## Stable release notifications
 
 [`stable_release_notify.py`](../notifications/stable_release_notify.py) updates one maintained
 Stable message without mentioning users. Its payload contains fixed release

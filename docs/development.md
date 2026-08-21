@@ -48,7 +48,7 @@ Run commands from the repository root:
 
 | Goal | Command | Result |
 |:-----|:--------|:-------|
-| Build and test everything | `./mvnw package` | Builds the complete reactor, runs its tests, and creates the transitional desktop ZIP |
+| Build and test everything | `./mvnw package` | Builds the complete reactor, runs its tests, and creates the portable PR-test ZIP |
 | Test one area | `./mvnw -pl modules/tasks -am test` | Tests the selected module and required upstream modules |
 | Start Frostguard | `./mvnw javafx:run` | Compiles what is needed and starts an isolated development instance |
 | Reproduce a clean verification build | `./mvnw clean install` | Deletes generated output, then rebuilds and tests the reactor |
@@ -83,7 +83,7 @@ To test autostart behavior from PowerShell:
 ## Build outputs and Windows packaging
 
 Normal module artifacts are written below their respective `target/`
-directories. `./mvnw package` also writes the transitional PR-test desktop ZIP
+directories. `./mvnw package` also writes the portable PR-test desktop ZIP
 below `packaging/desktop/target`; it does not install or update Frostguard.
 Individual module JARs are not standalone distributions.
 

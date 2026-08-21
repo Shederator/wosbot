@@ -2,8 +2,11 @@ package dev.frostguard.engine.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -104,6 +107,104 @@ class TaskBuilderServiceTest {
             assertEquals("search deal", reloaded.getNodes().get(0).getNodeName());
             assertEquals("HOME_DEALS_BUTTON", reloaded.getNodes().get(0).getParam("templatePath"));
             assertEquals("wait for panel", reloaded.getNodes().get(1).getNodeName());
+        } finally {
+            restoreWorkspace(originalWorkspace);
+        }
+    }
+
+    @Test
+    void stagesPickedTemplatesWithPortableCollisionSafeNames() throws Exception {
+        String originalWorkspace = System.getProperty(WorkspacePaths.WORKSPACE_PROPERTY);
+        System.setProperty(WorkspacePaths.WORKSPACE_PROPERTY, tempDir.toString());
+        try {
+            TaskBuilderService service = new TaskBuilderService();
+            Path firstSource = tempDir.resolve("first").resolve("event tab.png");
+            Path secondSource = tempDir.resolve("second").resolve("event tab.png");
+            Files.createDirectories(firstSource.getParent());
+            Files.createDirectories(secondSource.getParent());
+            Files.writeString(firstSource, "first");
+            Files.writeString(secondSource, "second");
+
+            String first = service.stageCustomTemplate(firstSource);
+            String same = service.stageCustomTemplate(firstSource);
+            String second = service.stageCustomTemplate(secondSource);
+
+            assertEquals("templates/event_tab.png", first);
+            assertEquals(first, same);
+            assertEquals("templates/event_tab-2.png", second);
+            assertEquals("first", Files.readString(tempDir.resolve("custom-tasks").resolve(first)));
+            assertEquals("second", Files.readString(tempDir.resolve("custom-tasks").resolve(second)));
+        } finally {
+            restoreWorkspace(originalWorkspace);
+        }
+    }
+
+    @Test
+    void saveAsCopiesRelativeTemplatesBesideTheBuilderDefinition() throws Exception {
+        String originalWorkspace = System.getProperty(WorkspacePaths.WORKSPACE_PROPERTY);
+        System.setProperty(WorkspacePaths.WORKSPACE_PROPERTY, tempDir.resolve("workspace").toString());
+        try {
+            Path importedDirectory = tempDir.resolve("imported");
+            Path sourceTemplate = importedDirectory.resolve("templates").resolve("event_tab.png");
+            Files.createDirectories(sourceTemplate.getParent());
+            Files.writeString(sourceTemplate, "png");
+            Path sourceJson = importedDirectory.resolve("flow.json");
+            Files.writeString(sourceJson, """
+                    {
+                      "title": "Portable flow",
+                      "initialScreen": "ANY",
+                      "steps": [{
+                        "stepId": 1,
+                        "kind": "TEMPLATE_SEARCH",
+                        "attributes": {"templatePath": "templates/event_tab.png"},
+                        "successorId": -1,
+                        "alternateId": -1
+                      }]
+                    }
+                    """);
+
+            TaskBuilderService service = new TaskBuilderService();
+            service.loadDefinition(sourceJson.toFile(), "0");
+            Path savedJson = tempDir.resolve("shared-copy").resolve("flow.json");
+            service.saveCurrentTaskToCustomTasks("Portable flow", savedJson);
+
+            assertEquals("png", Files.readString(
+                    savedJson.getParent().resolve("templates").resolve("event_tab.png")));
+        } finally {
+            restoreWorkspace(originalWorkspace);
+        }
+    }
+
+    @Test
+    void failedSerializationCannotReplaceAnExistingBuilderFile() throws Exception {
+        String originalWorkspace = System.getProperty(WorkspacePaths.WORKSPACE_PROPERTY);
+        System.setProperty(WorkspacePaths.WORKSPACE_PROPERTY, tempDir.toString());
+        try {
+            ObjectMapper failingMapper = new ObjectMapper() {
+                @Override
+                public void writeValue(File resultFile, Object value) throws IOException {
+                    Files.writeString(resultFile.toPath(), "partial");
+                    throw new IOException("simulated serialization failure");
+                }
+            };
+            TaskBuilderService service = new TaskBuilderService(failingMapper);
+            service.startSession("Safe save", "0");
+            service.addNode(new AutomationStep(1, FlowStepKind.WAIT));
+
+            Path builderFile = tempDir.resolve("custom-tasks").resolve("safe.json");
+            Path javaFile = builderFile.resolveSibling("safe.java");
+            Files.createDirectories(builderFile.getParent());
+            Files.writeString(builderFile, "known-good-json");
+            Files.writeString(javaFile, "known-good-java");
+
+            assertThrows(IOException.class,
+                    () -> service.saveCurrentTaskToCustomTasks("Safe save", builderFile));
+
+            assertEquals("known-good-json", Files.readString(builderFile));
+            assertEquals("known-good-java", Files.readString(javaFile));
+            try (var files = Files.list(builderFile.getParent())) {
+                assertFalse(files.anyMatch(path -> path.getFileName().toString().endsWith(".tmp")));
+            }
         } finally {
             restoreWorkspace(originalWorkspace);
         }

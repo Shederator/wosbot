@@ -237,7 +237,10 @@ private void resetTreeToTop() {
 	}
 
 private ImageSearchResultData findThumbsUp(SearchConfig searchConfig) {
-		return templateSearchHelper.locatePattern(
+		ImageSearchResultData current = templateSearchHelper.locatePattern(
+				TemplatesEnum.ALLIANCE_TECH_THUMB_UP_CURRENT,
+				searchConfig);
+		return current.isFound() ? current : templateSearchHelper.locatePattern(
 				TemplatesEnum.ALLIANCE_TECH_THUMB_UP,
 				searchConfig);
 	}
