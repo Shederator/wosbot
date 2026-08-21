@@ -28,6 +28,8 @@ import static dev.frostguard.api.configs.TemplatesEnum.BUILDING_BUTTON_UPGRADE;
 import static dev.frostguard.api.configs.TemplatesEnum.BUILDING_SURVIVOR_BUTTON_UPGRADE;
 import static dev.frostguard.api.configs.TemplatesEnum.GAME_HOME_SHORTCUTS_HELP_REQUEST4;
 import static dev.frostguard.api.configs.TemplatesEnum.GAME_HOME_SHORTCUTS_OBTAIN;
+import static dev.frostguard.api.configs.TemplatesEnum.GAME_HOME_SHORTCUTS_UPGRADE_TEXT;
+import static dev.frostguard.api.configs.TemplatesEnum.GAME_HOME_FURNACE;
 import static dev.frostguard.api.configs.TemplatesEnum.REPLENISH_ALL_BUTTON;
 import static dev.frostguard.engine.nav.LeftMenuTextSettings.*;
 
@@ -39,7 +41,8 @@ private static final AreaData QUEUE_AREA_2_VALUE = new AreaData(new PointData(95
 
 private static final AreaData BUILDING_ACTION_BUTTON_AREA_VALUE = new AreaData(new PointData(190, 1160), new PointData(530, 1250));
 
-private static final AreaData BUILDING_CONFIRM_BUTTON_AREA_VALUE = new AreaData(new PointData(489, 1034), new PointData(500, 1050));
+private static final AreaData BUILDING_CONFIRM_UPGRADE_SEARCH_AREA_VALUE =
+        new AreaData(new PointData(350, 900), new PointData(700, 1255));
 
 private static final AreaData BUILDING_NAME_AREA_VALUE = new AreaData(new PointData(260, 510), new PointData(510, 575));
 
@@ -60,6 +63,19 @@ private static final SearchConfig REPLENISH_BUTTON_RECHECK = SearchConfig.builde
         .withDelay(300)
         .withThreshold(90)
         .withCoordinates(new PointData(180, 1070), new PointData(535, 1195))
+        .build();
+
+private static final SearchConfig BUILDING_CONFIRM_UPGRADE_SEARCH = SearchConfig.builder()
+        .withMaxAttempts(3)
+        .withDelay(300)
+        .withThreshold(90)
+        .withArea(BUILDING_CONFIRM_UPGRADE_SEARCH_AREA_VALUE)
+        .build();
+
+private static final SearchConfig BUILDING_CONFIRM_UPGRADE_POSTCONDITION = SearchConfig.builder()
+        .withMaxAttempts(1)
+        .withThreshold(90)
+        .withArea(BUILDING_CONFIRM_UPGRADE_SEARCH_AREA_VALUE)
         .build();
 
 private final List<AreaData> queues = new ArrayList<>(Arrays.asList(QUEUE_AREA_1_VALUE, QUEUE_AREA_2_VALUE));
@@ -606,7 +622,7 @@ private long decodeTimeToMinutes(String timeString) {
         }
     }
 
-private void handleCityBuilding() {
+private boolean handleCityBuilding() {
         logInfo(routineLogUpgradeBuildingsLine("Handling City Building"));
 
 
@@ -616,28 +632,28 @@ private void handleCityBuilding() {
         if (!upgradeButton.isFound()) {
             logWarning(routineLogUpgradeBuildingsLine("Upgrade button not detected"));
             this.setRecurring(false);
-            return;
+            return false;
         }
 
 
         PointData center = upgradeButton.getPoint();
-        startBuildingAction("upgrade",
+        return startBuildingAction("upgrade",
                 new PointData(center.getX() - TEMPLATE_TAP_RADIUS, center.getY() - TEMPLATE_TAP_RADIUS),
                 new PointData(center.getX() + TEMPLATE_TAP_RADIUS, center.getY() + TEMPLATE_TAP_RADIUS));
     }
 
-private void handleNewBuilding() {
+private boolean handleNewBuilding() {
         logInfo(routineLogUpgradeBuildingsLine("Handling New Building"));
 
         if (!isBuildButtonVisible()) {
             logWarning(routineLogUpgradeBuildingsLine("Build button not detected"));
-            return;
+            return false;
         }
 
-        startBuildingAction("build", BUILDING_ACTION_BUTTON_AREA_VALUE.topLeft(), BUILDING_ACTION_BUTTON_AREA_VALUE.bottomRight());
+        return startBuildingAction("build", BUILDING_ACTION_BUTTON_AREA_VALUE.topLeft(), BUILDING_ACTION_BUTTON_AREA_VALUE.bottomRight());
     }
 
-private void startBuildingAction(String actionName, PointData buttonTopLeft, PointData buttonBottomRight) {
+private boolean startBuildingAction(String actionName, PointData buttonTopLeft, PointData buttonBottomRight) {
         logInfo(routineLogUpgradeBuildingsLine("Starting building " + actionName + "..."));
 
         tapInside(buttonTopLeft, buttonBottomRight);
@@ -645,14 +661,73 @@ private void startBuildingAction(String actionName, PointData buttonTopLeft, Poi
 
 
         if (!refillResourcesIfNeededFlow()) {
-            return;
+            return false;
         }
 
 
-        tapInside(BUILDING_CONFIRM_BUTTON_AREA_VALUE.topLeft(), BUILDING_CONFIRM_BUTTON_AREA_VALUE.bottomRight());
+        boolean confirmed = "upgrade".equals(actionName)
+                ? confirmDetectedBuildingUpgrade()
+                : confirmNewBuilding();
+        if (!confirmed) {
+            return false;
+        }
 
 
         tapAllianceHelp();
+        return true;
+    }
+
+private boolean confirmDetectedBuildingUpgrade() {
+        BuildingUpgradeConfirmationFlow.Outcome outcome = BuildingUpgradeConfirmationFlow.run(
+                new BuildingUpgradeConfirmationFlow.Ui() {
+                    @Override
+                    public boolean tapDetectedUpgrade() {
+                        ImageSearchResultData upgrade = templateSearchHelper.locatePattern(
+                                GAME_HOME_SHORTCUTS_UPGRADE_TEXT, BUILDING_CONFIRM_UPGRADE_SEARCH);
+                        if (!upgrade.isFound()) {
+                            return false;
+                        }
+                        logInfo(routineLogUpgradeBuildingsLine(
+                                "Upgrade confirmation detected at " + upgrade.getPoint()
+                                        + " with score " + String.format(Locale.ROOT, "%.2f", upgrade.getMatchScore()) + "%"));
+                        return tapInside(upgrade);
+                    }
+
+                    @Override
+                    public void waitForTransition() {
+                        sleepTask(500);
+                    }
+
+                    @Override
+                    public boolean isConfirmationPending() {
+                        boolean upgradeActionVisible = templateSearchHelper.locatePattern(
+                                GAME_HOME_SHORTCUTS_UPGRADE_TEXT,
+                                BUILDING_CONFIRM_UPGRADE_POSTCONDITION).isFound();
+                        if (upgradeActionVisible) {
+                            return true;
+                        }
+                        return !templateSearchHelper.locatePattern(
+                                GAME_HOME_FURNACE,
+                                SearchConfigConstants.DEFAULT_SINGLE).isFound();
+                    }
+                },
+                3);
+
+        if (outcome == BuildingUpgradeConfirmationFlow.Outcome.CONFIRMED) {
+            logInfo(routineLogUpgradeBuildingsLine("Building upgrade confirmed; upgrade dialog closed"));
+            return true;
+        }
+
+        logWarning(routineLogUpgradeBuildingsLine(
+                outcome == BuildingUpgradeConfirmationFlow.Outcome.BUTTON_NOT_FOUND
+                        ? "Upgrade confirmation button not detected in the building dialog"
+                        : "Upgrade confirmation did not return to the Home screen after the detected tap"));
+        return false;
+    }
+
+private boolean confirmNewBuilding() {
+        tapInside(new PointData(489, 1034), new PointData(500, 1050));
+        return true;
     }
 
 private boolean isBuildButtonVisible() {
@@ -907,13 +982,15 @@ private QueueAttemptResult handleQueueAttempt(UpgradeBuildingsRoutine.QueueReado
                     SearchConfigConstants.RESILIENT);
 
             if (upgradeButton.isFound()) {
-                handleCityBuilding();
-                return QueueAttemptResult.completed();
+                return handleCityBuilding()
+                        ? QueueAttemptResult.completed()
+                        : QueueAttemptResult.unresolved();
             } else {
 
                 if (isBuildButtonVisible()) {
-                    handleNewBuilding();
-                    return QueueAttemptResult.completed();
+                    return handleNewBuilding()
+                            ? QueueAttemptResult.completed()
+                            : QueueAttemptResult.unresolved();
                 }
 
                 ProductionBlocker blocker = handleProductionBlocker(queueResult.queueNumber());
