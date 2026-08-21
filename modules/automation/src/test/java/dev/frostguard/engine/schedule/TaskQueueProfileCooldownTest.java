@@ -112,6 +112,18 @@ class TaskQueueProfileCooldownTest {
         assertFalse(TaskQueue.requiresSlotAcquisition(LocalDateTime.now()));
     }
 
+    @Test
+    void idleExceededTickWithoutLeaseDoesNotReacquireImmediately() {
+        AccountDescriptor profile = persistedProfile();
+        RecordingTaskQueue queue = new RecordingTaskQueue(profile);
+        queue.statusModel.setIdleTimeExceeded(true);
+
+        queue.runSchedulerTick();
+
+        assertEquals(0, queue.slotAcquisitionCount,
+                "idle-exceeded scheduler ticks must not reacquire a missing lease before pause/resume");
+    }
+
     private static AccountDescriptor persistedProfile() {
         return ProfileService.obtain().fetchAllAccounts().stream().findFirst().orElseThrow();
     }

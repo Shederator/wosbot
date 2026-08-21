@@ -1,7 +1,5 @@
 package dev.frostguard.engine.schedule;
 
-import dev.frostguard.api.runtime.WorkspacePaths;
-
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -25,11 +23,12 @@ import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.configs.TpMessageSeverityEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ActionRequiredIncidentReport;
-import dev.frostguard.api.domain.TaskFailureReport;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.ProfileStatusData;
+import dev.frostguard.api.domain.TaskFailureReport;
 import dev.frostguard.api.domain.TaskQueueStatusData;
 import dev.frostguard.api.domain.TaskStateData;
+import dev.frostguard.api.runtime.WorkspacePaths;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.emulator.QueuePositionListener;
 import dev.frostguard.engine.error.ADBConnectionException;
@@ -43,13 +42,13 @@ import dev.frostguard.engine.schedule.inject.InjectionRule;
 import dev.frostguard.engine.schedule.preempt.PreemptionRule;
 import dev.frostguard.engine.schedule.priority.DefaultTaskPriorityProvider;
 import dev.frostguard.engine.schedule.priority.TaskPriorityProvider;
-import dev.frostguard.engine.service.AnalyticsService;
 import dev.frostguard.engine.service.ActionRequiredIncidentService;
-import dev.frostguard.engine.service.TaskFailureIncidentService;
+import dev.frostguard.engine.service.AnalyticsService;
 import dev.frostguard.engine.service.ConfigService;
 import dev.frostguard.engine.service.LoggingService;
 import dev.frostguard.engine.service.ProfileService;
 import dev.frostguard.engine.service.ScheduleService;
+import dev.frostguard.engine.service.TaskFailureIncidentService;
 import dev.frostguard.engine.service.TaskManagementService;
 import dev.frostguard.vision.convert.GameTimeUtils;
 
@@ -441,7 +440,7 @@ public class TaskQueue {
             onPausedTick();
             return;
         }
-        if (requiresSlotAcquisition(sessionOrigin)) {
+        if (!statusModel.isIdleTimeExceeded() && requiresSlotAcquisition(sessionOrigin)) {
             emitInfo("No active device lease - re-acquiring slot");
             acquireSlot();
         } else if (statusModel.isReadyToReconnect()
@@ -906,11 +905,13 @@ public class TaskQueue {
                 }
             }
 
-            suspendDevice(statusModel.getDelayUntil(), false);
+            suspendDevice(statusModel.getDelayUntil(), hasEnabledSiblingOnSameEmulator());
                     // Changed by pernerch | Date: 2026-07-02 | Why: force immediate activation of the
                     // selected peer queue after slot handover to eliminate idle dead time.
             statusModel.setIdleTimeExceeded(true);
-        } else if (statusModel.isIdleTimeExceeded() && LocalDateTime.now().plusMinutes(1).isAfter(statusModel.getDelayUntil())) {
+        } else if (statusModel.isIdleTimeExceeded()
+                && !requiresSlotAcquisition(sessionOrigin)
+                && LocalDateTime.now().plusMinutes(1).isAfter(statusModel.getDelayUntil())) {
             emitInfo("Next task approaching - re-acquiring slot"); acquireSlot();
             enqueue(DelayedTaskRegistry.create(TpDailyTaskEnum.INITIALIZE, profile));
             statusModel.setIdleTimeExceeded(false);

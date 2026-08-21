@@ -21,6 +21,15 @@ import dev.frostguard.vision.ocr.ResilientOcrExecutor;
 public class CharacterSwitchHelper {
 
     public static final int CHARACTER_SWITCH_RELOAD_DELAY_MS = 5000;
+    static final int PROFILE_MENU_SETTLE_DELAY_MS = 1000;
+    private static final int VERIFICATION_RETRY_DELAY_MS = 400;
+    private static final int MAX_VERIFICATION_ATTEMPTS = 2;
+
+    public enum CharacterVerificationResult {
+        MATCHED,
+        MISMATCHED,
+        UNREADABLE
+    }
 
     private final EmulatorController emu;
     private final String dev;
@@ -40,24 +49,49 @@ public class CharacterSwitchHelper {
 
     // --- Character verification ---
 
-    public boolean verifyCurrentCharacter(AccountDescriptor p) {
+    public CharacterVerificationResult verifyCurrentCharacter(AccountDescriptor p) {
         String wantName = p.getCharacterName(), wantId = p.getCharacterId();
-        if (blank(wantName) && blank(wantId)) { log.debug("No character config, skipping"); return true; }
+        if (blank(wantName) && blank(wantId)) {
+            log.debug("No character config, skipping");
+            return CharacterVerificationResult.MATCHED;
+        }
         log.info("Verifying character: name='" + wantName + "' id='" + wantId + "'");
 
-        taps.tapInside(CommonGameAreas.PROFILE_AVATAR, 1, 500);
+        openProfileMenu();
 
-        String liveId = ocrRead(CommonGameAreas.CHARACTER_ID_OCR_AREA, idOcrCfg());
-        String liveName = ocrRead(CommonGameAreas.CHARACTER_NAME_OCR_AREA, nameOcrCfg());
-        log.debug("Live char: name='" + liveName + "' id='" + liveId + "'");
+        for (int attempt = 1; attempt <= MAX_VERIFICATION_ATTEMPTS; attempt++) {
+            String liveId = ocrRead(CommonGameAreas.CHARACTER_ID_OCR_AREA, idOcrCfg());
+            String liveName = ocrRead(CommonGameAreas.CHARACTER_NAME_OCR_AREA, nameOcrCfg());
+            log.debug("Live char: name='" + liveName + "' id='" + liveId + "'");
 
-        boolean idOk = blank(wantId) || (!blank(liveId) && wantId.equals(liveId));
-        boolean nameOk = blank(wantName) || (!blank(liveName) && nameMatch(liveName, wantName));
-        if (!blank(wantId) && blank(liveId)) log.warn("ID configured but OCR failed");
-        if (!blank(wantName) && blank(liveName)) log.warn("Name configured but OCR failed");
+            CharacterVerificationResult result = evaluateCharacterEvidence(
+                    wantName, wantId, liveName, liveId);
+            if (result == CharacterVerificationResult.MATCHED) {
+                log.info("Char verified OK");
+                emu.pressBack(dev);
+                return CharacterVerificationResult.MATCHED;
+            }
+            if (result == CharacterVerificationResult.MISMATCHED) {
+                log.warn("Char mismatch");
+                emu.pressBack(dev);
+                return CharacterVerificationResult.MISMATCHED;
+            }
 
-        if (idOk || nameOk) { log.info("Char verified OK"); emu.pressBack(dev); return true; }
-        log.warn("Char mismatch"); return false;
+            if (!blank(wantId) && blank(liveId)) {
+                log.warn("ID configured but OCR failed");
+            }
+            if (!blank(wantName) && blank(liveName)) {
+                log.warn("Name configured but OCR failed");
+            }
+            if (attempt < MAX_VERIFICATION_ATTEMPTS) {
+                log.info("Character verification was unreadable. Retrying once before switching.");
+                sleep(VERIFICATION_RETRY_DELAY_MS);
+            }
+        }
+
+        log.warn("Character verification stayed unreadable");
+        emu.pressBack(dev);
+        return CharacterVerificationResult.UNREADABLE;
     }
 
     // --- Character switching ---
@@ -67,12 +101,18 @@ public class CharacterSwitchHelper {
         if (blank(target)) { log.error("No character name configured"); return false; }
         log.info("Switching to '" + target + "' server=" + p.getCharacterServer());
 
+        openProfileMenu();
+
         if (!tapTemplate(TemplatesEnum.GAME_PROFILE_SETTINGS_BUTTON,
                 CommonGameAreas.PROFILE_SETTINGS_BUTTON_AREA)) {
-            log.error("Settings button not found"); return false;
+            log.error("Settings button not found");
+            backOut(1);
+            return false;
         }
         if (!tapTemplate(TemplatesEnum.GAME_PROFILE_SETTINGS_SWITCH_CHARACTER_BUTTON, null)) {
-            log.error("Switch Character button not found"); emu.pressBack(dev); return false;
+            log.error("Switch Character button not found");
+            backOut(2);
+            return false;
         }
         sleep(2000);
 
@@ -84,7 +124,8 @@ public class CharacterSwitchHelper {
             // Check if already active via checkmark badge
             if (checkmarkAt(hit.getPoint())) {
                 log.info("Already active — done");
-                emu.pressBack(dev); sleep(500); return true;
+                backOut(2);
+                return true;
             }
 
             // Tap and confirm
@@ -96,6 +137,41 @@ public class CharacterSwitchHelper {
         // Changed by pernerch | Date: 2026-07-02 | Why: close emulator only as final fallback after repeated switch failure.
         log.error("Character not found after 3 passes — closing emulator");
         emu.closeEmulator(dev); return false;
+    }
+
+    static CharacterVerificationResult evaluateCharacterEvidence(
+            String wantedName, String wantedId, String liveName, String liveId) {
+        boolean hasWantedId = !blank(wantedId);
+        boolean hasWantedName = !blank(wantedName);
+        boolean hasLiveId = !blank(liveId);
+        boolean hasLiveName = !blank(liveName);
+
+        if (!hasWantedId && !hasWantedName) {
+            return CharacterVerificationResult.MATCHED;
+        }
+        if (!hasLiveId && !hasLiveName) {
+            return CharacterVerificationResult.UNREADABLE;
+        }
+
+        boolean idMatches = hasWantedId && hasLiveId && wantedId.equals(liveId);
+        boolean nameMatches = hasWantedName && hasLiveName && nameMatch(liveName, wantedName);
+
+        if (hasWantedId && hasWantedName) {
+            if (hasLiveId && hasLiveName) {
+                return idMatches && nameMatches
+                        ? CharacterVerificationResult.MATCHED
+                        : CharacterVerificationResult.MISMATCHED;
+            }
+            return CharacterVerificationResult.UNREADABLE;
+        }
+        if (hasWantedId) {
+            return hasLiveId
+                    ? (idMatches ? CharacterVerificationResult.MATCHED : CharacterVerificationResult.MISMATCHED)
+                    : CharacterVerificationResult.UNREADABLE;
+        }
+        return hasLiveName
+                ? (nameMatches ? CharacterVerificationResult.MATCHED : CharacterVerificationResult.MISMATCHED)
+                : CharacterVerificationResult.UNREADABLE;
     }
 
     // --- Roster scanning (merged active + inactive search) ---
@@ -170,7 +246,19 @@ public class CharacterSwitchHelper {
         taps.tapInside(hit, 1, 500); return true;
     }
 
-    private boolean nameMatch(String ocrText, String expected) {
+    private void openProfileMenu() {
+        taps.tapInside(CommonGameAreas.PROFILE_AVATAR, 1, 500);
+        sleep(PROFILE_MENU_SETTLE_DELAY_MS);
+    }
+
+    private void backOut(int count) {
+        for (int press = 0; press < count; press++) {
+            emu.pressBack(dev);
+            sleep(500);
+        }
+    }
+
+    private static boolean nameMatch(String ocrText, String expected) {
         if (blank(ocrText) || blank(expected)) return false;
         String a = ocrText.trim().replaceAll("\\s+", "");
         String b = expected.trim().replaceAll("\\s+", "");
@@ -181,7 +269,7 @@ public class CharacterSwitchHelper {
         return ocr.attemptRecognition(area, 3, 300L, cfg, t -> t != null && !t.trim().isEmpty(), String::trim);
     }
 
-    private static boolean blank(String s) { return s == null || s.isEmpty(); }
+    private static boolean blank(String s) { return s == null || s.isBlank(); }
 
     private void scrollDown() {
         emu.swipeScreen(dev, new PointData(360, 800), new PointData(360, 400));
