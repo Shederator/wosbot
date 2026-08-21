@@ -459,7 +459,7 @@ private static final DateTimeFormatter STRICT_HMS =
     // place. Both now route through this one shared normalizer.
     private static final Pattern DROPPED_MIDDLE_COLON = Pattern.compile("(\\d{2})(\\d{2}):(\\d{2})");
 
-    // the operator, 2026-08-08 (originally parseDuration-only -- see note above on why that split
+    // (originally parseDuration-only -- see note above on why that split
     // let this same gap reopen for isAcceptedFormat): the game prints short countdowns
     // without a leading zero ("2:41:07"), but the two-digit-hour checkers below don't
     // match a single digit. Tested live 2026-08-12: "2:41:07" failed isAcceptedFormat

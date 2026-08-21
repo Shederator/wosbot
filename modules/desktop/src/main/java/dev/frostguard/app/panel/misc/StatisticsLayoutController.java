@@ -257,7 +257,7 @@ public class StatisticsLayoutController extends AbstractProfileController {
     private TelemetryReport telemetry = TelemetryReport.load(NO_PROFILE_SELECTED_ID);
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    /** The "what the bot did" timeframe segments. the operator/2026-08-15: dropdown replaces the old
+    /** The "what the bot did" timeframe segments. Dropdown replaces the old
      *  button row -- Past Hour and This Month are new, This Week is the renamed Last 7 Days
      *  (same rolling-7-day math, just a friendlier label). A custom range was explicitly
      *  descoped ("let's just do those for now"). */
