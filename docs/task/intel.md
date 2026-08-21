@@ -10,6 +10,13 @@ switches to Wilderness, and opens Intel through the right-side Intel shortcut.
 Mission completion returns through that same Wilderness shortcut; it must not
 route through City or the Lighthouse.
 
+The green `Intel Gain` label describes new missions, not an Intel cycle that is
+already in progress. After the routine deploys a Beast and schedules its return
+ETA, a follow-up run keeps the cycle active and re-enters through Wilderness even
+when Daily is no longer green. The cycle ends only after the Intel cooldown is
+read successfully. When Daily is not green and no cycle is active, schedule the
+next 00:00, 08:00, or 16:00 UTC Intel refresh instead of polling every ten minutes.
+
 `Hide after mission completion` may remove completed rows and shift every row
 below them. Navigation must not change that account preference. A missing
 Lighthouse Intel icon after the bounded icon scan is treated as unavailable,
@@ -40,6 +47,8 @@ Intel Beast deployment follows these constraints:
 - accept a read travel time only when it is greater than zero and below five
   minutes;
 - reserve the Intel march until `travel time * 2` has elapsed;
+- refresh elapsed Intel ETAs again after Survivor/Journey processing and settle
+  waits, before deciding that only occupied march-bound missions remain;
 - when a flag formation is configured, allow only one Intel Beast march at a
   time and retry at its calculated return time.
 
