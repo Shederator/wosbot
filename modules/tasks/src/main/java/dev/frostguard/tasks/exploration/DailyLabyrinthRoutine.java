@@ -66,8 +66,26 @@ public class DailyLabyrinthRoutine extends DelayedTask {
             java.util.regex.Pattern.compile("([0-9]{1,2})\\s*-\\s*([0-9]{1,2})");
     private static final java.util.regex.Pattern ATTEMPTS_PATTERN =
             java.util.regex.Pattern.compile("([0-9]{1,2})\\s*$");
-    /** Hard stop so a misread can never spin the loop; the game's own cap is 5/zone/day. */
-    private static final int MAX_WIN_STREAK_ATTEMPTS = 5;
+    /**
+     * Safety bound on a winning streak, NOT a model of the game's allowance.
+     *
+     * <p>This was 5, on the belief that the game allows 5 attempts per zone per day. Live evidence
+     * says that is not how the counter behaves: a LOSS decrements it, a WIN does not.
+     *
+     * <ul>
+     *   <li>Gear Forge won nine battles across two runs on 2026-08-21 (6-7 up to 7-5) and the
+     *       "Remaining attempts today" line read 5 before every single one of them.</li>
+     *   <li>Research Center lost one battle and its counter went 5 -> 4, and stayed at 4 into the
+     *       next run.</li>
+     * </ul>
+     *
+     * <p>So a cap of 5 was cutting winning runs short for no reason -- reported as "in the gear forge
+     * it was winning and could keep going, it just stopped". The real stopping conditions are the two
+     * the loop already has: a loss, or the game's own counter running down. This value exists only so
+     * that a misread stage label cannot spin forever, and is therefore set well above any plausible
+     * real streak rather than at a number meant to model the rules.
+     */
+    private static final int MAX_WIN_STREAK_ATTEMPTS = 25;
     /** Filled by executeDungeonChallenge() once it reaches the zone's own stage screen. */
     private String stageBeforeBattle;
     private String stageAfterBattle;
@@ -553,6 +571,11 @@ public class DailyLabyrinthRoutine extends DelayedTask {
             // see STAGE_LABEL_TL. Bounded three ways so a misread can't spin it: the game's own
             // remaining-attempts counter, MAX_WIN_STREAK_ATTEMPTS, and an unreadable stage stopping
             // the streak rather than assuming a win.
+            // Tracks whether the previous battle left us standing on the zone's stage screen, so the
+            // next turn can press Challenge again instead of exiting to the map and walking back in.
+            boolean onStageScreen = false;
+            int battlesFought = 0;
+
             for (int battle = 1; battle <= MAX_WIN_STREAK_ATTEMPTS; battle++) {
                 stageBeforeBattle = null;
                 stageAfterBattle = null;
@@ -560,9 +583,27 @@ public class DailyLabyrinthRoutine extends DelayedTask {
 
                 // executeDungeonChallenge() fills stageBeforeBattle/lastAttemptsRemaining once it
                 // actually reaches the zone's stage screen -- the caller is still on the map here.
-                if (!executeDungeonChallenge(dungeonNumber)) {
-                    break;
+                boolean completed = onStageScreen
+                        ? runChallengeFromStageScreen(dungeonNumber)
+                        : executeDungeonChallenge(dungeonNumber);
+                if (!completed) {
+                    if (onStageScreen) {
+                        // The in-place path can miss when something is drawn over the Challenge
+                        // button -- the tutorial hand that points at it is the obvious candidate.
+                        // Fall back to the long way round rather than ending a winning streak.
+                        logInfo("Dungeon " + dungeonNumber + ": couldn't take the next turn from the "
+                                + "stage screen; going back out to the map and re-entering.");
+                        onStageScreen = false;
+                        if (settleAndNavigateToLabyrinthMenu(dungeonNumber)
+                                && executeDungeonChallenge(dungeonNumber)) {
+                            completed = true;
+                        }
+                    }
+                    if (!completed) {
+                        break;
+                    }
                 }
+                battlesFought++;
                 logInfo("Successfully completed challenge for dungeon " + dungeonNumber + ".");
                 anyCompleted = true;
 
@@ -590,11 +631,27 @@ public class DailyLabyrinthRoutine extends DelayedTask {
                 logInfo("Dungeon " + dungeonNumber + ": WON — advanced " + stageBefore + " -> "
                         + stageAfter + ". Going again while we're winning.");
 
-                if (!settleAndNavigateToLabyrinthMenu(dungeonNumber)) {
+                // Stay put if the stage screen is still up -- the battle returns to it, so the next
+                // Challenge is one tap away. Only walk back out to the map when it is not.
+                onStageScreen = isZoneStageScreenShowing();
+                if (!onStageScreen && !settleAndNavigateToLabyrinthMenu(dungeonNumber)) {
                     logWarning("Dungeon " + dungeonNumber + ": couldn't get back to the map for the next "
                             + "battle; stopping this zone.");
                     break;
                 }
+            }
+
+            if (battlesFought >= MAX_WIN_STREAK_ATTEMPTS) {
+                // Said out loud because this used to end in silence, which read as the routine giving
+                // up mid-streak. Hitting this bound is not a normal outcome: a real streak ends on a
+                // loss or on the game's own counter running down. Reaching it means something is
+                // wrong -- most likely the stage label being misread as advancing every time -- so it
+                // is logged as a warning with a frame, not as a tidy finish.
+                saveLabyrinthFrame("win_streak_safety_bound", dungeonNumber);
+                logWarning("Dungeon " + dungeonNumber + ": stopped after " + battlesFought
+                        + " straight wins, which is the safety bound, not a game limit. A genuine "
+                        + "streak should end on a loss or on the attempts counter running down, so "
+                        + "this suggests the stage label is being misread as advancing. Frame saved.");
             }
         }
 
@@ -691,6 +748,18 @@ public class DailyLabyrinthRoutine extends DelayedTask {
         // type check runs.
         sleepTask(LABYRINTH_LOAD_DELAY);
 
+        return runChallengeFromStageScreen(dungeonNumber);
+    }
+
+    /**
+     * Runs one attempt with the zone's stage screen already showing.
+     *
+     * <p>Split out of {@link #executeDungeonChallenge} so a win-streak can take another turn without
+     * leaving the zone. Everything above that split is map navigation -- finding the zone's banner
+     * and tapping into it -- which is pure waste once we are already standing on the stage screen a
+     * battle just returned us to.
+     */
+    private boolean runChallengeFromStageScreen(int dungeonNumber) {
         // Capture the stage BEFORE the battle, from here rather than from the
         // caller. The caller's loop starts on the Labyrinth MAP, where the "Stage N-M" label does
         // not exist -- reading it there returns null and the win/loss comparison can never work.
@@ -799,6 +868,23 @@ public class DailyLabyrinthRoutine extends DelayedTask {
     }
 
     /**
+     * True when the zone's own stage screen is still showing, i.e. the next attempt is one tap away.
+     *
+     * <p>Gated on the Challenge button itself rather than on the stage label, because the button is
+     * the thing the next turn actually needs. A false negative here is harmless -- the caller simply
+     * takes the long way round through the map, which is what it always used to do.
+     */
+    private boolean isZoneStageScreenShowing() {
+        boolean showing = templateSearchHelper.locatePattern(
+                TemplatesEnum.LABYRINTH_NORMAL_CHALLENGE,
+                SearchConfigConstants.SINGLE_WITH_2_RETRIES).isFound();
+        logInfo("Stage screen still showing after the battle: " + showing
+                + (showing ? " -- taking the next turn without leaving the zone."
+                           : " -- will re-enter from the map."));
+        return showing;
+    }
+
+    /**
      * Attempts to execute a normal challenge
      */
     private boolean attemptNormalChallenge(int dungeonNumber) {
@@ -859,7 +945,12 @@ public class DailyLabyrinthRoutine extends DelayedTask {
             stageAfterBattle = readCurrentStage();
             logInfo("Dungeon " + dungeonNumber + ": post-battle stage reads " + stageAfterBattle + ".");
 
-            pressBack();
+            // No pressBack() here. The battle already returns to the zone's own stage screen -- which
+            // is exactly why the stage label above is readable -- and that screen carries the
+            // Challenge button for the next attempt. Backing out to the map meant the win-streak had
+            // to walk the whole way back in for every single battle: exit, re-find the map banner,
+            // re-enter, re-read. Roughly seven seconds of clicks per win, buying nothing. The caller
+            // now stays here when it can and only navigates when it genuinely has to.
             return true;
         }
 
