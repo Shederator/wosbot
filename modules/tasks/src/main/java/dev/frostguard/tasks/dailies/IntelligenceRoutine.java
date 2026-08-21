@@ -165,9 +165,13 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 		int initiallyIdleMarches = resolveConfiguredIntelMarchesFlow();
 
 		if (!intelScreenHelper.enterIntelFromDailyIfAvailable()) {
+			// The Daily gate only proves absence, not the reset time; entering Intel once to
+			// read the actual "Refreshes In" banner schedules the next run precisely instead of
+			// a blind guess, which otherwise starves other profiles sharing this emulator slot.
 			logInfo(routineLogIntelligenceLine(
-					"Daily sidebar has no green Intel availability evidence. Retrying in 10 minutes."));
-			reschedule(LocalDateTime.now().plusMinutes(10));
+					"Daily sidebar has no green Intel availability evidence. Reading the Intel cooldown banner to plan the next run."));
+			intelScreenHelper.ensureOnIntelScreen();
+			tryRescheduleFromCooldownFlow();
 			processingTask = false;
 			return;
 		}
