@@ -441,7 +441,7 @@ public class TaskQueue {
             onPausedTick();
             return;
         }
-        if (requiresSlotAcquisition(sessionOrigin)) {
+        if (!statusModel.isIdleTimeExceeded() && requiresSlotAcquisition(sessionOrigin)) {
             emitInfo("No active device lease - re-acquiring slot");
             acquireSlot();
         } else if (statusModel.isReadyToReconnect()
