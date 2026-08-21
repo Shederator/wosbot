@@ -66,6 +66,10 @@ private static final int SURVIVOR_BATCH_LIMIT = 2;
 	// reschedule at this interval regardless of how far out the list
 	// cooldown reads, so a new spawn is never missed by more than this.
 	private static final int MAX_BEAST_RECHECK_MINUTES = 15;
+	/** Backoff when Intel cannot be opened at all -- see handleIntelUnreachable(). Matches the beast
+	 *  recheck cadence: the usual cause is an empty board, which is exactly what that interval waits
+	 *  for, and it is long enough that a real navigation problem cannot spin. */
+	private static final int INTEL_UNREACHABLE_BACKOFF_MINUTES = MAX_BEAST_RECHECK_MINUTES;
 
 	// Intel refresh-timer fix: sanity ceiling on the OCR-read full-list
 	// "Refreshes In" cooldown. The real refresh runs ~7h, but the value is read by OCR and the same
@@ -245,6 +249,51 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 
 @Override
 	protected void execute() {
+		try {
+			executeIntelPass();
+		} catch (dev.frostguard.engine.error.HomeNotFoundException intelUnreachable) {
+			handleIntelUnreachable(intelUnreachable);
+		}
+	}
+
+	/**
+	 * Backs off when Intel cannot be opened, instead of letting the failure escape into the queue.
+	 *
+	 * <p>Observed live 2026-08-21: the bot sat in a tight loop, roughly one cycle every 34 seconds
+	 * for an hour -- "Intel unreachable after 3 passes", then Initialize, then Intel again. A frame
+	 * captured mid-loop shows why: the bot was standing at the Lighthouse and the Intel bubble simply
+	 * was not on it, because there were no missions to collect. That is an ordinary nothing-to-do
+	 * state, but IntelScreenHelper raises HomeNotFoundException for it, and TaskQueue treats that as a
+	 * crash worth retrying at once:
+	 *
+	 * <pre>
+	 *   if (Objects.equals(before, task.getScheduled()) &amp;&amp; task.isRecurring())
+	 *       task.reschedule(LocalDateTime.now());          // the task threw before rescheduling itself
+	 *   ...
+	 *   if (ex instanceof HomeNotFoundException)
+	 *       enqueue(... INITIALIZE ...);                   // and Initialize is queued behind it
+	 * </pre>
+	 *
+	 * So the throw produced both halves of the loop: an immediate re-run and an Initialize between
+	 * each attempt. Catching it here means the queue sees a normal completion with a schedule the
+	 * task set itself, so neither branch fires.
+	 *
+	 * <p>Deliberately kept in this routine rather than changed in TaskQueue: retry-at-once plus
+	 * Initialize is the right response to a genuine lost-the-home-screen failure, which is what that
+	 * path exists for. What is wrong is only Intel reporting "nothing to do" through it.
+	 */
+	private void handleIntelUnreachable(RuntimeException cause) {
+		LocalDateTime nextRun = LocalDateTime.now().plusMinutes(INTEL_UNREACHABLE_BACKOFF_MINUTES);
+		logWarning(routineLogIntelligenceLine(
+				"Could not open Intel (" + cause.getMessage() + "). The usual cause is simply that the "
+						+ "Lighthouse is carrying no Intel bubble because there is nothing to collect yet. "
+						+ "Backing off until " + nextRun.format(DATETIME_FORMATTER) + " rather than "
+						+ "retrying immediately, which loops Intel and Initialize against each other."));
+		TroopSlotPolicy.release(profile, TpDailyTaskEnum.INTEL);
+		reschedule(nextRun);
+	}
+
+	private void executeIntelPass() {
 		intelBeastReturnTimes.clear();
 
 
