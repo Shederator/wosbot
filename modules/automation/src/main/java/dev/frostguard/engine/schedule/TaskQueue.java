@@ -86,7 +86,7 @@ public class TaskQueue {
     private volatile AccountDescriptor profile;
     private volatile ExecutionContext   runningContext;
     private volatile LocalDateTime      sessionOrigin;
-    // Changed by pernerch | Date: 2026-07-04 | Why: ensure first startup cycle runs Initialize regardless of idle heuristics.
+    // Ensure first startup cycle runs Initialize regardless of idle heuristics.
     private volatile boolean    forceInitialInitialize = true;
     private volatile boolean    shuttingDown = false;
     private volatile boolean    stoppedCleanly = false;
@@ -289,7 +289,7 @@ public class TaskQueue {
         return true;
     }
 
-        // Changed by pernerch | Date: 2026-07-02 | Why: expose overdue runnable snapshot so
+        // Expose overdue runnable snapshot so
         // peer queues on the same emulator can be prioritized before idle behavior closes/suspends.
         public synchronized Optional<OverdueRunnableSnapshot> peekMostRelevantOverdueRunnableTask() {
         LocalDateTime now = LocalDateTime.now();
@@ -398,7 +398,7 @@ public class TaskQueue {
             throw new IllegalStateException("Cannot start queue while its previous worker is still alive: "
                     + profile.getName());
         }
-        // Changed by pernerch | Date: 2026-07-04 | Why: reset startup Initialize gate on each queue start.
+        // Reset startup Initialize gate on each queue start.
         forceInitialInitialize = true;
         shuttingDown = false;
         stoppedCleanly = false;
@@ -640,7 +640,7 @@ public class TaskQueue {
             AnalyticsService.getInstance().trackTaskStarted(task.getTaskName());
             task.setLastExecutionTime(LocalDateTime.now());
             task.run();
-            // Changed by pernerch | Date: 2026-07-04 | Why: clear forced-Initialize mode once Initialize completed successfully.
+            // Clear forced-Initialize mode once Initialize completed successfully.
             if (task.getTpTask() == TpDailyTaskEnum.INITIALIZE) {
                 forceInitialInitialize = false;
             }
@@ -733,7 +733,7 @@ public class TaskQueue {
     }
 
     private boolean shouldRunInitialize() {
-        // Changed by pernerch | Date: 2026-07-04 | Why: keep first Initialize mandatory, then fall back to previous worth-check behavior.
+        // Keep first Initialize mandatory, then fall back to previous worth-check behavior.
         // The "mandatory" force ran Initialize even for a profile with ZERO
         // enabled tasks (Testing, freshly cleared) -- there was nothing to initialize FOR, so
         // it just tapped the screen for no reason. Only force it when there's actually at
@@ -857,7 +857,7 @@ public class TaskQueue {
             boolean keep = Boolean.TRUE.equals(profile.getConfig(ConfigurationKeyEnum.KEEP_EMULATOR_OPEN_BOOL, Boolean.class));
             if (keep) { emitInfo("Idle exceeded - keeping device open per config"); statusModel.setIdleTimeExceeded(true); return; }
 
-            // Changed by pernerch | Date: 2026-07-02 | Why: keep single-profile-per-emulator
+            // Keep single-profile-per-emulator
             // setups on the original idle path; only evaluate handover when siblings exist.
             if (hasEnabledSiblingOnSameEmulator()) {
                 Optional<PeerSwitchCandidate> peerCandidate = findBestOverduePeerOnSameEmulator();
@@ -869,7 +869,7 @@ public class TaskQueue {
             }
 
             suspendDevice(statusModel.getDelayUntil(), false);
-                    // Changed by pernerch | Date: 2026-07-02 | Why: force immediate activation of the
+                    // Force immediate activation of the
                     // selected peer queue after slot handover to eliminate idle dead time.
             statusModel.setIdleTimeExceeded(true);
         } else if (statusModel.isIdleTimeExceeded() && LocalDateTime.now().plusMinutes(1).isAfter(statusModel.getDelayUntil())) {
@@ -909,7 +909,7 @@ public class TaskQueue {
     }
 
     private boolean hasEnabledSiblingOnSameEmulator() {
-        // Changed by pernerch | Date: 2026-07-02 | Why: explicit sibling detection guard for
+        // Explicit sibling detection guard for
         // no-impact behavior in single-profile-per-emulator environments.
         if (profile == null || profile.getEmulatorNumber() == null || profile.getEmulatorNumber().isBlank()) {
             return false;

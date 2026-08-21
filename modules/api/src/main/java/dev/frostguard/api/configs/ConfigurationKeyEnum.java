@@ -441,9 +441,9 @@ public enum ConfigurationKeyEnum {
     DISCORD_TOKEN_STRING                ("",            String.class,   ConfigCategory.SYSTEM),
     GAME_VERSION_STRING                 ("GLOBAL",      String.class,   ConfigCategory.SYSTEM),
     IDLE_BEHAVIOR_STRING                ("CLOSE_EMULATOR", String.class, ConfigCategory.SYSTEM),
-    // Changed by pernerch | Date: 2026-07-04 | Why: allow explicit stop-policy selection for GUI stop action.
+    // Allow explicit stop-policy selection for GUI stop action.
     STOP_BEHAVIOR_STRING                ("DO_NOTHING",  String.class,   ConfigCategory.SYSTEM),
-    // Changed by pernerch | Date: 2026-07-04 | Why: separate Telegram stop behavior from local GUI stop behavior.
+    // Separate Telegram stop behavior from local GUI stop behavior.
     STOP_BEHAVIOR_TELEGRAM_STRING       ("DO_NOTHING",  String.class,   ConfigCategory.SYSTEM),
     LDPLAYER_PATH_STRING                ("",            String.class,   ConfigCategory.SYSTEM),
     MAX_IDLE_TIME_INT                   ("15",          Integer.class,  ConfigCategory.SYSTEM),

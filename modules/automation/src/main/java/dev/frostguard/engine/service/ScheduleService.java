@@ -153,12 +153,12 @@ public class ScheduleService {
 		haltEngine(StopBehaviorEnum.DO_NOTHING);
 	}
 
-	// Changed by pernerch | Date: 2026-07-04 | Why: apply GUI-specific stop behavior configured in Instance Settings.
+	// Apply GUI-specific stop behavior configured in Instance Settings.
 	public void haltEngineFromGui() {
 		haltEngine(resolveStopBehavior(ConfigurationKeyEnum.STOP_BEHAVIOR_STRING));
 	}
 
-	// Changed by pernerch | Date: 2026-07-04 | Why: apply Telegram-specific stop behavior configured in Instance Settings.
+	// Apply Telegram-specific stop behavior configured in Instance Settings.
 	public void haltEngineFromTelegram() {
 		haltEngine(resolveStopBehavior(ConfigurationKeyEnum.STOP_BEHAVIOR_TELEGRAM_STRING));
 	}
@@ -191,7 +191,7 @@ public class ScheduleService {
 	}
 
 	private StopBehaviorEnum resolveStopBehavior(ConfigurationKeyEnum key) {
-		// Changed by pernerch | Date: 2026-07-04 | Why: centralize config lookup and default fallback for stop policies.
+		// Centralize config lookup and default fallback for stop policies.
 		if (key == null) {
 			return StopBehaviorEnum.DO_NOTHING;
 		}
@@ -202,7 +202,7 @@ public class ScheduleService {
 	}
 
 	private void closeEnabledEmulators() {
-		// Changed by pernerch | Date: 2026-07-04 | Why: close each enabled profile emulator once when stop policy requests emulator shutdown.
+		// Close each enabled profile emulator once when stop policy requests emulator shutdown.
 		Set<String> emulatorsToClose = ProfileService.obtain().fetchAllAccounts().stream()
 				.filter(account -> Boolean.TRUE.equals(account.getEnabled()))
 				.map(AccountDescriptor::getEmulatorNumber)
@@ -241,7 +241,7 @@ public class ScheduleService {
 		changeAccountPause(accountId, false);
 	}
 
-	// Changed by pernerch | Date: 2026-07-02 | Why: allow runtime profile-switch events
+	// Allow runtime profile-switch events
 	// to refresh UI context (active profile name + stamina title) immediately.
 	public void notifyActiveProfile(Long accountId) {
 		if (accountId == null) {

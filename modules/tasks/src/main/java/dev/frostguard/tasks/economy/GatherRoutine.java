@@ -172,7 +172,7 @@ public class GatherRoutine extends DelayedTask {
         logInfo(String.format("Active gather marches: %d / %d; idle physical march slots: %d",
                 activeGatherCount, activeQueues, idleSlotCount));
 
-        // Changed by pernerch | Date: 2026-07-02 | Why: when higher-priority tasks are pending,
+        // When higher-priority tasks are pending,
         // defer based on real active-march timing instead of a blind fixed delay.
         List<TpDailyTaskEnum> pendingHigherPriorityTasks = GatherQueuePolicy.getPendingHigherPriorityMarchTasks(profile);
         if (!pendingHigherPriorityTasks.isEmpty()) {
@@ -261,7 +261,7 @@ public class GatherRoutine extends DelayedTask {
     // ================= CONFIGURATION =================
 
     private void loadConfig() {
-        // Changed by pernerch | Date: 2026-07-02 | Why: centralize queue limit via policy for consistent hard-cap behavior.
+        // Centralize queue limit via policy for consistent hard-cap behavior.
         this.activeQueues = GatherQueuePolicy.resolveActiveQueueLimit(
                 get(ConfigurationKeyEnum.GATHER_ACTIVE_MARCH_QUEUE_INT, DEFAULT_QUEUES));
         this.removeHeroes = get(ConfigurationKeyEnum.GATHER_REMOVE_HEROS_BOOL, DEFAULT_REMOVE_HEROES);
@@ -642,7 +642,7 @@ public class GatherRoutine extends DelayedTask {
         };
     }
 
-    // Changed by pernerch | Date: 2026-07-02 | Why: when autojoin is disabled and all gather
+    // When autojoin is disabled and all gather
     // slots are blocked, recall already-recallable marches before falling back to a fixed wait.
     private int recallBlockedMarchesWhenAutojoinOffFlow() {
         navigationHelper.ensureCorrectScreenLocation(LaunchPoint.WORLD);
@@ -1396,7 +1396,7 @@ public class GatherRoutine extends DelayedTask {
         writeProfileSetting(ConfigurationKeyEnum.GATHER_LAST_RECALL_TIME_STRING, "");
     }
 
-    // Changed by pernerch | Date: 2026-07-02 | Why: when Gather is blocked by a pending Intel
+    // When Gather is blocked by a pending Intel
     // task, force Intel immediately so it can use free marches now or reschedule itself on low stamina.
     private boolean triggerPendingIntelNowFlow() {
         TaskQueue queue = scheduleService.getCoordinator().getQueue(profile.getId());

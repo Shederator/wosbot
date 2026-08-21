@@ -92,7 +92,7 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
     protected static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     protected static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss");
 
-    // Changed by pernerch | Date: 2026-07-02 | Why: force stamina OCR refresh after
+    // Force stamina OCR refresh after
     // emulator-local profile switches so stale stamina values cannot leak between accounts.
     private static final Map<String, Long> LAST_ACTIVE_PROFILE_BY_EMULATOR = new ConcurrentHashMap<>();
 
@@ -160,7 +160,7 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
         Map<String, String> configBeforeExecution = snapshotProfileConfig();
         boolean switchedProfileOnEmulator = markAndDetectProfileSwitchFlow();
         if (switchedProfileOnEmulator) {
-            // Changed by pernerch | Date: 2026-07-02 | Why: publish active-profile changes
+            // Publish active-profile changes
             // so UI title/profile context tracks the account currently controlling the emulator.
             scheduleService.notifyActiveProfile(profile.getId());
         }
@@ -181,7 +181,7 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
             navigationHelper.ensureCorrectScreenLocation(getRequiredStartLocation());
 
             if (switchedProfileOnEmulator) {
-                // Changed by pernerch | Date: 2026-07-02 | Why: refresh stamina immediately on
+                // Refresh stamina immediately on
                 // profile handover so downstream task logic always starts from current account data.
                 logInfo("Profile switch detected on emulator " + EMULATOR_NUMBER + ". Refreshing stamina from profile screen.");
                 staminaHelper.updateStaminaFromProfile();
@@ -251,7 +251,7 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
         return changed;
     }
 
-    // Changed by pernerch | Date: 2026-07-02 | Why: detect emulator-local profile handover
+    // Detect emulator-local profile handover
     // so runtime state (stamina + active profile context) is refreshed exactly once per switch.
     private boolean markAndDetectProfileSwitchFlow() {
         if (EMULATOR_NUMBER == null || EMULATOR_NUMBER.isBlank() || profile == null || profile.getId() == null) {
@@ -456,7 +456,7 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
     }
 
     // ── logging ─────────────────────────────────────────────────────
-    // Changed by pernerch | Date: 2026-07-02 | Why: Ensure consistent profile name in logs for multi-profile 
+    // Ensure consistent profile name in logs for multi-profile 
     // emulator debugging. All log levels now include profile name for clarity when multiple profiles 
     // execute tasks on the same emulator (critical for detecting profile-switch race conditions).
 

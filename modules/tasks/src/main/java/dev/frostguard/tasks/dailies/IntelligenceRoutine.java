@@ -208,22 +208,22 @@ private int maxIntelMarches;
 
 private int intelMarchesRemaining;
 
-// Changed by pernerch | Date: 2026-07-04 | Why: keep runtime Intel capacity override when march capacity drops (e.g., VIP expiry).
+// Keep runtime Intel capacity override when march capacity drops (e.g., VIP expiry).
 private Integer intelMarchCapacityOverride;
 
 private int survivorMissionsSincePause;
 
-// Changed by pernerch | Date: 2026-07-02 | Why: ensure gather and autojoin can be resumed after Intel priority handling.
+// Ensure gather and autojoin can be resumed after Intel priority handling.
 private boolean shouldRequeueGatherAfterIntel;
 
-// Changed by pernerch | Date: 2026-07-02 | Why: restore autojoin after Intel processing so helping rallies continues.
+// Restore autojoin after Intel processing so helping rallies continues.
 private boolean shouldRequeueAutoJoinAfterIntel;
 
 // True once this Intel pass has already pulled Gather forward, so the
 // completion path and the finally-block requeue can't double-fire runNow on the same run.
 private boolean gatherRunNowTriggered;
 
-// Changed by pernerch | Date: 2026-07-02 | Why: track beast march dispatch to keep intel rescheduling accurate.
+// Track beast march dispatch to keep intel rescheduling accurate.
 private boolean beastMarchSent;
 
 private final List<LocalDateTime> intelBeastReturnTimes = new ArrayList<>();
@@ -253,7 +253,7 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 
 		processingTask = true;
 		beastMarchSent = false;
-		// Changed by pernerch | Date: 2026-07-04 | Why: reset per-run Intel march-capacity override before processing cycle starts.
+		// Reset per-run Intel march-capacity override before processing cycle starts.
 		intelMarchCapacityOverride = null;
 		shouldRequeueGatherAfterIntel = false;
 		shouldRequeueAutoJoinAfterIntel = false;
@@ -277,7 +277,7 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 		try {
 
 
-		// Changed by pernerch | Date: 2026-07-02 | Why: check mission availability before
+		// Check mission availability before
 		// recalling gather marches, so Intel does not disrupt gathering when nothing is actionable.
 		// Claim BEFORE the availability check, not after. Finished missions sit
 		// on the Intel map as a marker wearing a green tick, with a big "Claim All" button at the
@@ -317,10 +317,10 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 		TroopSlotPolicy.claim(profile, TpDailyTaskEnum.INTEL, resolveConfiguredIntelMarchesFlow(),
 				LocalDateTime.now().plusMinutes(MAX_BEAST_RECHECK_MINUTES));
 
-		// Changed by pernerch | Date: 2026-07-02 | Why: return to the world screen so gather marches can be recalled from the correct UI context.
+		// Return to the world screen so gather marches can be recalled from the correct UI context.
 		navigationHelper.ensureCorrectScreenLocation(LaunchPoint.WORLD);
 
-		// Changed by pernerch | Date: 2026-07-02 | Why: Intel must preempt gather for full-march execution when smart processing is disabled.
+		// Intel must preempt gather for full-march execution when smart processing is disabled.
 		if (!useSmartProcessing || recallGatherTroopsFlow) {
 			logInfo(routineLogIntelligenceLine("Intel gather-priority mode active (smart=" + useSmartProcessing
 					+ ", recall=" + recallGatherTroopsFlow + "). Recalling all gather troops..."));
@@ -328,7 +328,7 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 			shouldRequeueGatherAfterIntel = true;
 			logInfo(routineLogIntelligenceLine("All gather troops recalled. Proceeding with intel processing."));
 		} else {
-			// Changed by pernerch | Date: 2026-07-02 | Why: in smart processing mode, free Intel marches by recalling long-running duplicate gather marches first.
+			// In smart processing mode, free Intel marches by recalling long-running duplicate gather marches first.
 			int recalledDuplicateMarches = recallDuplicateGatherMarchesForSmartProcessingFlow();
 			if (recalledDuplicateMarches > 0) {
 				shouldRequeueGatherAfterIntel = true;
@@ -408,7 +408,7 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 	}
 
 private boolean hasAnyIntelMissionAvailableFlow() {
-		// Changed by pernerch | Date: 2026-07-02 | Why: lightweight pre-check to avoid unnecessary
+		// Lightweight pre-check to avoid unnecessary
 		// gather recalls when Intel has no visible missions to process.
 		intelScreenHelper.ensureOnIntelScreen();
 
@@ -938,7 +938,7 @@ private void recallGatherTroopsFlow() {
 					foundReturning, foundView, foundSpeedup, attempt)));
 
 			if (!foundReturning && !foundView && !foundSpeedup) {
-				// Changed by pernerch | Date: 2026-07-04 | Why: replace hard-coded march ceiling with configured/adjusted runtime capacity.
+				// Replace hard-coded march ceiling with configured/adjusted runtime capacity.
 				int configuredMarches = resolveConfiguredIntelMarchesFlow();
 				int idleMarches = countIdleMarchesFlow();
 				if (idleMarches >= configuredMarches) {
@@ -948,7 +948,7 @@ private void recallGatherTroopsFlow() {
 				}
 
 				int vipAdjustedMarches = Math.max(MIN_INTEL_MARCH_SLOTS, configuredMarches - 1);
-				// Changed by pernerch | Date: 2026-07-04 | Why: treat configured-1 idle marches with zero indicators as possible VIP slot expiry.
+				// Treat configured-1 idle marches with zero indicators as possible VIP slot expiry.
 				if (configuredMarches > MIN_INTEL_MARCH_SLOTS && idleMarches == vipAdjustedMarches) {
 					applyIntelMarchCapacityOverrideFlow(vipAdjustedMarches,
 							"No recall/view/speedup indicators and only " + idleMarches + "/" + configuredMarches
@@ -982,7 +982,7 @@ private void recallGatherTroopsFlow() {
 		logError(routineLogIntelligenceLine("recallGatherTroopsFlow exceeded max attempts (" + maxRetries + "), exiting to avoid deadlock"));
 	}
 
-	// Changed by pernerch | Date: 2026-07-02 | Why: keep detection and recall click in the same
+	// Keep detection and recall click in the same
 	// tab-open cycle so a found recall button can be acted on immediately without UI drift.
 	private TabRecallResult inspectAndRecallForTabFlow(boolean cityTab, SearchConfig searchConfig) {
 		int tapped = 0;
@@ -999,7 +999,7 @@ private void recallGatherTroopsFlow() {
 					TemplatesEnum.MARCHES_AREA_SPEEDUP_BUTTON,
 					searchConfig);
 
-			// Changed by pernerch | Date: 2026-07-02 | Why: gather recall must act on the full set
+			// Gather recall must act on the full set
 			// of visible recall buttons in the opened tab instead of repeatedly probing one button.
 			if (returningArrow != null && returningArrow.isFound()) {
 				List<ImageSearchResultData> recallButtons = locateAllPatternsWithMonoFallback(
@@ -1472,7 +1472,7 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 	}
 
 	private int resolveConfiguredIntelMarchesFlow() {
-		// Changed by pernerch | Date: 2026-07-04 | Why: keep one source of truth for configured march capacity plus runtime override.
+		// Keep one source of truth for configured march capacity plus runtime override.
 		Integer configuredMarches = profile.getConfig(ConfigurationKeyEnum.GATHER_ACTIVE_MARCH_QUEUE_INT, Integer.class);
 		int resolved = configuredMarches != null ? configuredMarches : MAX_INTEL_MARCH_SLOTS;
 		resolved = Math.max(MIN_INTEL_MARCH_SLOTS, Math.min(MAX_INTEL_MARCH_SLOTS, resolved));
@@ -1483,7 +1483,7 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 	}
 
 	private void applyIntelMarchCapacityOverrideFlow(int adjustedCapacity, String reason) {
-		// Changed by pernerch | Date: 2026-07-04 | Why: clamp and apply temporary capacity downgrade when VIP-expiry conditions are detected.
+		// Clamp and apply temporary capacity downgrade when VIP-expiry conditions are detected.
 		int normalized = Math.max(MIN_INTEL_MARCH_SLOTS, Math.min(MAX_INTEL_MARCH_SLOTS, adjustedCapacity));
 		if (intelMarchCapacityOverride != null && intelMarchCapacityOverride == normalized) {
 			return;

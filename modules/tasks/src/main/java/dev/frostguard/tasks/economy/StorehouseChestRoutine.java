@@ -372,7 +372,7 @@ public class StorehouseChestRoutine extends DelayedTask {
             logInfo("Stamina icon found. Tapping to open popup.");
             tapInside(stamina);
             
-            // Changed by pernerch | Date: 2026-07-02 | Why: wait for claim button visibility confirmation (not blind wait) before proceeding with claim.
+            // Wait for claim button visibility confirmation (not blind wait) before proceeding with claim.
             logDebug("Waiting for claim button to appear in popup...");
             if (!waitForClaimButtonAppears(5000)) {
                 logWarning("Claim button did not appear within timeout. Popup may not have loaded properly.");
@@ -439,7 +439,7 @@ public class StorehouseChestRoutine extends DelayedTask {
      * Claims the stamina reward and updates stamina service.
      */
     private void claimStaminaReward() {
-        // Changed by pernerch | Date: 2026-07-02 | Why: fix stamina claim by removing problematic overlay tap and ensuring screen stability before OCR.
+        // Fix stamina claim by removing problematic overlay tap and ensuring screen stability before OCR.
         // Let stamina details screen fully render
         sleepTask(1000);
 
