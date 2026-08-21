@@ -102,6 +102,11 @@ public class NavigationHelper {
         return reached;
     }
 
+    public ImageSearchResultData findSidebarDestinationRow(SidebarDestination destination) {
+        ensureCorrectScreenLocation(LaunchPoint.ANY);
+        return sidebar.findRow(destination);
+    }
+
     public boolean closeSidebar() {
         return sidebar.close();
     }

@@ -2,7 +2,7 @@ package dev.frostguard.tasks.dailies;
 
 final class IntelDeploymentPreflight {
 
-    static final long MAX_TRAVEL_SECONDS = 30 * 60;
+    static final long MAX_TRAVEL_SECONDS_EXCLUSIVE = 5 * 60;
 
     private IntelDeploymentPreflight() {}
 
@@ -10,9 +10,9 @@ final class IntelDeploymentPreflight {
         if (travelSeconds <= 0) {
             return new Decision(false, "travel time was unreadable");
         }
-        if (travelSeconds > MAX_TRAVEL_SECONDS) {
+        if (travelSeconds >= MAX_TRAVEL_SECONDS_EXCLUSIVE) {
             return new Decision(false, "travel time " + travelSeconds
-                    + "s exceeds the 30 minute Intel safety limit");
+                    + "s reaches the 5 minute Intel safety limit");
         }
         return new Decision(true, "travel time is plausible");
     }
