@@ -1471,6 +1471,17 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 				+ "/" + maxIntelMarches + " (Beast/Fire Beast only)."));
 	}
 
+	// Ported from upstream #261 (fix(intel): route and deploy missions reliably). This fork keeps
+	// its own IntelligenceRoutine, so the rest of that PR is not absorbed yet -- but this helper is
+	// pure and self-contained, and upstream's IntelligenceRoutineMarchCapacityTest covers it, so it
+	// is carried over verbatim to keep that test meaningful rather than deleting an upstream test.
+	static int resolveIntelMarchCapacity(int configuredMarches, int idleMarches, boolean useFlag) {
+		int available = Math.max(0, idleMarches);
+		return useFlag
+				? Math.min(1, available)
+				: Math.min(Math.max(0, configuredMarches), available);
+	}
+
 	private int resolveConfiguredIntelMarchesFlow() {
 		// Keep one source of truth for configured march capacity plus runtime override.
 		Integer configuredMarches = profile.getConfig(ConfigurationKeyEnum.GATHER_ACTIVE_MARCH_QUEUE_INT, Integer.class);

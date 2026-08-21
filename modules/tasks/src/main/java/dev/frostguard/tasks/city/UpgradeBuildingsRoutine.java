@@ -1,6 +1,7 @@
 package dev.frostguard.tasks.city;
 
 import dev.frostguard.api.configs.TpDailyTaskEnum;
+import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.domain.*;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.nav.SearchConfigConstants;
@@ -32,9 +33,9 @@ import static dev.frostguard.engine.nav.LeftMenuTextSettings.*;
 
 public class UpgradeBuildingsRoutine extends DelayedTask {
 
-private static final AreaData QUEUE_AREA_1_VALUE = new AreaData(new PointData(95, 377), new PointData(358, 398));
+private static final AreaData QUEUE_AREA_1_VALUE = new AreaData(new PointData(95, 370), new PointData(358, 407));
 
-private static final AreaData QUEUE_AREA_2_VALUE = new AreaData(new PointData(95, 450), new PointData(358, 474));
+private static final AreaData QUEUE_AREA_2_VALUE = new AreaData(new PointData(95, 443), new PointData(358, 480));
 
 private static final AreaData BUILDING_ACTION_BUTTON_AREA_VALUE = new AreaData(new PointData(190, 1160), new PointData(530, 1250));
 
@@ -135,7 +136,7 @@ public UpgradeBuildingsRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDail
                 return;
             }
 
-            if (rescheduleForRetainedReservation(attemptedQueues)) {
+            if (rescheduleForRetainedReservation(attemptedQueues, updatedResults)) {
                 marchHelper.closeLeftMenu();
                 return;
             }
@@ -144,7 +145,7 @@ public UpgradeBuildingsRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDail
             deferBasedOnBusyQueues(updatedResults);
             marchHelper.closeLeftMenu();
         } else {
-            if (rescheduleForRetainedReservation(Set.of())) {
+            if (rescheduleForRetainedReservation(Set.of(), queueResults)) {
                 marchHelper.closeLeftMenu();
                 return;
             }
@@ -157,7 +158,7 @@ public UpgradeBuildingsRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDail
         return LaunchPoint.HOME;
     }
 
-private enum QueueMood {
+enum QueueMood {
         IDLE,
 
         BUSY,
@@ -454,31 +455,30 @@ private void reserveConsumers(Set<ConstructionBlockerRegistry.Consumer> consumer
 }
 
 private void clearConstructionReservationWhenStarted(List<QueueReadout> queueResults) {
-        boolean hasIdleQueue = queueResults.stream()
-                .anyMatch(result -> result.state().status() == QueueMood.IDLE
-                        || result.state().status() == QueueMood.IDLE_TEMP);
-        Optional<QueueReadout> busyQueue = queueResults.stream()
-                .filter(result -> result.state().status() == QueueMood.BUSY)
-                .findFirst();
-        if (!shouldReleaseReservation(hasIdleQueue, busyQueue.isPresent())) {
-            return;
-        }
-
-        ConstructionBlockerRegistry.reservation(profile).ifPresent(reservation -> busyQueue
+        ConstructionBlockerRegistry.reservation(profile).ifPresent(reservation -> queueResults.stream()
+                .filter(result -> result.queueNumber() == reservation.constructionQueue())
+                .filter(result -> shouldReleaseReservation(result.state().status()))
+                .findFirst()
                 .ifPresent(result -> {
                     logInfo(routineLogUpgradeBuildingsLine(
-                            "No construction queue is free and queue " + result.queueNumber()
+                            "Reserved construction queue " + result.queueNumber()
                                     + " is BUSY; clearing production consumer lock "
                                     + reservation.consumers()));
                     ConstructionBlockerRegistry.clear(profile);
                 }));
     }
 
-static boolean shouldReleaseReservation(boolean hasIdleQueue, boolean hasBusyQueue) {
-        return !hasIdleQueue && hasBusyQueue;
+static boolean shouldReleaseReservation(QueueMood reservedQueueState) {
+        return reservedQueueState == QueueMood.BUSY;
 }
 
-private boolean rescheduleForRetainedReservation(Set<Integer> attemptedQueues) {
+static boolean shouldClearRetainedReservation(QueueMood reservedQueueState, boolean attempted, boolean expired) {
+        return reservedQueueState == QueueMood.NOT_PURCHASED
+                || attempted && (reservedQueueState == QueueMood.IDLE || reservedQueueState == QueueMood.IDLE_TEMP)
+                || expired;
+}
+
+private boolean rescheduleForRetainedReservation(Set<Integer> attemptedQueues, List<QueueReadout> queueResults) {
         Optional<ConstructionBlockerRegistry.Reservation> retainedReservation =
                 ConstructionBlockerRegistry.reservation(profile);
         if (retainedReservation.isEmpty()) {
@@ -487,20 +487,33 @@ private boolean rescheduleForRetainedReservation(Set<Integer> attemptedQueues) {
 
         ConstructionBlockerRegistry.Reservation reservation = retainedReservation.get();
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime retryAt = reservation.retryAt().isAfter(now)
-                ? reservation.retryAt()
-                : now.plusMinutes(BLOCKER_RELEASE_GRACE_MINUTES);
-        if (!retryAt.equals(reservation.retryAt())) {
-            ConstructionBlockerRegistry.reserve(profile, reservation.consumers(),
-                    reservation.constructionQueue(), retryAt);
+        QueueMood reservedQueueState = queueResults.stream()
+                .filter(result -> result.queueNumber() == reservation.constructionQueue())
+                .map(result -> result.state().status())
+                .findFirst()
+                .orElse(QueueMood.UNKNOWN);
+
+        boolean attempted = attemptedQueues.contains(reservation.constructionQueue());
+        boolean expired = !reservation.retryAt().isAfter(now);
+        if (shouldClearRetainedReservation(reservedQueueState, attempted, expired)) {
+            String reason = reservedQueueState == QueueMood.NOT_PURCHASED
+                    ? "reserved queue is not purchased"
+                    : attempted && (reservedQueueState == QueueMood.IDLE || reservedQueueState == QueueMood.IDLE_TEMP)
+                            ? "construction did not start on the reserved queue"
+                            : "the reservation expired without construction start evidence";
+            logWarning(routineLogUpgradeBuildingsLine(
+                    "Clearing production consumer lock for queue " + reservation.constructionQueue()
+                            + " because " + reason));
+            ConstructionBlockerRegistry.clear(profile);
+            return false;
         }
-        String attemptEvidence = attemptedQueues.contains(reservation.constructionQueue())
+        String attemptEvidence = attempted
                 ? "the construction attempt did not make the queue BUSY"
                 : "the reserved queue did not provide start evidence";
         logWarning(routineLogUpgradeBuildingsLine(
                 "Keeping production consumer lock because " + attemptEvidence
-                        + ". Retrying construction at " + retryAt));
-        this.reschedule(retryAt);
+                        + ". Retrying construction at " + reservation.retryAt()));
+        this.reschedule(reservation.retryAt());
         return true;
 }
 
@@ -686,6 +699,16 @@ private void logQueueStateFlow(int queueIndex, UpgradeBuildingsRoutine.QueueSnap
 
 private UpgradeBuildingsRoutine.QueueSnapshot inspectQueueState(AreaData queueArea) {
         try {
+            ImageSearchResultData idle = templateSearchHelper.locatePattern(
+                    TemplatesEnum.MARCH_QUEUE_STATUS_IDLE,
+                    SearchConfig.builder()
+                            .withArea(queueArea)
+                            .withThreshold(88)
+                            .withMaxAttempts(1)
+                            .build());
+            if (idle.isFound()) {
+                return new UpgradeBuildingsRoutine.QueueSnapshot(UpgradeBuildingsRoutine.QueueMood.IDLE, null);
+            }
 
 
             OcrSettingsData[] settingsToTry = {

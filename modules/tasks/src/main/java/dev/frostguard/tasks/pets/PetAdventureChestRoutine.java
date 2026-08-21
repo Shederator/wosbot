@@ -1,12 +1,10 @@
 package dev.frostguard.tasks.pets;
 
 import dev.frostguard.engine.schedule.LaunchPoint;
-
-
+import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
-import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
@@ -19,7 +17,7 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Task that manages Pet Adventure chests in the Beast Cage.
+ * Task that manages Pet Adventure chests.
  * 
  * <p>
  * <b>Execution Flow:</b>
@@ -64,14 +62,6 @@ public class PetAdventureChestRoutine extends DelayedTask {
 	// ========================================================================
 	// NAVIGATION CONSTANTS
 	// ========================================================================
-
-	/**
-	 * Button area for opening the Adventure Map screen in Beast Cage.
-	 * Reused from PetAllianceTreasuresRoutine.
-	 */
-	private static final AreaData ADVENTURE_MAP_BUTTON = new AreaData(
-			new PointData(547, 1150),
-			new PointData(650, 1210));
 
 	/**
 	 * Area to tap for skipping reward popups after claiming chests.
@@ -191,66 +181,16 @@ public class PetAdventureChestRoutine extends DelayedTask {
 	 * <p>
 	 * <b>Steps:</b>
 	 * <ol>
-	 * <li>Search for Pets button (with retries)</li>
-	 * <li>Tap to open Pets menu</li>
-	 * <li>Search for Beast Cage button (with retries)</li>
-	 * <li>Tap to open Beast Cage</li>
-	 * <li>Tap Adventure Map button to open adventure screen</li>
+	 * <li>Open the Daily sidebar</li>
+	 * <li>Locate the Pet Adventure row</li>
+	 * <li>Tap its detected Go control</li>
 	 * </ol>
 	 * 
 	 * @return true if navigation succeeded, false if any step failed
 	 */
 	private boolean navigateToPetAdventures() {
-		// Mirror PetSkills.openPetsMenu — a rally / "Assault Squad Invites" popup
-		// often covers the bottom-right Pets button, and SINGLE_WITH_RETRIES can't clear it. A back
-		// press dismisses the modal (and returns world→city), so retry properly instead of shoving
-		// ready-NOW chests 15 min out (and risking lost daily attempts) on a single blocked frame.
-		ImageSearchResultData petsResult = null;
-		for (int attempt = 1; attempt <= 3; attempt++) {
-			petsResult = templateSearchHelper.locatePattern(
-					TemplatesEnum.GAME_HOME_PETS,
-					SearchConfigConstants.DEFAULT_SINGLE);
-			if (petsResult.isFound()) {
-				break;
-			}
-			logWarning("Pets button not found (attempt " + attempt + "/3). Clearing any blocking popup and retrying.");
-			if (attempt < 3) {
-				pressBack();
-				sleepTask(1200);
-			}
-		}
-
-		if (petsResult == null || !petsResult.isFound()) {
-			logWarning("Pets button not found on home screen after retries");
-			return false;
-		}
-
-		logDebug("Opening Pets menu");
-		tapInside(petsResult.getPoint(), petsResult.getPoint());
-		sleepTask(3000); // Wait for Pets menu to fully load
-
-		// Search for Beast Cage button
-		ImageSearchResultData beastCageResult = templateSearchHelper.locatePattern(
-				TemplatesEnum.PETS_BEAST_CAGE,
-				SearchConfigConstants.SINGLE_WITH_RETRIES);
-
-		if (!beastCageResult.isFound()) {
-			logWarning("Beast Cage button not found in Pets menu");
-			pressBack(); // Exit Pets menu
-			return false;
-		}
-
-		logDebug("Opening Beast Cage");
-		tapInside(beastCageResult);
-		sleepTask(500); // Wait for Beast Cage to open
-
-		logDebug("Opening Adventure Map");
-		tapInside(
-				ADVENTURE_MAP_BUTTON.topLeft(),
-				ADVENTURE_MAP_BUTTON.bottomRight());
-		sleepTask(500); // Wait for adventure map to load
-
-		return true;
+		logDebug("Opening Pet Adventure through the Daily sidebar");
+		return navigationHelper.navigateToSidebarDestination(SidebarDestination.PET_ADVENTURE);
 	}
 
 	// ========================================================================

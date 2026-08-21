@@ -363,6 +363,18 @@ public class LifeEssenceRoutine extends DelayedTask {
 		return totalClaimed;
 	}
 
+	private List<ImageSearchResultData> locateClaimableEssence(TemplatesEnum template) {
+		return templateSearchHelper.locateAllPatterns(
+				template,
+				SearchConfig.builder()
+						.withArea(new AreaData(LIFE_ESSENCE_SEARCH_AREA.topLeft(),
+								LIFE_ESSENCE_SEARCH_AREA.bottomRight()))
+						.withThreshold(90)
+						.withMaxAttempts(1)
+						.withMaxResults(MAX_CLAIM_RESULTS)
+						.build());
+	}
+
 	/**
 	 * Check if weekly free scroll should be purchased
 	 * 

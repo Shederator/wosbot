@@ -206,8 +206,13 @@ public class LifeEssenceCaringRoutine extends DelayedTask {
 					"/" + MAX_CARING_BUTTON_SEARCHES + ")");
 
 			ImageSearchResultData caringButton = templateSearchHelper.locatePattern(
-					TemplatesEnum.LIFE_ESSENCE_DAILY_CARING_BUTTON,
+					TemplatesEnum.LIFE_ESSENCE_DAILY_CARING_BUTTON_CURRENT,
 					SearchConfig.builder().build());
+			if (!caringButton.isFound()) {
+				caringButton = templateSearchHelper.locatePattern(
+						TemplatesEnum.LIFE_ESSENCE_DAILY_CARING_BUTTON,
+						SearchConfig.builder().build());
+			}
 
 			if (caringButton.isFound()) {
 				logInfo("Caring button found. Performing caring action.");

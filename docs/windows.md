@@ -69,13 +69,14 @@ and leaves the current installation untouched. A failed installer upgrade uses
 Windows Installer rollback, attempts to reopen the retained application, and
 shows an update failure instead of silently claiming success.
 
-Until release binaries have an Authenticode publisher, Java-only Stable and
-Nightly updates keep their native desktop and watcher bootstrap files
-byte-identical to the already accepted Stable 2.1.0 and Nightly 26.8.12004
-launchers. The MSI version still increases for every release, and Frostguard
-displays the version embedded in its application JAR. Changes to the bootstrap,
-icon, or packaged JDK require a new Windows reputation decision; Authenticode
-signing remains the durable solution.
+Until release binaries have an Authenticode publisher, both channels reuse the
+already accepted Nightly desktop and watcher bootstrap bytes. Stable still uses
+its own packaged JVM options, application ID, update feed, and workspace; only
+the native PE bootstrap metadata says `Frostguard Nightly`. The MSI version
+still increases for every release, and Frostguard displays the version embedded
+in its application JAR. Changes to the bootstrap, icon, or packaged JDK require
+a new Windows reputation decision; Authenticode signing remains the durable
+solution.
 
 ## Source build commands and native packaging
 

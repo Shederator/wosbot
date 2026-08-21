@@ -391,8 +391,8 @@ public class PetSkillsRoutine extends DelayedTask {
      * Reschedules the task to retry in a few minutes.
      */
     private void handleMenuOpenFailure() {
-        logWarning("Failed to open Pets menu. Rescheduling for retry.");
-        reschedule(LocalDateTime.now().plusMinutes(FALLBACK_RESCHEDULE_MINUTES));
+        logWarning("Pets feature is unavailable on the confirmed Home screen. Retrying after game reset.");
+        reschedule(GameTimeUtils.dailyResetTime());
     }
 
     /**
@@ -443,6 +443,7 @@ public class PetSkillsRoutine extends DelayedTask {
      */
     private boolean openPetsMenu() {
         logDebug("Opening Pets menu");
+        navigationHelper.ensureCorrectScreenLocation(LaunchPoint.HOME);
 
         // This "retry" never retried. It incremented a counter and returned
         // false on the very first miss, so a single blocked frame abandoned the whole task —

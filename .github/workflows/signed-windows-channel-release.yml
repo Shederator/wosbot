@@ -263,7 +263,7 @@ jobs:
           "publisher=$($certificate.Subject)" | Out-File `
               -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-      - name: Build channel application image and installer
+      - name: Build channel application image
         shell: pwsh
         env:
           WINDOWS_VERSION: ${{ steps.identity.outputs.windows_version }}
@@ -271,7 +271,7 @@ jobs:
           AUTHENTICODE_PUBLISHER: ${{ steps.certificate.outputs.publisher }}
         run: |
           $mavenArgs = $env:MAVEN_ARGS -split " "
-          $profiles = "windows-app-image,windows-installer$($env:EXTRA_PROFILE)"
+          $profiles = "windows-app-image$($env:EXTRA_PROFILE)"
           $stableManifest = "https://github.com/$($env:GITHUB_REPOSITORY)/releases/latest/download/frostguard-stable-manifest.json"
           $nightlyManifest = "https://github.com/$($env:GITHUB_REPOSITORY)/releases/download/nightly/frostguard-nightly-manifest.json"
           & .\mvnw.cmd @mavenArgs "-Drevision=$($env:VERSION)" `
@@ -280,6 +280,27 @@ jobs:
               "-Dfrostguard.update.manifest.stable=$stableManifest" `
               "-Dfrostguard.update.manifest.nightly=$nightlyManifest" `
               "-P$profiles" package
+
+      - name: Build accepted Nightly bootstrap donor for Stable
+        if: env.CHANNEL == 'stable'
+        shell: pwsh
+        env:
+          WINDOWS_VERSION: ${{ steps.identity.outputs.windows_version }}
+          AUTHENTICODE_PUBLISHER: ${{ steps.certificate.outputs.publisher }}
+        run: |
+          $mavenArgs = $env:MAVEN_ARGS -split " "
+          $stableManifest = "https://github.com/$($env:GITHUB_REPOSITORY)/releases/latest/download/frostguard-stable-manifest.json"
+          $nightlyManifest = "https://github.com/$($env:GITHUB_REPOSITORY)/releases/download/nightly/frostguard-nightly-manifest.json"
+          & .\mvnw.cmd @mavenArgs -pl packaging/desktop -am -DskipTests `
+              "-Drevision=$($env:VERSION)" `
+              "-Dfrostguard.windows.app-version=$($env:WINDOWS_VERSION)" `
+              "-Dfrostguard.update.authenticode-publisher=$($env:AUTHENTICODE_PUBLISHER)" `
+              "-Dfrostguard.update.manifest.stable=$stableManifest" `
+              "-Dfrostguard.update.manifest.nightly=$nightlyManifest" `
+              "-Pwindows-app-image,windows-nightly" package
+          & build-support/packaging/use_nightly_bootstrap_for_stable.ps1 `
+              -StableImage packaging/desktop/target/app-image/Frostguard `
+              -NightlyImage "packaging/desktop/target/app-image/Frostguard Nightly"
 
       - name: Verify and smoke-test channel application image
         shell: pwsh
@@ -290,25 +311,40 @@ jobs:
           $verificationArgs = @(
               $image, '--channel', $env:CHANNEL, '--product-name', $env:PRODUCT_NAME
           )
-          if ($env:CHANNEL -eq 'nightly') {
-              $verificationArgs += @(
-                  '--expected-desktop-launcher-sha256',
-                  '5c728d3662d64c428d003874f6d62b798bbbe329f595b2b15a2ab5ab1fd1faa9',
-                  '--expected-watcher-launcher-sha256',
-                  '9c7452d890f39c7f4fdb2e5519993514c84f071deef222fe49784acfd459c209'
-              )
-          } else {
-              $verificationArgs += @(
-                  '--expected-desktop-launcher-sha256',
-                  '06610c6684f6323edf915a713d6a29cbc488d49f044685b80eabcfb1f7ca0a53',
-                  '--expected-watcher-launcher-sha256',
-                  'ed6a92c9e42bf4b205c669771bef4cbcd9e4d8674678f89cf944f965922f714e'
-              )
-          }
+          $verificationArgs += @(
+              '--expected-desktop-launcher-sha256',
+              '5c728d3662d64c428d003874f6d62b798bbbe329f595b2b15a2ab5ab1fd1faa9',
+              '--expected-watcher-launcher-sha256',
+              '9c7452d890f39c7f4fdb2e5519993514c84f071deef222fe49784acfd459c209'
+          )
           python build-support/verification/verify_app_image.py @verificationArgs
+          $bootstrapArgs = @()
+          if ($env:CHANNEL -eq 'stable') {
+              $bootstrapArgs += @('-BootstrapProductName', 'Frostguard Nightly')
+          }
           powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass `
               -File build-support/verification/smoke_test_app_image.ps1 `
-              -ImagePath $image -Channel $env:CHANNEL -ProductName $env:PRODUCT_NAME
+              -ImagePath $image -Channel $env:CHANNEL -ProductName $env:PRODUCT_NAME `
+              @bootstrapArgs
+
+      - name: Build installer from verified channel application image
+        shell: pwsh
+        env:
+          WINDOWS_VERSION: ${{ steps.identity.outputs.windows_version }}
+          EXTRA_PROFILE: ${{ steps.identity.outputs.profile }}
+          AUTHENTICODE_PUBLISHER: ${{ steps.certificate.outputs.publisher }}
+        run: |
+          $mavenArgs = $env:MAVEN_ARGS -split " "
+          $profiles = "windows-installer$($env:EXTRA_PROFILE)"
+          $stableManifest = "https://github.com/$($env:GITHUB_REPOSITORY)/releases/latest/download/frostguard-stable-manifest.json"
+          $nightlyManifest = "https://github.com/$($env:GITHUB_REPOSITORY)/releases/download/nightly/frostguard-nightly-manifest.json"
+          & .\mvnw.cmd @mavenArgs -pl packaging/desktop -am -DskipTests `
+              "-Drevision=$($env:VERSION)" `
+              "-Dfrostguard.windows.app-version=$($env:WINDOWS_VERSION)" `
+              "-Dfrostguard.update.authenticode-publisher=$($env:AUTHENTICODE_PUBLISHER)" `
+              "-Dfrostguard.update.manifest.stable=$stableManifest" `
+              "-Dfrostguard.update.manifest.nightly=$nightlyManifest" `
+              "-P$profiles" package
 
       - name: Prepare immutable installer and verify optional Authenticode
         id: installer

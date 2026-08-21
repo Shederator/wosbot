@@ -3,7 +3,8 @@ param(
     [string]$ImagePath,
     [ValidateSet("stable", "nightly")]
     [string]$Channel = "stable",
-    [string]$ProductName = "Frostguard"
+    [string]$ProductName = "Frostguard",
+    [string]$BootstrapProductName = $ProductName
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,9 +20,9 @@ if (-not (Test-Path -LiteralPath $watcherLauncher -PathType Leaf)) {
 }
 
 $versionInfo = (Get-Item -LiteralPath $appLauncher).VersionInfo
-if ($versionInfo.ProductName -ne $ProductName -or
+if ($versionInfo.ProductName -ne $BootstrapProductName -or
         $versionInfo.CompanyName -ne "Frostguard" -or
-        $versionInfo.FileDescription -ne "$ProductName automation desktop application") {
+        $versionInfo.FileDescription -ne "$BootstrapProductName automation desktop application") {
     throw "$ProductName.exe has incomplete Windows application metadata"
 }
 Add-Type -AssemblyName System.Drawing

@@ -44,11 +44,23 @@ class ConstructionBlockerRegistryTest {
     }
 
     @Test
-    void releasesOnlyWhenConstructionIsBusyAndNoQueueIsFree() {
-        assertTrue(UpgradeBuildingsRoutine.shouldReleaseReservation(false, true));
-        assertTrue(!UpgradeBuildingsRoutine.shouldReleaseReservation(true, true));
-        assertTrue(!UpgradeBuildingsRoutine.shouldReleaseReservation(true, false));
-        assertTrue(!UpgradeBuildingsRoutine.shouldReleaseReservation(false, false));
+    void releasesWhenTheReservedConstructionQueueIsBusy() {
+        assertTrue(UpgradeBuildingsRoutine.shouldReleaseReservation(UpgradeBuildingsRoutine.QueueMood.BUSY));
+        assertTrue(!UpgradeBuildingsRoutine.shouldReleaseReservation(UpgradeBuildingsRoutine.QueueMood.IDLE));
+        assertTrue(!UpgradeBuildingsRoutine.shouldReleaseReservation(UpgradeBuildingsRoutine.QueueMood.NOT_PURCHASED));
+        assertTrue(!UpgradeBuildingsRoutine.shouldReleaseReservation(UpgradeBuildingsRoutine.QueueMood.UNKNOWN));
+    }
+
+    @Test
+    void clearsRetainedReservationWhenItCannotStillProtectAConstructionStart() {
+        assertTrue(UpgradeBuildingsRoutine.shouldClearRetainedReservation(
+                UpgradeBuildingsRoutine.QueueMood.NOT_PURCHASED, false, false));
+        assertTrue(UpgradeBuildingsRoutine.shouldClearRetainedReservation(
+                UpgradeBuildingsRoutine.QueueMood.IDLE, true, false));
+        assertTrue(UpgradeBuildingsRoutine.shouldClearRetainedReservation(
+                UpgradeBuildingsRoutine.QueueMood.UNKNOWN, false, true));
+        assertTrue(!UpgradeBuildingsRoutine.shouldClearRetainedReservation(
+                UpgradeBuildingsRoutine.QueueMood.UNKNOWN, false, false));
     }
 
     @Test

@@ -47,8 +47,22 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertFalse((workflows / "stable-windows-release.yml").exists())
 
         self.assertIn("name: CI — Windows Installers", installers)
-        self.assertIn("Build and smoke-test Stable and Nightly installers", installers)
+        self.assertIn("Build and smoke-test required Windows installers", installers)
         self.assertIn('java-version: "21.0.12+8.0"', installers)
+        self.assertIn("windows_pr_channels.py", installers)
+        self.assertIn("fetch-depth: 0", installers)
+        self.assertGreaterEqual(
+            installers.count("if: steps.channels.outputs.nightly == 'true'"), 5)
+        self.assertIn(
+            "if: github.event_name == 'workflow_dispatch'\n"
+            "        uses: actions/upload-artifact@v4\n"
+            "        with:\n"
+            "          name: frostguard-stable-windows-app-image",
+            installers)
+        self.assertIn(
+            "if: github.event_name == 'workflow_dispatch' && "
+            "steps.channels.outputs.nightly == 'true'",
+            installers)
 
     def test_pr_test_build_keeps_bundle_verification_and_publication(self):
         workflow = (REPO_ROOT / ".github/workflows/pr-test-build.yml").read_text(
@@ -206,22 +220,42 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertIn("Remove an abandoned draft release", workflow)
         self.assertIn('java-version: "21.0.12+8.0"', workflow)
         for launcher_hash in (
-            "06610c6684f6323edf915a713d6a29cbc488d49f044685b80eabcfb1f7ca0a53",
-            "ed6a92c9e42bf4b205c669771bef4cbcd9e4d8674678f89cf944f965922f714e",
             "5c728d3662d64c428d003874f6d62b798bbbe329f595b2b15a2ab5ab1fd1faa9",
             "9c7452d890f39c7f4fdb2e5519993514c84f071deef222fe49784acfd459c209",
         ):
             self.assertIn(launcher_hash, installers)
             self.assertIn(launcher_hash, workflow)
+        for packaging_contract in (
+            "use_nightly_bootstrap_for_stable.ps1",
+            "Build accepted Nightly bootstrap donor for Stable",
+            "BootstrapProductName",
+            "Build installer from verified channel application image",
+        ):
+            self.assertIn(packaging_contract, workflow)
+        helper = (REPO_ROOT / "build-support/packaging/"
+                  "use_nightly_bootstrap_for_stable.ps1").read_text(encoding="utf-8")
+        self.assertIn('Join-Path $nightly "Frostguard Nightly.exe"', helper)
+        self.assertIn('Join-Path $stable "Frostguard.exe"', helper)
+        self.assertIn("Get-FileHash", helper)
+        self.assertIn("-ine $file.Sha256", helper)
         self.assertIn("stable_candidate_version", installers)
         self.assertIn("stable_candidate_windows_version", installers)
         self.assertIn("--candidate-windows-version", installers)
+        stable_build = installers.index("Build Stable application image")
+        donor_build = installers.index("Build accepted Nightly bootstrap donor for Stable")
+        stable_verify = installers.index("Verify Stable application image")
+        stable_installer = installers.index(
+            "Build Stable installer from verified application image")
         stable_upload = installers.index("Upload Stable installer")
-        packaging_reset = installers.index("Reset packaging output before Nightly build")
-        nightly_build = installers.index("Build Nightly application image and installer")
-        self.assertLess(stable_upload, packaging_reset)
-        self.assertLess(packaging_reset, nightly_build)
-        self.assertIn("-pl packaging/desktop clean", installers)
+        nightly_build = installers.index("Build Nightly application image")
+        nightly_installer = installers.index(
+            "Build Nightly installer from verified application image")
+        self.assertEqual(
+            sorted((stable_build, donor_build, stable_verify, stable_installer,
+                    stable_upload, nightly_build, nightly_installer)),
+            [stable_build, donor_build, stable_verify, stable_installer,
+             stable_upload, nightly_build, nightly_installer])
+        self.assertNotIn("Reset packaging output before Nightly build", installers)
         self.assertIn('gh api --method DELETE `', workflow)
         self.assertIn('releases/$($release.id)', workflow)
         immutable_tag_create = workflow.index(

@@ -274,13 +274,15 @@ the Java/JAR paths retained only for source and temporary PR-test bundles.
 Native packaging is opt-in through Maven profiles so the normal reactor build
 stays platform-neutral.
 
-The Nightly MSI product version remains monotonic for Windows Installer, while
-the unchanged native bootstrap launchers retain the last known-good launcher
-file version until Authenticode signing is enabled. This keeps their bytes and
-Smart App Control reputation stable across Java-only Nightly updates. The
-application reports its release version from packaged build metadata, not from
-the bootstrap file version. A bootstrap, icon, or JDK change still requires a
-new launcher identity and must pass the Windows signing/reputation gate.
+The Nightly MSI product version remains monotonic for Windows Installer. Until
+Authenticode signing is enabled, both channels reuse the unchanged, accepted
+Nightly bootstrap launcher bytes so Smart App Control reputation stays stable
+across Java-only updates. Stable behavior still comes from its separate
+packaged JVM configuration; only the PE bootstrap metadata retains the Nightly
+product name. The application reports its release version from packaged build
+metadata, not from the bootstrap file version. A bootstrap, icon, or JDK change
+still requires a new launcher identity and must pass the Windows
+signing/reputation gate.
 
 The watcher launcher is channel-specific internal infrastructure and does not
 receive Start-menu or desktop shortcuts. The installer exposes only the desktop

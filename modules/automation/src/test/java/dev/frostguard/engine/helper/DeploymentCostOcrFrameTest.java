@@ -18,17 +18,44 @@ class DeploymentCostOcrFrameTest {
 
     @Test
     void singleWordModeReadsRealTwoDigitRallyCost() throws Exception {
-        BufferedImage image = ImageIO.read(Objects.requireNonNull(getClass()
-                .getResourceAsStream("/deployment/polar-after-equalize-20260709.png")));
-        RawImageData frame = rgbaFrame(image);
+        assertEquals("22", readStaminaCost("/deployment/polar-after-equalize-20260709.png"));
+    }
 
-        String text = OcrEngine.recognizeText(
+    @Test
+    void singleWordModeReadsRealOneDigitIntelCost() throws Exception {
+        assertEquals("9", readStaminaCost("/deployment/intel-beast-formation-20260819.png"));
+    }
+
+    @Test
+    void travelRegionReadsCompleteTimerOnPolarFormation() throws Exception {
+        assertEquals("00:02:16", readTravelTime("/deployment/polar-after-equalize-20260709.png"));
+    }
+
+    @Test
+    void travelRegionDoesNotTurnIntelTimerIntoTenHours() throws Exception {
+        assertEquals("00:00:15", readTravelTime("/deployment/intel-beast-formation-20260819.png"));
+    }
+
+    private String readTravelTime(String resource) throws Exception {
+        RawImageData frame = rgbaFrame(image(resource));
+        return OcrEngine.recognizeText(
+                frame,
+                CommonGameAreas.TRAVEL_TIME_OCR_AREA.topLeft(),
+                CommonGameAreas.TRAVEL_TIME_OCR_AREA.bottomRight(),
+                CommonOCRSettings.TRAVEL_TIME_SETTINGS).trim();
+    }
+
+    private String readStaminaCost(String resource) throws Exception {
+        RawImageData frame = rgbaFrame(image(resource));
+        return OcrEngine.recognizeText(
                 frame,
                 CommonGameAreas.SPENT_STAMINA_OCR_AREA.topLeft(),
                 CommonGameAreas.SPENT_STAMINA_OCR_AREA.bottomRight(),
-                CommonOCRSettings.SPENT_STAMINA_SETTINGS);
+                CommonOCRSettings.SPENT_STAMINA_SETTINGS).trim();
+    }
 
-        assertEquals("22", text.trim());
+    private BufferedImage image(String resource) throws Exception {
+        return ImageIO.read(Objects.requireNonNull(getClass().getResourceAsStream(resource)));
     }
 
     private RawImageData rgbaFrame(BufferedImage image) {

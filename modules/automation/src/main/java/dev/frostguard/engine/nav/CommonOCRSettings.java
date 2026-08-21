@@ -30,6 +30,10 @@ public final class CommonOCRSettings {
     public static final OcrSettingsData INTEL_COOLDOWN_SETTINGS =
             buildConfig("0123456789:", true, 255, 255, 255, TextLayout.SINGLE_LINE);
 
+    // Daily sidebar status: "Intel Gain: 8" in green.
+    public static final OcrSettingsData INTEL_GAIN_SETTINGS =
+            buildConfig("IntelGain: 0123456789", true, 0, 193, 0, TextLayout.SINGLE_LINE);
+
     // red cooldown clock, isolated from illustrated skill backgrounds
     public static final OcrSettingsData RED_DURATION_SETTINGS =
             buildConfig("0123456789:", true, 243, 59, 59, TextLayout.SINGLE_LINE);
@@ -67,7 +71,7 @@ public final class CommonOCRSettings {
 
     private static OcrSettingsData buildSpentStaminaConfig() {
         return OcrSettingsData.builder()
-                .textLayout(TextLayout.SINGLE_WORD)
+                .textLayout(TextLayout.SINGLE_LINE)
                 .isolateForeground(true)
                 .targetColor(new Color(254, 254, 254))
                 .allowedGlyphs("0123456789")

@@ -23,8 +23,11 @@ origin explicitly; only those calls perform the bounded three-swipe reset.
 
 Daily destination icons provide row identity. The identical Go arrows do not. The navigator
 therefore finds the destination icon and derives the Go area from the detected row geometry.
-It resets the section to the top with a bounded gesture count, uses a destination-specific
-bounded scan, and requires the panel to disappear after the Go tap.
+Opening the panel and changing its section both establish the current UI's top position, so those
+transitions do not issue reset gestures. Reuse of an already-open section with an explicitly
+requested known origin closes and reopens the panel instead, relying on the same verified top
+position without momentum-sensitive swipes. Destination scans remain bounded and require the
+panel to disappear after the Go tap.
 
 City destination icons use the same row-relative Go association. Research Center is migrated
 through its detected Center Research icon. After the Go transition, the building's detected

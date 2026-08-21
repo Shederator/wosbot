@@ -24,7 +24,6 @@ public final class SidebarNavigator {
     private static final int SECTION_SETTLE_MS = 400;
     private static final int SCROLL_SETTLE_MS = 500;
     private static final int DESTINATION_SETTLE_MS = 2_000;
-    private static final int RESET_SWIPES = 3;
     private static final int ROW_ICON_THRESHOLD = 88;
     private static final int GO_LEFT_OFFSET = 337;
     private static final int GO_RIGHT_OFFSET = 383;
@@ -112,6 +111,10 @@ public final class SidebarNavigator {
         return NextOpenAction.DONE;
     }
 
+    static boolean establishesKnownTop(NextOpenAction action) {
+        return action == NextOpenAction.OPEN_PANEL || action == NextOpenAction.SELECT_SECTION;
+    }
+
     private boolean openSection(SidebarSection target, boolean resetRequested) {
         Optional<SidebarSection> current = selectedSection();
         boolean resetComplete = false;
@@ -131,6 +134,9 @@ public final class SidebarNavigator {
                         log.warn("Sidebar did not open after one verified trigger tap");
                         return false;
                     }
+                    if (resetRequested && establishesKnownTop(action)) {
+                        resetComplete = true;
+                    }
                 }
                 case SELECT_SECTION -> {
                     taps.tapInside(CommonGameAreas.sidebarTab(target), 1, SECTION_SETTLE_MS);
@@ -141,6 +147,9 @@ public final class SidebarNavigator {
                         return false;
                     }
                     log.debug("Sidebar section selected: " + target);
+                    if (resetRequested && establishesKnownTop(action)) {
+                        resetComplete = true;
+                    }
                 }
                 case RESET_TO_TOP -> {
                     if (!resetToTop(target)) {
@@ -180,13 +189,17 @@ public final class SidebarNavigator {
     }
 
     private boolean resetToTop(SidebarSection expected) {
-        for (int i = 0; i < RESET_SWIPES; i++) {
-            emu.swipeScreen(device, CommonGameAreas.SIDEBAR_RESET_FROM,
-                    CommonGameAreas.SIDEBAR_RESET_TO, 300);
-            interruptibleWait(SCROLL_SETTLE_MS);
+        log.debug("Reopening sidebar section to establish its top position: " + expected);
+        if (!close()) {
+            return false;
         }
+        if (!isRootScreen()) {
+            log.warn("Refusing to reopen the sidebar without a Home or World anchor");
+            return false;
+        }
+        taps.tapInside(CommonGameAreas.LEFT_MENU_TRIGGER, 1, SECTION_SETTLE_MS);
         if (selectedSection().orElse(null) != expected) {
-            log.warn("Sidebar state changed while resetting " + expected + " to the top");
+            log.warn("Sidebar did not reopen on the expected section: " + expected);
             return false;
         }
         return true;
