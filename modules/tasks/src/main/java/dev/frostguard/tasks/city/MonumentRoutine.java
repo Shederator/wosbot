@@ -85,6 +85,10 @@ import dev.frostguard.vision.convert.RegexNumberParser;
  */
 public class MonumentRoutine extends DelayedTask {
 
+    /** Guards against sweeping the Fragment Backpack twice in one pass when a run reaches the hub
+     *  by more than one route. Reset at the top of every execute(). */
+    private boolean backpackSweptThisRun;
+
     // ========== Stray-popup clearing (game-rendered modals ignore Android back) ==========
     /** Every close-X position observed so far across different tasks' leftover
      *  panels (Resource Stockpile Scan's "Overview", the "Resource &amp; Speedup
@@ -192,6 +196,11 @@ public class MonumentRoutine extends DelayedTask {
      *  points both failed to close it live; only its own X button worked. */
     private static final PointData PUZZLE_LORE_CARD_CLOSE_X = new PointData(645, 90);
     private static final int PUZZLE_ASSEMBLE_ANIM_SETTLE_MS = 1500;
+    /** Dismiss/look cycles after the assemble commit -- see pollForPuzzleOverviewAnchor(). Sized to
+     *  cover roughly 18s, comfortably past the ~5s the fixed sequence allowed and failed at, while
+     *  still bounded so a genuinely wrong screen gives up and dumps a frame rather than tapping on. */
+    private static final int PUZZLE_CHAIN_POLL_ATTEMPTS = 12;
+    private static final int PUZZLE_CHAIN_POLL_DELAY_MS = 1500;
 
     // ========== Fragment Pack detail (Enable) screen ==========
     /** Quantity defaults to the full owned count already -- one Enable tap consumes
@@ -351,7 +360,20 @@ public class MonumentRoutine extends DelayedTask {
         // unconditionally, before searching for anything.
         clearStrayPopups();
 
+        backpackSweptThisRun = false;
+
         if (!findAndOpenBadgeViaLancer()) {
+            // The Fragment Backpack is checked on EVERY visit, not only when a badge let us in.
+            // Requested directly after a live run: "every single scenario of the monument, before
+            // you exit, you always have to check the frag backpack."
+            //
+            // Without this the routine has a catch-22 that hides owned packs indefinitely. All three
+            // entry states -- the scroll-and-quill badge, the red binder, and the puzzle-ready icon
+            // -- are TRIGGERS that get consumed. Once they are spent there is nothing to detect, so
+            // the routine turns around at the door and reschedules; but packs sitting in the shared
+            // backpack are exactly the case where no trigger is showing. The thing most likely to
+            // hold unclaimed rewards was therefore the one thing never looked at.
+            sweepFragmentBackpackWithoutBadge();
             logInfo(logLine("No rewards-ready badge found right now. Rechecking in "
                     + IDLE_RECHECK_MINUTES + " minutes."));
             reschedule(LocalDateTime.now().plusMinutes(IDLE_RECHECK_MINUTES));
@@ -370,11 +392,13 @@ public class MonumentRoutine extends DelayedTask {
         // Moved here (was called before the back-arrow, at a coordinate that
         // doesn't exist on that screen -- see class header). This is the real Tundra Albums
         // hub, where Fragment Backpack's actual button lives.
-        logInfo(logLine("On Tundra Albums. Processing the shared Fragment Backpack."));
-        processFragmentBackpack();
-
-        logInfo(logLine("Checking the milestone chest track."));
-        claimMilestoneChestsIfReady();
+        //
+        // Routed through the one shared hub sweep so this path and the no-badge path cannot drift:
+        // whichever way we got here, the chest track, a completed album and the Fragment Backpack
+        // all get handled.
+        logInfo(logLine("On Tundra Albums. Running the hub sweep."));
+        backpackSweptThisRun = true;
+        sweepAlbumsHub();
 
         // Alliance Trade Sends (giving pieces TO allies) deliberately not run
         // automatically -- by design, confirmed live: "there's a whole other part of
@@ -745,21 +769,30 @@ public class MonumentRoutine extends DelayedTask {
                     + "the congrats/lore-card sequence, which re-anchors on a real template below."));
         }
 
-        tapNear(PUZZLE_ASSEMBLED_TAP_ANYWHERE);
-        sleepTask(ACTION_SETTLE_MS);
-
-        tapNear(PUZZLE_LORE_CARD_CLOSE_X);
-        sleepTask(PANEL_SETTLE_MS);
-
-        // Real re-anchor: don't trust the three estimated taps above blindly. Confirm we
-        // actually landed back on a puzzle overview screen (real native template) before
-        // touching Fragment Backpack at all.
-        ImageSearchResultData backpackIcon = templateSearchHelper.locatePattern(
-                TemplatesEnum.MONUMENT_PUZZLE_OVERVIEW_FRAGMENT_BACKPACK_ICON, SearchConfigConstants.DEFAULT_SINGLE);
+        // Observed live 2026-08-20 22:24: the commit above worked -- the banner read
+        // "Assemble Now", the hexagon measured 4633 blue / 410 green and was tapped -- and the run
+        // still died here on "Fragment Backpack icon not found after 1 attempts".
+        //
+        // The old sequence was tap(congrats) / sleep 900 / tap(loreX) / sleep 1200 / look ONCE:
+        // 3.6s of FIXED timing covering an assembly animation, a congrats screen and a lore card,
+        // with two blind taps in between. Both of those tap coordinates are rescaled desktop
+        // estimates that have never been checked against a native 720x1280 frame (see the
+        // "Puzzle-ready chain" constants comment). So the taps fire into whatever happens to be on
+        // screen at 900ms boundaries, and a single look decides the outcome.
+        //
+        // Poll for the real anchor instead of timing the animation. The Fragment Backpack icon IS a
+        // real native template, so it is the thing worth waiting for; between looks, dismiss with
+        // the congrats body tap and the lore-card X in turn, since only the X closes the lore card
+        // and only a body tap closes the congrats screen. Whichever screen is actually up receives
+        // the tap that closes it, order does not matter, and the loop exits the moment the anchor
+        // appears -- including immediately, before any tap, if the chain already landed.
+        ImageSearchResultData backpackIcon = pollForPuzzleOverviewAnchor();
         if (!backpackIcon.isFound()) {
-            logWarning(logLine("Fragment Backpack icon not found after the assemble/congrats/lore-card "
-                    + "sequence -- one of the estimated taps likely missed. Recovering toward Home "
-                    + "instead of continuing blind."));
+            logWarning(logLine("Fragment Backpack icon never appeared across "
+                    + PUZZLE_CHAIN_POLL_ATTEMPTS + " dismiss/look cycles (~"
+                    + (PUZZLE_CHAIN_POLL_ATTEMPTS * PUZZLE_CHAIN_POLL_DELAY_MS / 1000)
+                    + "s) after the assemble commit. Recovering toward Home instead of continuing "
+                    + "blind. " + dumpDiagnosticFrame("puzzle-chain-no-backpack-icon")));
             recoverTowardHome();
             return;
         }
@@ -780,6 +813,41 @@ public class MonumentRoutine extends DelayedTask {
 
         StatisticsService.obtain().addToCounter(profile, "Monument Puzzle Assembled", 1);
         logInfo(logLine("Puzzle-ready chain complete."));
+    }
+
+    /**
+     * Waits for the puzzle overview to come back after an assemble commit, dismissing whatever
+     * celebration screen is in the way, and returns the Fragment Backpack icon once it is really on
+     * screen.
+     *
+     * <p>Written as look-then-dismiss rather than dismiss-then-look on purpose: if the chain already
+     * landed on the overview, this returns on the very first look without tapping anything, so it
+     * cannot knock a correct screen off course. Only when the anchor is absent does it tap, and it
+     * alternates the two dismissals because they are not interchangeable -- the congrats screen
+     * closes on a body tap, while the lore card ignores body taps and closes only on its own X
+     * (both verified live). Alternating means the order the two screens appear in does not matter.
+     *
+     * @return the located icon, or the last unsuccessful result if it never appeared
+     */
+    private ImageSearchResultData pollForPuzzleOverviewAnchor() {
+        ImageSearchResultData icon = null;
+        for (int attempt = 1; attempt <= PUZZLE_CHAIN_POLL_ATTEMPTS; attempt++) {
+            icon = templateSearchHelper.locatePattern(
+                    TemplatesEnum.MONUMENT_PUZZLE_OVERVIEW_FRAGMENT_BACKPACK_ICON,
+                    SearchConfigConstants.DEFAULT_SINGLE);
+            if (icon.isFound()) {
+                logInfo(logLine("Puzzle overview anchor found on dismiss/look cycle " + attempt
+                        + " of " + PUZZLE_CHAIN_POLL_ATTEMPTS + "."));
+                return icon;
+            }
+            if (attempt % 2 == 1) {
+                tapNear(PUZZLE_ASSEMBLED_TAP_ANYWHERE);
+            } else {
+                tapNear(PUZZLE_LORE_CARD_CLOSE_X);
+            }
+            sleepTask(PUZZLE_CHAIN_POLL_DELAY_MS);
+        }
+        return icon;
     }
 
     /**
@@ -1042,6 +1110,46 @@ public class MonumentRoutine extends DelayedTask {
         }
     }
 
+    /**
+     * Opens the Monument with no badge to lead the way, and runs the full hub sweep.
+     *
+     * <p>This exists because all three entry states -- the scroll-and-quill badge, the red binder,
+     * and the puzzle-ready icon -- are consumable triggers. Once spent, the old routine had nothing
+     * to detect and turned around at the door, which is precisely the state in which owned fragment
+     * packs and a claimable milestone chest sit waiting. findAndOpenBadgeViaLancer() has already
+     * driven the camera to the Monument by the time this runs, so the building itself is on screen;
+     * MONUMENT_BUILDING_ANCHOR is a real native template and is used as the tap target rather than a
+     * guessed coordinate.
+     *
+     * <p>Nothing here cascades blind: if the anchor is not found we stop, and the hub sweep's own
+     * steps each verify their screen (processFragmentBackpack OCRs the panel title and dumps a frame
+     * on a miss).
+     */
+    private void sweepFragmentBackpackWithoutBadge() {
+        if (backpackSweptThisRun) {
+            return;
+        }
+
+        ImageSearchResultData building = templateSearchHelper.locatePattern(
+                TemplatesEnum.MONUMENT_BUILDING_ANCHOR, SearchConfigConstants.SINGLE_WITH_RETRIES);
+        if (!building.isFound()) {
+            logInfo(logLine("No badge and no Monument building anchor on screen either -- nothing to "
+                    + "open, so the Fragment Backpack cannot be checked this pass. "
+                    + dumpDiagnosticFrame("no-badge-no-building-anchor")));
+            return;
+        }
+
+        logInfo(logLine("No badge, but the Monument building is on screen at " + building.getPoint()
+                + " -- opening it anyway to check the milestone chest, any completed album, and the "
+                + "Fragment Backpack."));
+        backpackSweptThisRun = true;
+        tapNear(building.getPoint());
+        sleepTask(PANEL_SETTLE_MS);
+
+        sweepAlbumsHub();
+        recoverTowardHome();
+    }
+
     private boolean isScreenClear() {
         return templateSearchHelper.locatePattern(
                 TemplatesEnum.MONUMENT_REWARD_BADGE, SearchConfigConstants.QUICK_SEARCH).isFound()
@@ -1113,10 +1221,32 @@ public class MonumentRoutine extends DelayedTask {
     // possible tonight, so this scans a few plausible slot positions along the row rather than
     // trusting a single fixed point -- the row's exact scroll offset at any given moment isn't fully
     // characterized yet.
+    // Measured off a real native 720x1280 capture of the Tundra Albums hub
+    // (ocr-debug/albums-hub/tundra-albums-hub-live.png, saved as a test fixture). The six chest
+    // sprites were located by column profile against the flat orange panel background:
+    //
+    //     chest 1  x 173-209  centre 191      chest 4  x 433-480  centre 456
+    //     chest 2  x 252-299  centre 275      chest 5  x 524-570  centre 547
+    //     chest 3  x 342-389  centre 365      chest 6  x 614-660  centre 637
+    //
+    // all on the same row, sprite centre y = 173.
+    //
+    // The previous list was (245,178), (340,178), (428,178): only three entries, and every one of
+    // them landed in a GAP BETWEEN two chests -- 245 sits between chests 1 and 2, 340 between 2 and
+    // 3, 428 between 3 and 4. So the track was tapped three times per pass and could never claim
+    // anything. Reported as "there's a treasure chest at the top that has to be clicked" while the
+    // log cheerfully said "No milestone chest currently ready".
+    //
+    // On the captured frame the account is at 940/1347 with milestones at 815/855/895/935/975/1015,
+    // so chest 4 (935) is genuinely claimable and renders gold with sparkles while the rest are
+    // grey -- and chest 4's real centre, 456, was not covered by any old candidate.
     private static final PointData[] MILESTONE_CHEST_CANDIDATES = {
-            new PointData(245, 178),
-            new PointData(340, 178),
-            new PointData(428, 178),
+            new PointData(191, 173),
+            new PointData(275, 173),
+            new PointData(365, 173),
+            new PointData(456, 173),
+            new PointData(547, 173),
+            new PointData(637, 173),
     };
     private static final PointData MILESTONE_REWARDS_TAP_ANYWHERE = new PointData(360, 1198);
     private static final int MAX_MILESTONE_CHEST_CLAIMS = 6;
@@ -1214,6 +1344,106 @@ public class MonumentRoutine extends DelayedTask {
     // already carry the quit-game-dialog safety net) instead of one blind close-tap that assumes
     // we're still on the screen it expects.
     private static final long BACKPACK_PASS_TIME_BUDGET_MS = 90_000;
+
+    // ========== Album ready-book (a completed album waiting to be assembled) ==========
+    // Measured off the same real hub capture. Each album row carries a small book icon at the right
+    // end of its progress bar. A COMPLETED album's book blazes with a golden halo; an incomplete
+    // one shows the identical icon flat, with no glow. Measured on that frame:
+    //
+    //     Rekindled Flames  9/9  glow pixels 1859   bbox (556,510)-(628,584)  centre (592,547)
+    //     Song of Heroes    7/9  glow pixels  522   bbox (569,848)-(625,904)  centre (597,876)
+    //
+    // 3.5x apart, so this is a wide-margin call rather than a tuned threshold. Counting the halo
+    // beats template matching here for the same reason Life Essence moved off templates: the glow
+    // animates, so no single correlation score is stable, while the amount of glow is.
+    private static final int ALBUM_BOOK_BAND_LEFT = 548;
+    private static final int ALBUM_BOOK_BAND_RIGHT = 644;
+    private static final int ALBUM_BOOK_BAND_TOP = 300;
+    private static final int ALBUM_BOOK_BAND_BOTTOM = 1130;
+    private static final int ALBUM_BOOK_WINDOW = 90;
+    private static final int ALBUM_BOOK_STEP = 15;
+    /** Between the measured 522 (not ready) and 1859 (ready), nearer the low side so a partly
+     *  occluded ready book still counts. */
+    private static final int ALBUM_BOOK_MIN_GLOW_PX = 1100;
+
+    /**
+     * Finds a completed album's glowing ready-book on the Tundra Albums hub, if one is showing.
+     *
+     * <p>Slides a window down the book column and returns the centre of the topmost window whose
+     * glow count clears the threshold, so it picks the first ready album rather than assuming a
+     * fixed row -- the hub scrolls, and which album is complete changes week to week.
+     *
+     * @return the tap point of a ready album's book, or {@code null} if none is showing
+     */
+    private PointData findReadyAlbumBook() {
+        RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+        if (frame == null || frame.getBpp() != 32) {
+            return null;
+        }
+        byte[] px = frame.getFrameBytes();
+        int stride = frame.getWidth() * 4;
+
+        int bestCount = 0;
+        PointData best = null;
+        for (int top = ALBUM_BOOK_BAND_TOP;
+                top + ALBUM_BOOK_WINDOW < Math.min(ALBUM_BOOK_BAND_BOTTOM, frame.getHeight());
+                top += ALBUM_BOOK_STEP) {
+            int glow = 0;
+            for (int y = top; y < top + ALBUM_BOOK_WINDOW; y++) {
+                for (int x = ALBUM_BOOK_BAND_LEFT; x < ALBUM_BOOK_BAND_RIGHT && x < frame.getWidth(); x++) {
+                    int offset = y * stride + x * 4;
+                    if (offset + 2 >= px.length) continue;
+                    int c0 = px[offset] & 0xFF, g = px[offset + 1] & 0xFF, c2 = px[offset + 2] & 0xFF;
+                    // Channel-order agnostic: green is the middle byte in both RGBA and BGRA, and the
+                    // outer two swap. A warm glow is one outer channel high (red) and the other low
+                    // (blue), so test max/min of the pair rather than naming them.
+                    int hi = Math.max(c0, c2), lo = Math.min(c0, c2);
+                    if (hi >= 220 && g >= 170 && lo < 140) {
+                        glow++;
+                    }
+                }
+            }
+            if (glow > bestCount) {
+                bestCount = glow;
+                best = new PointData((ALBUM_BOOK_BAND_LEFT + ALBUM_BOOK_BAND_RIGHT) / 2,
+                        top + ALBUM_BOOK_WINDOW / 2);
+            }
+        }
+
+        if (bestCount >= ALBUM_BOOK_MIN_GLOW_PX && best != null) {
+            logInfo(logLine("Ready album book detected at " + best + " (" + bestCount
+                    + " glow px, need " + ALBUM_BOOK_MIN_GLOW_PX + ")."));
+            return best;
+        }
+        logInfo(logLine("No completed album waiting to be assembled (best glow count " + bestCount
+                + ", need " + ALBUM_BOOK_MIN_GLOW_PX + ")."));
+        return null;
+    }
+
+    /**
+     * Everything that must happen on the Tundra Albums hub before leaving it, whatever route got
+     * us here: claim the milestone chest track, assemble a completed album if one is waiting, and
+     * empty the Fragment Backpack.
+     *
+     * <p>Kept as one method and called from every hub-reaching path so the three cannot drift apart
+     * -- the standing rule is that the Fragment Backpack is checked on EVERY Monument visit.
+     */
+    private void sweepAlbumsHub() {
+        logInfo(logLine("Checking the milestone chest track."));
+        claimMilestoneChestsIfReady();
+
+        PointData readyBook = findReadyAlbumBook();
+        if (readyBook != null) {
+            logInfo(logLine("Completed album waiting -- opening it to run the assemble chain."));
+            tapNear(readyBook);
+            sleepTask(PANEL_SETTLE_MS);
+            handlePuzzleReadyChain();
+            return;
+        }
+
+        logInfo(logLine("Processing the shared Fragment Backpack."));
+        processFragmentBackpack();
+    }
 
     private void processFragmentBackpack() {
         processFragmentBackpack(ALBUMS_FRAGMENT_BACKPACK_BTN);
