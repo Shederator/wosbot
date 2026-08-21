@@ -24,6 +24,7 @@ import dev.frostguard.engine.service.TaskManagementService;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -114,6 +115,8 @@ private int consecutiveNoProgressCycles;
 
 private final IntelPatternPreference intelPatternPreference = new IntelPatternPreference();
 
+private final IntelCyclePolicy intelCyclePolicy = new IntelCyclePolicy();
+
 // Changed by pernerch | Date: 2026-07-02 | Why: ensure gather and autojoin can be resumed after Intel priority handling.
 private boolean shouldRequeueGatherAfterIntel;
 
@@ -164,12 +167,21 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 		MarchesAvailable marchesAvailable = new MarchesAvailable(true, null);
 		int initiallyIdleMarches = resolveConfiguredIntelMarchesFlow();
 
-		if (!intelScreenHelper.enterIntelFromDailyIfAvailable()) {
-			logInfo(routineLogIntelligenceLine(
-					"Daily sidebar has no green Intel availability evidence. Retrying in 10 minutes."));
-			reschedule(LocalDateTime.now().plusMinutes(10));
+		boolean dailyIntelAvailable = intelScreenHelper.enterIntelFromDailyIfAvailable();
+		IntelCyclePolicy.Decision entryDecision = intelCyclePolicy.evaluateDailyAvailability(
+				dailyIntelAvailable, LocalDateTime.now(), ZoneId.systemDefault());
+		if (entryDecision.action() == IntelCyclePolicy.Action.WAIT_FOR_NEXT_REFRESH) {
+			logInfo(routineLogIntelligenceLine("Daily sidebar has no green Intel availability evidence and no "
+					+ "Intel cycle is active. Planning the next UTC Intel refresh at: "
+					+ entryDecision.nextRun().format(DATETIME_FORMATTER)));
+			reschedule(entryDecision.nextRun());
 			processingTask = false;
 			return;
+		}
+		if (entryDecision.action() == IntelCyclePolicy.Action.RESUME_ACTIVE_CYCLE) {
+			logInfo(routineLogIntelligenceLine("Daily no longer reports new Intel, but the current cycle still "
+					+ "has pending mission completion. Resuming through the Wilderness shortcut."));
+			intelScreenHelper.resumeIntelCycleFromWilderness();
 		}
 		boolean intelMissionsDetected = hasVisibleIntelMissionFlow();
 		if (!intelMissionsDetected) {
@@ -187,7 +199,11 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 			processingTask = false;
 			return;
 		}
-		logInfo(routineLogIntelligenceLine("Daily sidebar visually confirmed available Intel."));
+		if (entryDecision.action() == IntelCyclePolicy.Action.START_AVAILABLE_CYCLE) {
+			logInfo(routineLogIntelligenceLine("Daily sidebar visually confirmed available Intel."));
+		} else {
+			logInfo(routineLogIntelligenceLine("Active Intel cycle entry confirmed from Wilderness."));
+		}
 
 		autoJoinTask = TaskManagementService.shared().lookupTaskState(profile.getId(),
 				TpDailyTaskEnum.ALLIANCE_AUTOJOIN.getId());
@@ -379,6 +395,7 @@ private void tryRescheduleFromCooldownFlow() {
 		}
 
 		reschedule(cooldown);
+		intelCyclePolicy.completeCycle();
 		pressBack();
 
 		logInfo(routineLogIntelligenceLine("Zero new intel detected. Planning next run task to run at: " + cooldown.format(DATETIME_FORMATTER)));
@@ -940,6 +957,8 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 		sleepTask(500);
 
 		intelScreenHelper.ensureOnIntelScreen();
+		releaseElapsedIntelMarchesFlow();
+		marchQueueLimitReached = !marchesAvailable.available() || intelMarchesRemaining <= 0;
 		boolean nonMarchBoundMissionAvailable = hasNonMarchBoundIntelMissionAvailableFlow();
 		boolean missionsStillAvailable = nonMarchBoundMissionAvailable || hasMarchBoundIntelMissionAvailableFlow();
 		boolean onlyMarchBoundMissionsLeft = missionsStillAvailable && !nonMarchBoundMissionAvailable;

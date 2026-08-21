@@ -104,6 +104,11 @@ public class IntelScreenHelper {
         enterIntelFromWilderness();
     }
 
+    /** Continues a previously started Intel cycle after Daily no longer reports new missions. */
+    public void resumeIntelCycleFromWilderness() {
+        enterIntelFromWilderness();
+    }
+
     private void enterIntelFromWilderness() {
         nav.ensureCorrectScreenLocation(LaunchPoint.WORLD);
         for (int pass = 1; pass <= MAX_NAV_PASSES; pass++) {

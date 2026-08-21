@@ -28,6 +28,16 @@ class IntelligenceRoutineMarchCapacityTest {
     }
 
     @Test
+    void survivorSettleTimeStillReleasesAnElapsedBeastEtaBeforeRescheduling() {
+        LocalDateTime deployedAt = LocalDateTime.of(2026, 8, 21, 18, 48, 48);
+        LocalDateTime returnEta = deployedAt.plusSeconds(30);
+        LocalDateTime afterSurvivorSettle = returnEta.plusSeconds(20);
+
+        assertEquals(1, IntelligenceRoutine.countElapsedIntelMarches(
+                afterSurvivorSettle, List.of(returnEta)));
+    }
+
+    @Test
     void configuredFlagLimitsBeastDeploymentToOneMarch() {
         assertEquals(1, IntelligenceRoutine.resolveIntelMarchCapacity(6, 3, true));
     }
