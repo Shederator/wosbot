@@ -353,33 +353,69 @@ public class MonumentRoutine extends DelayedTask {
         return true;
     }
 
+    /**
+     * A Monument pass is two separate concerns, and conflating them is what made this routine do a
+     * different amount of work depending on how it got in.
+     *
+     * <p><b>Getting in</b> has several doors: the scroll-and-quill badge, the red binder, the
+     * puzzle-ready icon, or -- once every trigger has been consumed -- no badge at all, in which
+     * case the Monument building itself is the way in. Each door harvests whatever that door alone
+     * puts on screen, then has exactly one job: land on the Tundra Albums hub and prove it.
+     *
+     * <p><b>The work</b> is the same checklist every time and does not care which door was used.
+     * Previously the no-badge door ran a smaller sweep and returned early, so the chest track, a
+     * completed album and Alliance Trade were only ever reachable behind a badge -- and a badge is
+     * a consumed trigger, so most passes skipped them. Alliance Trade's own red dot signals a
+     * fragment an ally has already handed over, which appears with no badge anywhere on the city,
+     * so that claim could sit uncollected indefinitely.
+     */
     @Override
     protected void execute() {
-        // A prior task (Resource Stockpile Scan, in particular) can
-        // leave its own popup open when Monument's turn comes up. Clear it first,
-        // unconditionally, before searching for anything.
+        // A prior task (Resource Stockpile Scan, in particular) can leave its own popup open when
+        // Monument's turn comes up. Clear it first, unconditionally, before searching for anything.
         clearStrayPopups();
 
         backpackSweptThisRun = false;
 
-        if (!findAndOpenBadgeViaLancer()) {
-            // The Fragment Backpack is checked on EVERY visit, not only when a badge let us in.
-            // Requested directly after a live run: "every single scenario of the monument, before
-            // you exit, you always have to check the frag backpack."
-            //
-            // Without this the routine has a catch-22 that hides owned packs indefinitely. All three
-            // entry states -- the scroll-and-quill badge, the red binder, and the puzzle-ready icon
-            // -- are TRIGGERS that get consumed. Once they are spent there is nothing to detect, so
-            // the routine turns around at the door and reschedules; but packs sitting in the shared
-            // backpack are exactly the case where no trigger is showing. The thing most likely to
-            // hold unclaimed rewards was therefore the one thing never looked at.
-            sweepFragmentBackpackWithoutBadge();
-            logInfo(logLine("No rewards-ready badge found right now. Rechecking in "
+        if (!enterAlbumsHub()) {
+            logInfo(logLine("Could not reach the Tundra Albums hub this pass. Rechecking in "
                     + IDLE_RECHECK_MINUTES + " minutes."));
             reschedule(LocalDateTime.now().plusMinutes(IDLE_RECHECK_MINUTES));
             return;
         }
 
+        runHubChecklist();
+
+        tapNear(ALBUMS_BACK_ARROW);
+        sleepTask(ACTION_SETTLE_MS);
+
+        StatisticsService.obtain().addToCounter(profile, "Monument Pass Completed", 1);
+        logInfo(logLine("Monument pass complete. Rechecking in " + IDLE_RECHECK_MINUTES + " minutes."));
+        reschedule(LocalDateTime.now().plusMinutes(IDLE_RECHECK_MINUTES));
+    }
+
+    // ---- getting in -------------------------------------------------------------------------
+
+    /**
+     * Tries each door in turn and returns only when the hub is confirmed on screen. Every door ends
+     * in the same {@link #isOnAlbumsHub()} check, so no caller can proceed on the assumption that a
+     * tap landed where it was aimed.
+     *
+     * @return true if the Tundra Albums hub is on screen right now
+     */
+    private boolean enterAlbumsHub() {
+        if (findAndOpenBadgeViaLancer()) {
+            return enteredViaBadge();
+        }
+        return enteredViaBuildingAnchor();
+    }
+
+    /**
+     * The badge door. The badge opens the Atlas rewards panel, whose ready rows exist only on this
+     * screen and only in this entry state, so they are harvested here as part of the door rather
+     * than in the shared checklist.
+     */
+    private boolean enteredViaBadge() {
         logInfo(logLine("Badge opened. Claiming any ready rows."));
         claimAllReadyRows();
 
@@ -389,56 +425,121 @@ public class MonumentRoutine extends DelayedTask {
         tapNear(ATLAS_BACK_ARROW);
         sleepTask(ACTION_SETTLE_MS);
 
-        // Moved here (was called before the back-arrow, at a coordinate that
-        // doesn't exist on that screen -- see class header). This is the real Tundra Albums
-        // hub, where Fragment Backpack's actual button lives.
-        //
-        // Routed through the one shared hub sweep so this path and the no-badge path cannot drift:
-        // whichever way we got here, the chest track, a completed album and the Fragment Backpack
-        // all get handled.
-        logInfo(logLine("On Tundra Albums. Running the hub sweep."));
-        sweepAlbumsHub();
+        if (!isOnAlbumsHub()) {
+            logWarning(logLine("Closing the Atlas panel did not leave us on the Tundra Albums hub -- "
+                    + "not running the checklist against an unidentified screen. "
+                    + dumpDiagnosticFrame("badge-exit-missed-hub")));
+            recoverTowardHome();
+            return false;
+        }
+        return true;
+    }
 
-        // Alliance Trade Sends (giving pieces TO allies) deliberately not run
-        // automatically -- by design, confirmed live: "there's a whole other part of
-        // this where you could give other alliance members pieces, but it's extremely
-        // complicated... not really appropriate at this time." processAllianceTradeSends() is
-        // left in place, live-verified working, just not called here.
-        //
-        // My Requests (Claim + Request -- asking the alliance FOR a piece) is
-        // now wired in, by design, a direct "build this whole thing" the same day he walked the
-        // real Claim/Request/piece-picker flow live tap-by-tap. Entered via the Tundra Albums
-        // hub's own always-present Alliance Trade button (not the floating city badge that led
-        // here today -- that badge reverted back to the normal MONUMENT_REWARD_BADGE state the
-        // moment its one pending trade got consumed, so there's no stable template for it to
-        // gate on; the hub button needs no badge at all).
-        // Observed live: this gate was OCR'ing BACKPACK_TITLE_TL/BR -- the
-        // Fragment Backpack panel's own title box, a completely different panel -- to "confirm"
-        // the Alliance Trade panel opened. Copy-paste bug: that region always reads blank here
-        // ('null' every single run), so this pass never once actually proceeded past the gate.
-        // No dedicated Alliance Trade title box was ever measured. Per the direct instruction
-        // ("keep it simple -- worst case is a false positive and it exits out anyway, who cares"):
-        // drop the broken OCR gate entirely and just proceed. ALBUMS_ALLIANCE_TRADE_BTN is a
-        // reliable always-present hub button (not a floating badge that can be absent), so a tap
-        // there is already good evidence -- if it somehow lands wrong, processAllianceTradeRequests
-        // simply fails to find its own buttons and falls through harmlessly.
-        // The gate came back, because "worst case is a harmless false positive"
-        // turned out to be false. A live frame of what this tap ACTUALLY opens is now captured
-        // (ocr-debug/monument-my-requests-label-unrecognized-2026-08-20T01-22-33): it is the
-        // "Obtain more" GOLD KEY PURCHASE dialog, not Alliance Trade. That also finally explains the
-        // string from the original report -- 'd to perform i epic pbuyy' is that panel's own line
-        // "Can be used to perform 1 Epic Recruitment." plus its Buy button, sitting inside the label
-        // region. ALBUMS_ALLIANCE_TRADE_BTN at (448,1197) is simply the wrong coordinate on this hub.
-        //
-        // And this is NOT harmless: MY_REQUESTS_CLAIM_BTN is (574,356), while that dialog's
-        // "Buy 1,500 gems" button sits at about (578,391). A blind Claim tap lands within ~35px of
-        // spending 1,500 gems. Nothing was spent only because the colour check happened to see 0
-        // green pixels (the Buy button is gold) -- luck, not design. So gate it properly on the
-        // panel's own title before any tapping happens, and dump the hub frame when the gate fails
-        // so the real button coordinate can be measured instead of guessed.
-        //
-        // Note this path only matters in the scroll/quill badge state; the puzzle/swap badge opens
-        // Alliance Trade directly and is already handled in processMonumentBadge().
+    /**
+     * The no-badge door. Every badge state is a trigger that gets consumed, so the common case is
+     * that nothing is showing -- but the hub still holds packs, a chest, and any Alliance Trade
+     * claim. The Monument building itself is always there, so it is the way in.
+     */
+    private boolean enteredViaBuildingAnchor() {
+        ImageSearchResultData building = templateSearchHelper.locatePattern(
+                TemplatesEnum.MONUMENT_BUILDING_ANCHOR, SearchConfigConstants.SINGLE_WITH_RETRIES);
+        if (!building.isFound()) {
+            logInfo(logLine("No badge and no Monument building anchor on screen either -- nothing to "
+                    + "open this pass. " + dumpDiagnosticFrame("no-badge-no-building-anchor")));
+            return false;
+        }
+
+        logInfo(logLine("No badge, but the Monument building is on screen at " + building.getPoint()
+                + " -- opening it to run the full checklist anyway."));
+        tapNear(building.getPoint());
+        sleepTask(PANEL_SETTLE_MS);
+
+        // A tap that opens the wrong screen has to stop here, not cascade. The first live run of
+        // this path landed on HERO RECRUITMENT and swept it anyway: the album-book detector fired on
+        // that screen's glowing Points Chest and the chain went looking for "Assemble Now".
+        if (!isOnAlbumsHub()) {
+            logWarning(logLine("Tapping the Monument building did not land on the Tundra Albums hub "
+                    + "-- not running the checklist against an unidentified screen. "
+                    + dumpDiagnosticFrame("no-badge-tap-missed-hub")));
+            recoverTowardHome();
+            return false;
+        }
+        return true;
+    }
+
+    // ---- the work ---------------------------------------------------------------------------
+
+    /**
+     * The whole Monument checklist, run identically no matter which door was used.
+     *
+     * <p>Each item re-confirms the hub before it acts. Several of these steps can legitimately
+     * leave the hub -- the assemble chain ends wherever its animation drops it, and claiming an
+     * album emits two stacked dialogs -- so a step that lands somewhere unexpected stops the
+     * remaining items instead of letting the next one tap blind. That cascade is how a pass
+     * previously ended up tapping the city's bottom navigation and opening the Mystery Shop while
+     * believing it was still on the hub.
+     */
+    private void runHubChecklist() {
+        if (!stillOnHubFor("the milestone chest track")) {
+            return;
+        }
+        claimMilestoneChestsIfReady();
+
+        if (!stillOnHubFor("a completed album")) {
+            return;
+        }
+        PointData readyBook = findReadyAlbumBook();
+        if (readyBook != null) {
+            logInfo(logLine("Completed album waiting -- opening it to run the assemble chain."));
+            tapNear(readyBook);
+            sleepTask(PANEL_SETTLE_MS);
+            handlePuzzleReadyChain();
+        }
+
+        if (!stillOnHubFor("the shared Fragment Backpack")) {
+            return;
+        }
+        logInfo(logLine("Processing the shared Fragment Backpack."));
+        processFragmentBackpack();
+
+        if (!stillOnHubFor("Alliance Trade")) {
+            return;
+        }
+        processAllianceTrade();
+    }
+
+    /**
+     * The guard every checklist item shares: confirm the hub is still on screen before acting.
+     *
+     * @param what the item about to run, named in the log line when it is skipped
+     */
+    private boolean stillOnHubFor(String what) {
+        if (isOnAlbumsHub()) {
+            return true;
+        }
+        logWarning(logLine("Not on the Tundra Albums hub any more -- skipping " + what
+                + " and the rest of this pass rather than tapping an unidentified screen. "
+                + dumpDiagnosticFrame("checklist-lost-hub")));
+        return false;
+    }
+
+    /**
+     * Alliance Trade: claim a fragment an ally has already sent, then hold one open request.
+     *
+     * <p>The hub's Alliance Trade button carries a red dot when an ally has filled the open
+     * request. That dot is the only signal for a waiting claim and it appears with no badge
+     * anywhere on the city, which is why this step has to be reachable on a plain no-trigger pass
+     * and not only from behind a badge.
+     *
+     * <p>The panel title is confirmed before anything is tapped. That gate is not doubt about the
+     * button coordinate -- ALBUMS_ALLIANCE_TRADE_BTN is correct, verified by tapping it on a live
+     * hub -- but about the screen underneath: if an earlier step has silently left the hub, this
+     * same coordinate lands on the city's bottom navigation instead.
+     *
+     * <p>Sending pieces TO allies ({@link #processAllianceTradeSends()}) stays deliberately
+     * uncalled, unchanged by this split.
+     */
+    private void processAllianceTrade() {
         logInfo(logLine("Opening Alliance Trade for My Requests (Claim/Request only)."));
         String hubFrame = dumpDiagnosticFrame("albums-hub-before-alliance-trade-tap");
         tapNear(ALBUMS_ALLIANCE_TRADE_BTN);
@@ -447,29 +548,23 @@ public class MonumentRoutine extends DelayedTask {
         String tradeTitle = stringHelper.attemptRecognition(
                 TRADE_PANEL_TITLE_TL, TRADE_PANEL_TITLE_BR,
                 2, 150L, PANEL_TITLE_OCR_SETTINGS,
-                s -> s != null && !s.isBlank(),
-                s -> s.toLowerCase());
+                title -> title != null && !title.isBlank(),
+                title -> title.toLowerCase());
+
         if (tradeTitle != null && (tradeTitle.contains("alliance") || tradeTitle.contains("trade"))) {
             processAllianceTradeRequests();
-            tapNear(TRADE_CLOSE_X);
-            sleepTask(ACTION_SETTLE_MS);
         } else {
-            logWarning(logLine("Tapping " + ALBUMS_ALLIANCE_TRADE_BTN + " on the Tundra Albums hub did NOT "
-                    + "open Alliance Trade -- panel title read as '" + tradeTitle + "'. Live evidence says "
-                    + "this coordinate opens the 'Obtain more' Gold Key purchase dialog, whose Buy button "
-                    + "sits ~35px from where a blind Claim tap would land. Not touching it. Closing out. "
+            logWarning(logLine("Tapping " + ALBUMS_ALLIANCE_TRADE_BTN + " did not open Alliance Trade "
+                    + "-- panel title read as " + tradeTitle + ". On the hub this coordinate is "
+                    + "correct, so reading anything else means the screen underneath was not the hub. "
+                    + "Not tapping further: the piece picker's Obtain more gold-key purchase sits "
+                    + "beside Request, and My Requests Claim is ~35px from a 1,500 gem Buy button. "
                     + "Hub frame before the tap: " + hubFrame + " | after: "
                     + dumpDiagnosticFrame("albums-alliance-trade-tap-wrong-panel")));
-            tapNear(TRADE_CLOSE_X);
-            sleepTask(ACTION_SETTLE_MS);
         }
 
-        tapNear(ALBUMS_BACK_ARROW);
+        tapNear(TRADE_CLOSE_X);
         sleepTask(ACTION_SETTLE_MS);
-
-        StatisticsService.obtain().addToCounter(profile, "Monument Pass Completed", 1);
-        logInfo(logLine("Monument pass complete. Rechecking in " + IDLE_RECHECK_MINUTES + " minutes."));
-        reschedule(LocalDateTime.now().plusMinutes(IDLE_RECHECK_MINUTES));
     }
 
     // "moved right three hundred pixels...
@@ -1115,59 +1210,6 @@ public class MonumentRoutine extends DelayedTask {
                     + "right after this will catch a genuinely blocked screen."));
         }
     }
-
-    /**
-     * Opens the Monument with no badge to lead the way, and runs the full hub sweep.
-     *
-     * <p>This exists because all three entry states -- the scroll-and-quill badge, the red binder,
-     * and the puzzle-ready icon -- are consumable triggers. Once spent, the old routine had nothing
-     * to detect and turned around at the door, which is precisely the state in which owned fragment
-     * packs and a claimable milestone chest sit waiting. findAndOpenBadgeViaLancer() has already
-     * driven the camera to the Monument by the time this runs, so the building itself is on screen;
-     * MONUMENT_BUILDING_ANCHOR is a real native template and is used as the tap target rather than a
-     * guessed coordinate.
-     *
-     * <p>Nothing here cascades blind: if the anchor is not found we stop, and the hub sweep's own
-     * steps each verify their screen (processFragmentBackpack OCRs the panel title and dumps a frame
-     * on a miss).
-     */
-    private void sweepFragmentBackpackWithoutBadge() {
-        if (backpackSweptThisRun) {
-            return;
-        }
-
-        ImageSearchResultData building = templateSearchHelper.locatePattern(
-                TemplatesEnum.MONUMENT_BUILDING_ANCHOR, SearchConfigConstants.SINGLE_WITH_RETRIES);
-        if (!building.isFound()) {
-            logInfo(logLine("No badge and no Monument building anchor on screen either -- nothing to "
-                    + "open, so the Fragment Backpack cannot be checked this pass. "
-                    + dumpDiagnosticFrame("no-badge-no-building-anchor")));
-            return;
-        }
-
-        logInfo(logLine("No badge, but the Monument building is on screen at " + building.getPoint()
-                + " -- opening it anyway to check the milestone chest, any completed album, and the "
-                + "Fragment Backpack."));
-        tapNear(building.getPoint());
-        sleepTask(PANEL_SETTLE_MS);
-
-        // Confirm the hub before touching anything on it. The first live run of this path tapped
-        // the building anchor and landed on HERO RECRUITMENT, then swept anyway: the album-book
-        // detector duly fired on that screen's glowing Points Chest (7076 px) and the chain opened a
-        // recruitment panel looking for "Assemble Now". A tap that opens the wrong screen has to
-        // stop here, not cascade -- which is the same rule the badge path already follows.
-        if (!isOnAlbumsHub()) {
-            logWarning(logLine("Tapping the Monument building did not land on the Tundra Albums hub "
-                    + "-- not sweeping a screen this code hasn't identified. "
-                    + dumpDiagnosticFrame("no-badge-tap-missed-hub")));
-            recoverTowardHome();
-            return;
-        }
-
-        sweepAlbumsHub();
-        recoverTowardHome();
-    }
-
     /** The hub's own "Tundra Albums" title, top-left. Measured on a native 720x1280 capture and
      *  read back clean with the bundled tesseract ("Tundra Albums", psm 7). */
     private static final PointData ALBUMS_HUB_TITLE_TL = new PointData(80, 16);
@@ -1462,43 +1504,6 @@ public class MonumentRoutine extends DelayedTask {
                 + ", need " + ALBUM_BOOK_MIN_GLOW_PX + ")."));
         return null;
     }
-
-    /**
-     * Everything that must happen on the Tundra Albums hub before leaving it, whatever route got
-     * us here: claim the milestone chest track, assemble a completed album if one is waiting, and
-     * empty the Fragment Backpack.
-     *
-     * <p>Kept as one method and called from every hub-reaching path so the three cannot drift apart
-     * -- the standing rule is that the Fragment Backpack is checked on EVERY Monument visit.
-     */
-    private void sweepAlbumsHub() {
-        logInfo(logLine("Checking the milestone chest track."));
-        claimMilestoneChestsIfReady();
-
-        PointData readyBook = findReadyAlbumBook();
-        if (readyBook != null) {
-            logInfo(logLine("Completed album waiting -- opening it to run the assemble chain."));
-            tapNear(readyBook);
-            sleepTask(PANEL_SETTLE_MS);
-            handlePuzzleReadyChain();
-
-            // The assemble chain leaves the screen wherever it ended -- including recovered to Home
-            // on a failure -- so the backpack cannot just be run next. Come back to the hub first,
-            // and only sweep it if we are genuinely back. The standing rule is that the Fragment
-            // Backpack is checked on every visit; an earlier version of this method returned here
-            // and silently skipped it whenever an album was ready, which is precisely backwards --
-            // an assembled album is when new fragments are most likely to be waiting.
-            if (!isOnAlbumsHub()) {
-                logInfo(logLine("Not back on the Albums hub after the assemble chain -- skipping the "
-                        + "Fragment Backpack this pass rather than tapping an unidentified screen."));
-                return;
-            }
-        }
-
-        logInfo(logLine("Processing the shared Fragment Backpack."));
-        processFragmentBackpack();
-    }
-
     /**
      * Sweeps the Fragment Backpack from whatever screen we are on, if its button is visible.
      *
