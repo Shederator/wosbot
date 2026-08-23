@@ -27,6 +27,12 @@ public final class TesseractOcrProvider implements OcrProvider {
 
     private static final Logger log = LoggerFactory.getLogger(TesseractOcrProvider.class);
 
+    /**
+     * Tess4J/Tesseract native state is not safe for overlapping Recognize calls;
+     * concurrent OCR has aborted the JVM on macOS inside {@code tprintf}.
+     */
+    private static final Object OCR_NATIVE_LOCK = new Object();
+
     /** Lazily resolved, then reused for every subsequent call. */
     private static volatile String resolvedTessdataDir;
 
@@ -83,6 +89,7 @@ public final class TesseractOcrProvider implements OcrProvider {
         t.setDatapath(locateTessdata());
         t.setLanguage(lang);
         t.setConfigs(Collections.singletonList("quiet"));
+        applyDebugSink(t);
         t.setPageSegMode(7); // SINGLE_LINE, matching the established default path
         t.setOcrEngineMode(1); // LSTM_ONLY
         return t;
@@ -94,6 +101,7 @@ public final class TesseractOcrProvider implements OcrProvider {
         t.setDatapath(locateTessdata());
         t.setLanguage("eng");
         t.setConfigs(Collections.singletonList("quiet"));
+        applyDebugSink(t);
 
         if (cfg.hasTextLayout()) {
             t.setPageSegMode(mapTextLayout(cfg.textLayout()));
@@ -107,6 +115,15 @@ public final class TesseractOcrProvider implements OcrProvider {
             t.setVariable("tessedit_char_whitelist", cfg.getAllowedChars());
         }
         return t;
+    }
+
+    /**
+     * The shipped {@code quiet} config uses {@code debug_file NUL} (Windows).
+     * On macOS that path is not a null device and Tesseract can abort inside
+     * {@code tprintf} while writing debug output.
+     */
+    private static void applyDebugSink(Tesseract engine) {
+        engine.setVariable("debug_file", PlatformPaths.isWindows() ? "NUL" : "/dev/null");
     }
 
     private static int mapTextLayout(TextLayout layout) {
@@ -123,10 +140,12 @@ public final class TesseractOcrProvider implements OcrProvider {
     /** Runs the engine and strips whitespace / line breaks. */
     private static String executeRecognition(Tesseract engine, BufferedImage img)
             throws OcrException {
-        try {
-            return engine.doOCR(img).replace("\n", "").replace("\r", "").trim();
-        } catch (TesseractException e) {
-            throw new OcrException("Tesseract OCR failed", e);
+        synchronized (OCR_NATIVE_LOCK) {
+            try {
+                return engine.doOCR(img).replace("\n", "").replace("\r", "").trim();
+            } catch (TesseractException e) {
+                throw new OcrException("Tesseract OCR failed", e);
+            }
         }
     }
 

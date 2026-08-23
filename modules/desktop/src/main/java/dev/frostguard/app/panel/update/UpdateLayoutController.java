@@ -5,7 +5,9 @@ import dev.frostguard.api.runtime.WorkspacePaths;
 import dev.frostguard.app.BuildMetadata;
 import dev.frostguard.app.bootstrap.ApplicationLifecycle;
 import dev.frostguard.update.InstallerHandoff;
+import dev.frostguard.update.MacInstallerHandoff;
 import dev.frostguard.update.PreparedUpdate;
+import dev.frostguard.update.ProjectSignedInstallerVerifier;
 import dev.frostguard.update.ProjectUpdateKey;
 import dev.frostguard.update.RunningBuild;
 import dev.frostguard.update.SemanticVersion;
@@ -50,12 +52,19 @@ public final class UpdateLayoutController {
     @FXML private Button buttonSwitchChannel;
 
     private final UpdateEndpointResolver endpoints = new UpdateEndpointResolver();
-    private final UpdateManager manager = new UpdateManager(
-            new WindowsAuthenticodeVerifier(), new WindowsInstallerHandoff());
+    private final UpdateManager manager = createUpdateManager();
     private final ChannelSwitchService channelSwitcher = new ChannelSwitchService();
     private RunningBuild runningBuild;
     private UpdateCandidate candidate;
     private RuntimeChannel switchTarget;
+
+    private static UpdateManager createUpdateManager() {
+        UpdatePlatform.OperatingSystem os = UpdatePlatform.current().operatingSystem();
+        if (os == UpdatePlatform.OperatingSystem.MACOS) {
+            return new UpdateManager(new ProjectSignedInstallerVerifier(), new MacInstallerHandoff());
+        }
+        return new UpdateManager(new WindowsAuthenticodeVerifier(), new WindowsInstallerHandoff());
+    }
 
     @FXML
     private void initialize() {
@@ -75,9 +84,10 @@ public final class UpdateLayoutController {
             } else {
                 labelStatus.setText("This build has no valid pinned project update key.");
             }
-        } else if (runningBuild.platform().operatingSystem() != UpdatePlatform.OperatingSystem.WINDOWS) {
+        } else if (runningBuild.platform().operatingSystem() != UpdatePlatform.OperatingSystem.WINDOWS
+                && runningBuild.platform().operatingSystem() != UpdatePlatform.OperatingSystem.MACOS) {
             buttonCheck.setDisable(true);
-            labelStatus.setText("Automatic installer handoff is currently available on Windows only.");
+            labelStatus.setText("Automatic installer handoff is not available on this platform.");
         } else {
             labelStatus.setText("Check the configured " + runningBuild.channel().directoryName() + " release feed.");
         }

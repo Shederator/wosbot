@@ -427,29 +427,9 @@ public class TaskQueue {
     // ========================================================================
 
     private void mainLoop() {
-        try {
-            acquireSlot();
-            while (statusModel.isRunning() && !shuttingDown) {
-                try {
-                    runSchedulerTick();
-                } catch (Throwable tickError) {
-                    // Keep the worker alive after unexpected failures; a dead queue looks "running"
-                    // in the UI while GlobalMonitor continues, so the bot appears idle forever.
-                    emitError("Queue tick failed: " + tickError.getClass().getSimpleName()
-                            + ": " + tickError.getMessage());
-                    logger.error("Queue tick failed for profile={}", profile.getName(), tickError);
-                    statusModel.getLoopState().setExecutedTask(false);
-                    sleepSchedulerTick(TICK_INTERVAL_MS);
-                }
-            }
-        } catch (Throwable fatal) {
-            emitError("Queue worker crashed: " + fatal.getClass().getSimpleName()
-                    + ": " + fatal.getMessage());
-            logger.error("Queue worker crashed for profile={}", profile.getName(), fatal);
-        } finally {
-            statusModel.setRunning(false);
-            broadcastStatus("NOT RUNNING - queue worker stopped");
-            emitInfo("TaskQueue worker exited");
+        acquireSlot();
+        while (statusModel.isRunning() && !shuttingDown) {
+            runSchedulerTick();
         }
     }
 
@@ -604,15 +584,8 @@ public class TaskQueue {
         } finally {
             synchronized (this) { if (runningContext != null) runningContext.clear(); runningContext = null; }
             if (!shuttingDown) {
-                try {
-                    handleReschedule(task, priorSchedule);
-                    recordPostExecution(task, st);
-                } catch (Throwable persistError) {
-                    emitErrorTask(task, "Post-execution bookkeeping failed: "
-                            + persistError.getClass().getSimpleName() + ": " + persistError.getMessage());
-                    logger.error("Post-execution bookkeeping failed for profile={} task={}",
-                            profile.getName(), task.getTaskName(), persistError);
-                }
+                handleReschedule(task, priorSchedule);
+                recordPostExecution(task, st);
             }
         }
         return ok;

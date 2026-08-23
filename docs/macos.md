@@ -30,14 +30,20 @@ Inside Whiteout Survival:
 
 ## Install a published pkg
 
-1. Download the macOS `.pkg` from the matching GitHub Release (Stable or Nightly).
+1. Download the macOS Apple Silicon `.pkg` from the matching GitHub Release
+   (Stable `releases/latest` or an immutable Nightly `vX.Y.Z-nightly…` tag).
 2. Open the pkg and complete installation (typically under `/Applications`).
 3. Start **Frostguard** or **Frostguard Nightly**.
 4. Open **Configuration** and confirm BlueStacks Air is selected. Browse to
    `/Applications/BlueStacks.app` if auto-detect fails.
 
 Stable and Nightly remain separate applications with separate workspaces under
-`~/.frostguard/workspaces/`, same channel model as Windows.
+`~/.frostguard/workspaces/`, same channel model as Windows. After a Windows
+channel release publishes, the **Release — macOS Stable or Nightly** workflow
+attaches the matching `.pkg` and refreshes the project-signed update manifest
+with a `macos-arm64` artifact. In-app updates on Mac open the downloaded pkg
+(Gatekeeper may still require Open Once; Apple notarization is not in this
+release).
 
 ## BlueStacks setup
 
