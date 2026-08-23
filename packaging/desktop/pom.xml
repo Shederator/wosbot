@@ -131,6 +131,30 @@
                         </configuration>
                     </execution>
                     <execution>
+                        <id>stage-onnx-models</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <!-- Beside the Tesseract data rather than anywhere new. Without this
+                                 the installed application has no weights, the in-process reader
+                                 reports itself unavailable, and chat is quietly read by the
+                                 fallback while the settings say otherwise. -->
+                            <outputDirectory>${project.build.directory}/input/lib/ocr-models</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.parent.basedir}/tools/ocr/onnx</directory>
+                                    <includes>
+                                        <include>*.onnx</include>
+                                        <include>*.dict</include>
+                                    </includes>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>stage-template-browser-assets</id>
                         <phase>prepare-package</phase>
                         <goals>

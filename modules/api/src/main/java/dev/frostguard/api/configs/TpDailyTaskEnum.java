@@ -111,7 +111,13 @@ public enum TpDailyTaskEnum {
 
     /* ── shop ── */
 
-    SHOP_MYSTERY           (80,  "Shop Mystery",                 ConfigurationKeyEnum.BOOL_MYSTERY_SHOP,                      RoutineCategory.SHOP);
+    SHOP_MYSTERY           (80,  "Shop Mystery",                 ConfigurationKeyEnum.BOOL_MYSTERY_SHOP,                      RoutineCategory.SHOP),
+
+    /* ── chat ── */
+
+    // No category is a clean fit; ALLIANCE is the closest, since Alliance chat
+    // is one of the three captured channels.
+    CHAT_CAPTURE           (901, "Chat Capture",                 ConfigurationKeyEnum.CHAT_CAPTURE_ENABLED_BOOL,              RoutineCategory.ALLIANCE);
 
     /* ================================================================
      *  Category taxonomy used to group routines in the management UI.

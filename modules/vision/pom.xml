@@ -71,5 +71,19 @@
 			<artifactId>junit-jupiter</artifactId>
 			<scope>test</scope>
 		</dependency>
-	</dependencies>
+			<!-- The Python OCR service answers in JSON; the in-process reader needs none of this,
+		     but PaddleOcrClient is still supported for comparison work. -->
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+		</dependency>
+		<!-- The chat reader runs PP-OCRv5 in this process rather than through a Python
+		     service. The jar carries natives for every platform it supports; a Windows-only build
+		     can strip the rest. -->
+		<dependency>
+			<groupId>com.microsoft.onnxruntime</groupId>
+			<artifactId>onnxruntime</artifactId>
+			<version>1.20.0</version>
+		</dependency>
+</dependencies>
 </project>

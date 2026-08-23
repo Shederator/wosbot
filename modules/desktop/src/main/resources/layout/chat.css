@@ -1,0 +1,277 @@
+/*
+ * The live transcript.
+ *
+ * Drawn with ordinary JavaFX controls, not a browser view: javafx-web carries WebKit natives, tens
+ * of megabytes per platform, and this feature ships to people who did not ask for it. Everything
+ * below is what JavaFX CSS can do on its own -- rounded corners, accent bars, chips, borders --
+ * which is the whole of what the layout needs.
+ *
+ * Rules rather than inline styles because the panel builds its nodes in Java. Inline styles meant
+ * every colour was written in several places and drifted; a class name is set once and the look
+ * lives here.
+ */
+
+/* ── palette ─────────────────────────────────────────────────────────────────────────────────
+ * Named once. The transcript sits inside the app's dark surfaces, so these are tuned to the
+ * panel behind them rather than picked in isolation.
+ */
+.chat-root {
+    -fx-body:        #dbdee1;   /* what somebody wrote */
+    -fx-muted:       #8a919b;   /* timestamps and the alliance label */
+    -fx-quote:       #a0a6b0;   /* the message being replied to */
+    -fx-rule:        #3f4248;   /* hairlines and accent bars */
+    -fx-panel:       #2b2d31;   /* a block that needs its own ground */
+    -fx-panel-edge:  #383b40;
+    -fx-mention:     #7aa2f7;   /* somebody being spoken to */
+    -fx-mention-bg:  #2c3350;
+    -fx-you:         #f0b232;   /* the whole alliance being spoken to */
+    -fx-you-bg:      #3a3016;
+}
+
+/* ── a message ─────────────────────────────────────────────────────────────────────────────── */
+
+/* One card per message, with a bar in the author's colour down its left edge.
+ *
+ * Messages used to be bare rows, and consecutive ones from the same person shared a single name --
+ * which saved a little height and cost the thing the panel exists for. A block of text with no name
+ * on it cannot be scanned for who said it, and "who is talking" is the first question anyone asks
+ * of a transcript. Every message carries its own name and time now.
+ */
+.chat-card {
+    -fx-background-color: #24272c;
+    -fx-background-radius: 10;
+    -fx-border-color: #31353b;
+    -fx-border-radius: 10;
+    -fx-border-width: 1;
+    -fx-padding: 0;
+}
+
+.chat-card:hover {
+    -fx-background-color: #292d33;
+}
+
+/* The author's colour, carried down the edge of their message. */
+.chat-gutter {
+    -fx-min-width: 3;
+    -fx-pref-width: 3;
+    -fx-max-width: 3;
+}
+
+.chat-card-body {
+    -fx-padding: 8 13 9 12;
+}
+
+.chat-author {
+    -fx-font-weight: bold;
+    -fx-font-size: 12.5px;
+}
+
+.chat-time,
+.chat-channel {
+    -fx-text-fill: -fx-muted;
+    -fx-font-size: 10.5px;
+}
+
+.chat-body {
+    -fx-fill: -fx-body;
+    -fx-font-size: 13px;
+}
+
+.chat-body-system {
+    -fx-fill: -fx-muted;
+    -fx-font-style: italic;
+    -fx-font-size: 12.5px;
+}
+
+.chat-body-emoji {
+    -fx-fill: -fx-body;
+    -fx-font-size: 20px;
+}
+
+/* ── the message being replied to ───────────────────────────────────────────────────────────
+ * A quote is context, not something this player said, so it is set above the reply, dimmer, and
+ * behind an accent bar -- the shape a reader already knows from every chat client.
+ */
+/* A quote and a long message were both grey rounded boxes, so the feed gave no way to tell
+ * something a player wrote from something they were answering. They are now opposites: a quote is
+ * INSET -- no ground of its own, a thick coloured bar down its left, text dimmer and smaller -- and
+ * a long message is RAISED, a panel with a ground and a border and no bar. */
+.chat-quote {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent transparent transparent #6b7a99;
+    -fx-border-width: 0 0 0 3;
+    -fx-padding: 0 0 0 8;
+}
+
+.chat-quote-text {
+    -fx-fill: -fx-quote;
+    -fx-font-size: 11px;
+}
+
+/* ── a long message ─────────────────────────────────────────────────────────────────────────
+ * Alliance calls run to a hundred words and, set as loose text, they swallow the messages either
+ * side of them. Given a ground of their own they read as one object that can be skipped or
+ * stopped at, which is what a reader scanning a day of chat actually needs.
+ */
+.chat-block {
+    -fx-background-color: -fx-panel;
+    -fx-background-radius: 8;
+    -fx-border-color: -fx-panel-edge;
+    -fx-border-radius: 8;
+    -fx-border-width: 1;
+    -fx-padding: 8 10 8 10;
+}
+
+/* The word "replying to" ahead of the quote. The bar alone said "this is set apart" without saying
+ * why, and a reader scanning the feed had to work out the relationship from the text. */
+/* "REPLYING TO" ahead of the quote. The bar alone said "this is set apart" without saying why,
+ * and the reader had to work the relationship out from the words. */
+.chat-reply-marker {
+    -fx-fill: #5f6b80;
+    -fx-font-size: 9px;
+    -fx-font-weight: bold;
+}
+
+/* The name being answered, lighter than the quoted words so it reads first. */
+.chat-quote-who {
+    -fx-fill: #b6bdc9;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
+/* Folds a pasted strategy dump down to a few lines. One player's copy-paste runs to five lines
+ * and buries the conversation either side of it; folded, it is still there to open. */
+.chat-more {
+    -fx-text-fill: #6b7a99;
+    -fx-font-size: 9.5px;
+    -fx-font-weight: bold;
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-padding: 2 0 0 0;
+    -fx-cursor: hand;
+}
+
+.chat-more:hover {
+    -fx-text-fill: #8ba3c9;
+}
+
+/* ── people ─────────────────────────────────────────────────────────────────────────────────
+ * A mention is the thing that makes a feed a conversation: it says who is talking to whom. Set
+ * as a chip in the mention colour so a thread between two players is followable at a glance.
+ */
+.chat-mention {
+    -fx-fill: -fx-mention;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+/* Addressing the whole alliance is a different act from addressing a person, and the game itself
+ * draws it in a different colour. Matching that keeps the transcript honest to the source. */
+.chat-mention-all {
+    -fx-fill: -fx-you;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.chat-chip {
+    -fx-font-size: 9.5px;
+    -fx-background-color: #3a3d43;
+    -fx-text-fill: #c3c8d0;
+    -fx-background-radius: 4;
+    -fx-padding: 1 5 1 5;
+}
+
+.chat-divider {
+    -fx-min-height: 1;
+    -fx-pref-height: 1;
+    -fx-background-color: -fx-rule;
+    -fx-opacity: 0.5;
+}
+
+/* A day boundary in a transcript that spans several. Centred label over a hairline, so it reads
+ * as a break in time rather than as another message. */
+.chat-daymark {
+    -fx-text-fill: -fx-muted;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-padding: 8 0 4 0;
+}
+
+/* A picked message, for copying out. Marked by a wash and a brighter edge rather than by the
+   system highlight colour: the cards already carry a per-author stripe, and a full-bleed selection
+   colour over the top of that hides the one thing the stripe is there to show. */
+.chat-card:picked {
+    -fx-background-color: rgba(88, 101, 242, 0.16);
+    -fx-background-radius: 5;
+}
+
+/* ---- Digest ------------------------------------------------------------------------------
+   Counted figures, not conversation, so this reads as a report rather than as a feed: cards with
+   headings, one accent colour, and numbers given room to be the thing you look at. Colours are the
+   literal palette the rest of this stylesheet uses rather than the application's -fg- variables,
+   because that is what the transcript beside it is drawn with and the two tabs sit together. */
+.digest-card {
+    -fx-background-color: #24272c;
+    -fx-background-radius: 7;
+    -fx-border-color: #31353b;
+    -fx-border-radius: 7;
+    -fx-padding: 14 16 15 16;
+}
+
+.digest-section {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #8a919b;
+}
+
+.digest-figure {
+    -fx-font-size: 25px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #dce0e5;
+}
+
+.digest-caption {
+    -fx-font-size: 11px;
+    -fx-text-fill: #8a919b;
+}
+
+.digest-tick {
+    -fx-font-size: 9px;
+    -fx-text-fill: #6b7a99;
+}
+
+.digest-row-name {
+    -fx-font-size: 12px;
+    -fx-text-fill: #dce0e5;
+}
+
+.digest-question {
+    -fx-font-size: 12.5px;
+    -fx-text-fill: #dce0e5;
+}
+
+.digest-bar {
+    -fx-background-color: #7aa2f7;
+    -fx-background-radius: 3;
+}
+
+/* The tallest bar, so the busiest hour is findable without reading the axis. */
+.digest-bar-peak {
+    -fx-background-color: #57f287;
+    -fx-background-radius: 3;
+}
+
+/* A message matching the find field. Every hit is tinted so the density of matches is visible
+   while scrolling; the one the view is parked on gets a left edge as well, because in a run of
+   twenty tinted cards "which one am I on" is the only question left. */
+.chat-card:found {
+    -fx-background-color: rgba(240, 178, 50, 0.14);
+    -fx-background-radius: 5;
+}
+
+.chat-card:current-match {
+    -fx-background-color: rgba(240, 178, 50, 0.30);
+    -fx-background-radius: 5;
+    -fx-border-color: transparent transparent transparent #f0b232;
+    -fx-border-width: 0 0 0 3;
+}
