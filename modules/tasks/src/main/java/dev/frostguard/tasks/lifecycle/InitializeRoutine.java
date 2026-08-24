@@ -39,7 +39,7 @@ import java.time.LocalDateTime;
  * <ul>
  * <li>This task does NOT reschedule after execution</li>
  * <li>Sets recurring=false on start to prevent re-execution</li>
- * <li>Unknown startup failures receive one immediate emulator restart</li>
+ * <li>Unknown in-game startup overlays receive one foreground-owned Back recovery</li>
  * <li>Persistent blockers pause the profile until a conservative retry time</li>
  * <li>Exception on success: Task completes without rescheduling</li>
  * </ul>
@@ -49,17 +49,15 @@ import java.time.LocalDateTime;
  * <ul>
  * <li>Game not installed: Throws StopExecutionException (stops queue)</li>
  * <li>Reconnect state detected: Throws ProfileInReconnectStateException</li>
- * <li>Home screen not found: Performs one bounded emulator restart</li>
+ * <li>Home screen not found: Tries one bounded in-game Back action, then pauses the profile</li>
  * <li>Verified Google Play redirect: Requires operator action and releases the
  * emulator slot during a profile cooldown</li>
  * </ul>
  * 
  * <p>
  * <b>State Management:</b>
- * The {@code isStarted} field is instance state that persists between
- * executions.
- * This is intentional - if the task retries (recurring=true), it will re-check
- * emulator status but maintain this flag across retry attempts.
+ * The {@code isStarted} field avoids repeating emulator checks during one
+ * initialization execution.
  */
 public class InitializeRoutine extends DelayedTask {
 
@@ -89,15 +87,17 @@ public class InitializeRoutine extends DelayedTask {
 	private static final String GOOGLE_PLAY_PACKAGE = "com.android.vending";
 	private static final int MAX_WELCOME_BACK_DISMISSALS = 1;
 	private static final int MAX_CLOSEABLE_OVERLAY_DISMISSALS = 3;
+	private static final int UNKNOWN_BLOCKER_BACK_SETTLE_MS = 2000;
+	private static final int MAX_UNKNOWN_BLOCKER_POSTCONDITION_ATTEMPTS = 3;
 	private static final int STARTUP_PATTERN_THRESHOLD = 90;
 
 	// ========== Instance State ==========
 	/**
 	 * Tracks whether the emulator has been successfully started.
-	 * This persists across task executions (when recurring=true triggers retry).
+	 * The flag remains valid for the rest of the current initialization flow.
 	 */
 	boolean isStarted = false;
-	private int emulatorRestartAttempts = 0;
+	private int unknownBlockerBackAttempts = 0;
 	private int welcomeBackDismissals = 0;
 	private int closeableOverlayDismissals = 0;
 	private String lastVerifiedStartupState = "initialization started";
@@ -138,8 +138,7 @@ public class InitializeRoutine extends DelayedTask {
 	 * This task intentionally does not call reschedule(). It either:
 	 * <ul>
 	 * <li>Completes successfully (recurring=false, task stops)</li>
-	 * <li>Fails and sets recurring=true (immediate retry)</li>
-	 * <li>Throws exception (queue handles appropriately)</li>
+	 * <li>Throws a bounded cooldown exception (queue persists the retry)</li>
 	 * </ul>
 	 * 
 	 * @throws StopExecutionException           if game is not installed
@@ -155,7 +154,7 @@ public class InitializeRoutine extends DelayedTask {
 		
 		// Wait for home screen
 		if (!waitForHomeScreen()) {
-			// Home screen not found - already handled (emulator closed, recurring set)
+			// A blocking startup state already selected and logged its bounded outcome.
 			return;
 		}
 		
@@ -257,21 +256,22 @@ public class InitializeRoutine extends DelayedTask {
 	 * ProfileInReconnectStateException.
 	 * 
 	 * <p>
-	 * If home screen is not found after all attempts, the first failure restarts
-	 * the emulator. A subsequent failure enters a profile cooldown and releases
-	 * the emulator slot.
+	 * If home screen is not found after all attempts, one Android Back recovery is
+	 * allowed only while Whiteout Survival is verified in the foreground. A
+	 * remaining blocker enters a profile cooldown and releases the emulator slot.
 	 *
 	 * <p>
 	 * A verified update dialog uses only its detected button, then waits for a
 	 * fresh known postcondition. Only a proven Google Play foreground redirect bypasses the
-	 * restart and escalates immediately.
+	 * generic startup recovery and escalates immediately.
 	 *
 	 * <p>
-	 * The bounded-restart path:
+	 * The bounded unknown-overlay path:
 	 * <ul>
-	 * <li>Closes the emulator</li>
-	 * <li>Resets isStarted flag</li>
-	 * <li>Sets recurring=true (triggers immediate retry)</li>
+	 * <li>Verifies that the game owns the foreground window</li>
+	 * <li>Sends Android Back at most once</li>
+	 * <li>Allows verified startup handlers to reveal a fresh home/world postcondition</li>
+	 * <li>Otherwise stops only the game and enters a profile cooldown</li>
 	 * </ul>
 	 * 
 	 * <p>
@@ -302,8 +302,7 @@ public class InitializeRoutine extends DelayedTask {
 				break;
 			}
 			if (downloadResult == ResourceDownloadResult.TIMED_OUT) {
-				handleHomeScreenNotFound();
-				return false;
+				deferResourceDownloadTimeout();
 			}
 
 			if (dismissWelcomeBackIfPresent()) {
@@ -334,8 +333,7 @@ public class InitializeRoutine extends DelayedTask {
 		}
 
 		if (!homeScreenFound) {
-			handleHomeScreenNotFound();
-			return false;
+			return recoverUnknownStartupBlocker();
 		}
 		
 		return true;
@@ -657,6 +655,23 @@ public class InitializeRoutine extends DelayedTask {
 		TIMED_OUT
 	}
 
+	private void deferResourceDownloadTimeout() {
+		LocalDateTime retryAt = LocalDateTime.now().plus(StartupRecoveryPolicy.UNKNOWN_BLOCKER_COOLDOWN);
+		String reason = "required resources did not finish before the startup timeout";
+		logError("Initialization blocked for profile=" + profile.getName()
+				+ ", expected=resource download completed and home/world"
+				+ ", observed=resource-download-timeout, lastAction=tapped verified Download Now button"
+				+ ", fallback=stop-game-and-release-slot, retryAt=" + retryAt
+				+ ", reason=" + reason + ".");
+		throw new ProfileCooldownException(reason, retryAt, new ActionRequiredContext(
+				"startup.resource-download-timeout",
+				"Required game resources did not finish downloading",
+				"Resource download completed and home/world available",
+				"Resource download remained incomplete for ten minutes",
+				"Tapped the verified Download Now button, then waited without further input",
+				"Stop the game, release the slot, and retry initialization after fifteen minutes"));
+	}
+
 	/**
 	 * Checks for reconnect state popup.
 	 * 
@@ -683,61 +698,73 @@ public class InitializeRoutine extends DelayedTask {
 	 * Handles the case where home screen was not found after all attempts.
 	 * 
 	 * <p>
-	 * Strategy:
+	 * Strategy after known startup-state checks and passive waiting are exhausted:
 	 * <ol>
-	 * <li>Performs an ADB health check (restarts ADB if needed)</li>
-	 * <li>Closes the emulator (clean slate, also invalidates ADB caches)</li>
-	 * <li>Resets isStarted flag (will re-launch emulator on retry)</li>
-	 * <li>Sets recurring=true (triggers immediate re-execution)</li>
+	 * <li>Verify that Whiteout Survival owns the foreground window</li>
+	 * <li>Send Android Back at most once</li>
+	 * <li>Re-run only verified startup handlers while waiting for home/world</li>
+	 * <li>Otherwise enter a cooldown that stops only the game and releases the slot</li>
 	 * </ol>
-	 * 
-	 * <p>
-	 * When the task re-executes after the one permitted restart, it will go
-	 * through the full initialization flow again. If startup is still blocked,
-	 * it enters a visible profile cooldown instead of restarting again.
 	 */
-	private void handleHomeScreenNotFound() {
-		if (StartupRecoveryPolicy.forUnknownBlocker(emulatorRestartAttempts)
-				== StartupRecoveryPolicy.UnknownBlockerAction.COOLDOWN_AND_RELEASE_SLOT) {
-			deferUnknownStartupBlocker();
+	private boolean recoverUnknownStartupBlocker() {
+		boolean gameForeground = isGameForeground();
+		if (StartupRecoveryPolicy.forUnknownBlocker(gameForeground, unknownBlockerBackAttempts)
+				== StartupRecoveryPolicy.UnknownBlockerAction.TRY_GAME_BACK) {
+			unknownBlockerBackAttempts++;
+			lastVerifiedStartupState = "unknown startup screen with Whiteout Survival foreground";
+			logWarning("Home/world remained unavailable after " + MAX_HOME_SCREEN_ATTEMPTS
+					+ " passive checks. Whiteout Survival owns the foreground window; sending bounded Android Back recovery "
+					+ unknownBlockerBackAttempts + "/"
+					+ StartupRecoveryPolicy.MAX_UNKNOWN_BLOCKER_BACK_ATTEMPTS + ".");
+			pressBack();
+			lastVerifiedStartupState = "bounded Android Back sent to foreground game";
+
+			for (int attempt = 1; attempt <= MAX_UNKNOWN_BLOCKER_POSTCONDITION_ATTEMPTS; attempt++) {
+				sleepTask(UNKNOWN_BLOCKER_BACK_SETTLE_MS);
+				if (searchForHomeScreen()) {
+					lastVerifiedStartupState = "home/world screen after bounded Android Back";
+					logInfo("Home screen found after one bounded Android Back recovery.");
+					return true;
+				}
+
+				checkForReconnectState();
+				if (dismissWelcomeBackIfPresent()) {
+					logInfo("Verified Welcome back dialog dismissed after bounded Android Back recovery.");
+					continue;
+				}
+				if (dismissCloseableStartupOverlayIfPresent()) {
+					logInfo("Verified closeable startup overlay dismissed after bounded Android Back recovery.");
+				}
+			}
 		}
 
-		emulatorRestartAttempts++;
-		logError("Home screen not found after " + MAX_HOME_SCREEN_ATTEMPTS
-				+ " attempts. Performing bounded emulator recovery " + emulatorRestartAttempts
-				+ "/" + StartupRecoveryPolicy.MAX_EMULATOR_RESTART_ATTEMPTS + ".");
-
-		// Perform ADB health check before closing emulator
-		// This may restart the ADB bridge if it's degraded
-		logInfo("Performing ADB health check before emulator restart...");
-		boolean adbHealthy = emuManager.performAdbHealthCheck(EMULATOR_NUMBER);
-		if (adbHealthy) {
-			logInfo("ADB health check passed. Proceeding with emulator restart.");
-		} else {
-			logWarning("ADB health check failed even after recovery attempts. "
-					+ "Will still try to restart emulator.");
-		}
-
-		emuManager.closeEmulator(EMULATOR_NUMBER);
-		isStarted = false;
-		setRecurring(true); // Trigger immediate retry
+		deferUnknownStartupBlocker(gameForeground);
+		return false;
 	}
 
-	private void deferUnknownStartupBlocker() {
+	private boolean isGameForeground() {
+		return emuManager.isPackageRunning(EMULATOR_NUMBER, EmulatorController.GAME.getPackageName());
+	}
+
+	private void deferUnknownStartupBlocker(boolean gameForeground) {
 		LocalDateTime retryAt = LocalDateTime.now().plus(StartupRecoveryPolicy.UNKNOWN_BLOCKER_COOLDOWN);
-		String reason = "home/world remained unavailable after bounded emulator recovery";
+		String reason = "home/world remained unavailable after bounded in-game recovery";
 		logError("Initialization blocked for profile=" + profile.getName()
 				+ ", expected=home/world, observed=unknown-startup-blocker"
-				+ ", lastAction=emulator-restart, recoveryAttempts=" + emulatorRestartAttempts
-				+ "/" + StartupRecoveryPolicy.MAX_EMULATOR_RESTART_ATTEMPTS
+				+ ", gameForeground=" + gameForeground
+				+ ", lastAction=" + (unknownBlockerBackAttempts > 0 ? "bounded-android-back" : "none")
+				+ ", recoveryAttempts=" + unknownBlockerBackAttempts
+				+ "/" + StartupRecoveryPolicy.MAX_UNKNOWN_BLOCKER_BACK_ATTEMPTS
 				+ ", fallback=stop-game-and-release-slot, retryAt=" + retryAt
 				+ ", reason=" + reason + ".");
 		throw new ProfileCooldownException(reason, retryAt, new ActionRequiredContext(
-				"startup.home-unavailable-after-restart",
+				"startup.home-unavailable-after-game-back",
 				"Startup remains blocked after automatic recovery",
 				"home/world",
 				"unsupported startup screen",
-				"One bounded emulator restart; no speculative screen input",
+				gameForeground
+						? "One bounded Android Back sent only while Whiteout Survival owned the foreground window"
+						: "No input sent because Whiteout Survival did not own the foreground window",
 				"Stop the game, release the slot, and retry initialization after fifteen minutes"));
 	}
 

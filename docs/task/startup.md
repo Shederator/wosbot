@@ -28,11 +28,15 @@ Initialization distinguishes startup blockers before attempting recovery:
   `ACTION REQUIRED` incident, sends no Store input, stops the blocked game
   process, releases the emulator slot, and retries after one hour. Merely seeing
   the original in-game update dialog is not enough to create an incident.
-- An unknown blocker receives one bounded emulator restart. If home/world is
-  still unavailable, Frostguard waits only for passive state change. It does
-  not send speculative navigation input; the same profile-wide cooldown
-  mechanism releases the slot for fifteen minutes instead of entering a
-  restart loop.
+- An unknown blocker first receives ten passive checks. If Whiteout Survival
+  still owns the Android foreground window, Frostguard sends Android Back once
+  and then reuses only verified startup handlers while requiring a fresh
+  home/world postcondition. This covers stacked game-owned event and promotional
+  overlays without depending on every rotating close icon. If the game is not
+  foreground or home/world remains unavailable, no further input is sent. The
+  profile-wide cooldown stops only the game,
+  releases the slot for fifteen minutes, and never cycles the emulator or
+  immediately retries Initialize.
 
 The close-control template `closeableOverlayClose.png` is cropped from the
 redacted real frame

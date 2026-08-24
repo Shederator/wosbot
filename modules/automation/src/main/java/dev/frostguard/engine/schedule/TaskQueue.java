@@ -543,9 +543,8 @@ public class TaskQueue {
             AnalyticsService.getInstance().trackTaskStarted(task.getTaskName());
             task.setLastExecutionTime(LocalDateTime.now());
             task.run();
-            // Initialize can return normally while requesting one bounded recovery retry.
-            // Keep the initial force flag until the routine reports a non-recurring success;
-            // otherwise the no-imminent-task guard would discard that recovery attempt.
+            // Keep the initial force flag until Initialize reports success. A profile cooldown
+            // persists and re-enqueues Initialize for the requested retry time instead.
             if (task.getTpTask() == TpDailyTaskEnum.INITIALIZE && !task.isRecurring()) {
                 forceInitialInitialize = false;
             }
