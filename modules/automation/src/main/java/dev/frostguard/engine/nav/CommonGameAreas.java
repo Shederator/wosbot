@@ -183,4 +183,12 @@ public final class CommonGameAreas {
     public static final int CHARACTER_NAME_ABOVE_FURNACE_BOTTOM_OFFSET_Y = 10;
     public static final int CHARACTER_NAME_ABOVE_FURNACE_X_START          = 210;
     public static final int CHARACTER_NAME_ABOVE_FURNACE_X_END            = 500;
+    // ── telemetry HUD counters (720x1280) ────────────────────────────
+    // Read by the telemetry collector. Power and gems are printed in full; coal is abbreviated,
+    // which is why the two read with different OCR presets. Covered against a saved real frame by
+    // TelemetryHudOcrFrameTest.
+
+    public static final AreaData TELEMETRY_POWER_OCR_AREA = region(130, 48, 272, 96);
+    public static final AreaData TELEMETRY_COAL_OCR_AREA  = region(430, 0, 515, 40);
+    public static final AreaData TELEMETRY_GEMS_OCR_AREA  = region(578, 2, 675, 38);
 }
