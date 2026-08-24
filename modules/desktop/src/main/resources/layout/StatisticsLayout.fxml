@@ -12,6 +12,9 @@
     <top>
         <HBox alignment="CENTER_RIGHT" spacing="12"
               style="-fx-padding: 10 16 6 16;">
+            <Label text="Telemetry every" />
+            <ComboBox fx:id="cmbTelemetryInterval" prefWidth="76.0" promptText="Hours" />
+            <Label text="hours" />
             <Button fx:id="btnRefresh" mnemonicParsing="false"
                     onAction="#handleRefresh" styleClass="action-button-timeline" text="Refresh" />
             <Button fx:id="btnReset" mnemonicParsing="false"
