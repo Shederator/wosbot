@@ -9,13 +9,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class StartupRecoveryPolicyTest {
 
     @Test
-    void permitsOnlyOneImmediateEmulatorRestart() {
-        assertEquals(StartupRecoveryPolicy.UnknownBlockerAction.RESTART_EMULATOR,
-                StartupRecoveryPolicy.forUnknownBlocker(0));
+    void permitsOnlyOneForegroundGameBack() {
+        assertEquals(StartupRecoveryPolicy.UnknownBlockerAction.TRY_GAME_BACK,
+                StartupRecoveryPolicy.forUnknownBlocker(true, 0));
         assertEquals(StartupRecoveryPolicy.UnknownBlockerAction.COOLDOWN_AND_RELEASE_SLOT,
-                StartupRecoveryPolicy.forUnknownBlocker(1));
+                StartupRecoveryPolicy.forUnknownBlocker(true, 1));
         assertEquals(StartupRecoveryPolicy.UnknownBlockerAction.COOLDOWN_AND_RELEASE_SLOT,
-                StartupRecoveryPolicy.forUnknownBlocker(2));
+                StartupRecoveryPolicy.forUnknownBlocker(true, 2));
+    }
+
+    @Test
+    void sendsNoRecoveryInputOutsideTheForegroundGame() {
+        assertEquals(StartupRecoveryPolicy.UnknownBlockerAction.COOLDOWN_AND_RELEASE_SLOT,
+                StartupRecoveryPolicy.forUnknownBlocker(false, 0));
     }
 
     @Test
