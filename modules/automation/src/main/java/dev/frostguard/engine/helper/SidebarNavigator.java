@@ -2,6 +2,7 @@ package dev.frostguard.engine.helper;
 
 import java.awt.image.BufferedImage;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
@@ -15,6 +16,7 @@ import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.nav.SidebarFrameClassifier;
 import dev.frostguard.engine.nav.SidebarRowAction;
+import dev.frostguard.engine.nav.SidebarRowLookup;
 import dev.frostguard.engine.nav.SidebarSection;
 import dev.frostguard.engine.nav.SidebarViewportChangeDetector;
 import dev.frostguard.engine.nav.SearchConfigConstants;
@@ -25,6 +27,9 @@ import dev.frostguard.vision.logging.ProfileContextLogger;
 public final class SidebarNavigator {
 
     private static final int SECTION_SETTLE_MS = 400;
+    static final int TRANSITION_POLL_MS = 200;
+    static final int TRANSITION_POLL_CHECKS = 9;
+    static final int MAX_TRIGGER_TAPS = 2;
     static final int SIDEBAR_OPEN_SETTLE_MS = 2_000;
     static final int SCROLL_SETTLE_MS = 2_000;
     static final int SCROLL_DISTANCE_PX = 120;
@@ -40,14 +45,16 @@ public final class SidebarNavigator {
     private final EmulatorController emu;
     private final String device;
     private final TapInteractionService taps;
-    private final TemplateSearchHelper searcher;
+    private final ScreenStateReader screenStates;
+    private final Waiter transitionWaiter;
     private final ProfileContextLogger log;
 
     public SidebarNavigator(EmulatorController emu, String device, AccountDescriptor profile) {
         this.emu = emu;
         this.device = device;
         this.taps = TapInteractionService.forController(emu, device);
-        this.searcher = new TemplateSearchHelper(emu, device, profile);
+        this.screenStates = this::captureScreenState;
+        this.transitionWaiter = this::interruptibleWait;
         this.log = new ProfileContextLogger(SidebarNavigator.class, profile);
     }
 
@@ -88,23 +95,37 @@ public final class SidebarNavigator {
 
     /** Finds a row from its left icon in the current viewport and after every settled scroll. */
     public ImageSearchResultData findRow(SidebarDestination destination) {
+        return findRowWithStatus(destination).rowIcon();
+    }
+
+    /** Distinguishes a failed sidebar transition from a completed scan with no matching row. */
+    public SidebarRowLookup findRowWithStatus(SidebarDestination destination) {
         if (!openSection(destination.section())) {
-            return ImageSearchResultData.miss();
+            return SidebarRowLookup.sidebarUnavailable();
         }
 
         RawImageData frame = emu.captureScreen(device);
+        if (frame == null || selectedSection(frame).orElse(null) != destination.section()) {
+            log.warn("Sidebar state changed before scanning for " + destination);
+            return SidebarRowLookup.sidebarUnavailable();
+        }
         ImageSearchResultData current = locateRowIcon(destination, frame);
         if (current.isFound()) {
-            return current;
+            return SidebarRowLookup.fromRow(current);
         }
 
         ScrollScanResult bottomScan = scan(destination, ScrollDirection.TOWARD_BOTTOM, frame);
+        if (!bottomScan.completed()) {
+            log.warn("Sidebar scan did not complete on a verified " + destination.section()
+                    + " section: " + destination);
+            return SidebarRowLookup.sidebarUnavailable();
+        }
         if (bottomScan.rowIcon().isFound()) {
-            return bottomScan.rowIcon();
+            return SidebarRowLookup.fromRow(bottomScan.rowIcon());
         }
         log.info("Sidebar destination unavailable after bounded icon scan: " + destination
                 + " bottomBoundary=" + bottomScan.boundaryReached());
-        return ImageSearchResultData.miss();
+        return SidebarRowLookup.fromRow(ImageSearchResultData.miss());
     }
 
     public boolean close() {
@@ -120,29 +141,65 @@ public final class SidebarNavigator {
     }
 
     private boolean openSectionInternal(SidebarSection target) {
-        Optional<SidebarSection> current = selectedSection();
+        ScreenState initialState = screenStates.read();
+        Optional<SidebarSection> current = initialState.section();
 
         if (current.isEmpty()) {
-            if (!isRootScreen()) {
+            if (!initialState.rootScreen()) {
                 log.warn("Refusing to tap the sidebar trigger without a Home or World anchor");
                 return false;
             }
-            log.debug("Sidebar closed; opening it once before selecting " + target);
-            taps.tapInside(CommonGameAreas.LEFT_MENU_TRIGGER, 1, SIDEBAR_OPEN_SETTLE_MS);
-            current = selectedSection();
-            if (current.isEmpty()) {
-                log.warn("Sidebar did not open after one verified trigger tap");
-                return false;
+            int triggerTaps = 0;
+            while (current.isEmpty() && triggerTaps < MAX_TRIGGER_TAPS) {
+                triggerTaps++;
+                log.debug("Sidebar closed/unknown; trigger tap " + triggerTaps + "/" + MAX_TRIGGER_TAPS
+                        + " before selecting " + target);
+                taps.tapInside(CommonGameAreas.LEFT_MENU_TRIGGER, 1, SIDEBAR_OPEN_SETTLE_MS);
+
+                TransitionObservation observation = awaitSection(Optional::isPresent);
+                current = observation.section();
+                if (current.isPresent()) {
+                    if (observation.checks() > 1 || triggerTaps > 1) {
+                        log.debug("Sidebar open confirmed after triggerTaps=" + triggerTaps
+                                + " checks=" + observation.checks()
+                                + " observed=" + current.orElseThrow());
+                    }
+                    break;
+                }
+
+                ScreenState retryState = screenStates.read();
+                current = retryState.section();
+                if (current.isPresent()) {
+                    log.debug("Sidebar open confirmed on retry verification without another trigger: observed="
+                            + current.orElseThrow());
+                    break;
+                }
+                boolean rootScreen = retryState.rootScreen();
+                if (!shouldRetryTrigger(triggerTaps, observation, current, rootScreen)) {
+                    log.warn("Sidebar open not confirmed: triggerTaps=" + triggerTaps + "/"
+                            + MAX_TRIGGER_TAPS + " checks=" + observation.checks()
+                            + " interrupted=" + observation.interrupted()
+                            + " observed=closed/unknown rootScreen=" + rootScreen);
+                    return false;
+                }
+                log.debug("Sidebar still closed/unknown on a verified root screen after checks="
+                        + observation.checks() + "; retrying the trigger once");
             }
         }
 
         if (current.orElse(null) != target) {
             taps.tapInside(CommonGameAreas.sidebarTab(target), 1, SECTION_SETTLE_MS);
-            current = selectedSection();
+            TransitionObservation observation = awaitSection(section -> section.orElse(null) == target);
+            current = observation.section();
             if (current.orElse(null) != target) {
                 log.warn("Sidebar section selection failed: requested=" + target
-                        + " observed=" + current.map(Enum::name).orElse("closed/unknown"));
+                        + " observed=" + current.map(Enum::name).orElse("closed/unknown")
+                        + " checks=" + observation.checks());
                 return false;
+            }
+            if (observation.checks() > 1) {
+                log.debug("Sidebar section transition recovered after checks="
+                        + observation.checks() + " requested=" + target);
             }
         }
 
@@ -174,7 +231,7 @@ public final class SidebarNavigator {
             if (after == null || selectedSection(after).orElse(null) != destination.section()) {
                 log.warn("Sidebar state changed while scanning for " + destination
                         + " direction=" + direction + " step=" + step);
-                return new ScrollScanResult(ImageSearchResultData.miss(), before, false);
+                return new ScrollScanResult(ImageSearchResultData.miss(), before, false, false);
             }
 
             ImageSearchResultData rowIcon = locateRowIcon(destination, after);
@@ -184,14 +241,14 @@ public final class SidebarNavigator {
                     + " step=" + step + "/" + MAX_BOUNDARY_STEPS
                     + " changed=" + changed + " found=" + rowIcon.isFound());
             if (rowIcon.isFound()) {
-                return new ScrollScanResult(rowIcon, after, false);
+                return new ScrollScanResult(rowIcon, after, false, true);
             }
             if (!changed) {
-                return new ScrollScanResult(ImageSearchResultData.miss(), after, true);
+                return new ScrollScanResult(ImageSearchResultData.miss(), after, true, true);
             }
             before = after;
         }
-        return new ScrollScanResult(ImageSearchResultData.miss(), before, false);
+        return new ScrollScanResult(ImageSearchResultData.miss(), before, false, true);
     }
 
     private RawImageData scrollAndCapture(ScrollDirection direction) {
@@ -222,11 +279,16 @@ public final class SidebarNavigator {
         return ImageSearchResultData.miss();
     }
 
-    private boolean isRootScreen() {
-        return searcher.locatePattern(TemplatesEnum.GAME_HOME_FURNACE,
-                SearchConfigConstants.DEFAULT_SINGLE).isFound()
-                || searcher.locatePattern(TemplatesEnum.GAME_HOME_WORLD,
-                        SearchConfigConstants.DEFAULT_SINGLE).isFound();
+    private ScreenState captureScreenState() {
+        RawImageData frame = emu.captureScreen(device);
+        Optional<SidebarSection> section = selectedSection(frame);
+        return new ScreenState(section, section.isEmpty() && isRootScreen(frame));
+    }
+
+    private boolean isRootScreen(RawImageData frame) {
+        double threshold = SearchConfigConstants.DEFAULT_SINGLE.getThreshold();
+        return emu.locatePattern(device, frame, TemplatesEnum.GAME_HOME_FURNACE, threshold).isFound()
+                || emu.locatePattern(device, frame, TemplatesEnum.GAME_HOME_WORLD, threshold).isFound();
     }
 
     private Optional<SidebarSection> selectedSection() {
@@ -235,6 +297,32 @@ public final class SidebarNavigator {
 
     private Optional<SidebarSection> selectedSection(RawImageData frame) {
         return SidebarFrameClassifier.selectedSection(ImageConverter.toBufferedImage(frame));
+    }
+
+    private TransitionObservation awaitSection(Predicate<Optional<SidebarSection>> accepted) {
+        return awaitSection(accepted, this::selectedSection, transitionWaiter);
+    }
+
+    static TransitionObservation awaitSection(Predicate<Optional<SidebarSection>> accepted,
+                                               SectionReader reader, Waiter waiter) {
+        Optional<SidebarSection> observed = Optional.empty();
+        boolean interrupted = false;
+        for (int check = 1; check <= TRANSITION_POLL_CHECKS; check++) {
+            observed = reader.read();
+            if (accepted.test(observed) || check == TRANSITION_POLL_CHECKS) {
+                return new TransitionObservation(observed, check, interrupted);
+            }
+            if (!waiter.waitFor(TRANSITION_POLL_MS)) {
+                return new TransitionObservation(observed, check, true);
+            }
+        }
+        throw new IllegalStateException("Unreachable sidebar transition polling state");
+    }
+
+    static boolean shouldRetryTrigger(int triggerTaps, TransitionObservation observation,
+                                      Optional<SidebarSection> observed, boolean rootScreen) {
+        return !observation.interrupted() && triggerTaps < MAX_TRIGGER_TAPS
+                && observed.isEmpty() && rootScreen;
     }
 
     private boolean interruptibleWait(long milliseconds) {
@@ -248,7 +336,26 @@ public final class SidebarNavigator {
     }
 
     private record ScrollScanResult(ImageSearchResultData rowIcon, RawImageData frame,
-                                    boolean boundaryReached) {}
+                                    boolean boundaryReached, boolean completed) {}
+
+    record TransitionObservation(Optional<SidebarSection> section, int checks, boolean interrupted) {}
+
+    record ScreenState(Optional<SidebarSection> section, boolean rootScreen) {}
+
+    @FunctionalInterface
+    interface SectionReader {
+        Optional<SidebarSection> read();
+    }
+
+    @FunctionalInterface
+    interface ScreenStateReader {
+        ScreenState read();
+    }
+
+    @FunctionalInterface
+    interface Waiter {
+        boolean waitFor(long milliseconds);
+    }
 
     private enum ScrollDirection {
         TOWARD_BOTTOM(CommonGameAreas.SIDEBAR_SCROLL_TOWARD_BOTTOM_FROM,

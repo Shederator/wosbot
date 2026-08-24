@@ -12,9 +12,16 @@ map scenery cannot masquerade as a selected tab. A missing classification is an
 unknown/closed state, not permission to continue tapping.
 
 Opening the collapsed panel retains one fixed handle area because no stable visible target
-exists in the supplied open-panel frames. That tap is allowed only while a Home or World
-anchor is present, is issued once, and must produce a classified selected tab. Section taps,
-scrolls, and close taps likewise require the expected panel state.
+exists in the supplied open-panel frames. The tap region is restricted to the interior of the
+thin arrow at `x=6..16, y=546..554`. This stays clear of both the absolute display edge, where
+MuMu can discard a tap, and the expanded compact Marching panel behind the handle on World. A
+trigger tap is allowed only while a Home or World anchor is present.
+After the initial 400 ms settle, the navigator polls fresh frames for up to
+roughly two seconds because live logs show that a successful tap can temporarily classify as
+closed or unknown. If no section appears and a fresh Home or World anchor still proves the root
+screen, the trigger is retried once; the second attempt is terminal. Section changes use the
+same bounded polling but never repeat the tab tap from an unknown state. Scrolls and close taps
+likewise require the expected panel state.
 
 Queue inspection opens or reuses its verified City or Wilderness section without changing the
 scroll position. This avoids unconditional reset gestures and allows one logical operation to
