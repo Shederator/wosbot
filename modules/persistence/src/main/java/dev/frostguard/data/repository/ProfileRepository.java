@@ -273,6 +273,7 @@ public class ProfileRepository {
 		if (entries == null) return;
 
 		Map<Long, List<ConfigData>> grouped = entries.stream()
+			.filter(entry -> entry.getSettingKey() != null)
 			.collect(Collectors.groupingBy(ConfigData::getProfileId));
 
 		descriptors.forEach(d ->
@@ -311,7 +312,17 @@ public class ProfileRepository {
 		String query = CONFIG_PROJECTION + " WHERE c.owner.id = :profileId";
 		List<ConfigData> entries = store.executeQuery(
 			query, ConfigData.class, Map.of("profileId", descriptor.getId()));
-		descriptor.setConfigs(entries != null ? entries : new ArrayList<>());
+		if (entries == null) {
+			descriptor.setConfigs(new ArrayList<>());
+			return descriptor;
+		}
+		List<ConfigData> known = new ArrayList<>();
+		for (ConfigData entry : entries) {
+			if (entry.getSettingKey() != null) {
+				known.add(entry);
+			}
+		}
+		descriptor.setConfigs(known);
 		return descriptor;
 	}
 

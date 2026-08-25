@@ -269,6 +269,10 @@ with `./mvnw javafx:run`; its versioned JAR is not a standalone distribution.
   and `app-image/Frostguard Nightly`
 - Windows installers: versioned MSI packages under
   `packaging/desktop/target/installers/<channel>`
+- macOS application images: `packaging/desktop/target/app-image/Frostguard.app`
+  and `Frostguard Nightly.app`
+- macOS installers: versioned `.pkg` packages under
+  `packaging/desktop/target/installers/<channel>`
 - ADB/Tesseract files staged from `tools/`
 - custom task examples staged from root `examples/custom-tasks/`
 - template PNGs staged from `modules/vision/src/main/resources/templates`

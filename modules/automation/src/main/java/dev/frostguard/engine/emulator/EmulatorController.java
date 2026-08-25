@@ -70,14 +70,25 @@ public class EmulatorController {
 
         // emulator backend
         String emuStr = cfg.get(ConfigurationKeyEnum.CURRENT_EMULATOR_STRING.name());
-        if (emuStr == null || emuStr.isBlank()) throw new IllegalStateException("No emulator selected");
+        if (emuStr == null || emuStr.isBlank()) {
+            emuStr = EmulatorType.defaultForCurrentPlatform().name();
+        }
         EmulatorType kind = EmulatorType.valueOf(emuStr);
+        if (!kind.isSupportedOnCurrentPlatform()) {
+            throw new IllegalStateException(kind.getDisplayName() + " is not supported on this OS");
+        }
         String dir = cfg.get(kind.getConfigKey());
-        if (dir == null || dir.isBlank()) throw new IllegalStateException("No path for " + kind.getDisplayName());
+        if (dir == null || dir.isBlank()) {
+            dir = kind.resolveConfiguredDirectory();
+        }
+        if (!kind.isConfiguredPathValid(dir)) {
+            throw new IllegalStateException("No valid path for " + kind.getDisplayName());
+        }
         backend = switch (kind) {
             case MUMU     -> new MuMuEmulatorInstance(dir);
             case MEMU     -> new MEmuEmulatorInstance(dir);
             case LDPLAYER -> new LDPlayerEmulatorInstance(dir);
+            case BLUESTACKS_AIR -> new BlueStacksAirEmulatorInstance(dir);
         };
         LOG.info("Backend: {}", kind.getDisplayName());
 
