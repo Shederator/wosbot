@@ -31,6 +31,10 @@ public class OcrSettingsData {
     private final Color targetColor;
     private final boolean diagnosticMode;
     private final String allowedGlyphs;
+    // Null language means "eng", which every existing call site relies on. See language() for
+    // why it is chosen per call site and TesseractOcrProvider for the packaged-model check.
+    private final String language;
+    private final boolean preserveLineBreaks;
 
     /* ---- private: construction via Configurator only ---- */
 
@@ -40,6 +44,8 @@ public class OcrSettingsData {
         this.targetColor       = cfg.targetColor;
         this.diagnosticMode    = cfg.diagnosticMode;
         this.allowedGlyphs    = cfg.allowedGlyphs;
+        this.language           = cfg.language;
+        this.preserveLineBreaks = cfg.preserveLineBreaks;
     }
 
     /* ---- pre-configured presets ---- */
@@ -96,7 +102,9 @@ public class OcrSettingsData {
                 && !isolateForeground
                 && targetColor == null
                 && !diagnosticMode
-                && (allowedGlyphs == null || allowedGlyphs.isEmpty());
+                && (allowedGlyphs == null || allowedGlyphs.isEmpty())
+                && language == null
+                && !preserveLineBreaks;
     }
 
     /**
@@ -111,7 +119,9 @@ public class OcrSettingsData {
                 .isolateForeground(this.isolateForeground)
                 .targetColor(this.targetColor)
                 .diagnosticMode(this.diagnosticMode)
-                .allowedGlyphs(this.allowedGlyphs);
+                .allowedGlyphs(this.allowedGlyphs)
+                .language(this.language)
+                .preserveLineBreaks(this.preserveLineBreaks);
     }
 
     /* ---- primary accessors ---- */
@@ -130,6 +140,32 @@ public class OcrSettingsData {
 
     /** Restricted character set for recognition (whitelist). */
     public String allowedGlyphs()                { return allowedGlyphs; }
+
+    /**
+     * Tesseract language code(s), e.g. {@code "eng"} or {@code "eng+chi_sim"}. Null means the caller
+     * never asked, and recognition defaults to {@code "eng"}.
+     *
+     * <p>It exists for reading multi-line, mixed-language player text -- world and alliance chat,
+     * where one screen routinely carries Latin, Cyrillic, Arabic and Chinese at once and an
+     * English-only model returns confident nonsense for most of it. The per-message chat reader
+     * that consumes it is proposed separately and depends on this change; until that lands, a null
+     * language with {@code preserveLineBreaks == false} reproduces exactly the behaviour every
+     * existing call site had before these options existed.
+     *
+     * <p>Recorded here so the next reader does not mistake an option with no current call site for
+     * dead configuration. The language cannot be a process-wide setting: the same run reads English
+     * countdowns and non-Latin chat minutes apart, so it has to be chosen per call site.
+     */
+    public String language()                     { return language; }
+
+    /**
+     * Whether recognised text keeps its original line breaks; the default flattens it to one line.
+     *
+     * <p>Same status as {@link #language()} -- see there. It matters for the same case: a chat
+     * panel is inherently multi-line, and flattening it destroys the message boundaries that make
+     * the text usable at all.
+     */
+    public boolean preserveLineBreaks()           { return preserveLineBreaks; }
 
     /* ---- presence checks ---- */
 
@@ -166,23 +202,28 @@ public class OcrSettingsData {
         if (!(other instanceof OcrSettingsData that)) return false;
         return isolateForeground == that.isolateForeground
             && diagnosticMode    == that.diagnosticMode
+            && preserveLineBreaks == that.preserveLineBreaks
             && textLayout        == that.textLayout
             && Objects.equals(targetColor,   that.targetColor)
-            && Objects.equals(allowedGlyphs, that.allowedGlyphs);
+            && Objects.equals(allowedGlyphs, that.allowedGlyphs)
+            && Objects.equals(language,      that.language);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(
                 textLayout, isolateForeground,
-                targetColor, diagnosticMode, allowedGlyphs);
+                targetColor, diagnosticMode, allowedGlyphs,
+                language, preserveLineBreaks);
     }
 
     @Override
     public String toString() {
         return "OCR{layout=" + textLayout
                 + ", fgIsolation=" + isolateForeground
-                + ", glyphs=" + allowedGlyphs + "}";
+                + ", glyphs=" + allowedGlyphs
+                + ", language=" + language
+                + ", preserveLineBreaks=" + preserveLineBreaks + "}";
     }
 
     /**
@@ -196,6 +237,8 @@ public class OcrSettingsData {
         private Color targetColor;
         private boolean diagnosticMode;
         private String allowedGlyphs;
+        private String language;
+        private boolean preserveLineBreaks = false;
 
         /* ---- primary setters ---- */
 
@@ -221,6 +264,16 @@ public class OcrSettingsData {
 
         public Configurator allowedGlyphs(String glyphs) {
             this.allowedGlyphs = glyphs;
+            return this;
+        }
+
+        public Configurator language(String lang) {
+            this.language = lang;
+            return this;
+        }
+
+        public Configurator preserveLineBreaks(boolean preserve) {
+            this.preserveLineBreaks = preserve;
             return this;
         }
 
