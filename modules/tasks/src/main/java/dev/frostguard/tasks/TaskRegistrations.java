@@ -73,6 +73,7 @@ public class TaskRegistrations {
             case EXPLORATION_CHEST -> new ExplorationRoutine(profile, type);
             case DO_EXPLORATION -> new DoExplorationRoutine(profile, type);
             case LABYRINTH -> new DailyLabyrinthRoutine(profile, type);
+            case LABYRINTH_RAID -> new LabyrinthRaidRoutine(profile, type);
             case TREK_SUPPLIES -> new TundraTrekRoutine(profile, type);
             case TREK_AUTOMATION -> new TundraTrekAutoRoutine(profile, type);
 

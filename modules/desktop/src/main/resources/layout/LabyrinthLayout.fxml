@@ -1,0 +1,332 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<!-- Labyrinth — settings for the weekly Labyrinth (Land of Heroes formation, generation, info). -->
+<BorderPane maxHeight="Infinity" maxWidth="Infinity"
+            HBox.hgrow="ALWAYS" VBox.vgrow="ALWAYS"
+            xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1">
+
+    <center>
+        <ScrollPane fitToWidth="true" hbarPolicy="NEVER" vbarPolicy="AS_NEEDED"
+                    styleClass="task-page-scroll">
+            <VBox spacing="16" styleClass="task-page-root" maxWidth="Infinity">
+
+                <!-- Enable card -->
+                <VBox styleClass="content-card">
+                    <HBox maxWidth="Infinity" styleClass="header-yellow">
+                        <CheckBox fx:id="checkBoxEnableLabyrinth" mnemonicParsing="false"
+                                  style="-fx-font-size: 15px; -fx-font-weight: bold;"
+                                  text="Enable Labyrinth" />
+                    </HBox>
+                    <VBox spacing="10" styleClass="task-section-inner">
+                        <Label styleClass="task-card-description" wrapText="true"
+                               text="Runs the weekly Labyrinth on its normal schedule, clearing whichever zone is open each day. Troop-ratio automation covers Land of Heroes, Cave of Monsters, Charm Mine, Research Center, Gear Forge, and Gaia Heart." />
+                        <CheckBox fx:id="checkBoxFormationTest" mnemonicParsing="false"
+                                  text="Formation test mode" />
+                        <Label styleClass="task-card-description" wrapText="true"
+                               style="-fx-font-style: italic;"
+                               text="ON: today's run ONLY sets the troop ratios below for whichever of Land of Heroes / Cave of Monsters / Charm Mine is currently open, and stops there -- no zone is attempted, no daily attempt is spent. Use this to safely check the ratio setup. OFF (normal use): runs the real weekly schedule and actually battles." />
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Label styleClass="task-field-label" text="Generation" />
+                            <ComboBox fx:id="comboBoxGeneration" />
+                        </HBox>
+                        <Separator style="-fx-opacity: 0.25;" />
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Label styleClass="task-field-label" text="Daily kickoff time (local, HH:mm)" />
+                            <TextField fx:id="tfDailyStartTime" prefWidth="80.0" promptText="12:00" />
+                        </HBox>
+                        <Label styleClass="task-card-description" wrapText="true"
+                               style="-fx-font-style: italic;"
+                               text="When the daily Labyrinth run kicks off, in your local time. Defaults to noon." />
+                    </VBox>
+                </VBox>
+
+                <!-- Land of Heroes formation card -->
+                <VBox styleClass="content-card">
+                    <HBox maxWidth="Infinity" styleClass="header-yellow">
+                        <Label style="-fx-font-size: 15px; -fx-font-weight: bold;"
+                               text="Land of Heroes — Troop Ratios" />
+                    </HBox>
+                    <VBox spacing="12" styleClass="task-section-inner">
+                        <Label styleClass="task-card-description" wrapText="true"
+                               text="Infantry / Lancer / Marksman split per squad (each row should total 100%). Only hero stats count in Land of Heroes, so this is purely troop composition. Seeded from community guides; tune from your loss reports." />
+
+                        <VBox spacing="6">
+                            <Label styleClass="task-field-label" text="Squad 1 (frontline / tank)" />
+                            <FlowPane hgap="14" vgap="8" alignment="CENTER_LEFT">
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Infantry %" />
+                                    <TextField fx:id="tfSquad1Inf" promptText="60" />
+                                </VBox>
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Lancer %" />
+                                    <TextField fx:id="tfSquad1Lan" promptText="40" />
+                                </VBox>
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Marksman %" />
+                                    <TextField fx:id="tfSquad1Mrk" promptText="0" />
+                                </VBox>
+                            </FlowPane>
+                        </VBox>
+
+                        <VBox spacing="6">
+                            <Label styleClass="task-field-label" text="Squad 2 (marksman / hybrid)" />
+                            <FlowPane hgap="14" vgap="8" alignment="CENTER_LEFT">
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Infantry %" />
+                                    <TextField fx:id="tfSquad2Inf" promptText="50" />
+                                </VBox>
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Lancer %" />
+                                    <TextField fx:id="tfSquad2Lan" promptText="0" />
+                                </VBox>
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Marksman %" />
+                                    <TextField fx:id="tfSquad2Mrk" promptText="50" />
+                                </VBox>
+                            </FlowPane>
+                        </VBox>
+
+                        <Label fx:id="labelRatioHint" wrapText="true"
+                               style="-fx-font-size: 11px; -fx-text-fill: #b9770e;" text="" />
+                    </VBox>
+                </VBox>
+
+                <!-- Cave of Monsters formation card -->
+                <VBox styleClass="content-card">
+                    <HBox maxWidth="Infinity" styleClass="header-yellow">
+                        <Label style="-fx-font-size: 15px; -fx-font-weight: bold;"
+                               text="Cave of Monsters — Troop Ratios" />
+                    </HBox>
+                    <VBox spacing="12" styleClass="task-section-inner">
+                        <Label styleClass="task-card-description" wrapText="true"
+                               text="Infantry / Lancer / Marksman split per squad (each row should total 100%). Only Pet stats actually score this zone, but composition still affects tanking/positioning. Same defaults as Land of Heroes; tune from your loss reports." />
+
+                        <VBox spacing="6">
+                            <Label styleClass="task-field-label" text="Squad 1 (frontline / tank)" />
+                            <FlowPane hgap="14" vgap="8" alignment="CENTER_LEFT">
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Infantry %" />
+                                    <TextField fx:id="tfCaveSquad1Inf" promptText="60" />
+                                </VBox>
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Lancer %" />
+                                    <TextField fx:id="tfCaveSquad1Lan" promptText="40" />
+                                </VBox>
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Marksman %" />
+                                    <TextField fx:id="tfCaveSquad1Mrk" promptText="0" />
+                                </VBox>
+                            </FlowPane>
+                        </VBox>
+
+                        <VBox spacing="6">
+                            <Label styleClass="task-field-label" text="Squad 2 (marksman / hybrid)" />
+                            <FlowPane hgap="14" vgap="8" alignment="CENTER_LEFT">
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Infantry %" />
+                                    <TextField fx:id="tfCaveSquad2Inf" promptText="50" />
+                                </VBox>
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Lancer %" />
+                                    <TextField fx:id="tfCaveSquad2Lan" promptText="0" />
+                                </VBox>
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Marksman %" />
+                                    <TextField fx:id="tfCaveSquad2Mrk" promptText="50" />
+                                </VBox>
+                            </FlowPane>
+                        </VBox>
+
+                        <Label fx:id="labelCaveRatioHint" wrapText="true"
+                               style="-fx-font-size: 11px; -fx-text-fill: #b9770e;" text="" />
+                    </VBox>
+                </VBox>
+
+                <!-- Charm Mine formation card -->
+                <VBox styleClass="content-card">
+                    <HBox maxWidth="Infinity" styleClass="header-yellow">
+                        <Label style="-fx-font-size: 15px; -fx-font-weight: bold;"
+                               text="Charm Mine — Troop Ratios" />
+                    </HBox>
+                    <VBox spacing="12" styleClass="task-section-inner">
+                        <Label styleClass="task-card-description" wrapText="true"
+                               text="Infantry / Lancer / Marksman split per squad (each row should total 100%). Only Chief Charm stats actually score this zone, but composition still affects tanking/positioning. Same defaults as Land of Heroes; tune from your loss reports." />
+
+                        <VBox spacing="6">
+                            <Label styleClass="task-field-label" text="Squad 1 (frontline / tank)" />
+                            <FlowPane hgap="14" vgap="8" alignment="CENTER_LEFT">
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Infantry %" />
+                                    <TextField fx:id="tfCharmSquad1Inf" promptText="60" />
+                                </VBox>
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Lancer %" />
+                                    <TextField fx:id="tfCharmSquad1Lan" promptText="40" />
+                                </VBox>
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Marksman %" />
+                                    <TextField fx:id="tfCharmSquad1Mrk" promptText="0" />
+                                </VBox>
+                            </FlowPane>
+                        </VBox>
+
+                        <VBox spacing="6">
+                            <Label styleClass="task-field-label" text="Squad 2 (marksman / hybrid)" />
+                            <FlowPane hgap="14" vgap="8" alignment="CENTER_LEFT">
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Infantry %" />
+                                    <TextField fx:id="tfCharmSquad2Inf" promptText="50" />
+                                </VBox>
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Lancer %" />
+                                    <TextField fx:id="tfCharmSquad2Lan" promptText="0" />
+                                </VBox>
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Marksman %" />
+                                    <TextField fx:id="tfCharmSquad2Mrk" promptText="50" />
+                                </VBox>
+                            </FlowPane>
+                        </VBox>
+
+                        <Label fx:id="labelCharmRatioHint" wrapText="true"
+                               style="-fx-font-size: 11px; -fx-text-fill: #b9770e;" text="" />
+                    </VBox>
+                </VBox>
+
+                <!-- Gaia Heart formation card -->
+                <VBox styleClass="content-card">
+                    <HBox maxWidth="Infinity" styleClass="header-yellow">
+                        <Label style="-fx-font-size: 15px; -fx-font-weight: bold;"
+                               text="Gaia Heart — Troop Ratios" />
+                    </HBox>
+                    <VBox spacing="12" styleClass="task-section-inner">
+                        <Label styleClass="task-card-description" wrapText="true"
+                               text="Infantry / Lancer / Marksman split per squad (each row should total 100%). Weekly zone (open ~Sundays) -- deploys your REAL troops and heroes, not normalized ones, so this is your actual account power, not a build test. One Deploy auto-chains through many stages on its own; a loss stops the chain and can be retried once with the same ratio before it's logged as a wall. Defaults below are seeded from community guides (a 60/40/0, 50/0/50, 50/20/30 three-army split) -- tune from your own loss reports." />
+
+                        <VBox spacing="6">
+                            <Label styleClass="task-field-label" text="Squad 1 (frontline / tank)" />
+                            <FlowPane hgap="14" vgap="8" alignment="CENTER_LEFT">
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Infantry %" />
+                                    <TextField fx:id="tfGaiaSquad1Inf" promptText="60" />
+                                </VBox>
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Lancer %" />
+                                    <TextField fx:id="tfGaiaSquad1Lan" promptText="40" />
+                                </VBox>
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Marksman %" />
+                                    <TextField fx:id="tfGaiaSquad1Mrk" promptText="0" />
+                                </VBox>
+                            </FlowPane>
+                        </VBox>
+
+                        <VBox spacing="6">
+                            <Label styleClass="task-field-label" text="Squad 2 (marksman / hybrid)" />
+                            <FlowPane hgap="14" vgap="8" alignment="CENTER_LEFT">
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Infantry %" />
+                                    <TextField fx:id="tfGaiaSquad2Inf" promptText="50" />
+                                </VBox>
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Lancer %" />
+                                    <TextField fx:id="tfGaiaSquad2Lan" promptText="0" />
+                                </VBox>
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Marksman %" />
+                                    <TextField fx:id="tfGaiaSquad2Mrk" promptText="50" />
+                                </VBox>
+                            </FlowPane>
+                        </VBox>
+
+                        <VBox spacing="6">
+                            <Label styleClass="task-field-label"
+                                   text="Squad 3 (balanced -- locked until Stage 15-10)" />
+                            <FlowPane hgap="14" vgap="8" alignment="CENTER_LEFT">
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Infantry %" />
+                                    <TextField fx:id="tfGaiaSquad3Inf" promptText="50" />
+                                </VBox>
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Lancer %" />
+                                    <TextField fx:id="tfGaiaSquad3Lan" promptText="20" />
+                                </VBox>
+                                <VBox spacing="4" prefWidth="120">
+                                    <Label styleClass="task-field-label" text="Marksman %" />
+                                    <TextField fx:id="tfGaiaSquad3Mrk" promptText="30" />
+                                </VBox>
+                            </FlowPane>
+                            <Label styleClass="task-card-description" wrapText="true"
+                                   style="-fx-font-style: italic;"
+                                   text="Set now so it's ready the moment your account unlocks it -- the bot only touches Squad 3 once the game shows it unlocked, never before." />
+                        </VBox>
+
+                        <Label fx:id="labelGaiaRatioHint" wrapText="true"
+                               style="-fx-font-size: 11px; -fx-text-fill: #b9770e;" text="" />
+                    </VBox>
+                </VBox>
+
+                <!-- Research Center default ratio card -->
+                <VBox styleClass="content-card">
+                    <HBox maxWidth="Infinity" styleClass="header-yellow">
+                        <Label style="-fx-font-size: 15px; -fx-font-weight: bold;"
+                               text="Research Center — Default Troop Ratio" />
+                    </HBox>
+                    <VBox spacing="12" styleClass="task-section-inner">
+                        <Label styleClass="task-card-description" wrapText="true"
+                               text="One troop composition, not two squads -- this is the Challenge deploy screen's tail-of-the-tape battle. Used as the first attempt's ratio; a loss still automatically tries a different lean for the second attempt before giving up on the stage for today." />
+                        <FlowPane hgap="14" vgap="8" alignment="CENTER_LEFT">
+                            <VBox spacing="4" prefWidth="120">
+                                <Label styleClass="task-field-label" text="Infantry %" />
+                                <TextField fx:id="tfResearchInf" promptText="50" />
+                            </VBox>
+                            <VBox spacing="4" prefWidth="120">
+                                <Label styleClass="task-field-label" text="Lancer %" />
+                                <TextField fx:id="tfResearchLan" promptText="20" />
+                            </VBox>
+                            <VBox spacing="4" prefWidth="120">
+                                <Label styleClass="task-field-label" text="Marksman %" />
+                                <TextField fx:id="tfResearchMrk" promptText="30" />
+                            </VBox>
+                        </FlowPane>
+                        <Label fx:id="labelResearchRatioHint" wrapText="true"
+                               style="-fx-font-size: 11px; -fx-text-fill: #b9770e;" text="" />
+                    </VBox>
+                </VBox>
+
+                <!-- Gear Forge default ratio card -->
+                <VBox styleClass="content-card">
+                    <HBox maxWidth="Infinity" styleClass="header-yellow">
+                        <Label style="-fx-font-size: 15px; -fx-font-weight: bold;"
+                               text="Gear Forge — Default Troop Ratio" />
+                    </HBox>
+                    <VBox spacing="12" styleClass="task-section-inner">
+                        <Label styleClass="task-card-description" wrapText="true"
+                               text="Same Challenge tail-of-the-tape battle as Research Center, one composition. First attempt's ratio; a loss still automatically tries a different lean for the second attempt before giving up on the stage for today." />
+                        <FlowPane hgap="14" vgap="8" alignment="CENTER_LEFT">
+                            <VBox spacing="4" prefWidth="120">
+                                <Label styleClass="task-field-label" text="Infantry %" />
+                                <TextField fx:id="tfGearForgeInf" promptText="60" />
+                            </VBox>
+                            <VBox spacing="4" prefWidth="120">
+                                <Label styleClass="task-field-label" text="Lancer %" />
+                                <TextField fx:id="tfGearForgeLan" promptText="10" />
+                            </VBox>
+                            <VBox spacing="4" prefWidth="120">
+                                <Label styleClass="task-field-label" text="Marksman %" />
+                                <TextField fx:id="tfGearForgeMrk" promptText="30" />
+                            </VBox>
+                        </FlowPane>
+                        <Label fx:id="labelGearForgeRatioHint" wrapText="true"
+                               style="-fx-font-size: 11px; -fx-text-fill: #b9770e;" text="" />
+                    </VBox>
+                </VBox>
+
+            </VBox>
+        </ScrollPane>
+    </center>
+</BorderPane>
