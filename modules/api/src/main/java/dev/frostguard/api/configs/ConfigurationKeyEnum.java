@@ -109,6 +109,91 @@ public enum ConfigurationKeyEnum {
     ARENA_TASK_PROTECT_ALLIANCE_BOOL    ("true",    Boolean.class,  ConfigCategory.DAILIES, true),
     ARENA_TASK_REFRESH_WITH_GEMS_BOOL   ("false",   Boolean.class,  ConfigCategory.DAILIES),
     DAILY_LABYRINTH_BOOL                ("false",   Boolean.class,  ConfigCategory.DAILIES),
+    /** Testing-only gate for the Land-of-Heroes formation-setup flow. When true,
+     *  DailyLabyrinthRoutine.execute() ONLY runs setupLandOfHeroesFormation() (tap Challenge → Quick
+     *  Deploy → Balance → OCR-drive the troop ratio → use-as-default → Confirm → Edit Formation → STOP)
+     *  and skips the normal daily-clear logic, so the free formation-setup can be triggered without
+     *  spending a daily battle attempt. Default false everywhere. */
+    LABYRINTH_FORMATION_TEST_BOOL       ("false",   Boolean.class,  ConfigCategory.DAILIES),
+    /** "kick Labyrinth off at noon every day" -- the daily run used to always
+     *  reschedule to the game's own 00:00 UTC reset (dailyResetTime()), which lands at an unintuitive
+     *  local-time hour depending on DST. Picked, HH:mm local time, defaults to noon. */
+    LABYRINTH_DAILY_START_TIME_STRING   ("12:00",   String.class,   ConfigCategory.DAILIES),
+    /** Labyrinth generation the account is playing (the operator is Gen 1). Informational + future tuning. */
+    LABYRINTH_GENERATION_STRING         ("Gen 1",   String.class,   ConfigCategory.DAILIES),
+    /** Land-of-Heroes per-squad troop ratios (Infantry/Lancer/Marksman), driven from the Labyrinth tab.
+     *  Defaults set to an alliance-mate's posted recommendation ("For the best results
+     *  in the labyrinth ... this will allow you to get the farthest you can") -- Land of Heroes 50/20/30,
+     *  applied to both squads since the post gave one ratio per zone. */
+    LABYRINTH_SQUAD1_INFANTRY_INT       ("50",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_SQUAD1_LANCER_INT         ("20",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_SQUAD1_MARKSMAN_INT       ("30",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_SQUAD2_INFANTRY_INT       ("50",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_SQUAD2_LANCER_INT         ("20",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_SQUAD2_MARKSMAN_INT       ("30",      Integer.class,  ConfigCategory.DAILIES),
+    // "we're up to like three now" -- extended the same per-squad troop-ratio
+    // formation-setup to Cave of Monsters and Charm Mine (Labyrinth zones 2 & 3). Each zone's own
+    // in-game rule ("Only the stats of Pets/Chief Charms take effect here") means troop stats don't
+    // score the fight directly, but composition still affects tanking/positioning -- the operator's explicit
+    // call to build the ratio controls for these anyway.
+    // Defaults updated to match the same alliance-mate recommendation --
+    // Cave of Monsters 50/10/40, Charm Mine 60/20/20. Cave/Charm are single-squad zones
+    // (see ZoneFormation.singleSquad -- only squad1Keys is actually read), squad2 kept in sync anyway.
+    LABYRINTH_CAVE_SQUAD1_INFANTRY_INT  ("50",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CAVE_SQUAD1_LANCER_INT    ("10",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CAVE_SQUAD1_MARKSMAN_INT  ("40",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CAVE_SQUAD2_INFANTRY_INT  ("50",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CAVE_SQUAD2_LANCER_INT    ("10",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CAVE_SQUAD2_MARKSMAN_INT  ("40",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CHARM_SQUAD1_INFANTRY_INT ("60",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CHARM_SQUAD1_LANCER_INT   ("20",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CHARM_SQUAD1_MARKSMAN_INT ("20",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CHARM_SQUAD2_INFANTRY_INT ("60",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CHARM_SQUAD2_LANCER_INT   ("20",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_CHARM_SQUAD2_MARKSMAN_INT ("20",      Integer.class,  ConfigCategory.DAILIES),
+    // "add the research center in the gear forge... where we can start entering
+    // true default troop ratios" -- Research Center and Gear Forge are single-troop-composition
+    // Challenge fights (no Squad1/Squad2 split like the other zones), so one Infantry/Lancer/Marksman
+    // % triple each. LabyrinthRaidRoutine.challengeZone() uses this as the FIRST attempt's preset,
+    // replacing the OCR-derived guess it used to make on its own; a Defeat still falls back to the
+    // existing live-tested "escalate to a different lean" safety net for the second attempt. Defaults
+    // match the same alliance-mate recommendation the other zones were seeded from: Research Center
+    // 50/20/30, Gear Forge 60/10/30.
+    LABYRINTH_RESEARCH_INFANTRY_INT     ("50",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_RESEARCH_LANCER_INT       ("20",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_RESEARCH_MARKSMAN_INT     ("30",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_GEARFORGE_INFANTRY_INT    ("60",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_GEARFORGE_LANCER_INT      ("10",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_GEARFORGE_MARKSMAN_INT    ("30",      Integer.class,  ConfigCategory.DAILIES),
+    // "once you add Gaia [Heart], I should be able to put in both formation
+    // percentages, and you'll automatically be able to adjust those in the game." Live-calibrated the
+    // same day (a Sunday, Gaia Heart's real open day) -- it's a genuine two-squad zone (Squad Config,
+    // Quick Deploy, per-squad Edit Formation/Balance), same shape as Land of Heroes, NOT single-squad
+    // like Cave of Monsters/Charm Mine. Deploys real troops/heroes, not normalized ones, but the
+    // Infantry/Lancer/Marksman comp lever works the same way. Squad 3 unlocks at Stage 15-10 (confirmed
+    // live -- "Clear Gaia Heart Stage 15-10 to unlock" shown on the still-locked 3rd slot); scaffolded
+    // now so the config/UI/automation are all ready the moment the operator's account unlocks it, rather than
+    // needing a second round-trip later. Defaults for all 3 squads come from community guides
+    // (topuplive.com's Whiteout Survival troops guide + corroborating community writeups, 2026-08-16
+    // research pass) recommending exactly a 3-army split of 60/40/0, 50/0/50, 50/20/30 for Gaia Heart
+    // -- happens to match the Land of Heroes "mirrored fix" ratio for squads 1-2 plus a third balanced
+    // comp for squad 3. Tune from real loss reports once the operator has enough data.
+    LABYRINTH_GAIA_SQUAD1_INFANTRY_INT  ("60",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_GAIA_SQUAD1_LANCER_INT    ("40",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_GAIA_SQUAD1_MARKSMAN_INT  ("0",       Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_GAIA_SQUAD2_INFANTRY_INT  ("50",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_GAIA_SQUAD2_LANCER_INT    ("0",       Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_GAIA_SQUAD2_MARKSMAN_INT  ("50",      Integer.class,  ConfigCategory.DAILIES),
+    // Squad 3 -- locked until Gaia Heart Stage 15-10. Not yet reachable/testable live, so this ratio
+    // is 100% community-sourced (see note above), unverified against the real Squad 3 UI.
+    LABYRINTH_GAIA_SQUAD3_INFANTRY_INT  ("50",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_GAIA_SQUAD3_LANCER_INT    ("20",      Integer.class,  ConfigCategory.DAILIES),
+    LABYRINTH_GAIA_SQUAD3_MARKSMAN_INT  ("30",      Integer.class,  ConfigCategory.DAILIES),
+    // "the new labyrinth" -- Research Center (Tech stats) + Gear Forge (Chief
+    // Gear stats), the stage-ladder raid system distinct from the classic Land of Heroes/Cave of
+    // Monsters/Charm Mine zones (LABYRINTH, id 11). Raid-claim only -- Challenge (real battle,
+    // limited daily attempts) deliberately not automated yet.
+    LABYRINTH_RAID_ENABLED_BOOL         ("false",   Boolean.class,  ConfigCategory.DAILIES),
     DAILY_MISSION_AUTO_SCHEDULE_BOOL    ("false",   Boolean.class,  ConfigCategory.DAILIES),
     DAILY_MISSION_BOOL                  ("false",   Boolean.class,  ConfigCategory.DAILIES),
     DAILY_MISSION_OFFSET_INT            ("720",     Integer.class,  ConfigCategory.DAILIES),
@@ -277,9 +362,9 @@ public enum ConfigurationKeyEnum {
     DISCORD_TOKEN_STRING                ("",            String.class,   ConfigCategory.SYSTEM),
     GAME_VERSION_STRING                 ("GLOBAL",      String.class,   ConfigCategory.SYSTEM),
     IDLE_BEHAVIOR_STRING                ("CLOSE_EMULATOR", String.class, ConfigCategory.SYSTEM),
-    // Changed by pernerch | Date: 2026-07-04 | Why: allow explicit stop-policy selection for GUI stop action.
+    // Allow explicit stop-policy selection for GUI stop action.
     STOP_BEHAVIOR_STRING                ("DO_NOTHING",  String.class,   ConfigCategory.SYSTEM),
-    // Changed by pernerch | Date: 2026-07-04 | Why: separate Telegram stop behavior from local GUI stop behavior.
+    // Separate Telegram stop behavior from local GUI stop behavior.
     STOP_BEHAVIOR_TELEGRAM_STRING       ("DO_NOTHING",  String.class,   ConfigCategory.SYSTEM),
     LDPLAYER_PATH_STRING                ("",            String.class,   ConfigCategory.SYSTEM),
     MAX_IDLE_TIME_INT                   ("15",          Integer.class,  ConfigCategory.SYSTEM),
