@@ -161,6 +161,28 @@ public final class CommonGameAreas {
     // formation layout, turning "00:00:15" into the valid but false ten-hour value "10:00:15".
     public static final AreaData TRAVEL_TIME_OCR_AREA   = region(500, 1134, 622, 1162);
 
+    // ── My Island (Life Essence) ─────────────────────────────────────
+
+    // Claim badges hang over the tree and over each crafting station, and players place their
+    // stations wherever they like, so the whole island is searched rather than fixed spots.
+    //
+    // Both edges are load-bearing. The top HUD's Life Essence counter is the same crystal artwork as
+    // the badges and passes every shape rule the detector applies, so excluding it here is the only
+    // thing that stops the routine tapping the currency counter. Measured across live frames that
+    // counter ends at y=54, and the window starts far enough below it to be unambiguous.
+    //
+    // The rest of the headroom is for the badge over the tree, which floats higher than any other.
+    // It reaches y=323 on a level 9 tree, and a clipped crystal loses pixels and height until it
+    // falls out of the shape rules - an earlier y=340 edge cut it to 40x40 and it passed by luck.
+    // Since a taller tree on another account puts that badge higher still, the window starts as
+    // high as the counter allows rather than just above the one tree that has been measured.
+    public static final AreaData ISLAND_CLAIM_BADGE_AREA = region(0, 100, 720, 1100);
+
+    // The Life Essence counter in the top bar. Being the same crystal artwork as the badges makes it
+    // a free proof that the island screen is really open, since no other screen the routine can land
+    // on carries it.
+    public static final AreaData ISLAND_ESSENCE_COUNTER = region(500, 10, 640, 60);
+
     // ── character identity ───────────────────────────────────────────
 
     public static final AreaData CHARACTER_ID_OCR_AREA   = region(300, 940, 465, 980);
