@@ -77,4 +77,13 @@ public final class CommonOCRSettings {
                 .allowedGlyphs("0123456789")
                 .build();
     }
+    // Telemetry HUD counters. The game abbreviates some values ("16.3M") and prints others in full
+    // ("25,967,881"); a digits-only whitelist silently turns the former into 163.
+    public static final OcrSettingsData TELEMETRY_ABBREVIATED_NUMBER_SETTINGS =
+            buildConfig("0123456789.,KMB", true, 255, 255, 255, TextLayout.SINGLE_LINE);
+
+    // Slots that always print in full (power, gems). Allowing K/M/B there costs accuracy for no
+    // benefit: with the letters whitelisted, a clean "56,256" crop has been read as "596,256".
+    public static final OcrSettingsData TELEMETRY_FULL_NUMBER_SETTINGS =
+            buildConfig("0123456789,", true, 255, 255, 255, TextLayout.SINGLE_LINE);
 }
