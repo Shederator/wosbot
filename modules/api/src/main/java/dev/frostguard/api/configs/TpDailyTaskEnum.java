@@ -111,7 +111,13 @@ public enum TpDailyTaskEnum {
 
     /* ── shop ── */
 
-    SHOP_MYSTERY           (80,  "Shop Mystery",                 ConfigurationKeyEnum.BOOL_MYSTERY_SHOP,                      RoutineCategory.SHOP);
+    SHOP_MYSTERY           (80,  "Shop Mystery",                 ConfigurationKeyEnum.BOOL_MYSTERY_SHOP,                      RoutineCategory.SHOP),
+
+    // "the new labyrinth" -- Research Center (Tech stats) + Gear Forge (Chief
+    // Gear stats), the stage-ladder raid system distinct from the classic Land of Heroes/Cave of
+    // Monsters/Charm Mine zones (LABYRINTH, id 11, above). Raid-claim only -- Challenge (real
+    // battle, limited daily attempts) deliberately not automated yet.
+    LABYRINTH_RAID (916, "Labyrinth Raid Claims", ConfigurationKeyEnum.LABYRINTH_RAID_ENABLED_BOOL, RoutineCategory.RESOURCE);
 
     /* ================================================================
      *  Category taxonomy used to group routines in the management UI.
