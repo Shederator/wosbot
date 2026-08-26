@@ -37,6 +37,7 @@ import dev.frostguard.engine.error.ActionRequiredContext;
 import dev.frostguard.engine.error.HomeNotFoundException;
 import dev.frostguard.engine.error.ProfileCooldownException;
 import dev.frostguard.engine.error.ProfileInReconnectStateException;
+import dev.frostguard.engine.error.QuitDialogStuckException;
 import dev.frostguard.engine.error.StopExecutionException;
 import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.schedule.inject.InjectionRule;
@@ -209,7 +210,7 @@ public class TaskQueue {
         return true;
     }
 
-        // Changed by pernerch | Date: 2026-07-02 | Why: expose overdue runnable snapshot so
+        // Expose overdue runnable snapshot so
         // peer queues on the same emulator can be prioritized before idle behavior closes/suspends.
         public synchronized Optional<OverdueRunnableSnapshot> peekMostRelevantOverdueRunnableTask() {
         LocalDateTime now = LocalDateTime.now();
@@ -318,7 +319,7 @@ public class TaskQueue {
             throw new IllegalStateException("Cannot start queue while its previous worker is still alive: "
                     + profile.getName());
         }
-        // Changed by pernerch | Date: 2026-07-04 | Why: reset startup Initialize gate on each queue start.
+        // Reset startup Initialize gate on each queue start.
         forceInitialInitialize = true;
         shuttingDown = false;
         stoppedCleanly = false;
@@ -644,7 +645,7 @@ public class TaskQueue {
     }
 
     private boolean shouldRunInitialize() {
-        // Changed by pernerch | Date: 2026-07-04 | Why: keep first Initialize mandatory, then fall back to previous worth-check behavior.
+        // Keep first Initialize mandatory, then fall back to previous worth-check behavior.
         return forceInitialInitialize || isInitializeWorthRunning();
     }
 
@@ -689,6 +690,13 @@ public class TaskQueue {
             pauseForProfileCooldown(task, cooldown);
         } else if (ex instanceof HomeNotFoundException) {
             emitErrorTask(task, "Home not found: " + ex.getMessage());
+            enqueue(DelayedTaskRegistry.create(TpDailyTaskEnum.INITIALIZE, profile));
+        } else if (ex instanceof QuitDialogStuckException) {
+            // The quit-game dialog is definitively still up and the guard
+            // gave up dismissing it rather than proceed blind. Same recovery as HomeNotFoundException
+            // -- we don't know what's actually on screen, so re-run INITIALIZE to get back to a
+            // known state instead of letting the next scheduled task run into a stuck dialog too.
+            emitErrorTask(task, "Quit dialog stuck: " + ex.getMessage());
             enqueue(DelayedTaskRegistry.create(TpDailyTaskEnum.INITIALIZE, profile));
         } else if (ex instanceof StopExecutionException) {
             emitErrorTask(task, "Execution stopped: " + ex.getMessage());
@@ -894,7 +902,7 @@ public class TaskQueue {
             boolean keep = Boolean.TRUE.equals(profile.getConfig(ConfigurationKeyEnum.KEEP_EMULATOR_OPEN_BOOL, Boolean.class));
             if (keep) { emitInfo("Idle exceeded - keeping device open per config"); statusModel.setIdleTimeExceeded(true); return; }
 
-            // Changed by pernerch | Date: 2026-07-02 | Why: keep single-profile-per-emulator
+            // Keep single-profile-per-emulator
             // setups on the original idle path; only evaluate handover when siblings exist.
             if (hasEnabledSiblingOnSameEmulator()) {
                 Optional<PeerSwitchCandidate> peerCandidate = findBestOverduePeerOnSameEmulator();
@@ -906,7 +914,7 @@ public class TaskQueue {
             }
 
             suspendDevice(statusModel.getDelayUntil(), false);
-                    // Changed by pernerch | Date: 2026-07-02 | Why: force immediate activation of the
+                    // Force immediate activation of the
                     // selected peer queue after slot handover to eliminate idle dead time.
             statusModel.setIdleTimeExceeded(true);
         } else if (statusModel.isIdleTimeExceeded() && LocalDateTime.now().plusMinutes(1).isAfter(statusModel.getDelayUntil())) {
@@ -946,7 +954,7 @@ public class TaskQueue {
     }
 
     private boolean hasEnabledSiblingOnSameEmulator() {
-        // Changed by pernerch | Date: 2026-07-02 | Why: explicit sibling detection guard for
+        // Explicit sibling detection guard for
         // no-impact behavior in single-profile-per-emulator environments.
         if (profile == null || profile.getEmulatorNumber() == null || profile.getEmulatorNumber().isBlank()) {
             return false;
