@@ -73,6 +73,55 @@ public final class OcrEngine {
      * @param cfg     tuning parameters (page segmentation, whitelist, scaling, etc.)
      * @return trimmed recognized text, never {@code null}
      */
+    /**
+     * Recognises a whole region once and reports every line with its position on the frame.
+     *
+     * <p>Coordinates come back in the frame's own space, not the crop's, so a caller can reason
+     * about where a line sat on screen without tracking the offset itself.
+     */
+    public static java.util.List<TextLine> recognizeLines(RawImageData capture, PointData c1,
+            PointData c2, OcrSettingsData cfg) throws OcrException {
+        requireValidCapture(capture);
+        int[] clip = computeClipRect(c1, c2, capture);
+        int cx = clip[0], cy = clip[1], cw = clip[2], ch = clip[3];
+
+        BufferedImage prepared = ImagePreprocessor.prepareForOcr(
+                capture, cx, cy, cw, ch, cfg.isolateForeground(), cfg.targetColor());
+
+        java.util.List<TextLine> local = getProvider().recognizeLines(prepared, cfg);
+        java.util.List<TextLine> onFrame = new java.util.ArrayList<>(local.size());
+        // Preprocessing magnifies before recognising, so the reader answers in the magnified
+        // image's coordinates. Undo that before adding the crop's own offset, or every position is
+        // four times too far out and a caller reasoning about columns sees nothing where it looked.
+        int mag = dev.frostguard.vision.convert.ImagePreprocessor.MAGNIFICATION;
+        for (TextLine l : local) {
+            onFrame.add(new TextLine(l.text(), l.left() / mag + cx, l.top() / mag + cy,
+                    l.width() / mag, l.height() / mag, l.confidence()));
+        }
+        log.debug("Recognised {} line(s) in {}x{} region at ({},{})", onFrame.size(), cw, ch, cx, cy);
+        return onFrame;
+    }
+
+    /** The same reading as {@link #recognizeLines}, reported one word at a time. */
+    public static java.util.List<TextLine> recognizeWords(RawImageData capture, PointData c1,
+            PointData c2, OcrSettingsData cfg) throws OcrException {
+        requireValidCapture(capture);
+        int[] clip = computeClipRect(c1, c2, capture);
+        int cx = clip[0], cy = clip[1], cw = clip[2], ch = clip[3];
+
+        BufferedImage prepared = ImagePreprocessor.prepareForOcr(
+                capture, cx, cy, cw, ch, cfg.isolateForeground(), cfg.targetColor());
+
+        java.util.List<TextLine> local = getProvider().recognizeWords(prepared, cfg);
+        java.util.List<TextLine> onFrame = new java.util.ArrayList<>(local.size());
+        int mag = dev.frostguard.vision.convert.ImagePreprocessor.MAGNIFICATION;
+        for (TextLine l : local) {
+            onFrame.add(new TextLine(l.text(), l.left() / mag + cx, l.top() / mag + cy,
+                    l.width() / mag, l.height() / mag, l.confidence()));
+        }
+        return onFrame;
+    }
+
     public static String recognizeText(RawImageData capture, PointData c1, PointData c2, OcrSettingsData cfg)
             throws OcrException {
         requireValidCapture(capture);

@@ -16,6 +16,7 @@ import dev.frostguard.tasks.exploration.*;
 import dev.frostguard.tasks.heroes.*;
 import dev.frostguard.tasks.lifecycle.*;
 import dev.frostguard.tasks.pets.*;
+import dev.frostguard.tasks.social.*;
 
 /**
  * Registers all task factories with the DelayedTaskRegistry.
@@ -113,6 +114,8 @@ public class TaskRegistrations {
             case CREATE_CHARACTER -> new CreateCharacterRoutine(profile, type);
             case TEST_HOOK_LOOP -> new TestHookLoopRoutine(profile, type);
             case DUMMY_TASK -> new DummyRoutine(profile, type);
+
+            case CHAT_CAPTURE -> new ChatCaptureRoutine(profile, type);
 
             default -> null;
         };

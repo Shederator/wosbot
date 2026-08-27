@@ -14,7 +14,7 @@ import java.awt.image.BufferedImage;
 public final class ImagePreprocessor {
 
     /** Magnification applied before recognition. */
-    private static final int MAGNIFICATION = 4;
+    public static final int MAGNIFICATION = 4;
 
     /** Per-channel distance used when isolating text pixels. */
     private static final int CHANNEL_TOLERANCE = 50;

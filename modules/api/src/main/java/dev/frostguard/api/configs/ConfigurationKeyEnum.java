@@ -316,7 +316,77 @@ public enum ConfigurationKeyEnum {
     TRAIN_MARKSMAN_BOOL                 ("false",   Boolean.class,  ConfigCategory.TRAINING),
     TRAIN_MINISTRY_APPOINTMENT_BOOL     ("false",   Boolean.class,  ConfigCategory.TRAINING),
     TRAIN_MINISTRY_APPOINTMENT_TIME_LONG("0",       Long.class,     ConfigCategory.TRAINING),
-    TRAIN_PRIORITIZE_PROMOTION_BOOL     ("false",   Boolean.class,  ConfigCategory.TRAINING);
+    TRAIN_PRIORITIZE_PROMOTION_BOOL     ("false",   Boolean.class,  ConfigCategory.TRAINING),
+
+    /* ─────────── chat capture ─────────── */
+
+    // Bearguard: Chat capture. World/Alliance/Personal are scraped on a
+    // schedule and diffed against what was already captured, so repeat runs
+    // only add genuinely new messages rather than re-saving the same history
+    // every cycle.
+    //
+    // MODE and FILTER_NOISE are honoured downstream (the dashboard/website
+    // side), not by this bot. The bot's own OCR has no way to understand
+    // meaning well enough to write a real summary - that needs an LLM pass
+    // over the captured transcript, which happens after capture, not during
+    // it. Recording the preference now means the downstream pass does not
+    // need its own separate settings surface.
+    CHAT_CAPTURE_ENABLED_BOOL           ("false",           Boolean.class,  ConfigCategory.SYSTEM),
+    CHAT_CAPTURE_FREQUENCY_MINUTES_INT  ("30",              Integer.class,  ConfigCategory.SYSTEM),
+    CHAT_CAPTURE_INCLUDE_WORLD_BOOL     ("true",            Boolean.class,  ConfigCategory.SYSTEM),
+    CHAT_CAPTURE_INCLUDE_ALLIANCE_BOOL  ("true",            Boolean.class,  ConfigCategory.SYSTEM),
+    // No longer offered in the settings, and off. Personal is not a feed like the other two: it is
+    // a list of people, and every message is a tap inside one of them. The routine that reads it
+    // that way is written and lives in ChatCaptureRoutine.photographConversations, but it has never
+    // been watched running, so the checkbox is gone rather than left promising something unproven.
+    // Setting this key by hand turns the whole path back on.
+    CHAT_CAPTURE_INCLUDE_PERSONAL_BOOL  ("false",           Boolean.class,  ConfigCategory.SYSTEM),
+    // TRANSCRIPT = keep full readable message history; SUMMARY = downstream
+    // should condense to "what happened today" instead of showing every line.
+    CHAT_CAPTURE_MODE_STRING            ("TRANSCRIPT",      String.class,   ConfigCategory.SYSTEM),
+    // Applied live, not just tagged: emote/sticker-only messages (no letters
+    // or digits after stripping punctuation) are dropped before saving, since
+    // that much is plain pattern matching and does not need an LLM.
+    CHAT_CAPTURE_FILTER_NOISE_BOOL      ("true",            Boolean.class,  ConfigCategory.SYSTEM),
+
+    // How many screens of history each pass walks back through. Every screen is one capture and
+    // one read, and consecutive passes overlap heavily, so this trades pass duration for how long
+    // the bot can be away before chat scrolls past what it can still reach.
+    CHAT_CAPTURE_SCROLL_BACK_INT        ("30",              Integer.class,  ConfigCategory.SYSTEM),
+
+    // Renders non-English messages into English over the network. Nothing is downloaded and no
+    // account is needed; a failed lookup leaves the original text in place.
+    CHAT_TRANSLATE_TO_ENGLISH_BOOL      ("true",            Boolean.class,  ConfigCategory.SYSTEM),
+
+    // Whole days older than this are deleted from the transcript. Frames are already removed as
+    // soon as they are read, so this bounds the text alone.
+    CHAT_TRANSCRIPT_RETENTION_DAYS_INT  ("30",              Integer.class,  ConfigCategory.SYSTEM),
+
+    // Hides game-generated chatter -- recalled messages, shared layouts and coordinates, rally and
+    // formation cards -- so the transcript is the conversation rather than the event feed.
+    CHAT_HIDE_GAME_CHATTER_BOOL         ("true",            Boolean.class,  ConfigCategory.SYSTEM),
+
+    // Megabytes of already-read screens to keep, so a pass can be read again without waiting for
+    // the alliance to repeat itself. Zero writes nothing: this saves pictures of a person's chat to
+    // their disk, which somebody should choose rather than discover.
+    CHAT_FRAME_CACHE_MB_INT             ("0",               Integer.class,  ConfigCategory.SYSTEM),
+
+    // Which reader turns screens into text: SERVICE for the Python one on a local port, JAVA for
+    // the same models running in this process. No longer offered as a choice -- the Python one
+    // needs an install nobody downloading this has, and the in-process reader is what every
+    // accuracy figure was measured against. Kept as a key so an existing profile still loads and
+    // so the service stays reachable for comparison work.
+    CHAT_READER_STRING                  ("JAVA",            String.class,   ConfigCategory.SYSTEM),
+
+    // How many messages the Chat tab draws. Each one is a little tree of nodes, so this is a
+    // spending limit on the panel rather than on the transcript: nothing is deleted, the older
+    // messages are simply not built. Whole days are bounded separately by the retention setting.
+    CHAT_VIEW_MESSAGES_INT              ("400",             Integer.class,  ConfigCategory.SYSTEM),
+
+    // Which clock chat times are drawn against. Empty means this machine's own zone. Messages are
+    // stored as instants -- an alliance spans a dozen countries and the moment is not negotiable --
+    // so this changes only what is displayed, never what was recorded.
+    CHAT_DISPLAY_TIMEZONE_STRING        ("",                String.class,   ConfigCategory.SYSTEM);
 
     /* ================================================================
      *  Functional groupings surfaced in the operator panel.
