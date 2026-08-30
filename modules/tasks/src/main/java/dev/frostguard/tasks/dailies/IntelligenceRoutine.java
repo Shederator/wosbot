@@ -77,7 +77,9 @@ private static final long JOURNEY_RESULT_POLL_MILLIS = 1_000L;
 // Fire Beast deployments only -- ordinary beast markers are not counted or capped.
 private static final int PREVAIL_WARNING_MAX_ATTEMPTS = 3;
 
-private static final int PREVAIL_WARNING_EXIT_MINUTES = 30;
+// A marker that will not open after this many taps is left alone for this pass.
+private static final int BEAST_OPEN_MAX_TAPS = 3;
+
 
 private static final AreaData JOURNEY_VICTORY_CONTINUE_AREA = AreaData.of(400, 990, 658, 1038);
 
@@ -1316,12 +1318,34 @@ private void handleBeast(ImageSearchResultData beast, boolean fireBeast) {
 			return;
 		}
 
-		tapInside(beast);
-		sleepTask(2000);
-
-		ImageSearchResultData view = templateSearchHelper.locatePattern(TemplatesEnum.INTEL_VIEW, SearchConfigConstants.SINGLE_WITH_RETRIES);
+		// The marker bobs, so the point a scan returns can be stale by the time the tap lands and the
+		// popup never opens. Measured on a popup that did open, the View button matches at 98.4 from
+		// 500ms onward, so a missing View means the tap missed, not that the button was read too early.
+		// Re-locate and tap again rather than abandoning the beast.
+		ImageSearchResultData view = ImageSearchResultData.miss();
+		ImageSearchResultData target = beast;
+		for (int tap = 1; tap <= BEAST_OPEN_MAX_TAPS; tap++) {
+			tapInside(target);
+			sleepTask(2000);
+			view = templateSearchHelper.locatePattern(TemplatesEnum.INTEL_VIEW,
+					SearchConfigConstants.SINGLE_WITH_RETRIES);
+			if (view.isFound()) {
+				break;
+			}
+			logWarning(routineLogIntelligenceLine("Tap " + tap + "/" + BEAST_OPEN_MAX_TAPS
+					+ " did not open the beast: no 'View' button. Re-locating the marker."));
+			pressBack();
+			sleepTask(600);
+			ImageSearchResultData again = locateIntelPatternMono(
+					fireBeast ? TemplatesEnum.INTEL_FIRE_BEAST : beastTemplates()[0],
+					SearchConfigConstants.FIRE_BEAST_SEARCH);
+			if (again.isFound()) {
+				target = again;
+			}
+		}
 		if (!view.isFound()) {
-			logWarning(routineLogIntelligenceLine("Could not find the 'View' button for the beast. Going back."));
+			logWarning(routineLogIntelligenceLine("Beast would not open after " + BEAST_OPEN_MAX_TAPS
+					+ " taps. Going back."));
 			pressBack();
 			return;
 		}
@@ -1377,12 +1401,16 @@ private void handleBeast(ImageSearchResultData beast, boolean fireBeast) {
 
 		if (fireBeast && deploymentHelper.isUnlikelyToPrevail()) {
 			if (prevailWarningAttempts >= PREVAIL_WARNING_MAX_ATTEMPTS) {
-				LocalDateTime retryAt = LocalDateTime.now().plusMinutes(PREVAIL_WARNING_EXIT_MINUTES);
+				LocalDateTime nextCycle = IntelCyclePolicy.nextRefresh(
+						LocalDateTime.now(), ZoneId.systemDefault());
 				logWarning(routineLogIntelligenceLine("Fire Beast odds warning again, with all "
 						+ PREVAIL_WARNING_MAX_ATTEMPTS + " warned tries already spent this run. No march was "
-						+ "sent; leaving Intel and retrying at: " + retryAt.format(DATETIME_FORMATTER)));
+						+ "sent; Intel is done for this cycle. Next run at: "
+						+ nextCycle.format(DATETIME_FORMATTER)));
 				pressBack();
-				reschedule(retryAt);
+				updateIntelMissionsAvailableFlag(false);
+				TroopSlotPolicy.release(profile, TpDailyTaskEnum.INTEL);
+				reschedule(nextCycle);
 				processingTask = false;
 				return;
 			}
