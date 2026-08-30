@@ -23,6 +23,12 @@ import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.engine.service.TaskManagementService;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
+import dev.frostguard.api.domain.RawImageData;
+import dev.frostguard.api.runtime.WorkspacePaths;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -31,6 +37,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.List;
+import javax.imageio.ImageIO;
 
 public class IntelligenceRoutine extends DelayedTask {
 
@@ -191,12 +198,27 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 		IntelCyclePolicy.Decision entryDecision = intelCyclePolicy.evaluateDailyAvailability(
 				dailyIntelAvailable, LocalDateTime.now(), ZoneId.systemDefault());
 		if (entryDecision.action() == IntelCyclePolicy.Action.WAIT_FOR_NEXT_REFRESH) {
-			logInfo(routineLogIntelligenceLine("Daily sidebar has no green Intel availability evidence and no "
-					+ "Intel cycle is active. Planning the next UTC Intel refresh at: "
-					+ entryDecision.nextRun().format(DATETIME_FORMATTER)));
-			reschedule(entryDecision.nextRun());
-			processingTask = false;
-			return;
+			// The Daily row answers "is there an Intel daily left to claim", which is not the question
+			// this task is asking. Markers stay on the map for the whole eight-hour cycle after that row
+			// goes quiet, and the sidebar gate was sending Intel back to sleep on top of them: on
+			// 30 August it skipped two runs in a row, thirty seconds apart, with Fire Beasts standing on
+			// the map the whole time. So a quiet Daily is no longer the last word -- the map gets looked
+			// at before the task gives up on it. One navigation, only on the runs that were going to
+			// bail anyway.
+			intelScreenHelper.resumeIntelCycleFromWilderness();
+			if (!hasVisibleIntelMissionFlow()) {
+				saveEmptyIntelMapScreenshot();
+				logInfo(routineLogIntelligenceLine("Daily sidebar has no green Intel availability evidence, no "
+						+ "Intel cycle is active, and the map shows no markers. Planning the next UTC Intel "
+						+ "refresh at: " + entryDecision.nextRun().format(DATETIME_FORMATTER)));
+				updateIntelMissionsAvailableFlag(false);
+				TroopSlotPolicy.release(profile, TpDailyTaskEnum.INTEL);
+				reschedule(entryDecision.nextRun());
+				processingTask = false;
+				return;
+			}
+			logInfo(routineLogIntelligenceLine("Daily sidebar reports no new Intel, but markers are on the map. "
+					+ "Processing them instead of waiting for the next refresh."));
 		}
 		if (entryDecision.action() == IntelCyclePolicy.Action.RESUME_ACTIVE_CYCLE) {
 			logInfo(routineLogIntelligenceLine("Daily no longer reports new Intel, but the current cycle still "
@@ -1468,6 +1490,25 @@ private void handleBeast(ImageSearchResultData beast, boolean fireBeast) {
 			}
 		}
 		intelScreenHelper.returnToIntelFromWilderness();
+	}
+
+	/** Keeps the frame behind a "no markers" decision, which is otherwise unfalsifiable after the fact. */
+	private void saveEmptyIntelMapScreenshot() {
+		try {
+			Path outputDirectory = WorkspacePaths.current().root().resolve("temp");
+			Files.createDirectories(outputDirectory);
+			String profileName = profile.getName() == null ? "profile" : profile.getName();
+			String safeProfileName = profileName.replaceAll("[^A-Za-z0-9._-]", "_");
+			Path output = outputDirectory.resolve("intel-map-no-markers-" + safeProfileName + "-latest.png");
+			RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+			BufferedImage image = dev.frostguard.vision.convert.ImageConverter.toBufferedImage(frame);
+			if (!ImageIO.write(image, "png", output.toFile())) {
+				throw new IOException("PNG writer unavailable");
+			}
+			logWarning(routineLogIntelligenceLine("Empty Intel map diagnostic screenshot saved: " + output));
+		} catch (Exception e) {
+			logWarning(routineLogIntelligenceLine("Could not save empty Intel map diagnostic: " + e.getMessage()));
+		}
 	}
 
 	private void waitForSurvivorBatchCooldownFlow() {
