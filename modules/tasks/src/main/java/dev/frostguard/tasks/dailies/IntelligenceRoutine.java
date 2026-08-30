@@ -1026,6 +1026,7 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 		}
 
 		if (!missionsStillAvailable) {
+			saveIntelScreenshot("intel-rescan-empty");
 			logInfo(routineLogIntelligenceLine("No intel missions found after re-scan. Intel run is complete for now."));
 			tryRescheduleFromCooldownFlow();
 			processingTask = false;
@@ -1506,20 +1507,24 @@ private void handleBeast(ImageSearchResultData beast, boolean fireBeast) {
 
 	/** Keeps the frame behind a "no markers" decision, which is otherwise unfalsifiable after the fact. */
 	private void saveEmptyIntelMapScreenshot() {
+		saveIntelScreenshot("intel-map-no-markers");
+	}
+
+	private void saveIntelScreenshot(String label) {
 		try {
 			Path outputDirectory = WorkspacePaths.current().root().resolve("temp");
 			Files.createDirectories(outputDirectory);
 			String profileName = profile.getName() == null ? "profile" : profile.getName();
 			String safeProfileName = profileName.replaceAll("[^A-Za-z0-9._-]", "_");
-			Path output = outputDirectory.resolve("intel-map-no-markers-" + safeProfileName + "-latest.png");
+			Path output = outputDirectory.resolve(label + "-" + safeProfileName + "-latest.png");
 			RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
 			BufferedImage image = dev.frostguard.vision.convert.ImageConverter.toBufferedImage(frame);
 			if (!ImageIO.write(image, "png", output.toFile())) {
 				throw new IOException("PNG writer unavailable");
 			}
-			logWarning(routineLogIntelligenceLine("Empty Intel map diagnostic screenshot saved: " + output));
+			logWarning(routineLogIntelligenceLine("Intel diagnostic screenshot saved: " + output));
 		} catch (Exception e) {
-			logWarning(routineLogIntelligenceLine("Could not save empty Intel map diagnostic: " + e.getMessage()));
+			logWarning(routineLogIntelligenceLine("Could not save Intel diagnostic: " + e.getMessage()));
 		}
 	}
 
