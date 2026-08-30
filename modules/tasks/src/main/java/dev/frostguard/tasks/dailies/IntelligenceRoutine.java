@@ -56,6 +56,22 @@ private static final long JOURNEY_INITIAL_RESULT_WAIT_MILLIS = 4_000L;
 
 private static final long JOURNEY_RESULT_POLL_MILLIS = 1_000L;
 
+// The deploy screen's red "You are not likely to prevail" line is the game quoting odds, not a
+// verdict -- the march can still win. So a warned Fire Beast is deployed anyway; only the count is
+// capped. Three warned deployments in a run and Intel stops rather than grinding stamina into odds
+// that keep coming back the same. A warned march that goes out is a try spent, and the routine
+// carries straight on to the next Fire Beast.
+//
+// Nothing on the screen is touched on the way past. maxAllTroopSliders() is deliberately not called:
+// tested live 2026-08-30 against a real warned Fire Beast screen, the march was already at capacity
+// (108,010/108,010) so the drags added nothing and were read as small decrements, taking the lineup
+// from 36,003 infantry down to 36,001 and costing 1,016 power.
+//
+// Fire Beast deployments only -- ordinary beast markers are not counted or capped.
+private static final int PREVAIL_WARNING_MAX_ATTEMPTS = 3;
+
+private static final int PREVAIL_WARNING_EXIT_MINUTES = 30;
+
 private static final AreaData JOURNEY_VICTORY_CONTINUE_AREA = AreaData.of(400, 990, 658, 1038);
 
 private static final SearchConfig INTEL_CLAIM_ALL_SEARCH = SearchConfig.builder()
@@ -126,6 +142,9 @@ private boolean shouldRequeueAutoJoinAfterIntel;
 // Changed by pernerch | Date: 2026-07-02 | Why: track beast march dispatch to keep intel rescheduling accurate.
 private boolean beastMarchSent;
 
+// Warned Fire Beast deployments spent this run; capped at PREVAIL_WARNING_MAX_ATTEMPTS.
+private int prevailWarningAttempts;
+
 private final List<LocalDateTime> intelBeastReturnTimes = new ArrayList<>();
 
 private TaskStateData autoJoinTask;
@@ -153,6 +172,7 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 
 		processingTask = true;
 		beastMarchSent = false;
+		prevailWarningAttempts = 0;
 		// Changed by pernerch | Date: 2026-07-04 | Why: reset per-run Intel march-capacity override before processing cycle starts.
 		intelMarchCapacityOverride = null;
 		shouldRequeueGatherAfterIntel = false;
@@ -1136,7 +1156,7 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 
 		if (fireBeastsEnabled && !(useFlag && beastMarchSent)) {
 			logDebug(routineLogIntelligenceLine("Scanning for fire beasts."));
-			if (seekAndProcessGrayscale(TemplatesEnum.INTEL_FIRE_BEAST, this::handleBeast)) {
+			if (seekAndProcessGrayscale(TemplatesEnum.INTEL_FIRE_BEAST, beast -> handleBeast(beast, true))) {
 				beastFound = true;
 				if (useFlag) {
 					return true;
@@ -1149,7 +1169,7 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 		if (!(useFlag && beastMarchSent)) {
 			logDebug(routineLogIntelligenceLine("Scanning for beasts using grayscale matching."));
 			for (TemplatesEnum beast_screening : beastTemplates()) {
-				if (seekAndProcessGrayscale(beast_screening, this::handleBeast)) {
+				if (seekAndProcessGrayscale(beast_screening, beast -> handleBeast(beast, false))) {
 					beastFound = true;
 					break;
 				}
@@ -1244,7 +1264,13 @@ private void handleJourney(ImageSearchResultData result) {
 		StatisticsService.obtain().addToCounter(profile, "Intel Journeys", 1);
 	}
 
-private void handleBeast(ImageSearchResultData beast) {
+/**
+ * Deploys against one Intel beast marker.
+ *
+ * @param fireBeast true when the marker was the Fire Beast one. Only Fire Beast deployments are held
+ *                  to the screen's odds warning; ordinary beasts deploy as before.
+ */
+private void handleBeast(ImageSearchResultData beast, boolean fireBeast) {
 		if (marchQueueLimitReached) {
 			logInfo(routineLogIntelligenceLine("Beast detected but march queue is full. Skipping deployment but marking as detected."));
 			return;
@@ -1312,6 +1338,23 @@ private void handleBeast(ImageSearchResultData beast) {
 		} else if (deploymentHelper.tapEqualize()) {
 			logInfo(routineLogIntelligenceLine("Formation setup: no flag configured; using Equalize."));
 			sleepTask(300);
+		}
+
+		if (fireBeast && deploymentHelper.isUnlikelyToPrevail()) {
+			if (prevailWarningAttempts >= PREVAIL_WARNING_MAX_ATTEMPTS) {
+				LocalDateTime retryAt = LocalDateTime.now().plusMinutes(PREVAIL_WARNING_EXIT_MINUTES);
+				logWarning(routineLogIntelligenceLine("Fire Beast odds warning again, with all "
+						+ PREVAIL_WARNING_MAX_ATTEMPTS + " warned tries already spent this run. No march was "
+						+ "sent; leaving Intel and retrying at: " + retryAt.format(DATETIME_FORMATTER)));
+				pressBack();
+				reschedule(retryAt);
+				processingTask = false;
+				return;
+			}
+			prevailWarningAttempts++;
+			logWarning(routineLogIntelligenceLine("Deploy screen reads \"You are not likely to prevail\"; "
+					+ "the odds are against it, not the outcome. Deploying anyway -- warned try "
+					+ prevailWarningAttempts + "/" + PREVAIL_WARNING_MAX_ATTEMPTS + " this run."));
 		}
 
 		var deployment = deploymentHelper.readScreen(DeploymentHelper.MAX_ATTACK_STAMINA_COST);

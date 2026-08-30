@@ -37,6 +37,10 @@ public class DeploymentHelper {
     private static final int COST_RED_PIXEL_MIN = 10;
     // The ticked preparation option shows ~390 green pixels; the three others show none.
     private static final int SET_TIME_TICK_PIXEL_MIN = 50;
+    // The odds warning measures ~1790 red pixels across its band and the band is otherwise empty, so
+    // the bar sits high: the loudest incidental red text found in 440 stored frames (a rally toast on
+    // the city view, not this screen) reached 287, and this stays clear of it.
+    static final int ODDS_WARNING_PIXEL_MIN = 600;
 
     private final EmulatorController emu;
     private final String device;
@@ -184,6 +188,24 @@ public class DeploymentHelper {
             return true;
         }
         return false;
+    }
+
+    /**
+     * True when the game prints its red "You are not likely to prevail" line above the troop rows,
+     * which is it saying this march loses. Red text is the only red thing in that band, so this is a
+     * pixel count rather than OCR, like every other answer this screen gives.
+     */
+    public boolean isUnlikelyToPrevail() {
+        try {
+            int redPixels = PixelStats.count(captureImage(), CommonGameAreas.DEPLOY_ODDS_WARNING_AREA,
+                    GameColors::isBlockedRed);
+            boolean warned = redPixels >= ODDS_WARNING_PIXEL_MIN;
+            log.debug("Deploy odds warning check: redPixels=" + redPixels + " result=" + warned);
+            return warned;
+        } catch (Exception ex) {
+            log.warn("Deploy odds warning check failed: " + ex.getMessage());
+            return false;
+        }
     }
 
     /** Equalises the troop sliders. Its x shifts with the Balance button, so it is matched, not tapped blind. */
