@@ -352,7 +352,7 @@ private boolean hasEnabledIntelMissionType() {
 private boolean hasVisibleIntelMissionFlow() {
 
 		if (fireBeastsEnabled && locateIntelPatternMono(
-				TemplatesEnum.INTEL_FIRE_BEAST, SearchConfigConstants.DEFAULT_SINGLE)
+				TemplatesEnum.INTEL_FIRE_BEAST, SearchConfigConstants.FIRE_BEAST_SEARCH)
 				.isFound()) {
 			return true;
 		}
@@ -489,8 +489,19 @@ private boolean shouldProcessBeastsFlow() {
 	}
 
 private boolean seekAndProcessGrayscale(TemplatesEnum template, Consumer<ImageSearchResultData> processMethod) {
+		return seekAndProcessGrayscale(template, SearchConfigConstants.SINGLE_WITH_RETRIES, processMethod);
+	}
+
+	/**
+	 * As above, for a template whose real match score will not clear the shared threshold. The Fire
+	 * Beast marker scores about 85 against a live capture, so every scan of it at the standard 90
+	 * failed silently and Intel never opened one; SearchConfigConstants.FIRE_BEAST_SEARCH was written
+	 * for that and had no callers.
+	 */
+	private boolean seekAndProcessGrayscale(TemplatesEnum template, SearchConfig searchConfig,
+			Consumer<ImageSearchResultData> processMethod) {
 		logDebug(routineLogIntelligenceLine("Scanning for grayscale template '" + template + "'"));
-		ImageSearchResultData result = locateIntelPatternMono(template, SearchConfigConstants.SINGLE_WITH_RETRIES);
+		ImageSearchResultData result = locateIntelPatternMono(template, searchConfig);
 
 		if (result.isFound()) {
 			logInfo(routineLogIntelligenceLine("Grayscale template detected: " + template));
@@ -1147,7 +1158,7 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 
 	private boolean hasMarchBoundIntelMissionAvailableFlow() {
 		if (fireBeastsEnabled && locateIntelPatternMono(
-				TemplatesEnum.INTEL_FIRE_BEAST, SearchConfigConstants.DEFAULT_SINGLE)
+				TemplatesEnum.INTEL_FIRE_BEAST, SearchConfigConstants.FIRE_BEAST_SEARCH)
 				.isFound()) {
 			return true;
 		}
@@ -1178,7 +1189,8 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 
 		if (fireBeastsEnabled && !(useFlag && beastMarchSent)) {
 			logDebug(routineLogIntelligenceLine("Scanning for fire beasts."));
-			if (seekAndProcessGrayscale(TemplatesEnum.INTEL_FIRE_BEAST, beast -> handleBeast(beast, true))) {
+			if (seekAndProcessGrayscale(TemplatesEnum.INTEL_FIRE_BEAST,
+					SearchConfigConstants.FIRE_BEAST_SEARCH, beast -> handleBeast(beast, true))) {
 				beastFound = true;
 				if (useFlag) {
 					return true;
