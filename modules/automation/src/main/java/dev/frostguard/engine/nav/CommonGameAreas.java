@@ -183,4 +183,25 @@ public final class CommonGameAreas {
     public static final int CHARACTER_NAME_ABOVE_FURNACE_BOTTOM_OFFSET_Y = 10;
     public static final int CHARACTER_NAME_ABOVE_FURNACE_X_START          = 210;
     public static final int CHARACTER_NAME_ABOVE_FURNACE_X_END            = 500;
+
+    // Bear rally OCR areas are relative to the detected join button's top edge.
+    public static final int BEAR_TRAP_INITIATOR_X1 = 281;
+    public static final int BEAR_TRAP_INITIATOR_X2 = 691;
+    public static final int BEAR_TRAP_INITIATOR_DY1 = -102;
+    public static final int BEAR_TRAP_INITIATOR_DY2 = -63;
+
+    public static final int BEAR_TRAP_MEMBERS_X1 = 626;
+    public static final int BEAR_TRAP_MEMBERS_X2 = 688;
+    public static final int BEAR_TRAP_MEMBERS_DY1 = -57;
+    public static final int BEAR_TRAP_MEMBERS_DY2 = -24;
+
+    public static final int BEAR_TRAP_CAPACITY_X1 = 284;
+    public static final int BEAR_TRAP_CAPACITY_X2 = 521;
+    public static final int BEAR_TRAP_CAPACITY_DY1 = -57;
+    public static final int BEAR_TRAP_CAPACITY_DY2 = -25;
+
+    public static final int BEAR_TRAP_COUNTDOWN_X1 = 571;
+    public static final int BEAR_TRAP_COUNTDOWN_X2 = 691;
+    public static final int BEAR_TRAP_COUNTDOWN_DY1 = -163;
+    public static final int BEAR_TRAP_COUNTDOWN_DY2 = -124;
 }
