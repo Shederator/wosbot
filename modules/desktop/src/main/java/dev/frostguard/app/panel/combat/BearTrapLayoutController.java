@@ -93,6 +93,34 @@ public class BearTrapLayoutController extends AbstractProfileController {
     @FXML
     private CheckComboBox<Integer> checkComboBoxJoinFlag;
 
+    @FXML private ComboBox<String> comboBoxJoinFlag1;
+    @FXML private ComboBox<String> comboBoxJoinFlag2;
+    @FXML private ComboBox<String> comboBoxJoinFlag3;
+    @FXML private ComboBox<String> comboBoxJoinFlag4;
+    @FXML private ComboBox<String> comboBoxJoinFlag5;
+    @FXML private ComboBox<String> comboBoxJoinFlag6;
+
+    @FXML
+    private CheckBox checkBoxAdvancedJoin;
+
+    @FXML
+    private javafx.scene.layout.VBox vBoxAdvancedJoinOptions;
+
+    @FXML
+    private TextField textFieldMinMemberCount;
+
+    @FXML
+    private TextField textFieldMinRallyCapacity;
+
+    @FXML
+    private TextField textFieldMinRemainingCapacity;
+
+    @FXML
+    private CheckBox checkBoxFrenzyMode;
+
+    @FXML
+    private TextField textFieldFrenzyStartMin;
+
     private List<TimerBinding> timerBindings;
     private boolean loadingParticipationTrigger;
     private boolean loadingProtectionModes;
@@ -130,14 +158,33 @@ public class BearTrapLayoutController extends AbstractProfileController {
         checkBoxMappings.put(checkBoxRecallTroops, ConfigurationKeyEnum.BEAR_TRAP_RECALL_TROOPS_BOOL);
         checkBoxMappings.put(checkBoxCallRally, ConfigurationKeyEnum.BEAR_TRAP_CALL_RALLY_BOOL);
         checkBoxMappings.put(checkBoxEnableJoin, ConfigurationKeyEnum.BEAR_TRAP_JOIN_RALLY_BOOL);
+        checkBoxMappings.put(checkBoxAdvancedJoin, ConfigurationKeyEnum.BEAR_TRAP_ADVANCED_JOIN_ENABLED_BOOL);
+        checkBoxMappings.put(checkBoxFrenzyMode, ConfigurationKeyEnum.BEAR_TRAP_FRENZY_MODE_ENABLED_BOOL);
 
         registerTextField(textFieldPreparationTime, labelPreparationTimeError,
                 ConfigurationKeyEnum.BEAR_TRAP_PREPARATION_TIME_INT);
+        registerTextField(textFieldMinMemberCount,
+                ConfigurationKeyEnum.BEAR_TRAP_MIN_MEMBER_COUNT_INT);
+        registerTextField(textFieldMinRallyCapacity,
+                ConfigurationKeyEnum.BEAR_TRAP_MIN_RALLY_CAPACITY_INT);
+        registerTextField(textFieldMinRemainingCapacity,
+                ConfigurationKeyEnum.BEAR_TRAP_MIN_REMAINING_CAPACITY_INT);
+        registerTextField(textFieldFrenzyStartMin,
+                ConfigurationKeyEnum.BEAR_TRAP_FRENZY_START_MINUTE_INT);
 
         comboBoxMappings.put(comboBoxTrapNumber, ConfigurationKeyEnum.BEAR_TRAP_NUMBER_INT);
         comboBoxMappings.put(comboBoxRallyFlag, ConfigurationKeyEnum.BEAR_TRAP_RALLY_FLAG_INT);
         checkComboBoxMappings.put(checkComboBoxJoinFlag, ConfigurationKeyEnum.BEAR_TRAP_JOIN_FLAG_INT);
+        comboBoxMappings.put(comboBoxJoinFlag1, ConfigurationKeyEnum.BEAR_TRAP_JOIN_MARCH_1_FLAG_STRING);
+        comboBoxMappings.put(comboBoxJoinFlag2, ConfigurationKeyEnum.BEAR_TRAP_JOIN_MARCH_2_FLAG_STRING);
+        comboBoxMappings.put(comboBoxJoinFlag3, ConfigurationKeyEnum.BEAR_TRAP_JOIN_MARCH_3_FLAG_STRING);
+        comboBoxMappings.put(comboBoxJoinFlag4, ConfigurationKeyEnum.BEAR_TRAP_JOIN_MARCH_4_FLAG_STRING);
+        comboBoxMappings.put(comboBoxJoinFlag5, ConfigurationKeyEnum.BEAR_TRAP_JOIN_MARCH_5_FLAG_STRING);
+        comboBoxMappings.put(comboBoxJoinFlag6, ConfigurationKeyEnum.BEAR_TRAP_JOIN_MARCH_6_FLAG_STRING);
     }
+
+    private static final List<String> FLAG_OPTIONS = List.of(
+            "No Flag", "1", "2", "3", "4", "5", "6", "7", "8");
 
     private void populateFlagControls() {
         comboBoxTrapNumber.setConverter(new StringConverter<>() {
@@ -153,6 +200,10 @@ public class BearTrapLayoutController extends AbstractProfileController {
         });
         comboBoxRallyFlag.getItems().setAll(FormationSlots.numbers());
         checkComboBoxJoinFlag.getItems().setAll(FormationSlots.numbers());
+        for (ComboBox<String> cb : joinFlagComboBoxes()) {
+            cb.getItems().setAll(FLAG_OPTIONS);
+            cb.setValue("No Flag");
+        }
     }
 
     private void configureParticipationTrigger() {
@@ -299,10 +350,28 @@ public class BearTrapLayoutController extends AbstractProfileController {
         checkBoxEnableJoin.disableProperty().bind(disabledUntilEnabled);
 
         comboBoxRallyFlag.disableProperty().bind(disabledUntilEnabled.or(checkBoxCallRally.selectedProperty().not()));
-        checkComboBoxJoinFlag.disableProperty().bind(disabledUntilEnabled.or(checkBoxEnableJoin.selectedProperty().not()));
+        BooleanExpression joinDisabled = disabledUntilEnabled.or(checkBoxEnableJoin.selectedProperty().not());
+        for (ComboBox<String> cb : joinFlagComboBoxes()) {
+            cb.disableProperty().bind(joinDisabled);
+        }
+
+        checkBoxAdvancedJoin.disableProperty().bind(joinDisabled);
+        if (vBoxAdvancedJoinOptions != null) {
+            bindManagedVisibility(vBoxAdvancedJoinOptions, checkBoxAdvancedJoin.selectedProperty().and(joinDisabled.not()));
+        }
+        BooleanExpression advancedDisabled = joinDisabled.or(checkBoxAdvancedJoin.selectedProperty().not());
+        checkBoxFrenzyMode.disableProperty().bind(advancedDisabled);
+        textFieldFrenzyStartMin.disableProperty().bind(advancedDisabled.or(checkBoxFrenzyMode.selectedProperty().not()));
+        textFieldMinMemberCount.disableProperty().bind(advancedDisabled);
+        textFieldMinRallyCapacity.disableProperty().bind(advancedDisabled);
+        textFieldMinRemainingCapacity.disableProperty().bind(advancedDisabled);
 
         bindManagedVisibility(comboBoxRallyFlag, checkBoxCallRally.selectedProperty());
-        bindManagedVisibility(checkComboBoxJoinFlag, checkBoxEnableJoin.selectedProperty());
+    }
+
+    private List<ComboBox<String>> joinFlagComboBoxes() {
+        return List.of(comboBoxJoinFlag1, comboBoxJoinFlag2, comboBoxJoinFlag3,
+                comboBoxJoinFlag4, comboBoxJoinFlag5, comboBoxJoinFlag6);
     }
 
     private void bindTimerState(TimerBinding timer) {

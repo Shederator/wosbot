@@ -120,6 +120,12 @@ public enum ConfigurationKeyEnum {
     /* ─────────── events ─────────── */
 
     BEAR_TRAP_ACTIVE_PETS_BOOL                  ("false",   Boolean.class,       ConfigCategory.EVENTS),
+    BEAR_TRAP_ADVANCED_JOIN_ENABLED_BOOL        ("false",   Boolean.class,       ConfigCategory.EVENTS),
+    BEAR_TRAP_FRENZY_MODE_ENABLED_BOOL          ("false",   Boolean.class,       ConfigCategory.EVENTS),
+    BEAR_TRAP_FRENZY_START_MINUTE_INT           ("22",      Integer.class,       ConfigCategory.EVENTS),
+    BEAR_TRAP_MIN_MEMBER_COUNT_INT              ("0",       Integer.class,       ConfigCategory.EVENTS),
+    BEAR_TRAP_MIN_RALLY_CAPACITY_INT            ("0",       Integer.class,       ConfigCategory.EVENTS),
+    BEAR_TRAP_MIN_REMAINING_CAPACITY_INT        ("0",       Integer.class,       ConfigCategory.EVENTS),
     BEAR_TRAP_CALL_RALLY_BOOL                   ("false",   Boolean.class,       ConfigCategory.EVENTS),
     BEAR_TRAP_EVENT_BOOL                        ("false",   Boolean.class,       ConfigCategory.EVENTS),
     BEAR_TRAP_ICON_PARTICIPATION_FALLBACK_BOOL  ("false",   Boolean.class,       ConfigCategory.EVENTS),
@@ -140,6 +146,12 @@ public enum ConfigurationKeyEnum {
     BEAST_HUNTING_ENABLED_BOOL                  ("false",   Boolean.class,       ConfigCategory.EVENTS),
     BEAST_HUNTING_LEVEL_INT                     ("30",      Integer.class,       ConfigCategory.EVENTS),
     BEAST_HUNTING_MARCHES_INT                   ("3",       Integer.class,       ConfigCategory.EVENTS),
+    BEAR_TRAP_JOIN_MARCH_1_FLAG_STRING          ("No Flag", String.class,        ConfigCategory.EVENTS),
+    BEAR_TRAP_JOIN_MARCH_2_FLAG_STRING          ("No Flag", String.class,        ConfigCategory.EVENTS),
+    BEAR_TRAP_JOIN_MARCH_3_FLAG_STRING          ("No Flag", String.class,        ConfigCategory.EVENTS),
+    BEAR_TRAP_JOIN_MARCH_4_FLAG_STRING          ("No Flag", String.class,        ConfigCategory.EVENTS),
+    BEAR_TRAP_JOIN_MARCH_5_FLAG_STRING          ("No Flag", String.class,        ConfigCategory.EVENTS),
+    BEAR_TRAP_JOIN_MARCH_6_FLAG_STRING          ("No Flag", String.class,        ConfigCategory.EVENTS),
     // Shared stamina reserve kept back for Intel/Rally; overflow sinks (Beast/Polar Terror) only spend above it.
     STAMINA_RESERVE_INT                         ("130",     Integer.class,       ConfigCategory.EVENTS),
     BOOL_CHIEF_ORDER_PRODUCTIVITY_DAY           ("false",   Boolean.class,       ConfigCategory.EVENTS),
