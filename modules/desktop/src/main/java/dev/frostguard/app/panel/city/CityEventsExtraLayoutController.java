@@ -7,6 +7,7 @@ import dev.frostguard.app.panel.profile.ProfileAux;
 import dev.frostguard.app.shared.AbstractProfileController;
 import dev.frostguard.app.shared.SettingValidators;
 import dev.frostguard.engine.service.ProfileService;
+import dev.frostguard.tasks.combat.ArenaRoutine;
 import javafx.beans.binding.Bindings;
 import javafx.fxml.FXML;
 import javafx.scene.Node;
@@ -70,6 +71,10 @@ public class CityEventsExtraLayoutController extends AbstractProfileController {
     private TextField textFieldArenaProfileServer;
     @FXML
     private Label labelArenaTargetingHint;
+    @FXML
+    private Label labelArenaExtraAttemptsHelp;
+    @FXML
+    private Label labelArenaListRefreshHelp;
     @FXML
     private Label labelArenaAlliancePolicyHelp;
     @FXML
@@ -180,6 +185,47 @@ public class CityEventsExtraLayoutController extends AbstractProfileController {
         return "No state check. Opponents in " + state + " are attacked like anyone else.";
     }
 
+    /**
+     * What the attempt and refresh settings cost, in the units the game charges.
+     *
+     * <p>Both are budgets rather than switches, and neither stated its size
+     * anywhere: extra attempts are bought with gems on a rising scale, and a run
+     * gets a fixed number of free list refreshes before any gem is spent. Read
+     * from the routine that spends them rather than restated here, so the screen
+     * cannot quote a price the run does not charge.</p>
+     */
+    private String describeExtraAttempts(Integer attempts) {
+        int[] prices = ArenaRoutine.extraAttemptGemPrices();
+        int wanted = attempts == null ? 0 : Math.min(attempts, prices.length);
+        if (wanted <= 0) {
+            return "Off. Only the free daily attempts are used and no gems are spent on attempts.";
+        }
+        StringBuilder breakdown = new StringBuilder();
+        int total = 0;
+        for (int i = 0; i < wanted; i++) {
+            total += prices[i];
+            breakdown.append(i == 0 ? "" : " + ").append(prices[i]);
+        }
+        String sum = wanted == 1
+            ? total + " gems"
+            : breakdown + " = " + total + " gems";
+        return "Buys " + wanted + (wanted == 1 ? " attempt" : " attempts")
+            + " once the free ones are gone, at a rising price: " + sum
+            + ". Bought only when an eligible opponent is actually on the list.";
+    }
+
+    private String describeListRefresh(boolean paidAllowed) {
+        String free = "Every run gets " + ArenaRoutine.maxFreeListRefreshes()
+            + " free list refreshes, used first, whenever no opponent on the list is eligible.";
+        if (paidAllowed) {
+            return free + " After those, up to " + ArenaRoutine.maxPaidListRefreshes()
+                + " more are bought with gems at the game's price.";
+        }
+        return free + " After those the run stops with its remaining attempts unused."
+            + " Tick to allow up to " + ArenaRoutine.maxPaidListRefreshes()
+            + " more, paid for in gems.";
+    }
+
     private void refreshPolicyHelp() {
         labelArenaAlliancePolicyHelp.setText(describeAlliancePolicy(
             comboBoxArenaAlliancePolicy.getValue(),
@@ -187,6 +233,8 @@ public class CityEventsExtraLayoutController extends AbstractProfileController {
         labelArenaServerPolicyHelp.setText(describeServerPolicy(
             comboBoxArenaServerPolicy.getValue(),
             orBlank(textFieldArenaProfileServer.getText())));
+        labelArenaExtraAttemptsHelp.setText(describeExtraAttempts(comboBoxArenaExtraAttempts.getValue()));
+        labelArenaListRefreshHelp.setText(describeListRefresh(checkBoxArenaRefreshWithGems.isSelected()));
     }
 
     private static String orBlank(String value) {
@@ -206,6 +254,8 @@ public class CityEventsExtraLayoutController extends AbstractProfileController {
         comboBoxArenaServerPolicy.valueProperty().addListener((o, before, after) -> refreshPolicyHelp());
         textFieldArenaProfileAlliance.textProperty().addListener((o, before, after) -> refreshPolicyHelp());
         textFieldArenaProfileServer.textProperty().addListener((o, before, after) -> refreshPolicyHelp());
+        comboBoxArenaExtraAttempts.valueProperty().addListener((o, before, after) -> refreshPolicyHelp());
+        checkBoxArenaRefreshWithGems.selectedProperty().addListener((o, before, after) -> refreshPolicyHelp());
         refreshPolicyHelp();
     }
 

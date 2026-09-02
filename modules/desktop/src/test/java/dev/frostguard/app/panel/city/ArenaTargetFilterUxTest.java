@@ -4,6 +4,7 @@ import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.app.panel.profile.ConfigAux;
 import dev.frostguard.app.panel.profile.ProfileAux;
 import dev.frostguard.app.shared.JavaFxToolkit;
+import dev.frostguard.tasks.combat.ArenaRoutine;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
@@ -157,6 +158,49 @@ class ArenaTargetFilterUxTest {
                 "typing a state must be reflected in the description straight away");
     }
 
+    @Test
+    void extraAttemptsQuoteTheRisingGemPriceTheRoutineActuallyCharges() throws Exception {
+        LoadedArenaView view = loadArenaView();
+        view.controller.onProfileLoad(arenaProfile("INF", "4527"));
+
+        view.extraAttempts.setValue(2);
+
+        int[] prices = ArenaRoutine.extraAttemptGemPrices();
+        String expectedSum = prices[0] + " + " + prices[1] + " = " + (prices[0] + prices[1]) + " gems";
+        assertTrue(view.extraAttemptsHelp.getText().contains(expectedSum),
+                "the cost must be broken down and totalled, was: " + view.extraAttemptsHelp.getText());
+    }
+
+    @Test
+    void zeroExtraAttemptsSaysPlainlyThatNoGemsAreSpent() throws Exception {
+        LoadedArenaView view = loadArenaView();
+        view.controller.onProfileLoad(arenaProfile("INF", "4527"));
+
+        view.extraAttempts.setValue(0);
+
+        assertTrue(view.extraAttemptsHelp.getText().contains("no gems are spent"),
+                "the off state must say what it costs, was: " + view.extraAttemptsHelp.getText());
+    }
+
+    @Test
+    void theRefreshBudgetIsStatedWhetherOrNotPaidRefreshesAreAllowed() throws Exception {
+        LoadedArenaView view = loadArenaView();
+        view.controller.onProfileLoad(arenaProfile("INF", "4527"));
+        String free = String.valueOf(ArenaRoutine.maxFreeListRefreshes());
+        String paid = String.valueOf(ArenaRoutine.maxPaidListRefreshes());
+
+        view.paidRefreshes.setSelected(false);
+        String off = view.listRefreshHelp.getText();
+        view.paidRefreshes.setSelected(true);
+        String on = view.listRefreshHelp.getText();
+
+        assertTrue(off.contains(free) && on.contains(free), "the free allowance is stated either way");
+        assertTrue(off.contains("attempts unused"),
+                "unticked must warn that the run can stop early, was: " + off);
+        assertTrue(on.contains(paid) && on.contains("gems"),
+                "ticked must state the paid ceiling and that it costs gems, was: " + on);
+    }
+
     private static ProfileAux arenaProfile(String alliance, String server) {
         ProfileAux profile = new ProfileAux(1L, "Default", "0", true, 50L, "", 0L,
                 "", "", alliance, server);
@@ -181,7 +225,11 @@ class ArenaTargetFilterUxTest {
                 (CheckBox) namespace.get("checkBoxArena"),
                 (Label) namespace.get("labelArenaTargetingHint"),
                 (Label) namespace.get("labelArenaAlliancePolicyHelp"),
-                (Label) namespace.get("labelArenaServerPolicyHelp"));
+                (Label) namespace.get("labelArenaServerPolicyHelp"),
+                (ComboBox<Integer>) namespace.get("comboBoxArenaExtraAttempts"),
+                (Label) namespace.get("labelArenaExtraAttemptsHelp"),
+                (CheckBox) namespace.get("checkBoxArenaRefreshWithGems"),
+                (Label) namespace.get("labelArenaListRefreshHelp"));
     }
 
     private record LoadedArenaView(CityEventsExtraLayoutController controller,
@@ -192,6 +240,10 @@ class ArenaTargetFilterUxTest {
                                    CheckBox arenaEnabled,
                                    Label hint,
                                    Label alliancePolicyHelp,
-                                   Label serverPolicyHelp) {
+                                   Label serverPolicyHelp,
+                                   ComboBox<Integer> extraAttempts,
+                                   Label extraAttemptsHelp,
+                                   CheckBox paidRefreshes,
+                                   Label listRefreshHelp) {
     }
 }
