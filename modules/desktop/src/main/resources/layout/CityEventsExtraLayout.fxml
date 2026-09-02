@@ -73,16 +73,16 @@
                                     </columnConstraints>
 
                                     <Label styleClass="task-field-label" text="Profile alliance" GridPane.columnIndex="0" GridPane.rowIndex="0" />
-                                    <Label fx:id="labelArenaProfileAlliance" maxWidth="Infinity" text="Not set" wrapText="true"
-                                           GridPane.columnIndex="1" GridPane.rowIndex="0" />
+                                    <TextField fx:id="textFieldArenaProfileAlliance" maxWidth="260.0" prefWidth="220.0"
+                                               promptText="ABC" GridPane.columnIndex="1" GridPane.rowIndex="0" />
 
                                     <Label styleClass="task-field-label" text="Alliance filter" GridPane.columnIndex="0" GridPane.rowIndex="1" />
                                     <ComboBox fx:id="comboBoxArenaAlliancePolicy" maxWidth="260.0" prefWidth="220.0"
                                               promptText="Any alliance" GridPane.columnIndex="1" GridPane.rowIndex="1" />
 
                                     <Label styleClass="task-field-label" text="Profile server" GridPane.columnIndex="0" GridPane.rowIndex="2" />
-                                    <Label fx:id="labelArenaProfileServer" maxWidth="Infinity" text="Not set" wrapText="true"
-                                           GridPane.columnIndex="1" GridPane.rowIndex="2" />
+                                    <TextField fx:id="textFieldArenaProfileServer" maxWidth="260.0" prefWidth="220.0"
+                                               promptText="1234" GridPane.columnIndex="1" GridPane.rowIndex="2" />
 
                                     <Label styleClass="task-field-label" text="Server policy" GridPane.columnIndex="0" GridPane.rowIndex="3" />
                                     <ComboBox fx:id="comboBoxArenaServerPolicy" maxWidth="260.0" prefWidth="220.0"
