@@ -71,6 +71,10 @@ public class CityEventsExtraLayoutController extends AbstractProfileController {
     @FXML
     private Label labelArenaTargetingHint;
     @FXML
+    private Label labelArenaAlliancePolicyHelp;
+    @FXML
+    private Label labelArenaServerPolicyHelp;
+    @FXML
     private ComboBox<Integer> comboBoxArenaExtraAttempts;
     @FXML
     private ComboBox<String> comboBoxArenaAlliancePolicy;
@@ -132,9 +136,57 @@ public class CityEventsExtraLayoutController extends AbstractProfileController {
                 comboBoxArenaServerPolicy.setValue("Any server");
             }
             refreshArenaTargetingHint();
+            refreshPolicyHelp();
         } finally {
             isLoadingProfile = false;
         }
+    }
+
+    /**
+     * What the selected filter actually does to a scanned opponent.
+     *
+     * <p>Every option here reads as a preference, but two of them are hard
+     * skips and the rest only reorder a list the routine still attacks all of.
+     * "Avoid" in particular still attacks your own alliance when nothing else
+     * is eligible, which is the opposite of what the word suggests to someone
+     * turning it on to protect teammates. The wording below says which opponents
+     * are removed outright, and names the unreadable case, because a strict
+     * filter drops rows the OCR could not resolve and that is what empties a
+     * list and leaves attempts unused.</p>
+     */
+    private String describeAlliancePolicy(String policy, String alliance) {
+        String tag = alliance.isBlank() ? "your alliance" : alliance;
+        if ("Never attack profile alliance".equals(policy)) {
+            return "Skips every " + tag + " member outright, and any opponent whose tag cannot be read.";
+        }
+        if ("Avoid profile alliance".equals(policy)) {
+            return "Ranks " + tag + " members last. Still attacks them when no one else is eligible.";
+        }
+        return "No alliance check. " + tag + " members are attacked like anyone else.";
+    }
+
+    private String describeServerPolicy(String policy, String server) {
+        String state = server.isBlank() ? "your state" : "state " + server;
+        if ("Never attack profile server".equals(policy)) {
+            return "Skips everyone in " + state + " outright, plus any row whose state cannot be read"
+                + " -- including the compact row layout, which shows no state at all.";
+        }
+        if ("Avoid profile server".equals(policy)) {
+            return "Ranks " + state + " last. Still attacks it when no one else is eligible.";
+        }
+        if ("Prefer profile server".equals(policy)) {
+            return "Ranks " + state + " first, so points stay inside your own state.";
+        }
+        return "No state check. Opponents in " + state + " are attacked like anyone else.";
+    }
+
+    private void refreshPolicyHelp() {
+        labelArenaAlliancePolicyHelp.setText(describeAlliancePolicy(
+            comboBoxArenaAlliancePolicy.getValue(),
+            orBlank(textFieldArenaProfileAlliance.getText())));
+        labelArenaServerPolicyHelp.setText(describeServerPolicy(
+            comboBoxArenaServerPolicy.getValue(),
+            orBlank(textFieldArenaProfileServer.getText())));
     }
 
     private static String orBlank(String value) {
@@ -145,6 +197,16 @@ public class CityEventsExtraLayoutController extends AbstractProfileController {
         labelArenaTargetingHint.setText(buildArenaTargetingHint(
             orBlank(textFieldArenaProfileAlliance.getText()),
             orBlank(textFieldArenaProfileServer.getText())));
+    }
+
+    private void installPolicyHelp() {
+        // Driven by both the dropdown and the field above it, so the description
+        // names the actual tag and state rather than a placeholder.
+        comboBoxArenaAlliancePolicy.valueProperty().addListener((o, before, after) -> refreshPolicyHelp());
+        comboBoxArenaServerPolicy.valueProperty().addListener((o, before, after) -> refreshPolicyHelp());
+        textFieldArenaProfileAlliance.textProperty().addListener((o, before, after) -> refreshPolicyHelp());
+        textFieldArenaProfileServer.textProperty().addListener((o, before, after) -> refreshPolicyHelp());
+        refreshPolicyHelp();
     }
 
     private String buildArenaTargetingHint(String alliance, String server) {
@@ -256,6 +318,8 @@ public class CityEventsExtraLayoutController extends AbstractProfileController {
                     .or(Bindings.createBooleanBinding(
                         () -> orBlank(textFieldArenaProfileServer.getText()).isBlank(),
                         textFieldArenaProfileServer.textProperty())));
+
+            installPolicyHelp();
 
             textFieldArenaProfileAlliance.setTooltip(new Tooltip("This profile's alliance tag, saved to the profile. Enables the alliance filter."));
             textFieldArenaProfileServer.setTooltip(new Tooltip("This profile's server (state) number, saved to the profile. Enables the server policy."));

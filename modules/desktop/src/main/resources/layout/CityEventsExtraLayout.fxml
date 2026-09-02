@@ -77,16 +77,24 @@
                                                promptText="ABC" GridPane.columnIndex="1" GridPane.rowIndex="0" />
 
                                     <Label styleClass="task-field-label" text="Alliance filter" GridPane.columnIndex="0" GridPane.rowIndex="1" />
-                                    <ComboBox fx:id="comboBoxArenaAlliancePolicy" maxWidth="260.0" prefWidth="220.0"
-                                              promptText="Any alliance" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+                                    <VBox maxWidth="Infinity" spacing="4" GridPane.columnIndex="1" GridPane.rowIndex="1">
+                                        <ComboBox fx:id="comboBoxArenaAlliancePolicy" maxWidth="260.0" prefWidth="220.0"
+                                                  promptText="Any alliance" />
+                                        <Label fx:id="labelArenaAlliancePolicyHelp" maxWidth="Infinity"
+                                               styleClass="task-card-description" wrapText="true" />
+                                    </VBox>
 
                                     <Label styleClass="task-field-label" text="Profile server" GridPane.columnIndex="0" GridPane.rowIndex="2" />
                                     <TextField fx:id="textFieldArenaProfileServer" maxWidth="260.0" prefWidth="220.0"
                                                promptText="1234" GridPane.columnIndex="1" GridPane.rowIndex="2" />
 
                                     <Label styleClass="task-field-label" text="Server policy" GridPane.columnIndex="0" GridPane.rowIndex="3" />
-                                    <ComboBox fx:id="comboBoxArenaServerPolicy" maxWidth="260.0" prefWidth="220.0"
-                                              promptText="Any server" GridPane.columnIndex="1" GridPane.rowIndex="3" />
+                                    <VBox maxWidth="Infinity" spacing="4" GridPane.columnIndex="1" GridPane.rowIndex="3">
+                                        <ComboBox fx:id="comboBoxArenaServerPolicy" maxWidth="260.0" prefWidth="220.0"
+                                                  promptText="Any server" />
+                                        <Label fx:id="labelArenaServerPolicyHelp" maxWidth="Infinity"
+                                               styleClass="task-card-description" wrapText="true" />
+                                    </VBox>
                                 </GridPane>
                             </VBox>
 

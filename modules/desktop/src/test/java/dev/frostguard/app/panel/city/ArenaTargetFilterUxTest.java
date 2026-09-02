@@ -112,6 +112,51 @@ class ArenaTargetFilterUxTest {
         assertTrue(view.server.isDisabled());
     }
 
+    @Test
+    void eachPolicyExplainsItselfUsingThisProfilesOwnTagAndState() throws Exception {
+        LoadedArenaView view = loadArenaView();
+        view.controller.onProfileLoad(arenaProfile("INF", "4527"));
+
+        view.alliancePolicy.setValue("Never attack profile alliance");
+        view.serverPolicy.setValue("Never attack profile server");
+
+        assertTrue(view.alliancePolicyHelp.getText().contains("INF"),
+                "the description must name the tag being protected, not a placeholder");
+        assertTrue(view.serverPolicyHelp.getText().contains("4527"),
+                "the description must name the state being protected, not a placeholder");
+    }
+
+    @Test
+    void hardSkipsAndSoftRankingsReadDifferently() throws Exception {
+        LoadedArenaView view = loadArenaView();
+        view.controller.onProfileLoad(arenaProfile("INF", "4527"));
+
+        view.serverPolicy.setValue("Never attack profile server");
+        String never = view.serverPolicyHelp.getText();
+        view.serverPolicy.setValue("Avoid profile server");
+        String avoid = view.serverPolicyHelp.getText();
+
+        assertTrue(never.startsWith("Skips"), "a hard skip must say it skips");
+        assertTrue(avoid.contains("Still attacks"),
+                "avoid must admit it still attacks your own state as a last resort");
+        assertTrue(never.contains("cannot be read"),
+                "a hard skip must warn that unreadable rows are dropped too");
+    }
+
+    @Test
+    void theDescriptionFollowsTheStateTypedAboveIt() throws Exception {
+        LoadedArenaView view = loadArenaView();
+        view.controller.onProfileLoad(arenaProfile("INF", ""));
+        view.serverPolicy.setValue("Never attack profile server");
+        assertTrue(view.serverPolicyHelp.getText().contains("your state"),
+                "with no state entered the description stays generic");
+
+        view.server.setText("4527");
+
+        assertTrue(view.serverPolicyHelp.getText().contains("state 4527"),
+                "typing a state must be reflected in the description straight away");
+    }
+
     private static ProfileAux arenaProfile(String alliance, String server) {
         ProfileAux profile = new ProfileAux(1L, "Default", "0", true, 50L, "", 0L,
                 "", "", alliance, server);
@@ -134,7 +179,9 @@ class ArenaTargetFilterUxTest {
                 (ComboBox<String>) namespace.get("comboBoxArenaAlliancePolicy"),
                 (ComboBox<String>) namespace.get("comboBoxArenaServerPolicy"),
                 (CheckBox) namespace.get("checkBoxArena"),
-                (Label) namespace.get("labelArenaTargetingHint"));
+                (Label) namespace.get("labelArenaTargetingHint"),
+                (Label) namespace.get("labelArenaAlliancePolicyHelp"),
+                (Label) namespace.get("labelArenaServerPolicyHelp"));
     }
 
     private record LoadedArenaView(CityEventsExtraLayoutController controller,
@@ -143,6 +190,8 @@ class ArenaTargetFilterUxTest {
                                    ComboBox<String> alliancePolicy,
                                    ComboBox<String> serverPolicy,
                                    CheckBox arenaEnabled,
-                                   Label hint) {
+                                   Label hint,
+                                   Label alliancePolicyHelp,
+                                   Label serverPolicyHelp) {
     }
 }
