@@ -37,6 +37,10 @@ public class DeploymentHelper {
     private static final int COST_RED_PIXEL_MIN = 10;
     // The ticked preparation option shows ~390 green pixels; the three others show none.
     private static final int SET_TIME_TICK_PIXEL_MIN = 50;
+    // The odds warning measures ~1790 red pixels across its band and the band is otherwise empty, so
+    // the bar sits high: the loudest incidental red text found in 440 stored frames (a rally toast on
+    // the city view, not this screen) reached 287, and this stays clear of it.
+    static final int ODDS_WARNING_PIXEL_MIN = 600;
 
     private final EmulatorController emu;
     private final String device;
@@ -186,6 +190,24 @@ public class DeploymentHelper {
         return false;
     }
 
+    /**
+     * True when the game prints its red "You are not likely to prevail" line above the troop rows,
+     * which is it saying this march loses. Red text is the only red thing in that band, so this is a
+     * pixel count rather than OCR, like every other answer this screen gives.
+     */
+    public boolean isUnlikelyToPrevail() {
+        try {
+            int redPixels = PixelStats.count(captureImage(), CommonGameAreas.DEPLOY_ODDS_WARNING_AREA,
+                    GameColors::isBlockedRed);
+            boolean warned = redPixels >= ODDS_WARNING_PIXEL_MIN;
+            log.debug("Deploy odds warning check: redPixels=" + redPixels + " result=" + warned);
+            return warned;
+        } catch (Exception ex) {
+            log.warn("Deploy odds warning check failed: " + ex.getMessage());
+            return false;
+        }
+    }
+
     /** Equalises the troop sliders. Its x shifts with the Balance button, so it is matched, not tapped blind. */
     public boolean tapEqualize() {
         ImageSearchResultData equalize = templates.locatePattern(
@@ -197,6 +219,34 @@ public class DeploymentHelper {
         }
         taps.tapInside(equalize);
         return true;
+    }
+
+    // Calibrated live on the 3-troop-type beast deployment screen (720x1280); that 3-row layout is
+    // specific to this screen.
+    private static final dev.frostguard.api.domain.PointData[] TROOP_SLIDER_LEFT = {
+            new dev.frostguard.api.domain.PointData(225, 730),
+            new dev.frostguard.api.domain.PointData(225, 870),
+            new dev.frostguard.api.domain.PointData(225, 1010),
+    };
+    private static final dev.frostguard.api.domain.PointData[] TROOP_SLIDER_RIGHT = {
+            new dev.frostguard.api.domain.PointData(640, 730),
+            new dev.frostguard.api.domain.PointData(640, 870),
+            new dev.frostguard.api.domain.PointData(640, 1010),
+    };
+
+    /**
+     * Drags every troop-type slider on the current deployment screen to its maximum.
+     *
+     * <p>Equalize spreads a march thinly and evenly across the three troop types, and the game
+     * answers that with its red "You are not likely to prevail" line -- a verdict on the lineup we
+     * just chose rather than on the target. Beast and Fire Beast deployments send the whole army
+     * instead.
+     */
+    public void maxAllTroopSliders() {
+        for (int i = 0; i < TROOP_SLIDER_LEFT.length; i++) {
+            emu.swipeScreen(device, TROOP_SLIDER_LEFT[i], TROOP_SLIDER_RIGHT[i]);
+        }
+        log.info("Dragged all troop sliders to max.");
     }
 
     private BufferedImage captureImage() {

@@ -24,6 +24,12 @@ public class IntelScreenHelper {
     private static final int MAX_NAV_PASSES = 3;
     private static final int INTEL_AVAILABLE_GREEN_MIN = 150;
     private static final long MISSION_RETURN_SETTLE_MILLIS = 1_000L;
+    // isIntelScreenActive() confirms the Intel chrome, which draws before the markers do. Every
+    // caller then scans for markers, so returning the moment the chrome appears had them all reading
+    // an empty map: on 30 August Intel entered the screen, found nothing, and rescheduled itself
+    // seven hours out with Fire Beasts standing on it. The wait belongs here, once, rather than at
+    // each of the five call sites.
+    private static final long MARKER_LAYER_SETTLE_MILLIS = 2_000L;
     private static final AreaData WORLD_INTEL_BUTTON_AREA = AreaData.of(615, 800, 715, 930);
     private static final TemplateSearchHelper.SearchConfig WORLD_INTEL_BUTTON_SEARCH =
             TemplateSearchHelper.SearchConfig.builder()
@@ -124,6 +130,7 @@ public class IntelScreenHelper {
             taps.tapInside(button);
             pause(800);
             if (isIntelScreenActive()) {
+                pause(MARKER_LAYER_SETTLE_MILLIS);
                 return;
             }
             log.warn("Wilderness Intel shortcut did not open the Intel map, pass " + pass);

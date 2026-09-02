@@ -23,6 +23,12 @@ import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.engine.service.TaskManagementService;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
+import dev.frostguard.api.domain.RawImageData;
+import dev.frostguard.api.runtime.WorkspacePaths;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -31,6 +37,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.List;
+import javax.imageio.ImageIO;
 
 public class IntelligenceRoutine extends DelayedTask {
 
@@ -55,6 +62,33 @@ private static final long JOURNEY_RESULT_TIMEOUT_MILLIS = 30_000L;
 private static final long JOURNEY_INITIAL_RESULT_WAIT_MILLIS = 4_000L;
 
 private static final long JOURNEY_RESULT_POLL_MILLIS = 1_000L;
+
+// The deploy screen's red "You are not likely to prevail" line is the game quoting odds, not a
+// verdict -- the march can still win. So a warned Fire Beast is deployed anyway; only the count is
+// capped. Three warned deployments in a run and Intel stops rather than grinding stamina into odds
+// that keep coming back the same. A warned march that goes out is a try spent, and the routine
+// carries straight on to the next Fire Beast.
+//
+// Nothing on the screen is touched on the way past. maxAllTroopSliders() is deliberately not called:
+// tested live 2026-08-30 against a real warned Fire Beast screen, the march was already at capacity
+// (108,010/108,010) so the drags added nothing and were read as small decrements, taking the lineup
+// from 36,003 infantry down to 36,001 and costing 1,016 power.
+//
+// Fire Beast deployments only -- ordinary beast markers are not counted or capped.
+private static final int PREVAIL_WARNING_MAX_ATTEMPTS = 3;
+
+// A marker that will not open after this many taps is left alone for this pass.
+private static final int BEAST_OPEN_MAX_TAPS = 3;
+
+// A Fire Beast is fought with everything, one attempt at a time. The gather recall above brings the
+// army home; sending the next attempt while the last one is still in the air fights it with whatever
+// is left behind, which is how three attempts become three losses. So after a warned Fire Beast
+// march the routine waits for the troops to come back before it tries again.
+private static final long BEAST_FIGHT_SETTLE_SECONDS = 25L;
+
+// Back presses allowed while backing out to the Intel map, never one while already on it.
+private static final int INTEL_BACKOUT_MAX_STEPS = 3;
+
 
 private static final AreaData JOURNEY_VICTORY_CONTINUE_AREA = AreaData.of(400, 990, 658, 1038);
 
@@ -126,6 +160,13 @@ private boolean shouldRequeueAutoJoinAfterIntel;
 // Changed by pernerch | Date: 2026-07-02 | Why: track beast march dispatch to keep intel rescheduling accurate.
 private boolean beastMarchSent;
 
+// Warned Fire Beast deployments spent this run; capped at PREVAIL_WARNING_MAX_ATTEMPTS.
+private int prevailWarningAttempts;
+
+// Set once the warned tries are spent: Fire Beasts are left alone for the rest of the run, and
+// everything else on the Intel map carries on as normal.
+private boolean fireBeastAttemptsExhausted;
+
 private final List<LocalDateTime> intelBeastReturnTimes = new ArrayList<>();
 
 private TaskStateData autoJoinTask;
@@ -153,6 +194,8 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 
 		processingTask = true;
 		beastMarchSent = false;
+		prevailWarningAttempts = 0;
+		fireBeastAttemptsExhausted = false;
 		// Changed by pernerch | Date: 2026-07-04 | Why: reset per-run Intel march-capacity override before processing cycle starts.
 		intelMarchCapacityOverride = null;
 		shouldRequeueGatherAfterIntel = false;
@@ -171,12 +214,25 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 		IntelCyclePolicy.Decision entryDecision = intelCyclePolicy.evaluateDailyAvailability(
 				dailyIntelAvailable, LocalDateTime.now(), ZoneId.systemDefault());
 		if (entryDecision.action() == IntelCyclePolicy.Action.WAIT_FOR_NEXT_REFRESH) {
-			logInfo(routineLogIntelligenceLine("Daily sidebar has no green Intel availability evidence and no "
-					+ "Intel cycle is active. Planning the next UTC Intel refresh at: "
-					+ entryDecision.nextRun().format(DATETIME_FORMATTER)));
-			reschedule(entryDecision.nextRun());
-			processingTask = false;
-			return;
+			// The Daily row answers "is there an Intel daily left to claim", which is not the question
+			// this task is asking. Markers stay on the map for the whole eight-hour cycle after that row
+			// goes quiet, and the sidebar gate was sending Intel back to sleep on top of them: on
+			// 30 August it skipped two runs in a row, thirty seconds apart, with Fire Beasts standing on
+			// the map the whole time. So a quiet Daily is no longer the last word -- the map gets looked
+			// at before the task gives up on it. One navigation, only on the runs that were going to
+			// bail anyway.
+			intelScreenHelper.resumeIntelCycleFromWilderness();
+			if (!hasVisibleIntelMissionFlow()) {
+				saveEmptyIntelMapScreenshot();
+				logInfo(routineLogIntelligenceLine("Daily sidebar has no green Intel availability evidence, no "
+						+ "Intel cycle is active, and the map shows no markers. Planning the next UTC Intel "
+						+ "refresh at: " + entryDecision.nextRun().format(DATETIME_FORMATTER)));
+				reschedule(entryDecision.nextRun());
+				processingTask = false;
+				return;
+			}
+			logInfo(routineLogIntelligenceLine("Daily sidebar reports no new Intel, but markers are on the map. "
+					+ "Processing them instead of waiting for the next refresh."));
 		}
 		if (entryDecision.action() == IntelCyclePolicy.Action.RESUME_ACTIVE_CYCLE) {
 			logInfo(routineLogIntelligenceLine("Daily no longer reports new Intel, but the current cycle still "
@@ -242,7 +298,16 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 			marchQueueLimitReached = !marchesAvailable.available() || intelMarchesRemaining <= 0;
 
 
-			redeemCompletedMissions();
+			// A claimed reward is a fight that was won. The three warned tries are per beast, not per
+			// run: beating one earns a fresh three against the next, which is the difference between
+			// working through the map and stopping after the third warning of the day.
+			if (redeemCompletedMissions() > 0 && prevailWarningAttempts > 0) {
+				logInfo(routineLogIntelligenceLine("A mission completed and paid out, so the Fire Beast is "
+						+ "dead. Resetting the warned-try count (was " + prevailWarningAttempts + "/"
+						+ PREVAIL_WARNING_MAX_ATTEMPTS + ") for the next one."));
+				prevailWarningAttempts = 0;
+				fireBeastAttemptsExhausted = false;
+			}
 
 
 			if (!hasEnoughStaminaFlow()) {
@@ -309,8 +374,8 @@ private boolean hasEnabledIntelMissionType() {
 
 private boolean hasVisibleIntelMissionFlow() {
 
-		if (fireBeastsEnabled && locateIntelPatternMono(
-				TemplatesEnum.INTEL_FIRE_BEAST, SearchConfigConstants.DEFAULT_SINGLE)
+		if (fireBeastsEnabled && !fireBeastAttemptsExhausted && locateIntelPatternMono(
+				TemplatesEnum.INTEL_FIRE_BEAST, SearchConfigConstants.FIRE_BEAST_SEARCH)
 				.isFound()) {
 			return true;
 		}
@@ -447,8 +512,19 @@ private boolean shouldProcessBeastsFlow() {
 	}
 
 private boolean seekAndProcessGrayscale(TemplatesEnum template, Consumer<ImageSearchResultData> processMethod) {
+		return seekAndProcessGrayscale(template, SearchConfigConstants.SINGLE_WITH_RETRIES, processMethod);
+	}
+
+	/**
+	 * As above, for a template whose real match score will not clear the shared threshold. The Fire
+	 * Beast marker scores about 85 against a live capture, so every scan of it at the standard 90
+	 * failed silently and Intel never opened one; SearchConfigConstants.FIRE_BEAST_SEARCH was written
+	 * for that and had no callers.
+	 */
+	private boolean seekAndProcessGrayscale(TemplatesEnum template, SearchConfig searchConfig,
+			Consumer<ImageSearchResultData> processMethod) {
 		logDebug(routineLogIntelligenceLine("Scanning for grayscale template '" + template + "'"));
-		ImageSearchResultData result = locateIntelPatternMono(template, SearchConfigConstants.SINGLE_WITH_RETRIES);
+		ImageSearchResultData result = locateIntelPatternMono(template, searchConfig);
 
 		if (result.isFound()) {
 			logInfo(routineLogIntelligenceLine("Grayscale template detected: " + template));
@@ -973,6 +1049,7 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 		}
 
 		if (!missionsStillAvailable) {
+			saveIntelScreenshot("intel-rescan-empty");
 			logInfo(routineLogIntelligenceLine("No intel missions found after re-scan. Intel run is complete for now."));
 			tryRescheduleFromCooldownFlow();
 			processingTask = false;
@@ -1104,8 +1181,8 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 	}
 
 	private boolean hasMarchBoundIntelMissionAvailableFlow() {
-		if (fireBeastsEnabled && locateIntelPatternMono(
-				TemplatesEnum.INTEL_FIRE_BEAST, SearchConfigConstants.DEFAULT_SINGLE)
+		if (fireBeastsEnabled && !fireBeastAttemptsExhausted && locateIntelPatternMono(
+				TemplatesEnum.INTEL_FIRE_BEAST, SearchConfigConstants.FIRE_BEAST_SEARCH)
 				.isFound()) {
 			return true;
 		}
@@ -1134,9 +1211,10 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 		boolean beastFound = false;
 
 
-		if (fireBeastsEnabled && !(useFlag && beastMarchSent)) {
+		if (fireBeastsEnabled && !fireBeastAttemptsExhausted && !(useFlag && beastMarchSent)) {
 			logDebug(routineLogIntelligenceLine("Scanning for fire beasts."));
-			if (seekAndProcessGrayscale(TemplatesEnum.INTEL_FIRE_BEAST, this::handleBeast)) {
+			if (seekAndProcessGrayscale(TemplatesEnum.INTEL_FIRE_BEAST,
+					SearchConfigConstants.FIRE_BEAST_SEARCH, beast -> handleBeast(beast, true))) {
 				beastFound = true;
 				if (useFlag) {
 					return true;
@@ -1149,7 +1227,7 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 		if (!(useFlag && beastMarchSent)) {
 			logDebug(routineLogIntelligenceLine("Scanning for beasts using grayscale matching."));
 			for (TemplatesEnum beast_screening : beastTemplates()) {
-				if (seekAndProcessGrayscale(beast_screening, this::handleBeast)) {
+				if (seekAndProcessGrayscale(beast_screening, beast -> handleBeast(beast, false))) {
 					beastFound = true;
 					break;
 				}
@@ -1244,7 +1322,13 @@ private void handleJourney(ImageSearchResultData result) {
 		StatisticsService.obtain().addToCounter(profile, "Intel Journeys", 1);
 	}
 
-private void handleBeast(ImageSearchResultData beast) {
+/**
+ * Deploys against one Intel beast marker.
+ *
+ * @param fireBeast true when the marker was the Fire Beast one. Only Fire Beast deployments are held
+ *                  to the screen's odds warning; ordinary beasts deploy as before.
+ */
+private void handleBeast(ImageSearchResultData beast, boolean fireBeast) {
 		if (marchQueueLimitReached) {
 			logInfo(routineLogIntelligenceLine("Beast detected but march queue is full. Skipping deployment but marking as detected."));
 			return;
@@ -1255,13 +1339,35 @@ private void handleBeast(ImageSearchResultData beast) {
 			return;
 		}
 
-		tapInside(beast);
-		sleepTask(2000);
-
-		ImageSearchResultData view = templateSearchHelper.locatePattern(TemplatesEnum.INTEL_VIEW, SearchConfigConstants.SINGLE_WITH_RETRIES);
+		// The marker bobs, so the point a scan returns can be stale by the time the tap lands and the
+		// popup never opens. Measured on a popup that did open, the View button matches at 98.4 from
+		// 500ms onward, so a missing View means the tap missed, not that the button was read too early.
+		// Re-locate and tap again rather than abandoning the beast.
+		ImageSearchResultData view = ImageSearchResultData.miss();
+		ImageSearchResultData target = beast;
+		for (int tap = 1; tap <= BEAST_OPEN_MAX_TAPS; tap++) {
+			tapInside(target);
+			sleepTask(2000);
+			view = templateSearchHelper.locatePattern(TemplatesEnum.INTEL_VIEW,
+					SearchConfigConstants.SINGLE_WITH_RETRIES);
+			if (view.isFound()) {
+				break;
+			}
+			logWarning(routineLogIntelligenceLine("Tap " + tap + "/" + BEAST_OPEN_MAX_TAPS
+					+ " did not open the beast: no 'View' button. Re-locating the marker."));
+			leaveToIntelScreenFlow();
+			sleepTask(600);
+			ImageSearchResultData again = locateIntelPatternMono(
+					fireBeast ? TemplatesEnum.INTEL_FIRE_BEAST : beastTemplates()[0],
+					SearchConfigConstants.FIRE_BEAST_SEARCH);
+			if (again.isFound()) {
+				target = again;
+			}
+		}
 		if (!view.isFound()) {
-			logWarning(routineLogIntelligenceLine("Could not find the 'View' button for the beast. Going back."));
-			pressBack();
+			logWarning(routineLogIntelligenceLine("Beast would not open after " + BEAST_OPEN_MAX_TAPS
+					+ " taps. Going back."));
+			leaveToIntelScreenFlow();
 			return;
 		}
 		tapInside(view);
@@ -1270,9 +1376,7 @@ private void handleBeast(ImageSearchResultData beast) {
 		ImageSearchResultData attack = templateSearchHelper.locatePattern(TemplatesEnum.INTEL_ATTACK, SearchConfigConstants.SINGLE_WITH_RETRIES);
 		if (!attack.isFound()) {
 			logWarning(routineLogIntelligenceLine("Could not find the 'Attack' button for the beast. Going back."));
-			pressBack();
-			pressBack();
-
+			leaveToIntelScreenFlow();
 			return;
 		}
 		tapInside(attack);
@@ -1309,9 +1413,36 @@ private void handleBeast(ImageSearchResultData beast) {
 				return;
 			}
 			logInfo(routineLogIntelligenceLine("Formation setup: flag #" + flagNumber + " confirmed."));
+		} else if (fireBeast) {
+			// Never Equalize a Fire Beast. Equalize splits the march evenly and thinly across the three
+			// troop types, and the game answers that with "You are not likely to prevail" -- the warning
+			// is then a verdict on the lineup we just chose, not on the beast. maxAllTroopSliders() was
+			// written for exactly this and its comment says so; it deploys the whole army instead.
+			deploymentHelper.maxAllTroopSliders();
+			logInfo(routineLogIntelligenceLine(
+					"Formation setup: Fire Beast -- every troop slider to max, not Equalize."));
+			sleepTask(600);
+			saveIntelScreenshot("intel-fire-beast-formation");
 		} else if (deploymentHelper.tapEqualize()) {
 			logInfo(routineLogIntelligenceLine("Formation setup: no flag configured; using Equalize."));
 			sleepTask(300);
+		}
+
+		if (fireBeast && deploymentHelper.isUnlikelyToPrevail()) {
+			if (prevailWarningAttempts >= PREVAIL_WARNING_MAX_ATTEMPTS) {
+				// Spent, but only for Fire Beasts. Survivor camps, journeys and ordinary beasts need
+				// neither the army nor these odds, so the run carries on without them being abandoned.
+				logWarning(routineLogIntelligenceLine("Fire Beast odds warning again, with all "
+						+ PREVAIL_WARNING_MAX_ATTEMPTS + " warned tries spent this run. No march was sent; "
+						+ "leaving Fire Beasts alone and continuing with the rest of the Intel map."));
+				fireBeastAttemptsExhausted = true;
+				leaveToIntelScreenFlow();
+				return;
+			}
+			prevailWarningAttempts++;
+			logWarning(routineLogIntelligenceLine("Deploy screen reads \"You are not likely to prevail\"; "
+					+ "the odds are against it, not the outcome. Deploying anyway -- warned try "
+					+ prevailWarningAttempts + "/" + PREVAIL_WARNING_MAX_ATTEMPTS + " this run."));
 		}
 
 		var deployment = deploymentHelper.readScreen(DeploymentHelper.MAX_ATTACK_STAMINA_COST);
@@ -1424,7 +1555,70 @@ private void handleBeast(ImageSearchResultData beast) {
 						+ ". Continuing loop to use remaining available marches."));
 			}
 		}
+		if (fireBeast) {
+			// Stop at the third march, not at the fourth deploy screen. Waiting for the next sighting to
+			// notice the tries are spent costs a whole pointless open-read-back trip per remaining
+			// marker, which is the 4th and 5th "attempt" that shows up on screen after the 3rd fight.
+			if (prevailWarningAttempts >= PREVAIL_WARNING_MAX_ATTEMPTS) {
+				fireBeastAttemptsExhausted = true;
+				logInfo(routineLogIntelligenceLine("Third warned Fire Beast march is away; that is the last "
+						+ "one this run. Leaving Fire Beasts alone and continuing with the rest of the map."));
+			}
+			waitForBeastMarchReturnFlow(travelTimeSeconds);
+		}
 		intelScreenHelper.returnToIntelFromWilderness();
+	}
+
+	/**
+	 * Blocks until the Fire Beast march is home again, so the next attempt is made with the whole army
+	 * rather than the remainder. Travel time is known from the deployment screen, so the wait starts as
+	 * the round trip plus the fight, and then the march queue itself is read until every slot is idle.
+	 */
+	/**
+	 * Gets back to the Intel map without ever pressing Back while already on it. Back on the Intel map
+	 * is the game's "do you want to quit?" prompt, and a blind extra press was opening it.
+	 */
+	private void leaveToIntelScreenFlow() {
+		for (int step = 1; step <= INTEL_BACKOUT_MAX_STEPS; step++) {
+			if (intelScreenHelper.isIntelScreenActive()) {
+				return;
+			}
+			pressBack();
+			sleepTask(700);
+		}
+		if (!intelScreenHelper.isIntelScreenActive()) {
+			intelScreenHelper.returnToIntelFromWilderness();
+		}
+	}
+
+	private void waitForBeastMarchReturnFlow(long travelTimeSeconds) {
+		long roundTripSeconds = travelTimeSeconds * 2 + BEAST_FIGHT_SETTLE_SECONDS;
+		logInfo(routineLogIntelligenceLine("Fire Beast march is away. Waiting " + roundTripSeconds
+				+ "s for the troops to come home before the next attempt."));
+		sleepTask(roundTripSeconds * 1000L);
+	}
+
+	/** Keeps the frame behind a "no markers" decision, which is otherwise unfalsifiable after the fact. */
+	private void saveEmptyIntelMapScreenshot() {
+		saveIntelScreenshot("intel-map-no-markers");
+	}
+
+	private void saveIntelScreenshot(String label) {
+		try {
+			Path outputDirectory = WorkspacePaths.current().root().resolve("temp");
+			Files.createDirectories(outputDirectory);
+			String profileName = profile.getName() == null ? "profile" : profile.getName();
+			String safeProfileName = profileName.replaceAll("[^A-Za-z0-9._-]", "_");
+			Path output = outputDirectory.resolve(label + "-" + safeProfileName + "-latest.png");
+			RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+			BufferedImage image = dev.frostguard.vision.convert.ImageConverter.toBufferedImage(frame);
+			if (!ImageIO.write(image, "png", output.toFile())) {
+				throw new IOException("PNG writer unavailable");
+			}
+			logWarning(routineLogIntelligenceLine("Intel diagnostic screenshot saved: " + output));
+		} catch (Exception e) {
+			logWarning(routineLogIntelligenceLine("Could not save Intel diagnostic: " + e.getMessage()));
+		}
 	}
 
 	private void waitForSurvivorBatchCooldownFlow() {

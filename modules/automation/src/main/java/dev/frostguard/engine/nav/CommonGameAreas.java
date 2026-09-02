@@ -130,6 +130,12 @@ public final class CommonGameAreas {
     // Body of the "Other Troops are marching toward the same target" confirmation.
     public static final AreaData SAME_TARGET_DIALOG_AREA      = region(60, 555, 680, 650);
 
+    // The deploy screen's red odds warning ("You are not likely to prevail"), the strip between the
+    // hero cards and the first troop row. Measured live on the 720x1280 beast deployment screen: the
+    // glyphs occupy y 595-622, and the orange hero card's bottom edge stops at y 577, so the band
+    // starts at 590 to keep that edge out of the red-pixel count.
+    public static final AreaData DEPLOY_ODDS_WARNING_AREA     = region(150, 590, 570, 630);
+
     // ── Hold-a-rally preparation time ────────────────────────────────
     //
     // The dialog keeps whatever preparation time was last picked in game and the bot never sets it,
