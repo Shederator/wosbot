@@ -227,8 +227,6 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 				logInfo(routineLogIntelligenceLine("Daily sidebar has no green Intel availability evidence, no "
 						+ "Intel cycle is active, and the map shows no markers. Planning the next UTC Intel "
 						+ "refresh at: " + entryDecision.nextRun().format(DATETIME_FORMATTER)));
-				updateIntelMissionsAvailableFlag(false);
-				TroopSlotPolicy.release(profile, TpDailyTaskEnum.INTEL);
 				reschedule(entryDecision.nextRun());
 				processingTask = false;
 				return;
