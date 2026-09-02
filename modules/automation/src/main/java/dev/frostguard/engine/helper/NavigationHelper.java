@@ -285,10 +285,27 @@ public class NavigationHelper {
                 broadcastDebug("Unknown screen - back (" + pass + "/" + budget + ")");
                 emu.pressBack(device);
                 interruptibleWait(300);
+                dismissQuitGameDialogIfPresent();
             }
             pass++;
         }
         throw new HomeNotFoundException("Home not found after " + budget + " attempts");
+    }
+
+    // Observed live caught live watching the app: this "unknown screen -> back" loop is the
+    // MOST common source of a bare-screen back-press across the ENTIRE codebase -- every task
+    // routes through ensureCorrectScreenLocation for recovery. On a bare screen with nothing open,
+    // this game's own back-button handling is to pop a native "Quit game?" confirmation dialog --
+    // one accidental tap from actually exiting mid-automation. The operator's report: "still happening,
+    // anywhere" -- a per-routine fix (Intel's own double-pressBack chains) wasn't enough because
+    // this shared recovery path is a second, much more common source. Public so DelayedTask.pressBack()
+    // (used directly by every routine) can also call it after every single back press, not just this
+    // loop -- genuinely "anywhere" coverage from one fix point instead of chasing individual call sites.
+    public void dismissQuitGameDialogIfPresent() {
+        // This used to check immediately with no settle delay and tap once
+        // with no verification the dialog actually closed. Delegated to QuitDialogGuard, the
+        // single shared implementation every Back call site in the codebase now routes through.
+        QuitDialogGuard.dismissIfPresent(emu, device);
     }
 
     // Require one immediate re-check before tapping a home/world anchor to reduce transient mis-taps.
