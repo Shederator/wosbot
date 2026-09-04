@@ -1,9 +1,11 @@
 package dev.frostguard.tasks;
 
 import dev.frostguard.api.configs.TpDailyTaskEnum;
+import dev.frostguard.api.configs.ControlledExecutionCapability;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.DelayedTaskRegistry;
+import dev.frostguard.engine.schedule.TaskRegistration;
 
 import dev.frostguard.tasks.alliance.*;
 import dev.frostguard.tasks.analytics.GameAnalyticsRoutine;
@@ -17,14 +19,37 @@ import dev.frostguard.tasks.heroes.*;
 import dev.frostguard.tasks.lifecycle.*;
 import dev.frostguard.tasks.pets.*;
 
+import java.util.Arrays;
+import java.util.Map;
+import java.util.Set;
+
 /**
  * Registers all task factories with the DelayedTaskRegistry.
  * Must be called once at application startup before any tasks are created.
  */
 public class TaskRegistrations {
 
+    private static final Set<TpDailyTaskEnum> WORKBENCH_EXCLUSIONS = Set.of(
+            TpDailyTaskEnum.CUSTOM_TASK,
+            TpDailyTaskEnum.GAME_ANALYTICS_LABYRINTH,
+            TpDailyTaskEnum.GAME_ANALYTICS_POWER,
+            TpDailyTaskEnum.INITIALIZE,
+            TpDailyTaskEnum.SKIP_TUTORIAL,
+            TpDailyTaskEnum.CREATE_CHARACTER,
+            TpDailyTaskEnum.DUMMY_TASK,
+            TpDailyTaskEnum.TEST_HOOK_LOOP);
+
+    private static final Map<TpDailyTaskEnum, ControlledExecutionCapability> WORKBENCH_CAPABILITIES = Map.of(
+            TpDailyTaskEnum.NOMADIC_MERCHANT, ControlledExecutionCapability.STEP_AWARE);
+
     public static void initialize() {
-        DelayedTaskRegistry.registerFactory(TaskRegistrations::createTask);
+        DelayedTaskRegistry.registerFactory(TaskRegistrations::createTask,
+                Arrays.stream(TpDailyTaskEnum.values())
+                        .filter(type -> !WORKBENCH_EXCLUSIONS.contains(type))
+                        .map(type -> new TaskRegistration(type,
+                                WORKBENCH_CAPABILITIES.getOrDefault(
+                                        type, ControlledExecutionCapability.COARSE)))
+                        .toList());
     }
 
     private static DelayedTask createTask(TpDailyTaskEnum type, AccountDescriptor profile) {

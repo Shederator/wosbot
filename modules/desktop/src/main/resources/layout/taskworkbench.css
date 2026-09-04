@@ -1,0 +1,155 @@
+.task-workbench-root {
+    -fx-background-color: #11141a;
+}
+
+.workbench-toolbar {
+    -fx-background-color: #181c24;
+    -fx-border-color: transparent transparent #2b313d transparent;
+    -fx-border-width: 0 0 1 0;
+    -fx-min-height: 74;
+}
+
+.workbench-title {
+    -fx-text-fill: #fcd176;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-padding: 0 8 0 0;
+}
+
+.workbench-combo {
+    -fx-background-color: #0d0f15;
+    -fx-border-color: #343b48;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-pref-height: 32;
+}
+
+.workbench-combo:focused {
+    -fx-border-color: #fcd176;
+}
+
+.workbench-capability {
+    -fx-text-fill: #3dc3c3;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
+.workbench-action-button {
+    -fx-background-color: #232936;
+    -fx-border-color: #3b4454;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-min-width: 34;
+    -fx-pref-width: 34;
+    -fx-max-width: 34;
+    -fx-min-height: 32;
+    -fx-pref-height: 32;
+    -fx-max-height: 32;
+    -fx-padding: 0;
+}
+
+.workbench-action-button .ikonli-font-icon {
+    -fx-icon-color: #e6edf3;
+}
+
+.workbench-action-button:hover {
+    -fx-background-color: #303848;
+    -fx-border-color: #59677c;
+}
+
+.workbench-action-button:disabled {
+    -fx-opacity: 0.35;
+}
+
+.workbench-stop-button .ikonli-font-icon {
+    -fx-icon-color: #ff615a;
+}
+
+.workbench-status-band {
+    -fx-background-color: #14171f;
+    -fx-border-color: transparent transparent #262a36 transparent;
+    -fx-border-width: 0 0 1 0;
+    -fx-min-height: 78;
+}
+
+.workbench-field-label,
+.workbench-section-title {
+    -fx-text-fill: #737e8c;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+
+.workbench-step-value {
+    -fx-text-fill: #e6edf3;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.workbench-state {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
+.workbench-state-idle,
+.workbench-state-stopped {
+    -fx-text-fill: #9eaab6;
+}
+
+.workbench-state-paused,
+.workbench-state-pause_requested {
+    -fx-text-fill: #fcd176;
+}
+
+.workbench-state-running,
+.workbench-state-completed {
+    -fx-text-fill: #59ba59;
+}
+
+.workbench-state-stopping,
+.workbench-state-failed {
+    -fx-text-fill: #ff615a;
+}
+
+.workbench-message {
+    -fx-background-color: #21191c;
+    -fx-text-fill: #ff8b86;
+    -fx-border-color: transparent transparent #4e292c transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
+.workbench-history {
+    -fx-background-color: #14171f;
+    -fx-border-color: #2b313d;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+}
+
+.workbench-history .column-header-background,
+.workbench-history .column-header {
+    -fx-background-color: #181c24;
+}
+
+.workbench-history .column-header .label {
+    -fx-text-fill: #9eaab6;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-alignment: CENTER_LEFT;
+}
+
+.workbench-history .table-row-cell {
+    -fx-background-color: #14171f;
+    -fx-border-color: transparent transparent #222733 transparent;
+}
+
+.workbench-history .table-row-cell:odd {
+    -fx-background-color: #181c24;
+}
+
+.workbench-history .table-row-cell:selected {
+    -fx-background-color: #263548;
+}
+
+.workbench-history .table-cell {
+    -fx-text-fill: #d7dee7;
+    -fx-padding: 8 10;
+}

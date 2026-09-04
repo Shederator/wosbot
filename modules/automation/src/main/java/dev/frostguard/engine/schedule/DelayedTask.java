@@ -4,6 +4,7 @@ import dev.frostguard.vision.convert.RegexNumberParser;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
 import dev.frostguard.data.repository.ProfileRepository;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
+import dev.frostguard.api.configs.ControlledExecutionCapability;
 import dev.frostguard.api.configs.TpMessageSeverityEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.engine.emulator.EmulatorController;
@@ -36,6 +37,7 @@ import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Supplier;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.TimeUnit;
@@ -94,6 +96,7 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
 
     // ── preemption ──────────────────────────────────────────────────
     private PreemptionToken preemptionToken;
+    private volatile TaskExecutionControl executionControl;
 
     // ── construction ────────────────────────────────────────────────
 
@@ -149,6 +152,15 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
 
     @Override
     public void run() {
+        TaskExecutionControl control = executionControl;
+        if (control != null && control.capability() == ControlledExecutionCapability.COARSE) {
+            control.runStep(taskName, this::runTaskLifecycle);
+            return;
+        }
+        runTaskLifecycle();
+    }
+
+    private void runTaskLifecycle() {
         checkPreemption();
         staminaDeferral = null;
         refreshProfileFromDb();
@@ -201,6 +213,37 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
             int templateDelta = this.templateSearchHelper.getFailedSearches() - baselineTemplate;
             dev.frostguard.engine.service.StatisticsService.obtain()
                     .logJobExecution(profile, taskName, elapsed, ocrDelta, templateDelta);
+        }
+    }
+
+    protected void step(String stepName, Runnable action) {
+        TaskExecutionControl control = executionControl;
+        if (control == null) {
+            action.run();
+            return;
+        }
+        control.runStep(stepName, action);
+    }
+
+    protected <T> T step(String stepName, Supplier<T> action) {
+        TaskExecutionControl control = executionControl;
+        return control == null ? action.get() : control.runStep(stepName, action);
+    }
+
+    protected void skipStep(String stepName) {
+        TaskExecutionControl control = executionControl;
+        if (control != null) {
+            control.skipStep(stepName);
+        }
+    }
+
+    public void attachExecutionControl(TaskExecutionControl control) {
+        this.executionControl = control;
+    }
+
+    public void detachExecutionControl(TaskExecutionControl control) {
+        if (this.executionControl == control) {
+            this.executionControl = null;
         }
     }
 
@@ -402,7 +445,7 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
                 long left = deadline - System.currentTimeMillis();
                 if (left <= 0) break;
 
-                if (!isInjecting && acceptsInjections()
+                if (executionControl == null && !isInjecting && acceptsInjections()
                         && !BearTrapProtectionPolicy.isFullPauseActive(profile)) {
                     InjectionRule pending = GlobalMonitorService.getInstance()
                             .pollPendingInjection(profile.getId());
