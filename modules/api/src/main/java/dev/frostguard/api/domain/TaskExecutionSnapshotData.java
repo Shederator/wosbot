@@ -10,8 +10,13 @@ public record TaskExecutionSnapshotData(
         String profileName,
         TpDailyTaskEnum taskType,
         TaskExecutionState state,
+        String currentStepId,
         String currentStep,
         TaskStepStatus currentStepStatus,
+        String nextStepId,
+        String nextStep,
+        TaskStepStatus nextStepStatus,
+        String lastStepId,
         String lastStep,
         TaskStepStatus lastStepStatus,
         String message,
@@ -24,6 +29,7 @@ public record TaskExecutionSnapshotData(
     public static TaskExecutionSnapshotData idle() {
         return new TaskExecutionSnapshotData(
                 null, null, null, null, TaskExecutionState.IDLE,
-                null, null, null, null, null, List.of());
+                null, null, null, null, null, null,
+                null, null, null, null, List.of());
     }
 }

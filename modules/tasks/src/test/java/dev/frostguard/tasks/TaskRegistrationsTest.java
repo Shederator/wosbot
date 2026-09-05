@@ -66,6 +66,43 @@ class TaskRegistrationsTest {
     }
 
     @Test
+    void everyWorkbenchTaskPublishesAValidPreviewFlow() {
+        DelayedTaskRegistry.getWorkbenchTasks().forEach(registration -> {
+            assertFalse(registration.flowDefinition().nodes().isEmpty());
+            assertEquals(registration.flowDefinition().entryStep().id(),
+                    registration.flowDefinition().entryStepId());
+        });
+    }
+
+    @Test
+    void nomadicMerchantFlowIncludesBranchesAndLoopbacks() {
+        var flow = DelayedTaskRegistry.getWorkbenchTasks().stream()
+                .filter(registration -> registration.taskType() == TpDailyTaskEnum.NOMADIC_MERCHANT)
+                .findFirst()
+                .orElseThrow()
+                .flowDefinition();
+
+        assertEquals(5, flow.nodes().size());
+        assertTrue(flow.edges().stream().anyMatch(edge -> edge.toStepId().equals(
+                NomadicMerchantRoutine.CLAIM_RESOURCES_STEP)
+                && flow.nodes().stream().map(node -> node.id()).toList().indexOf(edge.fromStepId())
+                        > flow.nodes().stream().map(node -> node.id()).toList().indexOf(edge.toStepId())));
+        assertTrue(flow.edges().stream().anyMatch(edge -> !edge.label().isBlank()));
+    }
+
+    @Test
+    void coarseIntelTaskUsesOneWholeTaskNode() {
+        TaskRegistration intel = DelayedTaskRegistry.getWorkbenchTasks().stream()
+                .filter(registration -> registration.taskType() == TpDailyTaskEnum.INTEL)
+                .findFirst()
+                .orElseThrow();
+
+        assertEquals(ControlledExecutionCapability.COARSE, intel.controlledExecutionCapability());
+        assertEquals(1, intel.flowDefinition().nodes().size());
+        assertEquals(TpDailyTaskEnum.INTEL.name(), intel.flowDefinition().entryStepId());
+    }
+
+    @Test
     void schedulerFactoryStillCreatesNomadicMerchant() {
         AccountDescriptor profile = new AccountDescriptor(
                 9_090_090L, "Workbench", "0", true, 1L, 30L);

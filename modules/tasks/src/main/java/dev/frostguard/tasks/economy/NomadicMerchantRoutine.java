@@ -7,6 +7,9 @@ import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.api.domain.TaskFlowDefinitionData;
+import dev.frostguard.api.domain.TaskFlowEdgeData;
+import dev.frostguard.api.domain.TaskFlowNodeData;
 import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -18,6 +21,18 @@ import java.time.LocalDateTime;
 
 public class NomadicMerchantRoutine extends DelayedTask {
 
+    public static final String OPEN_SHOP_STEP = "open-shop";
+    public static final String CLAIM_RESOURCES_STEP = "claim-resources";
+    public static final String PURCHASE_VIP_STEP = "purchase-vip";
+    public static final String REFRESH_OFFERS_STEP = "refresh-offers";
+    public static final String RECORD_OUTCOME_STEP = "record-outcome";
+
+    private static final String OPEN_SHOP_LABEL = "Open shop";
+    private static final String CLAIM_RESOURCES_LABEL = "Claim free resource offers";
+    private static final String PURCHASE_VIP_LABEL = "Purchase VIP points";
+    private static final String REFRESH_OFFERS_LABEL = "Refresh merchant offers";
+    private static final String RECORD_OUTCOME_LABEL = "Record merchant outcome";
+
     private static final long MAX_TASK_EXECUTION_MS = 2 * 60 * 1000L;
 
     private static final TemplatesEnum[] RESOURCE_TEMPLATES = { TemplatesEnum.NOMADIC_MERCHANT_COAL,
@@ -28,9 +43,28 @@ public class NomadicMerchantRoutine extends DelayedTask {
         super(profile, tpDailyTask);
     }
 
+    public static TaskFlowDefinitionData workbenchFlow() {
+        return new TaskFlowDefinitionData(
+                OPEN_SHOP_STEP,
+                java.util.List.of(
+                        new TaskFlowNodeData(OPEN_SHOP_STEP, OPEN_SHOP_LABEL),
+                        new TaskFlowNodeData(CLAIM_RESOURCES_STEP, CLAIM_RESOURCES_LABEL),
+                        new TaskFlowNodeData(PURCHASE_VIP_STEP, PURCHASE_VIP_LABEL),
+                        new TaskFlowNodeData(REFRESH_OFFERS_STEP, REFRESH_OFFERS_LABEL),
+                        new TaskFlowNodeData(RECORD_OUTCOME_STEP, RECORD_OUTCOME_LABEL)),
+                java.util.List.of(
+                        new TaskFlowEdgeData(OPEN_SHOP_STEP, CLAIM_RESOURCES_STEP, "shop opened"),
+                        new TaskFlowEdgeData(CLAIM_RESOURCES_STEP, PURCHASE_VIP_STEP, "offers checked"),
+                        new TaskFlowEdgeData(CLAIM_RESOURCES_STEP, RECORD_OUTCOME_STEP, "deadline reached"),
+                        new TaskFlowEdgeData(PURCHASE_VIP_STEP, CLAIM_RESOURCES_STEP, "purchased"),
+                        new TaskFlowEdgeData(PURCHASE_VIP_STEP, REFRESH_OFFERS_STEP, "not purchased or disabled"),
+                        new TaskFlowEdgeData(REFRESH_OFFERS_STEP, CLAIM_RESOURCES_STEP, "refreshed"),
+                        new TaskFlowEdgeData(REFRESH_OFFERS_STEP, RECORD_OUTCOME_STEP, "no refresh")));
+    }
+
     @Override
     protected void execute() {
-        if (!step("Open shop", this::openShop)) {
+        if (!step(OPEN_SHOP_STEP, OPEN_SHOP_LABEL, this::openShop)) {
             return;
         }
 
@@ -41,7 +75,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
         boolean continueOperations = true;
 
         while (continueOperations && System.currentTimeMillis() < executionDeadlineMs) {
-            freeResourcesClaimedCount += step("Claim free resource offers",
+            freeResourcesClaimedCount += step(CLAIM_RESOURCES_STEP, CLAIM_RESOURCES_LABEL,
                     () -> claimFreeResources(executionDeadlineMs));
 
             if (System.currentTimeMillis() >= executionDeadlineMs) {
@@ -52,9 +86,9 @@ public class NomadicMerchantRoutine extends DelayedTask {
                     ConfigurationKeyEnum.BOOL_NOMADIC_MERCHANT_VIP_POINTS, Boolean.class);
             boolean purchasedVipPoints;
             if (vipBuyEnabled) {
-                purchasedVipPoints = step("Purchase VIP points", this::purchaseVipPoints);
+                purchasedVipPoints = step(PURCHASE_VIP_STEP, PURCHASE_VIP_LABEL, this::purchaseVipPoints);
             } else {
-                skipStep("Purchase VIP points");
+                skipStep(PURCHASE_VIP_STEP, PURCHASE_VIP_LABEL);
                 purchasedVipPoints = false;
             }
 
@@ -64,7 +98,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
                 continue;
             }
 
-            boolean refreshed = step("Refresh merchant offers", this::refreshMerchantOffers);
+            boolean refreshed = step(REFRESH_OFFERS_STEP, REFRESH_OFFERS_LABEL, this::refreshMerchantOffers);
             if (refreshed) {
                 dailyRefreshUsedCount++;
             } else {
@@ -75,7 +109,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
         int claimed = freeResourcesClaimedCount;
         int vipPurchased = vipPointsPurchasedCount;
         int refreshes = dailyRefreshUsedCount;
-        step("Record merchant outcome",
+        step(RECORD_OUTCOME_STEP, RECORD_OUTCOME_LABEL,
                 () -> recordOutcome(claimed, vipPurchased, refreshes, executionDeadlineMs));
     }
 

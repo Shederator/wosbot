@@ -39,17 +39,24 @@ public class TaskRegistrations {
             TpDailyTaskEnum.DUMMY_TASK,
             TpDailyTaskEnum.TEST_HOOK_LOOP);
 
-    private static final Map<TpDailyTaskEnum, ControlledExecutionCapability> WORKBENCH_CAPABILITIES = Map.of(
-            TpDailyTaskEnum.NOMADIC_MERCHANT, ControlledExecutionCapability.STEP_AWARE);
+    private static final Map<TpDailyTaskEnum, TaskRegistration> STEP_AWARE_WORKBENCH_TASKS = Map.of(
+            TpDailyTaskEnum.NOMADIC_MERCHANT,
+            new TaskRegistration(
+                    TpDailyTaskEnum.NOMADIC_MERCHANT,
+                    ControlledExecutionCapability.STEP_AWARE,
+                    NomadicMerchantRoutine.workbenchFlow()));
 
     public static void initialize() {
         DelayedTaskRegistry.registerFactory(TaskRegistrations::createTask,
                 Arrays.stream(TpDailyTaskEnum.values())
                         .filter(type -> !WORKBENCH_EXCLUSIONS.contains(type))
-                        .map(type -> new TaskRegistration(type,
-                                WORKBENCH_CAPABILITIES.getOrDefault(
-                                        type, ControlledExecutionCapability.COARSE)))
+                        .map(TaskRegistrations::workbenchRegistration)
                         .toList());
+    }
+
+    private static TaskRegistration workbenchRegistration(TpDailyTaskEnum type) {
+        return STEP_AWARE_WORKBENCH_TASKS.getOrDefault(
+                type, new TaskRegistration(type, ControlledExecutionCapability.COARSE));
     }
 
     private static DelayedTask createTask(TpDailyTaskEnum type, AccountDescriptor profile) {

@@ -6,6 +6,7 @@ import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.TaskExecutionEventData;
 import dev.frostguard.api.domain.TaskExecutionSnapshotData;
 import dev.frostguard.api.domain.TaskExecutionState;
+import dev.frostguard.api.domain.TaskFlowNodeData;
 import dev.frostguard.api.domain.TaskStepStatus;
 import dev.frostguard.engine.error.StopExecutionException;
 
@@ -34,8 +35,13 @@ public final class TaskExecutionControl {
     private final Deque<TaskExecutionEventData> history = new ArrayDeque<>();
 
     private TaskExecutionState state = TaskExecutionState.PAUSED;
+    private String currentStepId;
     private String currentStep;
     private TaskStepStatus currentStepStatus;
+    private String nextStepId;
+    private String nextStep;
+    private TaskStepStatus nextStepStatus;
+    private String lastStepId;
     private String lastStep;
     private TaskStepStatus lastStepStatus;
     private String message;
@@ -51,6 +57,10 @@ public final class TaskExecutionControl {
         this.taskType = registration.taskType();
         this.capability = registration.controlledExecutionCapability();
         this.publisher = publisher;
+        TaskFlowNodeData entryStep = registration.flowDefinition().entryStep();
+        this.nextStepId = entryStep.id();
+        this.nextStep = entryStep.label();
+        this.nextStepStatus = TaskStepStatus.WAITING;
     }
 
     public ControlledExecutionCapability capability() {
@@ -79,14 +89,25 @@ public final class TaskExecutionControl {
     }
 
     public void runStep(String stepName, Runnable action) {
-        runStep(stepName, () -> {
+        runStep(stepName, stepName, () -> {
             action.run();
             return null;
         });
     }
 
     public <T> T runStep(String stepName, Supplier<T> action) {
-        awaitPermission(stepName);
+        return runStep(stepName, stepName, action);
+    }
+
+    public void runStep(String stepId, String stepName, Runnable action) {
+        runStep(stepId, stepName, () -> {
+            action.run();
+            return null;
+        });
+    }
+
+    public <T> T runStep(String stepId, String stepName, Supplier<T> action) {
+        awaitPermission(stepId, stepName);
         try {
             T result = action.get();
             finishStep(TaskStepStatus.COMPLETED, null);
@@ -100,7 +121,11 @@ public final class TaskExecutionControl {
     }
 
     public void skipStep(String stepName) {
-        awaitPermission(stepName);
+        skipStep(stepName, stepName);
+    }
+
+    public void skipStep(String stepId, String stepName) {
+        awaitPermission(stepId, stepName);
         finishStep(TaskStepStatus.SKIPPED, null);
     }
 
@@ -190,12 +215,22 @@ public final class TaskExecutionControl {
         lock.lock();
         try {
             if (currentStep != null && currentStepStatus != TaskStepStatus.STOPPED) {
-                addEvent(currentStep, TaskStepStatus.STOPPED, null);
+                addEvent(currentStepId, currentStep, TaskStepStatus.STOPPED, null);
+                lastStepId = currentStepId;
                 lastStep = currentStep;
                 lastStepStatus = TaskStepStatus.STOPPED;
+            } else if (nextStep != null) {
+                addEvent(nextStepId, nextStep, TaskStepStatus.STOPPED, null);
+                lastStepId = nextStepId;
+                lastStep = nextStep;
+                lastStepStatus = TaskStepStatus.STOPPED;
             }
+            currentStepId = null;
             currentStep = null;
             currentStepStatus = null;
+            nextStepId = null;
+            nextStep = null;
+            nextStepStatus = null;
             state = TaskExecutionState.STOPPED;
             message = "Execution stopped";
             publishLocked();
@@ -222,16 +257,20 @@ public final class TaskExecutionControl {
         }
     }
 
-    private void awaitPermission(String stepName) {
+    private void awaitPermission(String stepId, String stepName) {
+        if (stepId == null || stepId.isBlank()) {
+            throw new IllegalArgumentException("Step id is required");
+        }
         if (stepName == null || stepName.isBlank()) {
             throw new IllegalArgumentException("Step name is required");
         }
         lock.lock();
         try {
-            currentStep = stepName;
-            currentStepStatus = TaskStepStatus.WAITING;
+            nextStepId = stepId;
+            nextStep = stepName;
+            nextStepStatus = TaskStepStatus.WAITING;
             state = TaskExecutionState.PAUSED;
-            addEvent(stepName, TaskStepStatus.WAITING, null);
+            addEvent(stepId, stepName, TaskStepStatus.WAITING, null);
             publishLocked();
 
             while (!stopRequested && !continuous && stepPermits == 0) {
@@ -248,9 +287,14 @@ public final class TaskExecutionControl {
             if (!continuous) {
                 stepPermits--;
             }
+            currentStepId = nextStepId;
+            currentStep = nextStep;
             currentStepStatus = TaskStepStatus.STARTED;
+            nextStepId = null;
+            nextStep = null;
+            nextStepStatus = null;
             state = TaskExecutionState.RUNNING;
-            addEvent(stepName, TaskStepStatus.STARTED, null);
+            addEvent(currentStepId, currentStep, TaskStepStatus.STARTED, null);
             publishLocked();
         } finally {
             lock.unlock();
@@ -261,9 +305,12 @@ public final class TaskExecutionControl {
         lock.lock();
         try {
             String finishedStep = currentStep;
-            addEvent(finishedStep, status, detail);
+            String finishedStepId = currentStepId;
+            addEvent(finishedStepId, finishedStep, status, detail);
+            lastStepId = finishedStepId;
             lastStep = finishedStep;
             lastStepStatus = status;
+            currentStepId = null;
             currentStep = null;
             currentStepStatus = null;
             message = detail;
@@ -279,8 +326,12 @@ public final class TaskExecutionControl {
     private void transitionToTerminal(TaskExecutionState terminalState, String detail) {
         lock.lock();
         try {
+            currentStepId = null;
             currentStep = null;
             currentStepStatus = null;
+            nextStepId = null;
+            nextStep = null;
+            nextStepStatus = null;
             state = terminalState;
             message = detail;
             publishLocked();
@@ -289,9 +340,9 @@ public final class TaskExecutionControl {
         }
     }
 
-    private void addEvent(String stepName, TaskStepStatus status, String detail) {
+    private void addEvent(String stepId, String stepName, TaskStepStatus status, String detail) {
         history.addLast(new TaskExecutionEventData(
-                ++sequence, LocalDateTime.now(), stepName, status, detail));
+                ++sequence, LocalDateTime.now(), stepId, stepName, status, detail));
         while (history.size() > HISTORY_LIMIT) {
             history.removeFirst();
         }
@@ -306,7 +357,9 @@ public final class TaskExecutionControl {
     private TaskExecutionSnapshotData snapshotLocked() {
         return new TaskExecutionSnapshotData(
                 runId, profileId, profileName, taskType, state,
-                currentStep, currentStepStatus, lastStep, lastStepStatus,
+                currentStepId, currentStep, currentStepStatus,
+                nextStepId, nextStep, nextStepStatus,
+                lastStepId, lastStep, lastStepStatus,
                 message, new ArrayList<>(history));
     }
 

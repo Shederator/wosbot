@@ -154,7 +154,7 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
     public void run() {
         TaskExecutionControl control = executionControl;
         if (control != null && control.capability() == ControlledExecutionCapability.COARSE) {
-            control.runStep(taskName, this::runTaskLifecycle);
+            control.runStep(tpTask.name(), taskName, this::runTaskLifecycle);
             return;
         }
         runTaskLifecycle();
@@ -217,23 +217,35 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
     }
 
     protected void step(String stepName, Runnable action) {
+        step(stepName, stepName, action);
+    }
+
+    protected void step(String stepId, String stepName, Runnable action) {
         TaskExecutionControl control = executionControl;
         if (control == null) {
             action.run();
             return;
         }
-        control.runStep(stepName, action);
+        control.runStep(stepId, stepName, action);
     }
 
     protected <T> T step(String stepName, Supplier<T> action) {
+        return step(stepName, stepName, action);
+    }
+
+    protected <T> T step(String stepId, String stepName, Supplier<T> action) {
         TaskExecutionControl control = executionControl;
-        return control == null ? action.get() : control.runStep(stepName, action);
+        return control == null ? action.get() : control.runStep(stepId, stepName, action);
     }
 
     protected void skipStep(String stepName) {
+        skipStep(stepName, stepName);
+    }
+
+    protected void skipStep(String stepId, String stepName) {
         TaskExecutionControl control = executionControl;
         if (control != null) {
-            control.skipStep(stepName);
+            control.skipStep(stepId, stepName);
         }
     }
 

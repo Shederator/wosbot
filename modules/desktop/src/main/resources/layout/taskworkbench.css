@@ -48,6 +48,30 @@
     -fx-padding: 0;
 }
 
+.workbench-load-button {
+    -fx-background-color: #2d6d69;
+    -fx-border-color: #41958f;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-min-height: 32;
+    -fx-pref-height: 32;
+    -fx-padding: 0 12;
+    -fx-text-fill: #f4f7f8;
+    -fx-font-weight: bold;
+}
+
+.workbench-load-button .ikonli-font-icon {
+    -fx-icon-color: #f4f7f8;
+}
+
+.workbench-load-button:hover {
+    -fx-background-color: #37817c;
+}
+
+.workbench-load-button:disabled {
+    -fx-opacity: 0.35;
+}
+
 .workbench-action-button .ikonli-font-icon {
     -fx-icon-color: #e6edf3;
 }
@@ -88,6 +112,14 @@
 .workbench-state {
     -fx-font-size: 11px;
     -fx-font-weight: bold;
+    -fx-min-width: 92;
+    -fx-pref-width: 92;
+    -fx-alignment: center;
+    -fx-padding: 7 8;
+    -fx-background-color: #202632;
+    -fx-border-color: #384252;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
 }
 
 .workbench-state-idle,
@@ -117,39 +149,132 @@
     -fx-border-width: 0 0 1 0;
 }
 
-.workbench-history {
+.workbench-split {
+    -fx-background-color: #11141a;
+    -fx-padding: 0;
+}
+
+.workbench-split > .split-pane-divider {
+    -fx-background-color: #303744;
+    -fx-padding: 2;
+}
+
+.workbench-section {
+    -fx-background-color: #14171f;
+    -fx-padding: 10 18 12 18;
+}
+
+.workbench-graph-scroll {
+    -fx-background-color: #101319;
+    -fx-border-color: #2b313d;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+}
+
+.workbench-graph-scroll > .viewport {
+    -fx-background-color: #101319;
+}
+
+.workbench-flow-edge {
+    -fx-stroke: #667384;
+    -fx-stroke-width: 1.5;
+    -fx-fill: transparent;
+}
+
+.workbench-flow-arrow {
+    -fx-fill: #8995a4;
+}
+
+.workbench-edge-label {
+    -fx-fill: #8f9cab;
+    -fx-font-size: 10px;
+}
+
+.workbench-flow-node {
+    -fx-background-color: #1b2029;
+    -fx-border-color: #46505f;
+    -fx-border-width: 1 1 1 5;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-padding: 8 12;
+    -fx-alignment: center-left;
+}
+
+.workbench-node-title {
+    -fx-text-fill: #e6edf3;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.workbench-node-status {
+    -fx-text-fill: #98a4b2;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+
+.workbench-node-not-run {
+    -fx-border-color: #46505f;
+}
+
+.workbench-node-waiting {
+    -fx-border-color: #e0b84f;
+    -fx-background-color: #29251b;
+}
+
+.workbench-node-started {
+    -fx-border-color: #4da3d9;
+    -fx-background-color: #182735;
+}
+
+.workbench-node-completed {
+    -fx-border-color: #59ba59;
+    -fx-background-color: #17271d;
+}
+
+.workbench-node-skipped,
+.workbench-node-stopped {
+    -fx-border-color: #7e8996;
+    -fx-background-color: #1c2026;
+}
+
+.workbench-node-failed {
+    -fx-border-color: #ff615a;
+    -fx-background-color: #2b1a1d;
+}
+
+.workbench-log-table {
     -fx-background-color: #14171f;
     -fx-border-color: #2b313d;
     -fx-border-radius: 4;
     -fx-background-radius: 4;
 }
 
-.workbench-history .column-header-background,
-.workbench-history .column-header {
+.workbench-log-table .column-header-background,
+.workbench-log-table .column-header {
     -fx-background-color: #181c24;
 }
 
-.workbench-history .column-header .label {
+.workbench-log-table .column-header .label {
     -fx-text-fill: #9eaab6;
     -fx-font-size: 11px;
     -fx-font-weight: bold;
     -fx-alignment: CENTER_LEFT;
 }
 
-.workbench-history .table-row-cell {
+.workbench-log-table .table-row-cell {
     -fx-background-color: #14171f;
     -fx-border-color: transparent transparent #222733 transparent;
 }
 
-.workbench-history .table-row-cell:odd {
+.workbench-log-table .table-row-cell:odd {
     -fx-background-color: #181c24;
 }
 
-.workbench-history .table-row-cell:selected {
+.workbench-log-table .table-row-cell:selected {
     -fx-background-color: #263548;
 }
 
-.workbench-history .table-cell {
+.workbench-log-table .table-cell {
     -fx-text-fill: #d7dee7;
     -fx-padding: 8 10;
 }

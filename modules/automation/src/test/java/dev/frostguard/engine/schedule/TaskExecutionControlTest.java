@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -36,10 +37,11 @@ class TaskExecutionControlTest {
         assertEquals(0, executions.get());
 
         control.executeNextStep();
-        await(() -> "Second".equals(control.snapshot().currentStep()));
+        await(() -> "Second".equals(control.snapshot().nextStep()));
 
         assertEquals(1, executions.get());
         assertEquals(TaskExecutionState.PAUSED, control.snapshot().state());
+        assertNull(control.snapshot().currentStep());
         control.requestStop();
         assertThrows(Exception.class, () -> run.get(2, TimeUnit.SECONDS));
     }
@@ -53,12 +55,13 @@ class TaskExecutionControlTest {
             control.runStep("Second", executions::incrementAndGet);
         });
 
-        await(() -> "First".equals(control.snapshot().currentStep()));
+        await(() -> "First".equals(control.snapshot().nextStep()));
         assertEquals(TaskExecutionState.PAUSED, control.snapshot().state());
-        assertEquals(TaskStepStatus.WAITING, control.snapshot().currentStepStatus());
+        assertEquals(TaskStepStatus.WAITING, control.snapshot().nextStepStatus());
+        assertNull(control.snapshot().currentStep());
 
         control.executeNextStep();
-        await(() -> "Second".equals(control.snapshot().currentStep()));
+        await(() -> "Second".equals(control.snapshot().nextStep()));
 
         assertEquals(1, executions.get());
         assertEquals("First", control.snapshot().lastStep());
@@ -71,6 +74,36 @@ class TaskExecutionControlTest {
 
         assertEquals(2, executions.get());
         assertEquals(TaskExecutionState.COMPLETED, control.snapshot().state());
+    }
+
+    @Test
+    void preservesStableStepIdAcrossWaitingRunningAndCompletion() throws Exception {
+        TaskExecutionControl control = control(ControlledExecutionCapability.STEP_AWARE);
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        CompletableFuture<Void> run = CompletableFuture.runAsync(() ->
+                control.runStep("stable-id", "Visible label", () -> {
+                    started.countDown();
+                    awaitLatch(release);
+                }));
+
+        await(() -> "stable-id".equals(control.snapshot().nextStepId()));
+        assertEquals(TaskStepStatus.WAITING, control.snapshot().nextStepStatus());
+
+        control.executeNextStep();
+        assertTrue(started.await(2, TimeUnit.SECONDS));
+        try {
+            assertEquals("stable-id", control.snapshot().currentStepId());
+            assertEquals(TaskStepStatus.STARTED, control.snapshot().currentStepStatus());
+        } finally {
+            release.countDown();
+        }
+        run.get(2, TimeUnit.SECONDS);
+
+        assertEquals("stable-id", control.snapshot().lastStepId());
+        assertEquals(TaskStepStatus.COMPLETED, control.snapshot().lastStepStatus());
+        assertTrue(control.snapshot().history().stream()
+                .allMatch(event -> "stable-id".equals(event.stepId())));
     }
 
     @Test
@@ -92,7 +125,7 @@ class TaskExecutionControlTest {
         assertEquals(TaskExecutionState.PAUSE_REQUESTED, control.snapshot().state());
 
         releaseFirst.countDown();
-        await(() -> "Second".equals(control.snapshot().currentStep()));
+        await(() -> "Second".equals(control.snapshot().nextStep()));
         assertEquals(TaskExecutionState.PAUSED, control.snapshot().state());
 
         control.requestStop();
@@ -131,7 +164,8 @@ class TaskExecutionControlTest {
         CompletableFuture<Void> run = CompletableFuture.runAsync(
                 () -> control.runStep("Waiting", executions::incrementAndGet));
 
-        await(() -> control.snapshot().currentStepStatus() == TaskStepStatus.WAITING);
+        await(() -> control.snapshot().nextStepStatus() == TaskStepStatus.WAITING
+                && "Waiting".equals(control.snapshot().nextStep()));
         control.requestStop();
         assertThrows(Exception.class, () -> run.get(2, TimeUnit.SECONDS));
         control.stopped();
