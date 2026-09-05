@@ -4,6 +4,8 @@ import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.ActionRequiredIncidentData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.LogMessageData;
+import dev.frostguard.api.runtime.WorkspacePaths;
+import dev.frostguard.api.runtime.WorkspaceSession;
 import dev.frostguard.data.entity.DailyTask;
 import dev.frostguard.data.repository.DailyTaskRepository;
 import dev.frostguard.engine.error.ProfileCooldownException;
@@ -12,6 +14,7 @@ import dev.frostguard.engine.service.LoggingService;
 import dev.frostguard.engine.service.ActionRequiredIncidentService;
 import dev.frostguard.engine.service.ProfileService;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -19,6 +22,7 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -26,6 +30,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TaskQueueProfileCooldownTest {
+
+    @BeforeAll
+    static void initializeTestWorkspace() {
+        WorkspaceSession.initializeLayout(WorkspacePaths.current());
+    }
 
     @AfterEach
     void detachLogObserver() {
@@ -113,7 +122,10 @@ class TaskQueueProfileCooldownTest {
     }
 
     private static AccountDescriptor persistedProfile() {
-        return ProfileService.obtain().fetchAllAccounts().stream().findFirst().orElseThrow();
+        AccountDescriptor profile = new AccountDescriptor(
+                null, "Profile cooldown " + UUID.randomUUID(), "0", false, 100L, 30L);
+        assertTrue(ProfileService.obtain().createAccount(profile));
+        return profile;
     }
 
     private static void assertCloseTo(LocalDateTime expected, LocalDateTime actual) {

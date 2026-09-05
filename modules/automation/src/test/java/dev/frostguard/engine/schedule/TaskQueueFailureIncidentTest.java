@@ -5,12 +5,15 @@ import dev.frostguard.api.domain.ActionRequiredIncidentData;
 import dev.frostguard.api.domain.ActionRequiredIncidentState;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.LogMessageData;
+import dev.frostguard.api.runtime.WorkspacePaths;
+import dev.frostguard.api.runtime.WorkspaceSession;
 import dev.frostguard.data.repository.TaskFailureStreakRepository;
 import dev.frostguard.engine.error.StartupCaptureException;
 import dev.frostguard.engine.service.ActionRequiredIncidentService;
 import dev.frostguard.engine.service.LoggingService;
 import dev.frostguard.engine.service.ProfileService;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -23,6 +26,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TaskQueueFailureIncidentTest {
+
+    @BeforeAll
+    static void initializeTestWorkspace() {
+        WorkspaceSession.initializeLayout(WorkspacePaths.current());
+    }
 
     @AfterEach
     void detachLogObserver() {

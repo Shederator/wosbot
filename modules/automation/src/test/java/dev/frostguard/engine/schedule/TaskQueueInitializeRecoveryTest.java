@@ -2,11 +2,14 @@ package dev.frostguard.engine.schedule;
 
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.api.runtime.WorkspacePaths;
+import dev.frostguard.api.runtime.WorkspaceSession;
 import dev.frostguard.data.entity.DailyTask;
 import dev.frostguard.data.repository.DailyTaskRepository;
 import dev.frostguard.engine.error.ActionRequiredContext;
 import dev.frostguard.engine.error.ProfileCooldownException;
 import dev.frostguard.engine.service.ProfileService;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -19,6 +22,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TaskQueueInitializeRecoveryTest {
+
+    @BeforeAll
+    static void initializeTestWorkspace() {
+        WorkspaceSession.initializeLayout(WorkspacePaths.current());
+    }
 
     @Test
     void unknownOverlayCooldownStopsOnlyGameAndDoesNotImmediatelyRetryInitialize() {
