@@ -69,9 +69,7 @@ public class MysteryShopRoutine extends DelayedTask {
 		sleepTask(1000);
 
 		// STEP 2: Search for mystery shop within the shop menu
-		ImageSearchResultData mysteryShopResult = templateSearchHelper.locatePattern(
-				TemplatesEnum.SHOP_MYSTERY_BUTTON,
-				SearchConfigConstants.DEFAULT_SINGLE);
+		ImageSearchResultData mysteryShopResult = locateMysteryShopTab();
 
 		if (!mysteryShopResult.isFound()) {
 			logWarning("Mystery Shop button not found inside the shop. Rescheduling for 1 hour.");
@@ -86,6 +84,18 @@ public class MysteryShopRoutine extends DelayedTask {
 		sleepTask(1000);
 		logInfo("Successfully navigated to the Mystery Shop.");
 		return true;
+	}
+
+	private ImageSearchResultData locateMysteryShopTab() {
+		ImageSearchResultData active = templateSearchHelper.locatePattern(
+				TemplatesEnum.SHOP_MYSTERY_BUTTON_ACTIVE,
+				SearchConfigConstants.DEFAULT_SINGLE);
+		if (active.isFound()) {
+			return active;
+		}
+		return templateSearchHelper.locatePattern(
+				TemplatesEnum.SHOP_MYSTERY_BUTTON_INACTIVE,
+				SearchConfigConstants.DEFAULT_SINGLE);
 	}
 
 	/**
