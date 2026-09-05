@@ -1,16 +1,20 @@
 <#
 .SYNOPSIS
-    Starts the Frostguard JAR, waits for completion or timeout, and performs process cleanup.
+    Starts Frostguard, waits for completion or timeout, and performs process cleanup.
 
 .DESCRIPTION
-    The script resolves the latest Frostguard JAR by wildcard pattern, stops leftover Java processes
-    launched with that same JAR, starts a fresh Frostguard instance with --autostart, waits for the
-    configured timeout, then stops Frostguard and the configured emulator process.
+    Installed mode starts the native executable created by the Frostguard MSI. Development mode
+    starts the repository through mvnw.cmd javafx:run. Both modes pass --autostart, enforce the
+    configured timeout, then stop Frostguard and the configured emulator process.
 #>
 
 param(
-    [string]$JarPattern = "frostguard-*.jar",
+    [ValidateSet("Installed", "Development")]
+    [string]$Mode = "Installed",
+    [string]$LauncherPath = "",
+    [string]$RepositoryPath = "",
     [string]$VmProcessName = "MuMuNxMain",
+    [ValidateRange(1, 604800)]
     [int]$TimeoutSec = 2700
 )
 
@@ -33,6 +37,9 @@ function Stop-ProcessTreeByPid {
     try {
         Write-Log "Stopping process tree for PID=$ProcessId"
         cmd.exe /c "taskkill /PID $ProcessId /T /F" | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "taskkill exited with code $LASTEXITCODE"
+        }
         Write-Log "Process tree stopped for PID=$ProcessId"
     }
     catch {
@@ -40,69 +47,86 @@ function Stop-ProcessTreeByPid {
     }
 }
 
-function Resolve-FrostguardJar {
-    param(
-        [string]$SearchRoot,
-        [string]$Pattern
-    )
+function Resolve-FrostguardLaunch {
+    if ($Mode -eq "Installed") {
+        $resolvedLauncherPath = $LauncherPath
+        if ([string]::IsNullOrWhiteSpace($resolvedLauncherPath)) {
+            $localAppData = [Environment]::GetFolderPath("LocalApplicationData")
+            if ([string]::IsNullOrWhiteSpace($localAppData)) {
+                throw "Windows did not provide a LocalApplicationData directory"
+            }
+            $resolvedLauncherPath = Join-Path $localAppData "Frostguard\Frostguard.exe"
+        }
 
-    $matches = @(Get-ChildItem -Path $SearchRoot -Filter $Pattern -File -Recurse |
-        Sort-Object LastWriteTime -Descending)
+        if (-not [IO.Path]::IsPathRooted($resolvedLauncherPath)) {
+            throw "LauncherPath must be an absolute path: '$resolvedLauncherPath'"
+        }
+        if (-not (Test-Path -LiteralPath $resolvedLauncherPath -PathType Leaf)) {
+            throw "Frostguard launcher not found: '$resolvedLauncherPath'"
+        }
 
-    if ($matches.Count -eq 0) {
-        throw "No jar found matching pattern '$Pattern' under '$SearchRoot'"
+        $resolvedLauncherPath = (Get-Item -LiteralPath $resolvedLauncherPath).FullName
+        return [PSCustomObject]@{
+            FilePath = $resolvedLauncherPath
+            Arguments = [string[]]@("--autostart")
+            WorkingDirectory = Split-Path -Parent $resolvedLauncherPath
+            Display = "`"$resolvedLauncherPath`" --autostart"
+        }
     }
 
-    if ($matches.Count -gt 1) {
-        Write-Log "Multiple jar files matched '$Pattern'. Selecting: $($matches[0].FullName)"
+    if ([string]::IsNullOrWhiteSpace($RepositoryPath)) {
+        throw "RepositoryPath is required in Development mode"
     }
-    else {
-        Write-Log "Single jar matched '$Pattern': $($matches[0].FullName)"
+    if (-not [IO.Path]::IsPathRooted($RepositoryPath)) {
+        throw "RepositoryPath must be an absolute path: '$RepositoryPath'"
+    }
+    if (-not (Test-Path -LiteralPath $RepositoryPath -PathType Container)) {
+        throw "Repository directory not found: '$RepositoryPath'"
     }
 
-    return $matches[0]
+    $resolvedRepositoryPath = (Get-Item -LiteralPath $RepositoryPath).FullName
+    $mavenWrapper = Join-Path $resolvedRepositoryPath "mvnw.cmd"
+    if (-not (Test-Path -LiteralPath $mavenWrapper -PathType Leaf)) {
+        throw "Maven Wrapper not found: '$mavenWrapper'"
+    }
+
+    return [PSCustomObject]@{
+        FilePath = $mavenWrapper
+        Arguments = [string[]]@("-Djavafx.args=--autostart", "javafx:run")
+        WorkingDirectory = $resolvedRepositoryPath
+        Display = "`"$mavenWrapper`" `"-Djavafx.args=--autostart`" javafx:run"
+    }
 }
 
 Write-Log "============================================================"
 Write-Log "Script started"
-Write-Log "Parameters: JarPattern='$JarPattern', VmProcessName='$VmProcessName', TimeoutSec=$TimeoutSec"
+Write-Log "Parameters: Mode='$Mode', VmProcessName='$VmProcessName', TimeoutSec=$TimeoutSec"
 
 $proc = $null
 
 try {
-    $jarFile = Resolve-FrostguardJar -SearchRoot $PSScriptRoot -Pattern $JarPattern
-    $jarPath = $jarFile.FullName
-    $jarName = $jarFile.Name
-
-    Write-Log "Resolved Frostguard jar: $jarPath"
-
-    $oldJavaProcesses = Get-CimInstance Win32_Process -Filter "Name='java.exe' OR Name='javaw.exe'" |
-        Where-Object { $_.CommandLine -like "*$jarName*" }
-
-    foreach ($oldProcess in $oldJavaProcesses) {
-        Write-Log "Found leftover Frostguard Java process PID=$($oldProcess.ProcessId)"
-        Stop-ProcessTreeByPid -ProcessId $oldProcess.ProcessId
-    }
-
-    Write-Log "Starting Frostguard: java -jar `"$jarPath`" --autostart"
-    $proc = Start-Process -FilePath "java.exe" `
-        -ArgumentList @("-jar", $jarPath, "--autostart") `
+    $launch = Resolve-FrostguardLaunch
+    Write-Log "Starting Frostguard: $($launch.Display)"
+    $proc = Start-Process -FilePath $launch.FilePath `
+        -ArgumentList $launch.Arguments `
+        -WorkingDirectory $launch.WorkingDirectory `
         -PassThru
 
     Write-Log "Frostguard started with PID=$($proc.Id)"
 
-    try {
-        Write-Log "Waiting up to $TimeoutSec seconds for PID=$($proc.Id)"
-        $null = Wait-Process -Id $proc.Id -Timeout $TimeoutSec
+    Write-Log "Waiting up to $TimeoutSec seconds for PID=$($proc.Id)"
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSec)
+    while (-not $proc.HasExited -and [DateTime]::UtcNow -lt $deadline) {
+        Start-Sleep -Seconds 1
+        $proc.Refresh()
+    }
+
+    if ($proc.HasExited) {
         Write-Log "Frostguard PID=$($proc.Id) exited before timeout"
     }
-    catch {
-        Write-Log "Timeout reached or wait interrupted for PID=$($proc.Id)"
-    }
-    finally {
-        if ($null -ne $proc) {
-            Stop-ProcessTreeByPid -ProcessId $proc.Id
-        }
+    else {
+        Write-Log "Timeout reached for PID=$($proc.Id)"
+        Stop-ProcessTreeByPid -ProcessId $proc.Id
     }
 
     $vmProcesses = Get-Process -Name $VmProcessName -ErrorAction SilentlyContinue
@@ -119,5 +143,16 @@ catch {
     throw
 }
 finally {
+    if ($null -ne $proc) {
+        try {
+            $proc.Refresh()
+            if (-not $proc.HasExited) {
+                Stop-ProcessTreeByPid -ProcessId $proc.Id
+            }
+        }
+        catch {
+            Write-Log "Failed to inspect Frostguard PID=$($proc.Id): $($_.Exception.Message)"
+        }
+    }
     Write-Log "Script ended"
 }

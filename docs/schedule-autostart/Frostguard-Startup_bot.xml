@@ -41,8 +41,8 @@
   <Actions Context="Author">
     <Exec>
       <Command>powershell.exe</Command>
-      <Arguments>-NoProfile -ExecutionPolicy Bypass -File &quot;C:\Frostguard\launch.ps1&quot; -JarPattern &quot;frostguard-*.jar&quot; -VmProcessName &quot;MuMuNxMain&quot;</Arguments>
-      <WorkingDirectory>C:\Frostguard</WorkingDirectory>
+      <Arguments>-NoProfile -ExecutionPolicy Bypass -File &quot;C:\Frostguard-Autostart\launch.ps1&quot; -Mode Installed -VmProcessName &quot;MuMuNxMain&quot;</Arguments>
+      <WorkingDirectory>C:\Frostguard-Autostart</WorkingDirectory>
     </Exec>
   </Actions>
 </Task>

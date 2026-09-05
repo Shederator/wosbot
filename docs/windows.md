@@ -189,9 +189,15 @@ Optional Task Scheduler templates are in `docs/schedule-autostart/`.
 
 Use them when the machine should wake, run Frostguard for a fixed window, stop the emulator, and return to standby. Edit imported task actions before enabling them:
 
-- Update the path to `launch.ps1`.
-- Update the working directory to your Frostguard installation.
+- Copy `launch.ps1` to a stable location and update its path and working
+  directory in the task action.
+- Keep the production example in `Installed` mode for the Stable MSI, or set an
+  explicit executable path for Nightly or a custom MSI destination.
+- For a source checkout, select `Development` mode and provide its repository or
+  worktree root; the script then uses `mvnw.cmd javafx:run`.
 - Adjust the schedule times.
 - Confirm the emulator process name, for example `MuMuNxMain`.
 
-The templates are examples and should be reviewed on the target Windows machine before unattended use.
+See the [scheduled autostart guide](schedule-autostart/active-bot.md) for the
+exact actions. The templates are examples and should be reviewed and tested on
+the target Windows machine before unattended use.
