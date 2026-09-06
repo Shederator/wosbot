@@ -58,7 +58,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "21.0.12+8.0"
+          java-version: "21.0.12+8.0.LTS"
           cache: maven
 
       - name: Install WiX Toolset 3

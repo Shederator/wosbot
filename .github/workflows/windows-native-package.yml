@@ -71,7 +71,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "21.0.12+8.0"
+          java-version: "21.0.12+8.0.LTS"
           cache: maven
 
       # JDK 21 jpackage invokes the WiX 3 candle/light toolchain for an MSI.
