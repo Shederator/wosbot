@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.Test;
 
 import dev.frostguard.api.domain.AreaData;
-import dev.frostguard.api.domain.PointData;
 
 class ShopTabGeometryTest {
 
@@ -19,12 +18,11 @@ class ShopTabGeometryTest {
     }
 
     @Test
-    void usesMeasuredPageSwipeAndItsReverse() {
-        assertEquals(new PointData(600, 1240), CommonGameAreas.SHOP_TABS_TOWARD_LATER_FROM);
-        assertEquals(new PointData(350, 1240), CommonGameAreas.SHOP_TABS_TOWARD_LATER_TO);
-        assertEquals(CommonGameAreas.SHOP_TABS_TOWARD_LATER_TO,
-                CommonGameAreas.SHOP_TABS_TOWARD_EARLIER_FROM);
-        assertEquals(CommonGameAreas.SHOP_TABS_TOWARD_LATER_FROM,
-                CommonGameAreas.SHOP_TABS_TOWARD_EARLIER_TO);
+    void mirrorsTrailingTapAreasFromTheRightEdge() {
+        assertEquals(AreaData.of(539, 1218, 708, 1263), CommonGameAreas.shopTabTapAreaFromRight(0));
+        assertEquals(AreaData.of(341, 1218, 510, 1263), CommonGameAreas.shopTabTapAreaFromRight(1));
+        assertEquals(AreaData.of(143, 1218, 312, 1263), CommonGameAreas.shopTabTapAreaFromRight(2));
+        assertEquals(AreaData.of(529, 1208, 718, 1273), CommonGameAreas.SHOP_RIGHTMOST_TAB_OCR_AREA);
+        assertThrows(IllegalArgumentException.class, () -> CommonGameAreas.shopTabTapAreaFromRight(3));
     }
 }

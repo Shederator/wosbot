@@ -84,23 +84,33 @@ public final class CommonGameAreas {
     private static final int SHOP_TAB_HEIGHT = 65;
     private static final int SHOP_TAB_PITCH = 198;
     private static final int SHOP_TAB_TAP_MARGIN = 10;
+    private static final int SHOP_VIEWPORT_WIDTH = 720;
 
     public static final AreaData SHOP_LEFTMOST_TAB_OCR_AREA =
             region(SHOP_TAB_LEFT, SHOP_TAB_TOP,
                     SHOP_TAB_LEFT + SHOP_TAB_WIDTH, SHOP_TAB_TOP + SHOP_TAB_HEIGHT);
-
-    // A 250 px gesture is strong enough to page the strip while avoiding the overshoot observed
-    // with a full first-to-third-slot swipe. The reverse gesture moves toward earlier tabs.
-    public static final PointData SHOP_TABS_TOWARD_LATER_FROM = point(600, 1240);
-    public static final PointData SHOP_TABS_TOWARD_LATER_TO = point(350, 1240);
-    public static final PointData SHOP_TABS_TOWARD_EARLIER_FROM = point(350, 1240);
-    public static final PointData SHOP_TABS_TOWARD_EARLIER_TO = point(600, 1240);
+    public static final AreaData SHOP_RIGHTMOST_TAB_OCR_AREA =
+            region(SHOP_VIEWPORT_WIDTH - SHOP_TAB_LEFT - SHOP_TAB_WIDTH, SHOP_TAB_TOP,
+                    SHOP_VIEWPORT_WIDTH - SHOP_TAB_LEFT, SHOP_TAB_TOP + SHOP_TAB_HEIGHT);
 
     public static AreaData shopTabTapArea(int visibleSlot) {
         if (visibleSlot < 0 || visibleSlot >= SHOP_TAB_VISIBLE_COUNT) {
             throw new IllegalArgumentException("Shop tab slot must be between 0 and 2");
         }
         int left = SHOP_TAB_LEFT + visibleSlot * SHOP_TAB_PITCH;
+        return insetShopTabArea(left);
+    }
+
+    public static AreaData shopTabTapAreaFromRight(int visibleSlotFromRight) {
+        if (visibleSlotFromRight < 0 || visibleSlotFromRight >= SHOP_TAB_VISIBLE_COUNT) {
+            throw new IllegalArgumentException("Shop tab slot from right must be between 0 and 2");
+        }
+        int rightmostLeft = SHOP_VIEWPORT_WIDTH - SHOP_TAB_LEFT - SHOP_TAB_WIDTH;
+        int left = rightmostLeft - visibleSlotFromRight * SHOP_TAB_PITCH;
+        return insetShopTabArea(left);
+    }
+
+    private static AreaData insetShopTabArea(int left) {
         return region(
                 left + SHOP_TAB_TAP_MARGIN,
                 SHOP_TAB_TOP + SHOP_TAB_TAP_MARGIN,

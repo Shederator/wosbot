@@ -1,20 +1,20 @@
 package dev.frostguard.tasks.economy;
 
-import dev.frostguard.engine.schedule.LaunchPoint;
-
-
 import java.time.LocalDateTime;
-import dev.frostguard.vision.convert.GameTimeUtils;
+
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
+import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
-import dev.frostguard.api.domain.AccountDescriptor;
-import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.helper.TemplateSearchHelper;
 import dev.frostguard.engine.nav.SearchConfigConstants;
+import dev.frostguard.engine.nav.ShopTab;
+import dev.frostguard.engine.schedule.DelayedTask;
+import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.service.StatisticsService;
+import dev.frostguard.vision.convert.GameTimeUtils;
 
 public class MysteryShopRoutine extends DelayedTask {
 
@@ -27,7 +27,7 @@ public class MysteryShopRoutine extends DelayedTask {
 		int attempt = 0;
 
 		while (attempt < 5) {
-			if (navigateToShop()) {
+			if (navigateToMysteryShop()) {
 				handleMysteryShopOperations();
 				return;
 			} else {
@@ -45,47 +45,14 @@ public class MysteryShopRoutine extends DelayedTask {
 		}
 	}
 
-	/**
-	 * Navigates to the shop section in the game
-	 *
-	 * @return true if navigation was successful, false otherwise
-	 */
-	private boolean navigateToShop() {
+	boolean navigateToMysteryShop() {
 		logInfo("Navigating to the Mystery Shop.");
-		// STEP 1: Search for the bottom bar shop button
-		ImageSearchResultData shopButtonResult = templateSearchHelper.locatePattern(
-				TemplatesEnum.GAME_HOME_BOTTOM_BAR_SHOP_BUTTON,
-				SearchConfigConstants.DEFAULT_SINGLE);
+		return navigationHelper.navigateToShop(ShopTab.MYSTERY_SHOP);
+	}
 
-		if (!shopButtonResult.isFound()) {
-			logWarning("Shop button on the main screen not found. Rescheduling for 1 hour.");
-			LocalDateTime nextAttempt = LocalDateTime.now().plusHours(1);
-			this.reschedule(nextAttempt);
-			return false;
-		}
-
-		// Tap on shop button
-		tapInside(shopButtonResult.getPoint(), shopButtonResult.getPoint());
-		sleepTask(1000);
-
-		// STEP 2: Search for mystery shop within the shop menu
-		ImageSearchResultData mysteryShopResult = templateSearchHelper.locatePattern(
-				TemplatesEnum.SHOP_MYSTERY_BUTTON,
-				SearchConfigConstants.DEFAULT_SINGLE);
-
-		if (!mysteryShopResult.isFound()) {
-			logWarning("Mystery Shop button not found inside the shop. Rescheduling for 1 hour.");
-			pressBack();
-			LocalDateTime nextAttempt = LocalDateTime.now().plusHours(1);
-			this.reschedule(nextAttempt);
-			return false;
-		}
-
-		// Tap on mystery shop
-		tapInside(mysteryShopResult.getPoint(), mysteryShopResult.getPoint());
-		sleepTask(1000);
-		logInfo("Successfully navigated to the Mystery Shop.");
-		return true;
+	@Override
+	protected LaunchPoint getRequiredStartLocation() {
+		return LaunchPoint.HOME;
 	}
 
 	/**

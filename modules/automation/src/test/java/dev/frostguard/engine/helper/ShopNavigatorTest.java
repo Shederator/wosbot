@@ -13,6 +13,7 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
+import dev.frostguard.api.domain.PointData;
 import dev.frostguard.engine.nav.ShopTab;
 
 class ShopNavigatorTest {
@@ -38,6 +39,30 @@ class ShopNavigatorTest {
     }
 
     @Test
+    void selectsCanyonFromTheConfirmedGemEndAnchor() {
+        FakeInteractions fake = FakeInteractions.withRightObservations(
+                new ShopTab[] { ShopTab.MYSTERY_SHOP, ShopTab.VIP_SHOP },
+                new ShopTab[] { null, ShopTab.GEM_SHOP });
+
+        assertTrue(new ShopNavigator(fake).navigateTo(ShopTab.CANYON_SHOP));
+        assertEquals(List.of(ShopNavigator.SwipeDirection.LATER,
+                ShopNavigator.SwipeDirection.LATER), fake.swipes);
+        assertEquals(2, fake.tappedSlotFromRight);
+        assertEquals(-1, fake.tappedSlot);
+    }
+
+    @Test
+    void computesAllTrailingSlotsFromTheGemAnchor() {
+        assertTrue(ShopNavigator.usesRightEndAnchor(ShopTab.CANYON_SHOP));
+        assertTrue(ShopNavigator.usesRightEndAnchor(ShopTab.SKIN_SHOP));
+        assertTrue(ShopNavigator.usesRightEndAnchor(ShopTab.GEM_SHOP));
+        assertFalse(ShopNavigator.usesRightEndAnchor(ShopTab.FOUNDRY_SHOP));
+        assertEquals(2, ShopNavigator.visibleSlotFromRight(ShopTab.GEM_SHOP, ShopTab.CANYON_SHOP));
+        assertEquals(1, ShopNavigator.visibleSlotFromRight(ShopTab.GEM_SHOP, ShopTab.SKIN_SHOP));
+        assertEquals(0, ShopNavigator.visibleSlotFromRight(ShopTab.GEM_SHOP, ShopTab.GEM_SHOP));
+    }
+
+    @Test
     void reversesWhenAForwardSwipeMovesPastTheTarget() {
         FakeInteractions fake = new FakeInteractions(
                 ShopTab.MYSTERY_SHOP, ShopTab.STATE_OF_POWER_SHOP, ShopTab.VIP_SHOP);
@@ -45,6 +70,8 @@ class ShopNavigatorTest {
         assertTrue(new ShopNavigator(fake).navigateTo(ShopTab.ALLIANCE_CHAMPIONSHIP_SHOP));
         assertEquals(List.of(ShopNavigator.SwipeDirection.LATER,
                 ShopNavigator.SwipeDirection.EARLIER), fake.swipes);
+        assertEquals(new PointData(350, 1240), fake.gestures.get(1).from());
+        assertEquals(new PointData(600, 1240), fake.gestures.get(1).to());
         assertEquals(1, fake.tappedSlot);
     }
 
@@ -88,13 +115,25 @@ class ShopNavigatorTest {
 
     private static final class FakeInteractions implements ShopNavigator.Interactions {
         private final Deque<Optional<ShopTab>> observations = new ArrayDeque<>();
+        private final Deque<Optional<ShopTab>> rightObservations = new ArrayDeque<>();
         private final List<ShopNavigator.SwipeDirection> swipes = new ArrayList<>();
+        private final List<ShopSwipeCalibration.Gesture> gestures = new ArrayList<>();
         private int tappedSlot = -1;
+        private int tappedSlotFromRight = -1;
 
         private FakeInteractions(ShopTab... tabs) {
             Arrays.stream(tabs)
                     .map(Optional::ofNullable)
                     .forEach(observations::addLast);
+        }
+
+        private static FakeInteractions withRightObservations(
+                ShopTab[] leftTabs, ShopTab[] rightTabs) {
+            FakeInteractions fake = new FakeInteractions(leftTabs);
+            Arrays.stream(rightTabs)
+                    .map(Optional::ofNullable)
+                    .forEach(fake.rightObservations::addLast);
+            return fake;
         }
 
         @Override
@@ -108,14 +147,26 @@ class ShopNavigatorTest {
         }
 
         @Override
-        public boolean swipe(ShopNavigator.SwipeDirection direction) {
+        public Optional<ShopTab> readRightmostTab() {
+            return rightObservations.isEmpty() ? Optional.empty() : rightObservations.removeFirst();
+        }
+
+        @Override
+        public boolean swipe(ShopNavigator.SwipeDirection direction,
+                ShopSwipeCalibration.Gesture gesture) {
             swipes.add(direction);
+            gestures.add(gesture);
             return true;
         }
 
         @Override
         public void tapSlot(int visibleSlot) {
             tappedSlot = visibleSlot;
+        }
+
+        @Override
+        public void tapSlotFromRight(int visibleSlotFromRight) {
+            tappedSlotFromRight = visibleSlotFromRight;
         }
     }
 }

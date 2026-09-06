@@ -3,9 +3,11 @@ package dev.frostguard.engine.helper;
 import java.io.IOException;
 import java.util.Optional;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.input.TapInteractionService;
@@ -20,24 +22,25 @@ import dev.frostguard.vision.ocr.OcrException;
 public final class ShopNavigator {
 
     static final int MAX_SWIPE_ATTEMPTS = 10;
-    private static final int SWIPE_DURATION_MS = 500;
-    private static final int SWIPE_SETTLE_MS = 1_500;
     private static final int OCR_ATTEMPTS = 2;
     private static final int OCR_RETRY_MS = 300;
 
     private final Interactions interactions;
+    private final Supplier<ShopSwipeCalibration> calibration;
     private final Consumer<String> info;
     private final Consumer<String> warn;
 
     public ShopNavigator(EmulatorController emu, String device, AccountDescriptor profile) {
         ProfileContextLogger logger = new ProfileContextLogger(ShopNavigator.class, profile);
         this.interactions = new EmulatorInteractions(emu, device, profile, logger);
+        this.calibration = () -> ShopSwipeCalibration.load(logger::warn);
         this.info = logger::info;
         this.warn = logger::warn;
     }
 
     ShopNavigator(Interactions interactions) {
         this.interactions = interactions;
+        this.calibration = ShopSwipeCalibration::defaults;
         this.info = ignored -> { };
         this.warn = ignored -> { };
     }
@@ -62,8 +65,10 @@ public final class ShopNavigator {
         }
 
         ShopTab leftmost = initial.get();
+        boolean useRightEndAnchor = usesRightEndAnchor(target);
+        ShopSwipeCalibration calibration = this.calibration.get();
         for (int attempt = 0; attempt <= MAX_SWIPE_ATTEMPTS; attempt++) {
-            int slot = visibleSlot(leftmost, target);
+            int slot = useRightEndAnchor ? -1 : visibleSlot(leftmost, target);
             if (slot >= 0) {
                 info.accept("Selecting shop tab: target=" + target.displayName()
                         + " leftmost=" + leftmost.displayName() + " slot=" + slot);
@@ -74,13 +79,35 @@ public final class ShopNavigator {
                 break;
             }
 
-            SwipeDirection direction = directionTo(leftmost, target);
+            SwipeDirection direction = useRightEndAnchor
+                    ? SwipeDirection.LATER
+                    : directionTo(leftmost, target);
+            int swipeAttempt = attempt + 1;
+            ShopSwipeCalibration.Gesture configuredGesture = calibration.forAttempt(swipeAttempt);
+            ShopSwipeCalibration.Gesture effectiveGesture = direction == SwipeDirection.LATER
+                    ? configuredGesture
+                    : configuredGesture.reversed();
             info.accept("Shop tab swipe: target=" + target.displayName()
                     + " leftmost=" + leftmost.displayName() + " direction=" + direction
-                    + " attempt=" + (attempt + 1) + "/" + MAX_SWIPE_ATTEMPTS);
-            if (!interactions.swipe(direction)) {
+                    + " attempt=" + swipeAttempt + "/" + MAX_SWIPE_ATTEMPTS
+                    + " calibration=" + (swipeAttempt == 1 ? "first" : "follow-up")
+                    + " from=" + effectiveGesture.from() + " to=" + effectiveGesture.to()
+                    + " duration=" + effectiveGesture.durationDescription()
+                    + " settle=" + effectiveGesture.settleMs() + "ms");
+            if (!interactions.swipe(direction, effectiveGesture)) {
                 warn.accept("Shop tab swipe was interrupted: direction=" + direction);
                 return false;
+            }
+
+            if (useRightEndAnchor) {
+                Optional<ShopTab> rightmost = interactions.readRightmostTab();
+                if (rightmost.filter(tab -> tab == ShopTab.GEM_SHOP).isPresent()) {
+                    int slotFromRight = visibleSlotFromRight(ShopTab.GEM_SHOP, target);
+                    info.accept("Selecting trailing shop tab from confirmed Gem end anchor: target="
+                            + target.displayName() + " slotFromRight=" + slotFromRight);
+                    interactions.tapSlotFromRight(slotFromRight);
+                    return true;
+                }
             }
 
             Optional<ShopTab> observed = interactions.readLeftmostTab(false);
@@ -113,6 +140,17 @@ public final class ShopNavigator {
         return slot >= 0 && slot < CommonGameAreas.SHOP_TAB_VISIBLE_COUNT ? slot : -1;
     }
 
+    static int visibleSlotFromRight(ShopTab rightmost, ShopTab target) {
+        int slotFromRight = rightmost.position() - target.position();
+        return slotFromRight >= 0 && slotFromRight < CommonGameAreas.SHOP_TAB_VISIBLE_COUNT
+                ? slotFromRight
+                : -1;
+    }
+
+    static boolean usesRightEndAnchor(ShopTab target) {
+        return target.position() >= ShopTab.CANYON_SHOP.position();
+    }
+
     static SwipeDirection directionTo(ShopTab leftmost, ShopTab target) {
         return target.position() > leftmost.position()
                 ? SwipeDirection.LATER
@@ -133,8 +171,10 @@ public final class ShopNavigator {
     interface Interactions {
         boolean openShop();
         Optional<ShopTab> readLeftmostTab(boolean initialViewport);
-        boolean swipe(SwipeDirection direction);
+        Optional<ShopTab> readRightmostTab();
+        boolean swipe(SwipeDirection direction, ShopSwipeCalibration.Gesture gesture);
         void tapSlot(int visibleSlot);
+        void tapSlotFromRight(int visibleSlotFromRight);
     }
 
     private static final class EmulatorInteractions implements Interactions {
@@ -164,27 +204,9 @@ public final class ShopNavigator {
 
         @Override
         public Optional<ShopTab> readLeftmostTab(boolean initialViewport) {
-            for (int attempt = 1; attempt <= OCR_ATTEMPTS; attempt++) {
-                try {
-                    String raw = emu.readText(
-                            device,
-                            CommonGameAreas.SHOP_LEFTMOST_TAB_OCR_AREA.topLeft(),
-                            CommonGameAreas.SHOP_LEFTMOST_TAB_OCR_AREA.bottomRight(),
-                            CommonOCRSettings.SHOP_TAB_TEXT_SETTINGS);
-                    Optional<ShopTab> tab = ShopTab.fromOcr(raw);
-                    log.debug("Shop left-tab OCR: raw='" + printable(raw) + "' matched="
-                            + tab.map(ShopTab::displayName).orElse("none")
-                            + " attempt=" + attempt + "/" + OCR_ATTEMPTS);
-                    if (tab.isPresent()) {
-                        return tab;
-                    }
-                } catch (IOException | OcrException | RuntimeException exception) {
-                    log.debug("Shop left-tab OCR failed at attempt " + attempt + ": "
-                            + exception.getMessage());
-                }
-                if (attempt < OCR_ATTEMPTS && !interruptibleWait(OCR_RETRY_MS)) {
-                    return Optional.empty();
-                }
+            Optional<ShopTab> tab = readTab(CommonGameAreas.SHOP_LEFTMOST_TAB_OCR_AREA, "left");
+            if (tab.isPresent()) {
+                return tab;
             }
 
             if (initialViewport) {
@@ -204,24 +226,54 @@ public final class ShopNavigator {
         }
 
         @Override
-        public boolean swipe(SwipeDirection direction) {
-            if (direction == SwipeDirection.LATER) {
-                emu.swipeScreen(device,
-                        CommonGameAreas.SHOP_TABS_TOWARD_LATER_FROM,
-                        CommonGameAreas.SHOP_TABS_TOWARD_LATER_TO,
-                        SWIPE_DURATION_MS);
-            } else {
-                emu.swipeScreen(device,
-                        CommonGameAreas.SHOP_TABS_TOWARD_EARLIER_FROM,
-                        CommonGameAreas.SHOP_TABS_TOWARD_EARLIER_TO,
-                        SWIPE_DURATION_MS);
+        public Optional<ShopTab> readRightmostTab() {
+            return readTab(CommonGameAreas.SHOP_RIGHTMOST_TAB_OCR_AREA, "right");
+        }
+
+        private Optional<ShopTab> readTab(AreaData area, String anchor) {
+            for (int attempt = 1; attempt <= OCR_ATTEMPTS; attempt++) {
+                try {
+                    String raw = emu.readText(
+                            device,
+                            area.topLeft(),
+                            area.bottomRight(),
+                            CommonOCRSettings.SHOP_TAB_TEXT_SETTINGS);
+                    Optional<ShopTab> tab = ShopTab.fromOcr(raw);
+                    log.debug("Shop " + anchor + "-tab OCR: raw='" + printable(raw) + "' matched="
+                            + tab.map(ShopTab::displayName).orElse("none")
+                            + " attempt=" + attempt + "/" + OCR_ATTEMPTS);
+                    if (tab.isPresent()) {
+                        return tab;
+                    }
+                } catch (IOException | OcrException | RuntimeException exception) {
+                    log.debug("Shop left-tab OCR failed at attempt " + attempt + ": "
+                            + exception.getMessage());
+                }
+                if (attempt < OCR_ATTEMPTS && !interruptibleWait(OCR_RETRY_MS)) {
+                    return Optional.empty();
+                }
             }
-            return interruptibleWait(SWIPE_SETTLE_MS);
+            return Optional.empty();
+        }
+
+        @Override
+        public boolean swipe(SwipeDirection direction, ShopSwipeCalibration.Gesture gesture) {
+            if (gesture.durationMs() == 0) {
+                emu.swipeScreen(device, gesture.from(), gesture.to());
+            } else {
+                emu.swipeScreen(device, gesture.from(), gesture.to(), gesture.durationMs());
+            }
+            return interruptibleWait(gesture.settleMs());
         }
 
         @Override
         public void tapSlot(int visibleSlot) {
             taps.tapInside(CommonGameAreas.shopTabTapArea(visibleSlot), 1, 1_000);
+        }
+
+        @Override
+        public void tapSlotFromRight(int visibleSlotFromRight) {
+            taps.tapInside(CommonGameAreas.shopTabTapAreaFromRight(visibleSlotFromRight), 1, 1_000);
         }
 
         private static boolean interruptibleWait(long milliseconds) {
