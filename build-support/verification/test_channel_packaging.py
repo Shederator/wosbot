@@ -48,7 +48,7 @@ class ChannelPackagingTest(unittest.TestCase):
 
         self.assertIn("name: CI — Windows Installers", installers)
         self.assertIn("Build and smoke-test required Windows installers", installers)
-        self.assertIn('java-version: "21.0.12+8.0"', installers)
+        self.assertIn('java-version: "21.0.12+8.0.LTS"', installers)
         self.assertIn("windows_pr_channels.py", installers)
         self.assertIn("fetch-depth: 0", installers)
         self.assertGreaterEqual(
@@ -218,7 +218,7 @@ class ChannelPackagingTest(unittest.TestCase):
         self.assertIn("--changes-unchanged", workflow)
         self.assertIn("fetch-depth: 0", workflow)
         self.assertIn("Remove an abandoned draft release", workflow)
-        self.assertIn('java-version: "21.0.12+8.0"', workflow)
+        self.assertIn('java-version: "21.0.12+8.0.LTS"', workflow)
         for launcher_hash in (
             "5c728d3662d64c428d003874f6d62b798bbbe329f595b2b15a2ab5ab1fd1faa9",
             "9c7452d890f39c7f4fdb2e5519993514c84f071deef222fe49784acfd459c209",
