@@ -75,6 +75,39 @@ public final class CommonGameAreas {
         };
     }
 
+    // ── shop footer navigation ──────────────────────────────────────
+
+    public static final int SHOP_TAB_VISIBLE_COUNT = 3;
+    private static final int SHOP_TAB_LEFT = 2;
+    private static final int SHOP_TAB_TOP = 1208;
+    private static final int SHOP_TAB_WIDTH = 189;
+    private static final int SHOP_TAB_HEIGHT = 65;
+    private static final int SHOP_TAB_PITCH = 198;
+    private static final int SHOP_TAB_TAP_MARGIN = 10;
+
+    public static final AreaData SHOP_LEFTMOST_TAB_OCR_AREA =
+            region(SHOP_TAB_LEFT, SHOP_TAB_TOP,
+                    SHOP_TAB_LEFT + SHOP_TAB_WIDTH, SHOP_TAB_TOP + SHOP_TAB_HEIGHT);
+
+    // A 250 px gesture is strong enough to page the strip while avoiding the overshoot observed
+    // with a full first-to-third-slot swipe. The reverse gesture moves toward earlier tabs.
+    public static final PointData SHOP_TABS_TOWARD_LATER_FROM = point(600, 1240);
+    public static final PointData SHOP_TABS_TOWARD_LATER_TO = point(350, 1240);
+    public static final PointData SHOP_TABS_TOWARD_EARLIER_FROM = point(350, 1240);
+    public static final PointData SHOP_TABS_TOWARD_EARLIER_TO = point(600, 1240);
+
+    public static AreaData shopTabTapArea(int visibleSlot) {
+        if (visibleSlot < 0 || visibleSlot >= SHOP_TAB_VISIBLE_COUNT) {
+            throw new IllegalArgumentException("Shop tab slot must be between 0 and 2");
+        }
+        int left = SHOP_TAB_LEFT + visibleSlot * SHOP_TAB_PITCH;
+        return region(
+                left + SHOP_TAB_TAP_MARGIN,
+                SHOP_TAB_TOP + SHOP_TAB_TAP_MARGIN,
+                left + SHOP_TAB_WIDTH - SHOP_TAB_TAP_MARGIN,
+                SHOP_TAB_TOP + SHOP_TAB_HEIGHT - SHOP_TAB_TAP_MARGIN);
+    }
+
     // ── march slot grid (top-left / bottom-right, slot 6→1) ─────────
 
     public static final PointData[] MARCH_SLOTS_TOP_LEFT = {
