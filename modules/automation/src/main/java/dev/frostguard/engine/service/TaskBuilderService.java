@@ -4,6 +4,9 @@ import dev.frostguard.vision.ocr.OcrEngine;
 import dev.frostguard.api.configs.FlowStepKind;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.engine.helper.NavigationHelper;
+import dev.frostguard.engine.nav.ShopTab;
+import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.RawImageData;
@@ -26,6 +29,7 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Objects;
 
 /**
  * Service that manages a Task Builder recording session.
@@ -45,9 +49,11 @@ public class TaskBuilderService {
     private final EmulatorController emuManager;
     private final Path customTasksDir;
     private final ObjectMapper mapper;
+    private final ShopNavigationAction shopNavigationAction;
     private AutomationBlueprint currentDefinition;
     private Path currentDefinitionDirectory;
     private String activeEmulatorNumber;
+    private AccountDescriptor activeProfile;
     private TapInteractionService tapService;
 
     public TaskBuilderService() {
@@ -55,9 +61,16 @@ public class TaskBuilderService {
     }
 
     TaskBuilderService(ObjectMapper mapper) {
+        this(mapper, (emulatorNumber, profile, target) ->
+                new NavigationHelper(EmulatorController.getInstance(), emulatorNumber, profile)
+                        .navigateToShop(target));
+    }
+
+    TaskBuilderService(ObjectMapper mapper, ShopNavigationAction shopNavigationAction) {
         this.emuManager = EmulatorController.getInstance();
         this.customTasksDir = WorkspacePaths.current().customTasks();
         this.mapper = mapper;
+        this.shopNavigationAction = Objects.requireNonNull(shopNavigationAction);
         try {
             Files.createDirectories(customTasksDir);
         } catch (IOException e) {
@@ -66,6 +79,11 @@ public class TaskBuilderService {
     }
 
     public record CustomTaskSaveResult(Path javaFile, Path builderFile, String className) {}
+
+    @FunctionalInterface
+    interface ShopNavigationAction {
+        boolean navigate(String emulatorNumber, AccountDescriptor profile, ShopTab target);
+    }
 
     private static ObjectMapper defaultMapper() {
         return new ObjectMapper()
@@ -87,8 +105,16 @@ public class TaskBuilderService {
         this.currentDefinition = new AutomationBlueprint(taskName);
         this.currentDefinitionDirectory = customTasksDir;
         this.activeEmulatorNumber = emulatorNumber;
+        this.activeProfile = null;
         this.tapService = TapInteractionService.forController(emuManager, emulatorNumber);
         logger.info("Task Builder session started: '{}' on emulator {}", taskName, emulatorNumber);
+    }
+
+    /** Starts a session with the profile context required by reusable navigation helpers. */
+    public void startSession(String taskName, AccountDescriptor profile) {
+        Objects.requireNonNull(profile, "Task Builder profile is required");
+        startSession(taskName, profile.getEmulatorNumber());
+        this.activeProfile = profile;
     }
 
     /**
@@ -108,7 +134,17 @@ public class TaskBuilderService {
         this.currentDefinition = loaded;
         this.currentDefinitionDirectory = file.toPath().toAbsolutePath().normalize().getParent();
         this.activeEmulatorNumber = emulatorNumber;
+        this.activeProfile = null;
+        this.tapService = null;
         logger.info("Task Builder definition imported: '{}' from {}", loaded.getName(), file.getAbsolutePath());
+        return loaded;
+    }
+
+    /** Loads a definition with the profile context required by reusable navigation helpers. */
+    public AutomationBlueprint loadDefinition(File file, AccountDescriptor profile) throws IOException {
+        Objects.requireNonNull(profile, "Task Builder profile is required");
+        AutomationBlueprint loaded = loadDefinition(file, profile.getEmulatorNumber());
+        setActiveProfile(profile);
         return loaded;
     }
 
@@ -302,12 +338,13 @@ public class TaskBuilderService {
 
         try {
             boolean success = performNodeAction(node);
+            node.setExecuted(success);
             if (success) {
-                node.setExecuted(true);
                 logger.info("Node executed successfully: {}", node.getSummary());
             }
             return success;
         } catch (Exception e) {
+            node.setExecuted(false);
             logger.error("Failed to execute node: {}", node.getSummary(), e);
             return false;
         }
@@ -363,8 +400,34 @@ public class TaskBuilderService {
             case BACK_BUTTON     -> executeBackButton();
             case OCR_READ        -> executeOcr(node);
             case TEMPLATE_SEARCH -> executeTemplateSearch(node);
+            case SHOP_NAVIGATION -> executeShopNavigation(node);
             case NAVIGATE        -> { logger.info("Navigate node recorded"); yield true; }
         };
+    }
+
+    private boolean executeShopNavigation(AutomationStep node) {
+        String configuredTab = node.getParam(AutomationStep.PARAM_SHOP_TAB);
+        ShopTab target;
+        try {
+            target = ShopTab.valueOf(configuredTab);
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            logger.warn("Shop Navigation node has invalid shopTab: '{}'", configuredTab);
+            return false;
+        }
+
+        if (activeProfile == null) {
+            logger.warn("Cannot navigate to {}: no Task Builder profile is selected", target.displayName());
+            return false;
+        }
+        if (!Objects.equals(activeProfile.getEmulatorNumber(), activeEmulatorNumber)) {
+            logger.warn("Cannot navigate to {}: selected profile emulator {} does not match active emulator {}",
+                    target.displayName(), activeProfile.getEmulatorNumber(), activeEmulatorNumber);
+            return false;
+        }
+
+        logger.info("Task Builder navigating profile '{}' on emulator {} to {}",
+                activeProfile.getName(), activeEmulatorNumber, target.displayName());
+        return shopNavigationAction.navigate(activeEmulatorNumber, activeProfile, target);
     }
 
     // ── Tap ────────────────────────────────────────────────────────────────
@@ -608,6 +671,20 @@ public class TaskBuilderService {
 
     public void setActiveEmulatorNumber(String emulatorNumber) {
         this.activeEmulatorNumber = emulatorNumber;
+        this.tapService = null;
+        if (activeProfile != null
+                && !Objects.equals(activeProfile.getEmulatorNumber(), emulatorNumber)) {
+            this.activeProfile = null;
+        }
+    }
+
+    /** Selects the profile used by live Task Builder actions and its emulator. */
+    public void setActiveProfile(AccountDescriptor profile) {
+        this.activeProfile = profile;
+        if (profile != null) {
+            this.activeEmulatorNumber = profile.getEmulatorNumber();
+            this.tapService = null;
+        }
     }
 
     public boolean hasActiveSession() {

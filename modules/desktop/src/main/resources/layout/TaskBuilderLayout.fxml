@@ -88,13 +88,16 @@
                 <Button text="🔍" onAction="#handleAddTemplateNode" styleClass="tb-icon-btn"
                         maxWidth="Infinity" GridPane.rowIndex="5">
                     <tooltip><Tooltip text="Find Image"/></tooltip></Button>
+                <Button text="🛒" onAction="#handleAddShopNavigationNode" styleClass="tb-icon-btn"
+                        maxWidth="Infinity" GridPane.rowIndex="6">
+                    <tooltip><Tooltip text="Open Shop Tab"/></tooltip></Button>
 
                 <!-- Spacer row -->
-                <Region GridPane.rowIndex="6" GridPane.vgrow="ALWAYS"/>
+                <Region GridPane.rowIndex="7" GridPane.vgrow="ALWAYS"/>
 
                 <!-- Bottom action buttons -->
                 <Button onAction="#handleExecuteAll" styleClass="tb-icon-btn-green"
-                        maxWidth="Infinity" GridPane.rowIndex="7">
+                        maxWidth="Infinity" GridPane.rowIndex="8">
                     <graphic>
                         <javafx.scene.shape.SVGPath content="M 8 5 L 19 12 L 8 19 Z"
                                                      scaleX="0.8" scaleY="0.8" />
@@ -102,7 +105,7 @@
                     <tooltip><Tooltip text="Execute All"/></tooltip>
                 </Button>
                 <Button onAction="#handleClearAll" styleClass="tb-icon-btn-red"
-                        maxWidth="Infinity" GridPane.rowIndex="8">
+                        maxWidth="Infinity" GridPane.rowIndex="9">
                     <graphic>
                         <javafx.scene.shape.SVGPath content="M 6 19 C 6 20.1 6.9 21 8 21 L 16 21 C 17.1 21 18 20.1 18 19 L 18 7 L 6 7 L 6 19 Z M 19 4 L 15.5 4 L 14.5 3 L 9.5 3 L 8.5 4 L 5 4 L 5 6 L 19 6 L 19 4 Z"
                                                      scaleX="0.55" scaleY="0.55"/>
@@ -198,6 +201,16 @@
                     <!-- BACK properties -->
                     <VBox fx:id="backPropsBox" spacing="10" visible="false" managed="false">
                         <FlowPane hgap="14" vgap="10" alignment="CENTER_LEFT">
+                        </FlowPane>
+                    </VBox>
+
+                    <!-- SHOP NAVIGATION properties -->
+                    <VBox fx:id="shopNavigationPropsBox" spacing="10" visible="false" managed="false">
+                        <FlowPane hgap="14" vgap="10" alignment="CENTER_LEFT">
+                            <Label text="Shop tab:" styleClass="tb-props-label"/>
+                            <ComboBox fx:id="shopTabCombo" prefWidth="260" styleClass="tb-combo"/>
+                            <Label text="Opens Shop and selects this tab through the shared navigation helper."
+                                   styleClass="tb-props-hint"/>
                         </FlowPane>
                     </VBox>
 

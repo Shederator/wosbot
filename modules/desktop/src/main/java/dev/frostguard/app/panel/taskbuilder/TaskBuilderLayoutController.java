@@ -13,6 +13,7 @@ import dev.frostguard.engine.service.ProfileService;
 import dev.frostguard.engine.service.TaskBuilderService;
 import dev.frostguard.engine.service.TaskCodeGenerator;
 import dev.frostguard.engine.service.TemplatePathResolver;
+import dev.frostguard.engine.nav.ShopTab;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.event.ActionEvent;
@@ -89,6 +90,8 @@ public class TaskBuilderLayoutController {
     @FXML private VBox waitPropsBox;
     @FXML private TextField waitMsField;
     @FXML private VBox backPropsBox;
+    @FXML private VBox shopNavigationPropsBox;
+    @FXML private ComboBox<ShopTab> shopTabCombo;
     @FXML private VBox ocrPropsBox;
     @FXML private TextField ocrTlXField, ocrTlYField, ocrBrXField, ocrBrYField;
     @FXML private ComboBox<String> ocrConditionCombo;
@@ -222,6 +225,24 @@ public class TaskBuilderLayoutController {
             ocrConditionCombo.setItems(FXCollections.observableArrayList("CONTAINS", "EQUALS", "STARTS_WITH", "ENDS_WITH", "NOT_CONTAINS"));
             ocrConditionCombo.setValue("CONTAINS");
         }
+        if (shopTabCombo != null) {
+            shopTabCombo.setItems(FXCollections.observableArrayList(ShopTab.values()));
+            shopTabCombo.setConverter(new javafx.util.StringConverter<>() {
+                @Override
+                public String toString(ShopTab tab) {
+                    return tab == null ? "" : tab.displayName();
+                }
+
+                @Override
+                public ShopTab fromString(String displayName) {
+                    return Arrays.stream(ShopTab.values())
+                            .filter(tab -> tab.displayName().equals(displayName))
+                            .findFirst()
+                            .orElse(null);
+                }
+            });
+            shopTabCombo.setValue(ShopTab.MYSTERY_SHOP);
+        }
         addAutoApplyListeners();
         setStatus("Ready — add nodes from the toolbox");
     }
@@ -269,6 +290,11 @@ public class TaskBuilderLayoutController {
         if (ocrExpectedField != null) ocrExpectedField.textProperty().addListener(ocrListener);
         if (ocrConditionCombo != null) {
             ocrConditionCombo.valueProperty().addListener((obs, oldV, newV) -> { if (!isBinding) handleApplyOcrProps(null); });
+        }
+        if (shopTabCombo != null) {
+            shopTabCombo.valueProperty().addListener((obs, oldV, newV) -> {
+                if (!isBinding) handleApplyShopNavigationProps(null);
+            });
         }
 
         javafx.beans.value.ChangeListener<String> tplListener = (obs, oldV, newV) -> { if (!isBinding) handleApplyTemplateProps(null); };
@@ -425,7 +451,7 @@ public class TaskBuilderLayoutController {
         AccountDescriptor sel = profileComboBox.getValue();
         if (sel == null) { setStatus("⚠ Select a profile"); return; }
         handleClearAll(null);
-        builderService.startSession(name.trim(), sel.getEmulatorNumber());
+        builderService.startSession(name.trim(), sel);
         applyStartLocation(null); // reset start location for new session
         updateNodeCount();
         setStatus("🆕 Session: \"" + name.trim() + "\"");
@@ -538,7 +564,9 @@ public class TaskBuilderLayoutController {
         }
 
         try {
-            AutomationBlueprint imported = builderService.loadDefinition(file, emulator);
+            AutomationBlueprint imported = selected != null
+                    ? builderService.loadDefinition(file, selected)
+                    : builderService.loadDefinition(file, emulator);
             renderImportedDefinition(imported);
             setStatus("Imported builder task: " + imported.getName());
         } catch (Exception ex) {
@@ -900,6 +928,7 @@ public class TaskBuilderLayoutController {
     @FXML private void handleAddBackNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.BACK_BUTTON); }
     @FXML private void handleAddOcrNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.OCR_READ); }
     @FXML private void handleAddTemplateNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.TEMPLATE_SEARCH); }
+    @FXML private void handleAddShopNavigationNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.SHOP_NAVIGATION); }
 
     private void addNodeToCanvas(FlowStepKind type) {
         ensureSession();
@@ -910,6 +939,8 @@ public class TaskBuilderLayoutController {
             case WAIT -> node.setParam("durationMs", "1000");
             case SWIPE -> { node.setParam("startX","0"); node.setParam("startY","0");
                            node.setParam("endX","0"); node.setParam("endY","0"); }
+            case SHOP_NAVIGATION -> node.setParam(
+                    AutomationStep.PARAM_SHOP_TAB, ShopTab.MYSTERY_SHOP.name());
             default -> {}
         }
 
@@ -1554,6 +1585,10 @@ public class TaskBuilderLayoutController {
         if (swipePropsBox != null) { swipePropsBox.setVisible(false); swipePropsBox.setManaged(false); }
         waitPropsBox.setVisible(false); waitPropsBox.setManaged(false);
         backPropsBox.setVisible(false); backPropsBox.setManaged(false);
+        if (shopNavigationPropsBox != null) {
+            shopNavigationPropsBox.setVisible(false);
+            shopNavigationPropsBox.setManaged(false);
+        }
         ocrPropsBox.setVisible(false); ocrPropsBox.setManaged(false);
         if (templatePropsBox != null) { templatePropsBox.setVisible(false); templatePropsBox.setManaged(false); }
         
@@ -1584,6 +1619,20 @@ public class TaskBuilderLayoutController {
                 waitMsField.setText(node.getParam("durationMs") != null ? node.getParam("durationMs") : "1000");
             }
             case BACK_BUTTON -> { backPropsBox.setVisible(true); backPropsBox.setManaged(true); }
+            case SHOP_NAVIGATION -> {
+                if (shopNavigationPropsBox != null) {
+                    shopNavigationPropsBox.setVisible(true);
+                    shopNavigationPropsBox.setManaged(true);
+                }
+                if (shopTabCombo != null) {
+                    String configuredTab = node.getParam(AutomationStep.PARAM_SHOP_TAB);
+                    try {
+                        shopTabCombo.setValue(ShopTab.valueOf(configuredTab));
+                    } catch (IllegalArgumentException | NullPointerException exception) {
+                        shopTabCombo.setValue(null);
+                    }
+                }
+            }
             case OCR_READ -> {
                 ocrPropsBox.setVisible(true); ocrPropsBox.setManaged(true);
                 ocrTlXField.setText(node.getParam("tlX") != null ? node.getParam("tlX") : "0");
@@ -1694,6 +1743,12 @@ public class TaskBuilderLayoutController {
     @FXML private void handleApplyWaitProps(ActionEvent e) {
         if (selectedNode == null) return;
         selectedNode.setParam("durationMs", waitMsField.getText());
+        refreshCard(selectedNode);
+    }
+
+    @FXML private void handleApplyShopNavigationProps(ActionEvent e) {
+        if (selectedNode == null || shopTabCombo == null || shopTabCombo.getValue() == null) return;
+        selectedNode.setParam(AutomationStep.PARAM_SHOP_TAB, shopTabCombo.getValue().name());
         refreshCard(selectedNode);
     }
 
@@ -1953,6 +2008,8 @@ public class TaskBuilderLayoutController {
     @FXML private void handleExecuteAll(ActionEvent e) {
         AutomationBlueprint def = builderService.getCurrentDefinition();
         if (def == null || def.getNodes().isEmpty()) { setStatus("⚠ No nodes"); return; }
+        AccountDescriptor profile = profileComboBox.getValue();
+        if (profile == null) { setStatus("⚠ Select a profile"); return; }
 
         // Build id→node map for O(1) lookup
         Map<Integer, AutomationStep> nodeMap = new LinkedHashMap<>();
@@ -1962,7 +2019,7 @@ public class TaskBuilderLayoutController {
         int firstId = def.getNodes().get(0).getId();
 
         setStatus("▶ Executing DAG...");
-        AccountDescriptor profile = profileComboBox.getValue();
+        builderService.setActiveProfile(profile);
         Thread t = new Thread(() -> {
             try {
                 String startLocStr = def.getStartLocation();
@@ -1984,6 +2041,7 @@ public class TaskBuilderLayoutController {
             }
 
             int currentId = firstId;
+            int failedNodeId = -1;
             while (currentId > 0) {
                 AutomationStep current = nodeMap.get(currentId);
                 if (current == null) break;
@@ -1997,6 +2055,7 @@ public class TaskBuilderLayoutController {
                 });
 
                 if (!ok) {
+                    failedNodeId = nodeRef.getId();
                     Platform.runLater(() -> setStatus("❌ Failed at node #" + nodeRef.getId()));
                     break;
                 }
@@ -2006,14 +2065,20 @@ public class TaskBuilderLayoutController {
 
                 try { Thread.sleep(400); } catch (InterruptedException ignored) { return; }
             }
+            final int failure = failedNodeId;
             capturePreview();
-            Platform.runLater(() -> setStatus("✅ DAG execution complete"));
+            Platform.runLater(() -> setStatus(failure < 0
+                    ? "✅ DAG execution complete"
+                    : "❌ Failed at node #" + failure));
         });
         t.setDaemon(true); t.start();
     }
 
 
     private void execNode(AutomationStep node) {
+        AccountDescriptor profile = profileComboBox.getValue();
+        if (profile == null) { setStatus("⚠ Select a profile"); return; }
+        builderService.setActiveProfile(profile);
         setStatus("▶ " + node.getSummary() + "...");
         Thread t = new Thread(() -> {
             boolean ok = builderService.executeNode(node);
@@ -2100,10 +2165,13 @@ public class TaskBuilderLayoutController {
     private void ensureSession() {
         if (!builderService.hasActiveSession()) {
             AccountDescriptor sel = profileComboBox.getValue();
-            String emu = sel != null ? sel.getEmulatorNumber() : "0";
             String name = taskNameField.getText();
             if (name == null || name.trim().isEmpty()) name = "Untitled Task";
-            builderService.startSession(name.trim(), emu);
+            if (sel != null) {
+                builderService.startSession(name.trim(), sel);
+            } else {
+                builderService.startSession(name.trim(), "0");
+            }
         }
     }
 

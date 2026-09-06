@@ -34,6 +34,14 @@ class AutomationStepTest {
         assertEquals("Find: HOME_DEALS_BUTTON @85%  GS [area]", step.describeBriefly());
     }
 
+    @Test
+    void summarizesSelectedShopTabForTheEditor() {
+        AutomationStep step = new AutomationStep(1, FlowStepKind.SHOP_NAVIGATION);
+        step.setParam(AutomationStep.PARAM_SHOP_TAB, "ALLIANCE_CHAMPIONSHIP_SHOP");
+
+        assertEquals("Shop: Alliance Championship Shop", step.describeBriefly());
+    }
+
     /** Every kind must produce a summary; none may throw. */
     @Test
     void summarizesEveryStepKind() {

@@ -22,6 +22,7 @@ import java.util.Map;
  *   <li><b>BACK_BUTTON</b> — (none)</li>
  *   <li><b>OCR_READ</b> — tlX, tlY, brX, brY, condition, expectedValue</li>
  *   <li><b>TEMPLATE_SEARCH</b> — templatePath, threshold, grayscale, tlX, brX</li>
+ *   <li><b>SHOP_NAVIGATION</b> — shopTab</li>
  *   <li><b>NAVIGATE</b> — location</li>
  * </ul>
  *
@@ -45,6 +46,7 @@ import java.util.Map;
         creatorVisibility = JsonAutoDetect.Visibility.NONE)
 public class AutomationStep {
     public static final String PARAM_NODE_NAME = "nodeName";
+    public static final String PARAM_SHOP_TAB = "shopTab";
     public static final int NODE_NAME_MAX_LENGTH = 30;
 
     @JsonAlias("id")
@@ -342,6 +344,9 @@ public class AutomationStep {
                         tplPath, threshold, suffix);
             }
 
+            case SHOP_NAVIGATION -> String.format("Shop: %s",
+                    humanizeEnumValue(resolveAttrOr(PARAM_SHOP_TAB, "MYSTERY_SHOP")));
+
             case NAVIGATE -> String.format("Navigate: %s",
                     resolveAttrOr("location", "HOME"));
         };
@@ -360,6 +365,18 @@ public class AutomationStep {
     private String resolveAttrOr(String key, String fallback) {
         String val = getAttribute(key);
         return val != null ? val : fallback;
+    }
+
+    private String humanizeEnumValue(String value) {
+        String normalized = value.replace('_', ' ').toLowerCase(java.util.Locale.ROOT);
+        StringBuilder display = new StringBuilder(normalized.length());
+        boolean capitalize = true;
+        for (int index = 0; index < normalized.length(); index++) {
+            char character = normalized.charAt(index);
+            display.append(capitalize ? Character.toUpperCase(character) : character);
+            capitalize = character == ' ';
+        }
+        return display.toString();
     }
 
     @Override

@@ -153,6 +153,16 @@ class FxmlControllerBindingTest {
                 "TaskBuilderLayout.fxml must declare nodeNameField so node names can be edited");
     }
 
+    @Test
+    void taskBuilderDocumentDeclaresShopNavigationNodeControls() throws IOException {
+        String document = Files.readString(layoutDirectory.resolve("TaskBuilderLayout.fxml"));
+        Set<String> declaredIds = matches(FX_ID, document);
+
+        assertTrue(declaredIds.contains("shopNavigationPropsBox"));
+        assertTrue(declaredIds.contains("shopTabCombo"));
+        assertTrue(document.contains("onAction=\"#handleAddShopNavigationNode\""));
+    }
+
     /**
      * The opposite mismatch is louder — an unresolved handler makes
      * {@code FXMLLoader.load} throw — but it still escapes compilation, so it is

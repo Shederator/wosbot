@@ -9,6 +9,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -16,14 +18,72 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import dev.frostguard.api.configs.FlowStepKind;
+import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.AutomationBlueprint;
 import dev.frostguard.api.domain.AutomationStep;
 import dev.frostguard.api.runtime.WorkspacePaths;
+import dev.frostguard.engine.nav.ShopTab;
 
 class TaskBuilderServiceTest {
 
     @TempDir
     Path tempDir;
+
+    @Test
+    void executesShopNavigationWithTheSelectedProfileAndTab() {
+        String originalWorkspace = System.getProperty(WorkspacePaths.WORKSPACE_PROPERTY);
+        System.setProperty(WorkspacePaths.WORKSPACE_PROPERTY, tempDir.toString());
+        try {
+            AtomicReference<String> emulator = new AtomicReference<>();
+            AtomicReference<AccountDescriptor> selectedProfile = new AtomicReference<>();
+            AtomicReference<ShopTab> selectedTab = new AtomicReference<>();
+            TaskBuilderService service = new TaskBuilderService(new ObjectMapper(),
+                    (device, profile, target) -> {
+                        emulator.set(device);
+                        selectedProfile.set(profile);
+                        selectedTab.set(target);
+                        return true;
+                    });
+            AccountDescriptor profile = new AccountDescriptor(
+                    42L, "Test Profile", "3", true, 1L, 30L);
+            service.startSession("Shop probe", profile);
+            AutomationStep step = new AutomationStep(1, FlowStepKind.SHOP_NAVIGATION);
+            step.setParam(AutomationStep.PARAM_SHOP_TAB, ShopTab.CANYON_SHOP.name());
+
+            assertTrue(service.executeNode(step));
+
+            assertEquals("3", emulator.get());
+            assertEquals(profile, selectedProfile.get());
+            assertEquals(ShopTab.CANYON_SHOP, selectedTab.get());
+            assertTrue(step.isExecuted());
+        } finally {
+            restoreWorkspace(originalWorkspace);
+        }
+    }
+
+    @Test
+    void refusesShopNavigationWithoutProfileContext() {
+        String originalWorkspace = System.getProperty(WorkspacePaths.WORKSPACE_PROPERTY);
+        System.setProperty(WorkspacePaths.WORKSPACE_PROPERTY, tempDir.toString());
+        try {
+            AtomicBoolean called = new AtomicBoolean();
+            TaskBuilderService service = new TaskBuilderService(new ObjectMapper(),
+                    (device, profile, target) -> {
+                        called.set(true);
+                        return true;
+                    });
+            service.startSession("Shop probe", "0");
+            AutomationStep step = new AutomationStep(1, FlowStepKind.SHOP_NAVIGATION);
+            step.setParam(AutomationStep.PARAM_SHOP_TAB, ShopTab.VIP_SHOP.name());
+
+            assertFalse(service.executeNode(step));
+
+            assertFalse(called.get());
+            assertFalse(step.isExecuted());
+        } finally {
+            restoreWorkspace(originalWorkspace);
+        }
+    }
 
     @Test
     void savesBuilderJsonAndGeneratedJavaBesideIt() throws Exception {
