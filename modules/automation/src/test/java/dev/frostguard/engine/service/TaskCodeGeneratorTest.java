@@ -65,4 +65,30 @@ class TaskCodeGeneratorTest {
 
         assertTrue(source.contains("// pause before bag"));
     }
+
+    @Test
+    void generatesSharedShopNavigationWithSafeFailureHandling() {
+        AutomationBlueprint blueprint = new AutomationBlueprint("Open Gem Shop");
+        AutomationStep step = new AutomationStep(1, FlowStepKind.SHOP_NAVIGATION);
+        step.setParam(AutomationStep.PARAM_SHOP_TAB, "GEM_SHOP");
+        blueprint.addNode(step);
+
+        String source = new TaskCodeGenerator().generate(blueprint, "open_gem_shop", "Open Gem Shop");
+
+        assertTrue(source.contains("import dev.frostguard.engine.nav.ShopTab;"));
+        assertTrue(source.contains("if (!navigationHelper.navigateToShop(ShopTab.GEM_SHOP))"));
+        assertTrue(source.contains("logWarning(\"Shop navigation failed: Gem Shop\")"));
+        assertTrue(source.contains("__state = -1;"));
+    }
+
+    @Test
+    void rejectsShopNavigationWithoutAValidTab() {
+        AutomationBlueprint blueprint = new AutomationBlueprint("Invalid Shop");
+        AutomationStep step = new AutomationStep(7, FlowStepKind.SHOP_NAVIGATION);
+        step.setParam(AutomationStep.PARAM_SHOP_TAB, "NOT_A_SHOP");
+        blueprint.addNode(step);
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> new TaskCodeGenerator().generate(blueprint, "invalid_shop", "Invalid Shop"));
+    }
 }

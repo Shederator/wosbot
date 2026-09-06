@@ -12,6 +12,7 @@ public enum FlowStepKind {
     BACK_BUTTON("Back Button", "Press the Android back button"),
     OCR_READ("OCR Read", "Read text from a screen region"),
     TEMPLATE_SEARCH("Template Search", "Search for an image on screen"),
+    SHOP_NAVIGATION("Shop Navigation", "Open a selected Shop tab"),
     NAVIGATE("Navigate", "Ensure correct screen location (Home/World)");
 
     private final String label;

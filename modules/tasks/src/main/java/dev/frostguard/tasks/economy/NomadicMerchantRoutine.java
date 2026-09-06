@@ -11,6 +11,7 @@ import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.nav.SearchConfigConstants;
+import dev.frostguard.engine.nav.ShopTab;
 import dev.frostguard.engine.helper.TemplateSearchHelper;
 
 import java.time.LocalDateTime;
@@ -30,22 +31,12 @@ public class NomadicMerchantRoutine extends DelayedTask {
     @Override
     protected void execute() {
 
-        // STEP 1: Navigate to shop - Search for the bottom bar shop button
-        ImageSearchResultData shopButtonResult = templateSearchHelper.locatePattern(
-                TemplatesEnum.GAME_HOME_BOTTOM_BAR_SHOP_BUTTON,
-                SearchConfigConstants.DEFAULT_SINGLE);
-
-        if (!shopButtonResult.isFound()) {
-            logWarning("Shop button not found on the main screen. Rescheduling for 1 hour.");
+        if (!navigateToNomadicMerchantShop()) {
+            logWarning("Nomadic Merchant shop navigation failed. Rescheduling for 1 hour.");
             LocalDateTime nextAttempt = LocalDateTime.now().plusHours(1);
             this.reschedule(nextAttempt);
             return;
         }
-
-        // Tap on shop button and wait for shop to load
-        logInfo("Navigating to the shop.");
-        tapInside(shopButtonResult.getPoint(), shopButtonResult.getPoint());
-        sleepTask(2000);
 
         // STEP 2: Main loop to handle all nomadic merchant operations
         boolean continueOperations = true;
@@ -162,6 +153,10 @@ public class NomadicMerchantRoutine extends DelayedTask {
 
         // Final step: schedule task till game reset
         reschedule(GameTimeUtils.dailyResetTime());
+    }
+
+    boolean navigateToNomadicMerchantShop() {
+        return navigationHelper.navigateToShop(ShopTab.NOMADIC_MERCHANT);
     }
 
     @Override

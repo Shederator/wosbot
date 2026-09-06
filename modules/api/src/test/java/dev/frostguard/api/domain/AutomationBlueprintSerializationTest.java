@@ -124,6 +124,21 @@ class AutomationBlueprintSerializationTest {
         assertEquals("wait for panel", reloaded.getSteps().get(1).getNodeName());
     }
 
+    @Test
+    void preservesSelectedShopTabAcrossSaveAndReload() throws Exception {
+        AutomationBlueprint blueprint = new AutomationBlueprint("shop probe");
+        AutomationStep shop = new AutomationStep(3, FlowStepKind.SHOP_NAVIGATION);
+        shop.setParam(AutomationStep.PARAM_SHOP_TAB, "LABYRINTH_SHOP");
+        blueprint.addNode(shop);
+
+        AutomationBlueprint reloaded =
+                mapper.readValue(mapper.writeValueAsString(blueprint), AutomationBlueprint.class);
+
+        assertEquals(FlowStepKind.SHOP_NAVIGATION, reloaded.getSteps().get(0).getKind());
+        assertEquals("LABYRINTH_SHOP",
+                reloaded.getSteps().get(0).getParam(AutomationStep.PARAM_SHOP_TAB));
+    }
+
     /** Flows saved by earlier builds used the duplicated legacy key spellings. */
     @Test
     void loadsFlowsSavedWithLegacyKeyNames() throws Exception {

@@ -501,6 +501,7 @@
 .flow-node-header-back     { -fx-background-color: #d97706; }
 .flow-node-header-ocr      { -fx-background-color: #059669; }
 .flow-node-header-template { -fx-background-color: #dc2626; }
+.flow-node-header-shop     { -fx-background-color: #a16207; }
 
 .flow-node-type-label { -fx-text-fill: #fff; -fx-font-weight: 700; -fx-font-size: 12px; }
 .flow-node-id-label   { -fx-text-fill: rgba(255,255,255,0.5); -fx-font-weight: 500; -fx-font-size: 10px; }

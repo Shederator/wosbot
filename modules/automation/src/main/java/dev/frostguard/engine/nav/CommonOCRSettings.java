@@ -11,6 +11,16 @@ public final class CommonOCRSettings {
 
     private CommonOCRSettings() {}
 
+    private static final String LATIN_LETTERS =
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ ";
+
+    // Shop labels can wrap to multiple lines and selected/unselected tabs use different colours.
+    public static final OcrSettingsData SHOP_TAB_TEXT_SETTINGS =
+            OcrSettingsData.builder()
+                    .textLayout(TextLayout.SPARSE)
+                    .allowedGlyphs(LATIN_LETTERS)
+                    .build();
+
     // stamina fraction: "123/500" style
     public static final OcrSettingsData STAMINA_FRACTION_SETTINGS =
             buildConfig("0123456789/", true, 255, 255, 255, TextLayout.SINGLE_LINE);

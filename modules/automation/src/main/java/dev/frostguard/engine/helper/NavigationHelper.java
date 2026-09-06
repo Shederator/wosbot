@@ -15,6 +15,7 @@ import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.nav.SidebarSection;
+import dev.frostguard.engine.nav.ShopTab;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.service.LoggingService;
 import dev.frostguard.vision.logging.ProfileContextLogger;
@@ -49,6 +50,7 @@ public class NavigationHelper {
     private final String accountName;
     private final LoggingService logs;
     private final SidebarNavigator sidebar;
+    private final ShopNavigator shops;
 
     public NavigationHelper(EmulatorController emuManager, String emulatorNumber,
                             AccountDescriptor profile) {
@@ -60,6 +62,7 @@ public class NavigationHelper {
         this.accountName = profile.getName();
         this.logs = LoggingService.obtain();
         this.sidebar = new SidebarNavigator(emuManager, emulatorNumber, profile);
+        this.shops = new ShopNavigator(emuManager, emulatorNumber, profile);
     }
 
     // ── alliance menu ────────────────────────────────────────────────
@@ -109,6 +112,16 @@ public class NavigationHelper {
 
     public boolean closeSidebar() {
         return sidebar.close();
+    }
+
+    public boolean navigateToShop(ShopTab target) {
+        ensureCorrectScreenLocation(LaunchPoint.HOME);
+        broadcastInfo("Navigating to shop tab " + target.displayName());
+        boolean reached = shops.navigateTo(target);
+        if (!reached) {
+            broadcastWarn("Shop navigation failed: " + target.displayName());
+        }
+        return reached;
     }
 
     public void navigateToLabyrinthRanking() {

@@ -75,6 +75,49 @@ public final class CommonGameAreas {
         };
     }
 
+    // ── shop footer navigation ──────────────────────────────────────
+
+    public static final int SHOP_TAB_VISIBLE_COUNT = 3;
+    private static final int SHOP_TAB_LEFT = 2;
+    private static final int SHOP_TAB_TOP = 1208;
+    private static final int SHOP_TAB_WIDTH = 189;
+    private static final int SHOP_TAB_HEIGHT = 65;
+    private static final int SHOP_TAB_PITCH = 198;
+    private static final int SHOP_TAB_TAP_MARGIN = 10;
+    private static final int SHOP_VIEWPORT_WIDTH = 720;
+
+    public static final AreaData SHOP_LEFTMOST_TAB_OCR_AREA =
+            region(SHOP_TAB_LEFT, SHOP_TAB_TOP,
+                    SHOP_TAB_LEFT + SHOP_TAB_WIDTH, SHOP_TAB_TOP + SHOP_TAB_HEIGHT);
+    public static final AreaData SHOP_RIGHTMOST_TAB_OCR_AREA =
+            region(SHOP_VIEWPORT_WIDTH - SHOP_TAB_LEFT - SHOP_TAB_WIDTH, SHOP_TAB_TOP,
+                    SHOP_VIEWPORT_WIDTH - SHOP_TAB_LEFT, SHOP_TAB_TOP + SHOP_TAB_HEIGHT);
+
+    public static AreaData shopTabTapArea(int visibleSlot) {
+        if (visibleSlot < 0 || visibleSlot >= SHOP_TAB_VISIBLE_COUNT) {
+            throw new IllegalArgumentException("Shop tab slot must be between 0 and 2");
+        }
+        int left = SHOP_TAB_LEFT + visibleSlot * SHOP_TAB_PITCH;
+        return insetShopTabArea(left);
+    }
+
+    public static AreaData shopTabTapAreaFromRight(int visibleSlotFromRight) {
+        if (visibleSlotFromRight < 0 || visibleSlotFromRight >= SHOP_TAB_VISIBLE_COUNT) {
+            throw new IllegalArgumentException("Shop tab slot from right must be between 0 and 2");
+        }
+        int rightmostLeft = SHOP_VIEWPORT_WIDTH - SHOP_TAB_LEFT - SHOP_TAB_WIDTH;
+        int left = rightmostLeft - visibleSlotFromRight * SHOP_TAB_PITCH;
+        return insetShopTabArea(left);
+    }
+
+    private static AreaData insetShopTabArea(int left) {
+        return region(
+                left + SHOP_TAB_TAP_MARGIN,
+                SHOP_TAB_TOP + SHOP_TAB_TAP_MARGIN,
+                left + SHOP_TAB_WIDTH - SHOP_TAB_TAP_MARGIN,
+                SHOP_TAB_TOP + SHOP_TAB_HEIGHT - SHOP_TAB_TAP_MARGIN);
+    }
+
     // ── march slot grid (top-left / bottom-right, slot 6→1) ─────────
 
     public static final PointData[] MARCH_SLOTS_TOP_LEFT = {

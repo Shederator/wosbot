@@ -3,6 +3,7 @@ package dev.frostguard.engine.service;
 import dev.frostguard.api.configs.FlowStepKind;
 import dev.frostguard.api.domain.AutomationBlueprint;
 import dev.frostguard.api.domain.AutomationStep;
+import dev.frostguard.engine.nav.ShopTab;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -69,6 +70,7 @@ public class TaskCodeGenerator {
         out.append("import dev.frostguard.api.configs.TemplatesEnum;\n");
         out.append("import dev.frostguard.api.domain.ImageSearchResultData;\n");
         out.append("import dev.frostguard.engine.helper.TemplateSearchHelper;\n");
+        out.append("import dev.frostguard.engine.nav.ShopTab;\n");
         out.append("import dev.frostguard.engine.schedule.DelayedTask;\n");
         out.append("import dev.frostguard.engine.schedule.LaunchPoint;\n");
         out.append("import dev.frostguard.engine.service.TemplatePathResolver;\n");
@@ -178,11 +180,13 @@ public class TaskCodeGenerator {
             case BACK_BUTTON     -> writeBack(out, node);
             case OCR_READ        -> writeOcr(out, node, nodeEdges);
             case TEMPLATE_SEARCH -> writeTemplateSearch(out, node, nodeEdges);
+            case SHOP_NAVIGATION -> writeShopNavigation(out, node, nodeEdges);
             default              -> out.append(i5).append("// Unrecognised action\n");
         }
 
         if (node.getType() != FlowStepKind.OCR_READ
-                && node.getType() != FlowStepKind.TEMPLATE_SEARCH) {
+                && node.getType() != FlowStepKind.TEMPLATE_SEARCH
+                && node.getType() != FlowStepKind.SHOP_NAVIGATION) {
             int nextId = node.getNextNodeId();
             LoopDetector.BackEdge edge = pickEdge(nodeEdges, false);
             if (edge != null && nextId > 0) {
@@ -238,6 +242,35 @@ public class TaskCodeGenerator {
 
     private void writeBack(StringBuilder out, AutomationStep node) {
         out.append(indent(5)).append("pressBack();\n");
+    }
+
+    private void writeShopNavigation(StringBuilder out, AutomationStep node,
+                                     List<LoopDetector.BackEdge> nodeEdges) {
+        String configuredTab = node.getParam(AutomationStep.PARAM_SHOP_TAB);
+        ShopTab target;
+        try {
+            target = ShopTab.valueOf(configuredTab);
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            throw new IllegalArgumentException("Shop Navigation node #" + node.getId()
+                    + " has invalid shopTab: " + configuredTab, exception);
+        }
+
+        String i5 = indent(5), i6 = indent(6);
+        out.append(i5).append("if (!navigationHelper.navigateToShop(ShopTab.")
+                .append(target.name()).append(")) {\n");
+        out.append(i6).append("logWarning(\"Shop navigation failed: ")
+                .append(escapeJavaString(target.displayName())).append("\");\n");
+        out.append(i6).append("__state = -1;\n");
+        out.append(i5).append("} else {\n");
+
+        int nextId = node.getNextNodeId();
+        LoopDetector.BackEdge edge = pickEdge(nodeEdges, false);
+        if (edge != null && nextId > 0) {
+            writeLoopGuard(out, node, edge, nextId, -1, 6);
+        } else {
+            out.append(i6).append("__state = ").append(nextId > 0 ? nextId : -1).append(";\n");
+        }
+        out.append(i5).append("}\n");
     }
 
     // ── OCR branching ─────────────────────────────────────────────────
