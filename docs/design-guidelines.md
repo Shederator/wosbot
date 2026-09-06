@@ -60,6 +60,12 @@ emulator state to stabilize. Avoid aggressive back-to-back work after profile
 load unless the task is explicitly time-sensitive. Unknown states should exit
 conservatively rather than create implicit loops.
 
+For tasks exposed as step-aware in Task Workbench, place named `step(...)`
+boundaries around user-meaningful operations. Register the complete read-only
+flow with stable IDs and keep the registered labels and runtime boundaries in
+sync. Avoid pausing inside low-level input or vision calls, and keep normal
+scheduler behavior unchanged when no controlled execution session is attached.
+
 ## Logging And Statistics
 
 Log important state transitions, decisions, evidence, fallback reasons, and the

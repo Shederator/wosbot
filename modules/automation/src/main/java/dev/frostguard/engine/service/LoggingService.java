@@ -4,6 +4,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 
 import dev.frostguard.api.configs.TpMessageSeverityEnum;
@@ -22,6 +23,7 @@ public class LoggingService {
 	}
 
 	private final AtomicReference<LogListener> observer = new AtomicReference<>();
+	private final CopyOnWriteArrayList<LogListener> additionalObservers = new CopyOnWriteArrayList<>();
 	private final ArrayDeque<LogMessageData> recentEntries = new ArrayDeque<>();
 
 	private LoggingService() {
@@ -35,10 +37,21 @@ public class LoggingService {
 		observer.set(listener);
 	}
 
+	public void addObserver(LogListener listener) {
+		if (listener != null) {
+			additionalObservers.addIfAbsent(listener);
+		}
+	}
+
+	public void removeObserver(LogListener listener) {
+		additionalObservers.remove(listener);
+	}
+
 	public void emit(TpMessageSeverityEnum level, String origin, String accountName, String content) {
 		LogMessageData message = LogMessageData.of(level, content, origin, accountName);
 		remember(message);
 		Optional.ofNullable(observer.get()).ifPresent(listener -> listener.onLogEntryEmitted(message));
+		additionalObservers.forEach(listener -> listener.onLogEntryEmitted(message));
 	}
 
 	public synchronized List<LogMessageData> recentFor(String accountName, String taskName, int limit) {
