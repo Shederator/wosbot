@@ -1,9 +1,12 @@
 # Install Frostguard on Windows
 
-This guide is for running a published or temporary Frostguard build. Choose
-**exactly one** of the three build options below, then complete the shared
-emulator and game setup once. The options are alternatives, not consecutive
-steps.
+This guide is for running a published or temporary Frostguard build on
+**Windows**. Choose **exactly one** of the three build options below, then
+complete the shared emulator and game setup once. The options are alternatives,
+not consecutive steps.
+
+macOS users should follow [macOS Setup (BlueStacks)](macos.md) for the Apple
+Silicon `.pkg` / BlueStacks path.
 
 Developers who want to build, test, or run the repository should use the
 separate [developer setup](development.md).
@@ -15,6 +18,7 @@ separate [developer setup](development.md).
 | **1 — Recommended** | Stable | You want to use Frostguard normally | Self-contained Windows x64 MSI |
 | **2 — Preview** | Nightly | You want newer changes and accept unfinished or unstable behavior | Separate self-contained Windows x64 MSI |
 | **Testing only** | PR build | You were asked to test specific open pull requests | Temporary ZIP requiring Java 21 |
+| **macOS** | Stable / Nightly pkg | Apple Silicon + BlueStacks | See [macos.md](macos.md) |
 
 If you are unsure, install **Stable**.
 

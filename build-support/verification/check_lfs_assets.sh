@@ -32,6 +32,7 @@ required=(
   "modules/vision/src/main/resources/native/opencv/opencv_java4110.dll"
   "tools/adb/adb.exe"
   "tools/adb/AdbWinApi.dll"
+  "tools/adb/mac/adb"
   "tools/tesseract/eng.traineddata"
 )
 for want in "${required[@]}"; do
@@ -60,7 +61,11 @@ for asset in "${assets[@]}"; do
     continue
   fi
   # Every real asset here is far larger than any stub could be.
-  size="$(stat -c%s "${asset}")"
+  if stat -c%s "${asset}" >/dev/null 2>&1; then
+    size="$(stat -c%s "${asset}")"
+  else
+    size="$(stat -f%z "${asset}")"
+  fi
   if [[ "${size}" -lt 10240 ]]; then
     echo "::error file=${asset}::LFS asset is implausibly small (${size} bytes)."
     failed=1

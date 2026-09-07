@@ -84,6 +84,13 @@ public final class ManifestCodec {
                     || required(signature.publisher(), "Authenticode publisher").isBlank())) {
                 throw new IllegalArgumentException("Windows Authenticode requirement is invalid");
             }
+        } else if (platform.operatingSystem() == UpdatePlatform.OperatingSystem.MACOS) {
+            if (!fileName.toLowerCase(Locale.ROOT).endsWith(".pkg")) {
+                throw new IllegalArgumentException("macOS update artifact must be a pkg installer");
+            }
+            if (artifact.signature() != null) {
+                throw new IllegalArgumentException("macOS update artifacts do not use Authenticode requirements");
+            }
         }
     }
 

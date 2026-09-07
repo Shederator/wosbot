@@ -2,15 +2,16 @@
 
 <img src="https://capsule-render.vercel.app/api?type=waving&color=0:081522,45:17324d,100:4f86a8&height=210&section=header&text=Frostguard&fontSize=72&fontColor=eaf7ff&fontAlignY=36&desc=Whiteout%20Survival%20Automation&descSize=20&descAlignY=58&descColor=b9e2f5" width="100%" alt="Frostguard" />
 
-### A free, open-source Windows automation assistant for Whiteout Survival
+### A free, open-source Windows and macOS automation assistant for Whiteout Survival
 
 Automate recurring tasks, coordinate scheduled events, and manage multiple
-accounts through supported Android emulators.
+accounts through supported Android emulators (Windows: MuMu / LDPlayer / MEmu;
+macOS: BlueStacks).
 
 [![Download Stable](https://img.shields.io/badge/Download-Stable-2f855a?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Shederator/wosbot/releases/latest)
 [![Join Discord](https://img.shields.io/badge/Join-Discord-5865f2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/sUthSHRVvU)
 
-**Windows 10/11 · Self-contained installer · Java included · Free**
+**Windows 10/11 · macOS (Apple Silicon) · Self-contained installer · Java included · Free**
 
 </div>
 

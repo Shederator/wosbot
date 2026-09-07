@@ -1,0 +1,266 @@
+name: Release — macOS Stable or Nightly
+
+# Publishes the macOS .pkg onto an immutable Windows-created channel release,
+# then merges macos-arm64 into the project-signed update manifest.
+# Runs after the Windows release workflow on the Nightly schedule.
+
+on:
+  schedule:
+    - cron: "47 3 * * *"
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "Release identity to attach the macOS pkg to"
+        required: true
+        type: choice
+        options:
+          - stable
+          - nightly
+      version:
+        description: "Existing immutable SemVer already published by the Windows release"
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: macos-${{ github.event_name == 'schedule' && 'nightly' || inputs.channel }}-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and attach ${{ github.event_name == 'schedule' && 'nightly' || inputs.channel }} macOS pkg
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    env:
+      MAVEN_ARGS: "-B --no-transfer-progress -Dstyle.color=never"
+      REQUESTED_CHANNEL: ${{ inputs.channel }}
+      REQUESTED_VERSION: ${{ inputs.version }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      FROSTGUARD_UPDATE_SIGNING_PRIVATE_KEY_BASE64: ${{ secrets.FROSTGUARD_UPDATE_SIGNING_PRIVATE_KEY_BASE64 }}
+
+    steps:
+      - name: Check out main with release assets
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Verify Git LFS assets are real binaries
+        run: build-support/verification/check_lfs_assets.sh
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21.0.12+8.0"
+          cache: maven
+
+      - name: Install Tesseract (packaging natives into the app image)
+        run: brew install tesseract leptonica
+
+      - name: Resolve target Windows-published release identity
+        id: identity
+        run: |
+          set -euo pipefail
+          channel="${REQUESTED_CHANNEL:-}"
+          version="${REQUESTED_VERSION:-}"
+          if [[ "${GITHUB_EVENT_NAME}" == "schedule" ]]; then
+            channel="nightly"
+            version=""
+          fi
+          if [[ "${channel}" != "stable" && "${channel}" != "nightly" ]]; then
+            echo "Release channel must be stable or nightly" >&2
+            exit 1
+          fi
+
+          manifest_name="frostguard-${channel}-manifest.json"
+          if [[ "${channel}" == "nightly" ]]; then
+            feed_api="repos/${GITHUB_REPOSITORY}/releases/tags/nightly"
+          else
+            feed_api="repos/${GITHUB_REPOSITORY}/releases/latest"
+          fi
+
+          feed_json_path="${RUNNER_TEMP}/feed.json"
+          gh api "${feed_api}" > "${feed_json_path}"
+          manifest_asset_id="$(python3 - "${feed_json_path}" "${manifest_name}" <<'PY'
+import json, sys
+from pathlib import Path
+feed = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+name = sys.argv[2]
+matches = [a for a in feed.get("assets", []) if a.get("name") == name]
+if len(matches) != 1:
+    raise SystemExit(f"Update feed must contain exactly one {name}")
+print(matches[0]["id"])
+PY
+)"
+          signed_envelope="${RUNNER_TEMP}/current-${manifest_name}"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/assets/${manifest_asset_id}" \
+            -H "Accept: application/octet-stream" > "${signed_envelope}"
+
+          payload="${RUNNER_TEMP}/payload-${manifest_name}"
+          python3 - "${signed_envelope}" "${payload}" <<'PY'
+import base64, json, sys
+from pathlib import Path
+envelope = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+Path(sys.argv[2]).write_bytes(base64.b64decode(envelope["payload"]))
+PY
+
+          feed_version="$(python3 - "${payload}" <<'PY'
+import json, sys
+from pathlib import Path
+print(json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["version"])
+PY
+)"
+
+          if [[ -z "${version}" ]]; then
+            version="${feed_version}"
+          elif [[ "${version}" != "${feed_version}" ]]; then
+            echo "Requested version ${version} does not match feed version ${feed_version}" >&2
+            exit 1
+          fi
+
+          tag="v${version}"
+          release_json_path="${RUNNER_TEMP}/release.json"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" > "${release_json_path}"
+          product_name="Frostguard"
+          profile=""
+          asset_prefix="Frostguard"
+          if [[ "${channel}" == "nightly" ]]; then
+            product_name="Frostguard Nightly"
+            profile=",windows-nightly"
+            asset_prefix="Frostguard-Nightly"
+          fi
+          installer_name="${asset_prefix}-${version}-macos-arm64.pkg"
+
+          already="$(python3 - "${release_json_path}" "${installer_name}" <<'PY'
+import json, sys
+from pathlib import Path
+release = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+name = sys.argv[2]
+print("true" if any(a.get("name") == name for a in release.get("assets", [])) else "false")
+PY
+)"
+          if [[ "${already}" == "true" ]]; then
+            echo "macOS pkg ${installer_name} is already on ${tag}; nothing to do."
+            echo "skip=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          {
+            echo "skip=false"
+            echo "channel=${channel}"
+            echo "version=${version}"
+            echo "tag=${tag}"
+            echo "product_name=${product_name}"
+            echo "profile=${profile}"
+            echo "installer_name=${installer_name}"
+            echo "manifest_name=${manifest_name}"
+            echo "payload=${payload}"
+            echo "signed_envelope=${signed_envelope}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Build macOS application image and pkg
+        if: steps.identity.outputs.skip != 'true'
+        env:
+          CHANNEL: ${{ steps.identity.outputs.channel }}
+          VERSION: ${{ steps.identity.outputs.version }}
+          EXTRA_PROFILE: ${{ steps.identity.outputs.profile }}
+        run: |
+          set -euo pipefail
+          stable_manifest="https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/frostguard-stable-manifest.json"
+          nightly_manifest="https://github.com/${GITHUB_REPOSITORY}/releases/download/nightly/frostguard-nightly-manifest.json"
+          ./mvnw ${MAVEN_ARGS} \
+            -Drevision="${VERSION}" \
+            -Djavafx.platform=mac-aarch64 \
+            -Dmacos.app.image -Dmacos.pkg \
+            -Dfrostguard.update.manifest.stable="${stable_manifest}" \
+            -Dfrostguard.update.manifest.nightly="${nightly_manifest}" \
+            "-Pmacos-app-image,macos-pkg${EXTRA_PROFILE}" \
+            -pl packaging/desktop -am package
+
+      - name: Verify and smoke-test macOS application image
+        if: steps.identity.outputs.skip != 'true'
+        env:
+          CHANNEL: ${{ steps.identity.outputs.channel }}
+          PRODUCT_NAME: ${{ steps.identity.outputs.product_name }}
+        run: |
+          set -euo pipefail
+          image="packaging/desktop/target/app-image/${PRODUCT_NAME}.app"
+          python3 build-support/verification/verify_app_image.py \
+            "${image}" \
+            --platform macos \
+            --channel "${CHANNEL}" \
+            --product-name "${PRODUCT_NAME}"
+          chmod +x build-support/verification/smoke_test_app_image.sh
+          build-support/verification/smoke_test_app_image.sh "${image}"
+
+      - name: Upload immutable macOS pkg and refresh signed manifest
+        if: steps.identity.outputs.skip != 'true'
+        id: publish
+        env:
+          CHANNEL: ${{ steps.identity.outputs.channel }}
+          VERSION: ${{ steps.identity.outputs.version }}
+          TAG: ${{ steps.identity.outputs.tag }}
+          INSTALLER_NAME: ${{ steps.identity.outputs.installer_name }}
+          MANIFEST_NAME: ${{ steps.identity.outputs.manifest_name }}
+          PAYLOAD: ${{ steps.identity.outputs.payload }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${FROSTGUARD_UPDATE_SIGNING_PRIVATE_KEY_BASE64:-}" ]]; then
+            echo "FROSTGUARD_UPDATE_SIGNING_PRIVATE_KEY_BASE64 is not configured" >&2
+            exit 1
+          fi
+          source_pkg="$(find "packaging/desktop/target/installers/${CHANNEL}" -maxdepth 1 -name '*.pkg' -type f | head -n 1)"
+          if [[ -z "${source_pkg}" ]]; then
+            echo "Expected a macOS pkg under packaging/desktop/target/installers/${CHANNEL}" >&2
+            exit 1
+          fi
+          installer="${RUNNER_TEMP}/${INSTALLER_NAME}"
+          cp "${source_pkg}" "${installer}"
+
+          gh release upload "${TAG}" "${installer}" --repo "${GITHUB_REPOSITORY}"
+          public_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${INSTALLER_NAME}"
+
+          merged_payload="${RUNNER_TEMP}/merged-${MANIFEST_NAME}"
+          python3 build-support/release/add_update_manifest_artifact.py \
+            --payload "${PAYLOAD}" \
+            --platform macos-arm64 \
+            --installer "${installer}" \
+            --installer-url "${public_url}" \
+            --output "${merged_payload}"
+
+          ./mvnw ${MAVEN_ARGS} -pl modules/update,modules/api -am -DskipTests package
+          signed_manifest="${RUNNER_TEMP}/${MANIFEST_NAME}"
+          java -cp "modules/update/target/classes:modules/api/target/classes" \
+            dev.frostguard.update.ProjectManifestSigner sign "${merged_payload}" "${signed_manifest}"
+          verification_cp="modules/update/target/classes:modules/api/target/classes:packaging/desktop/target/input/lib/*"
+          java -cp "${verification_cp}" \
+            dev.frostguard.update.ProjectManifestSigner verify "${signed_manifest}"
+
+          gh release upload "${TAG}" "${signed_manifest}" --repo "${GITHUB_REPOSITORY}" --clobber
+
+          if [[ "${CHANNEL}" == "nightly" ]]; then
+            gh release upload nightly "${signed_manifest}" --repo "${GITHUB_REPOSITORY}" --clobber
+            immutable_url="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
+            channel_notes="$(cat <<EOF
+          Permanent Frostguard Nightly channel.
+
+          **Current build:** [${VERSION}](${immutable_url})
+
+          Download the Windows x64 MSI or macOS Apple Silicon pkg from that immutable release.
+          This rolling channel contains only the project-signed update manifest used to select
+          and verify the current installer.
+
+          Stable: https://github.com/${GITHUB_REPOSITORY}/releases/latest
+          EOF
+)"
+            gh release edit nightly --repo "${GITHUB_REPOSITORY}" \
+              --title "Frostguard Nightly - Latest" --notes "${channel_notes}" --prerelease
+          fi
+
+          echo "download_url=${public_url}" >> "${GITHUB_OUTPUT}"
+          echo "release_url=https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}" >> "${GITHUB_OUTPUT}"

@@ -62,6 +62,66 @@ class ManifestCodecTest {
         assertThrows(UpdateException.class, () -> codec.read(json.getBytes(StandardCharsets.UTF_8)));
     }
 
+    @Test
+    void acceptsMacosPkgBesideWindowsMsi() throws Exception {
+        String json = """
+                {
+                  "schemaVersion": 1,
+                  "channel": "stable",
+                  "version": "3.0.1",
+                  "publishedAt": "2026-08-10T04:00:00Z",
+                  "minimumUpdaterVersion": "3.0.0",
+                  "releaseNotesUrl": "https://example.com/releases/3.0.1",
+                  "artifacts": {
+                    "windows-x64": {
+                      "operatingSystem": "windows",
+                      "architecture": "x64",
+                      "fileName": "Frostguard-3.0.1-windows-x64.msi",
+                      "url": "https://example.com/releases/3.0.1/Frostguard-3.0.1-windows-x64.msi",
+                      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "size": 123
+                    },
+                    "macos-arm64": {
+                      "operatingSystem": "macos",
+                      "architecture": "arm64",
+                      "fileName": "Frostguard-3.0.1-macos-arm64.pkg",
+                      "url": "https://example.com/releases/3.0.1/Frostguard-3.0.1-macos-arm64.pkg",
+                      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "size": 456
+                    }
+                  }
+                }
+                """;
+        UpdateManifest manifest = codec.read(json.getBytes(StandardCharsets.UTF_8));
+        assertEquals("Frostguard-3.0.1-macos-arm64.pkg",
+                manifest.artifacts().get("macos-arm64").fileName());
+    }
+
+    @Test
+    void rejectsMacosMsiArtifact() {
+        String json = """
+                {
+                  "schemaVersion": 1,
+                  "channel": "stable",
+                  "version": "3.0.1",
+                  "publishedAt": "2026-08-10T04:00:00Z",
+                  "minimumUpdaterVersion": "3.0.0",
+                  "releaseNotesUrl": "https://example.com/releases/3.0.1",
+                  "artifacts": {
+                    "macos-arm64": {
+                      "operatingSystem": "macos",
+                      "architecture": "arm64",
+                      "fileName": "Frostguard-3.0.1-macos-arm64.msi",
+                      "url": "https://example.com/releases/3.0.1/Frostguard-3.0.1-macos-arm64.msi",
+                      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "size": 123
+                    }
+                  }
+                }
+                """;
+        assertThrows(UpdateException.class, () -> codec.read(json.getBytes(StandardCharsets.UTF_8)));
+    }
+
     static String validUnsignedManifest() {
         return validManifest().replaceAll(",\\s*\"signature\"\\s*:\\s*\\{[^}]+}", "");
     }

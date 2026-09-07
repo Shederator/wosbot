@@ -96,11 +96,15 @@ public final class ApplicationLifecycle {
     }
 
     private static void terminateAdbProcess() throws IOException {
-        if (!System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win")) {
+        if (dev.frostguard.api.platform.PlatformPaths.isWindows()) {
+            new ProcessBuilder("taskkill", "/F", "/IM", "adb.exe").start();
+            LOG.info("adb.exe shutdown requested");
             return;
         }
-        new ProcessBuilder("taskkill", "/F", "/IM", "adb.exe").start();
-        LOG.info("adb.exe shutdown requested");
+        if (dev.frostguard.api.platform.PlatformPaths.isMacOs()) {
+            new ProcessBuilder("pkill", "-f", "adb").start();
+            LOG.info("ADB process shutdown requested");
+        }
     }
 
     public static final class LifecycleException extends Exception {

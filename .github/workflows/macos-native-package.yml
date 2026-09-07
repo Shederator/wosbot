@@ -1,0 +1,110 @@
+name: CI — macOS Installers
+
+on:
+  pull_request:
+    paths:
+      - "**/pom.xml"
+      - "modules/**/src/**"
+      - "packaging/desktop/**"
+      - "build-support/packaging/**"
+      - "build-support/release/**"
+      - "build-support/verification/*app_image*"
+      - "build-support/verification/smoke_test_app_image.sh"
+      - "tools/**"
+      - "examples/custom-tasks/**"
+      - ".github/workflows/macos-native-package.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-native-package-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MAVEN_ARGS: "-B --no-transfer-progress -Dstyle.color=never"
+
+jobs:
+  package:
+    name: Build and smoke-test Stable and Nightly macOS packages
+    runs-on: macos-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Verify Git LFS assets are real binaries
+        run: build-support/verification/check_lfs_assets.sh
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21.0.12+8.0"
+          cache: maven
+
+      - name: Install Tesseract (packaging natives into the app image)
+        run: brew install tesseract leptonica
+
+      - name: Build Stable application image and pkg
+        run: |
+          ./mvnw $MAVEN_ARGS \
+            -Djavafx.platform=mac-aarch64 \
+            -Dmacos.app.image -Dmacos.pkg \
+            -Pmacos-app-image,macos-pkg \
+            -pl packaging/desktop -am package
+
+      - name: Verify Stable application image
+        run: |
+          python3 build-support/verification/verify_app_image.py \
+            "packaging/desktop/target/app-image/Frostguard.app" \
+            --platform macos \
+            --channel stable \
+            --product-name Frostguard
+
+      - name: Smoke-test Stable application image
+        run: |
+          chmod +x build-support/verification/smoke_test_app_image.sh
+          build-support/verification/smoke_test_app_image.sh \
+            "packaging/desktop/target/app-image/Frostguard.app"
+
+      - name: Upload Stable pkg
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostguard-macos-pkg-stable
+          path: packaging/desktop/target/installers/stable/*.pkg
+          if-no-files-found: error
+
+      - name: Clean packaging outputs before Nightly
+        run: |
+          rm -rf packaging/desktop/target/app-image \
+            packaging/desktop/target/input \
+            packaging/desktop/target/installers \
+            packaging/desktop/target/jpackage
+
+      - name: Build Nightly application image and pkg
+        run: |
+          ./mvnw $MAVEN_ARGS \
+            -Djavafx.platform=mac-aarch64 \
+            -Dmacos.app.image -Dmacos.pkg \
+            -Pmacos-app-image,macos-pkg,windows-nightly \
+            -pl packaging/desktop -am package
+
+      - name: Verify Nightly application image
+        run: |
+          python3 build-support/verification/verify_app_image.py \
+            "packaging/desktop/target/app-image/Frostguard Nightly.app" \
+            --platform macos \
+            --channel nightly \
+            --product-name "Frostguard Nightly"
+
+      - name: Upload Nightly pkg
+        uses: actions/upload-artifact@v4
+        with:
+          name: frostguard-macos-pkg-nightly
+          path: packaging/desktop/target/installers/nightly/*.pkg
+          if-no-files-found: error

@@ -33,6 +33,7 @@ import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 
 /**
@@ -145,8 +146,8 @@ public class EmuConfigLayoutController {
 	private void populateEmulatorTable(Map<String, String> globalConfig) {
 		String activeEmulatorKey = globalConfig.get(ConfigurationKeyEnum.CURRENT_EMULATOR_STRING.name());
 
-		for (EmulatorType kind : EmulatorType.values()) {
-			String resolvedPath = globalConfig.getOrDefault(kind.getConfigKey(), kind.getDefaultPath());
+		for (EmulatorType kind : EmulatorType.valuesForCurrentPlatform()) {
+			String resolvedPath = globalConfig.getOrDefault(kind.getConfigKey(), kind.resolveConfiguredDirectory());
 			EmulatorAux entry = new EmulatorAux(kind, resolvedPath);
 			entry.setActive(kind.name().equals(activeEmulatorKey));
 			emulatorList.add(entry);
@@ -201,22 +202,39 @@ public class EmuConfigLayoutController {
 			{
 				browseBtn.setOnAction(evt -> {
 					EmulatorAux target = getTableView().getItems().get(getIndex());
-					File picked = promptForExecutable("Select" + target.getEmulatorType().getExecutableName());
+					EmulatorType type = target.getEmulatorType();
+					if (type.isAdbOnlyProvider()) {
+						DirectoryChooser directoryChooser = new DirectoryChooser();
+						directoryChooser.setTitle("Select " + type.getDisplayName() + " app bundle");
+						directoryChooser.setInitialDirectory(new File(System.getProperty("user.home")));
+						File picked = directoryChooser.showDialog(tableviewEmulators.getScene().getWindow());
+						if (picked == null) {
+							return;
+						}
+						if (!type.isConfiguredPathValid(picked.getAbsolutePath())) {
+							displayError("Folder not valid. Select a BlueStacks.app (or BlueStacks Air.app) bundle.");
+							return;
+						}
+						target.setPath(picked.getAbsolutePath());
+						tableviewEmulators.refresh();
+						ScheduleService.obtain().persistEmulatorPath(type.getConfigKey(), picked.getAbsolutePath());
+						return;
+					}
+
+					File picked = promptForExecutable("Select " + type.getExecutableName());
 
 					if (picked == null) {
 						return;
 					}
 
-					if (!picked.getName().equalsIgnoreCase(target.getEmulatorType().getExecutableName())) {
-						displayError("File not valid, please select: " + target.getEmulatorType().getExecutableName());
+					if (!picked.getName().equalsIgnoreCase(type.getExecutableName())) {
+						displayError("File not valid, please select: " + type.getExecutableName());
 						return;
 					}
 
 					target.setPath(picked.getParent());
 					tableviewEmulators.refresh();
-					ScheduleService.obtain().persistEmulatorPath(
-							target.getEmulatorType().getConfigKey(),
-							picked.getParent());
+					ScheduleService.obtain().persistEmulatorPath(type.getConfigKey(), picked.getParent());
 				});
 			}
 

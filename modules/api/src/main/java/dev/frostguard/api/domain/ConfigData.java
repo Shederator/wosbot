@@ -45,9 +45,15 @@ public class ConfigData {
     }
 
     private static ConfigurationKeyEnum resolveKeyName(String keyName) {
-        return keyName == null || keyName.isBlank()
-                ? null
-                : ConfigurationKeyEnum.valueOf(keyName.trim());
+        if (keyName == null || keyName.isBlank()) {
+            return null;
+        }
+        try {
+            return ConfigurationKeyEnum.valueOf(keyName.trim());
+        } catch (IllegalArgumentException unknown) {
+            // Older DBs / other forks may contain keys this build does not define.
+            return null;
+        }
     }
 
     /* ── derived ── */

@@ -306,6 +306,7 @@ public class TaskQueue {
 
         if (taskBacklog.remove(replacement)) emitInfo("Moved " + replacement.getTaskName() + " to NOW");
         else                                  emitInfo("Injecting " + replacement.getTaskName() + " NOW");
+        replacement.reschedule(LocalDateTime.now());
         enqueue(replacement);
         if (shouldSignal && ctx != null) ctx.preempt(rule);
     }
@@ -484,7 +485,11 @@ public class TaskQueue {
     private synchronized DelayedTask selectNextTask() {
         DelayedTask head = taskBacklog.peek();
         if (head == null) { statusModel.setDelayUntil(LocalDateTime.now().plusSeconds(1)); return null; }
-        if (head.getDelay(TimeUnit.MILLISECONDS) > 0) { statusModel.setDelayUntil(head.getScheduled()); return null; }
+        if (head.getDelay(TimeUnit.MILLISECONDS) > 0) {
+            LocalDateTime scheduled = head.getScheduled();
+            statusModel.setDelayUntil(scheduled != null ? scheduled : LocalDateTime.now().plusSeconds(1));
+            return null;
+        }
 
         List<DelayedTask> batch = new ArrayList<>();
         batch.add(taskBacklog.poll());
@@ -1104,6 +1109,10 @@ public class TaskQueue {
     }
 
     private void triggerPcSleep(LocalDateTime wakeAt) {
+        if (!dev.frostguard.api.platform.PlatformPaths.isWindows()) {
+            emitError("PC sleep idle policy is only supported on Windows");
+            return;
+        }
         try {
             deviceBridge.closeEmulator(profile.getEmulatorNumber());
             deviceBridge.releaseEmulatorSlot(profile);
@@ -1198,8 +1207,14 @@ public class TaskQueue {
     }
 
     private String formatCountdown(LocalDateTime target) {
+        if (target == null) {
+            return "00:00:00";
+        }
         Duration d = Duration.between(LocalDateTime.now(), target);
-        return String.format("%02d:%02d:%02d", d.toHours(), d.toMinutesPart(), d.toSecondsPart());
+        long hours = Math.max(0L, d.toHours());
+        int minutes = Math.max(0, d.toMinutesPart());
+        int seconds = Math.max(0, d.toSecondsPart());
+        return String.format("%02d:%02d:%02d", hours, minutes, seconds);
     }
 
     // ---- logging -----------------------------------------------------------

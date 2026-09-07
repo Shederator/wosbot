@@ -73,13 +73,8 @@ public abstract class EmulatorInstance {
         AndroidDebugBridge.terminate();
     }
 
-    private String adbPath() {
-        String wd = System.getProperty("user.dir");
-        for (String sub : new String[]{"tools", "packaging/desktop/target/input/lib"}) {
-            File f = new File(wd, sub + File.separator + "adb" + File.separator + "adb.exe");
-            if (f.exists()) return f.getAbsolutePath();
-        }
-        return consolePath + File.separator + "adb.exe";
+    protected String adbPath() {
+        return dev.frostguard.api.platform.PlatformPaths.resolveAdbPath(consolePath);
     }
 
     private void killAdb() {
