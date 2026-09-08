@@ -3,6 +3,7 @@ package dev.frostguard.engine.helper;
 import dev.frostguard.api.configs.TpMessageSeverityEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.engine.error.QuitDialogStuckException;
 import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.input.TapJitterPolicy;
 import dev.frostguard.engine.nav.CommonGameAreas;
@@ -16,6 +17,7 @@ import dev.frostguard.vision.logging.ProfileContextLogger;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
 
 import java.time.LocalDateTime;
+import java.util.concurrent.CancellationException;
 
 // Orchestrates stamina tracking: OCR reads, regen delay computation,
 // availability gating, item top-ups, and travel time parsing.
@@ -54,7 +56,7 @@ public class StaminaHelper {
     }
 
     // Opens avatar screen, reads stamina via OCR, persists, then navigates back.
-    // Changed by pernerch | Date: 2026-07-02 | Why: add timeout guards to prevent stamina reads from blocking for 1+ seconds when OCR is slow or UI is unresponsive.
+    // Add timeout guards to prevent stamina reads from blocking for 1+ seconds when OCR is slow or UI is unresponsive.
     public void updateStaminaFromProfile() {
         emitDebug("Opening profile to read stamina");
         long startMs = System.currentTimeMillis();
@@ -74,7 +76,7 @@ public class StaminaHelper {
                 taps.tapInside(CommonGameAreas.STAMINA_BUTTON, 1, 200);
             } else {
                 emitWarn("Stamina read timeout: stamina button click exceeded 1.5s, aborting");
-                device.pressBack(deviceSlot);
+                QuitDialogGuard.pressBackSafely(device, deviceSlot);
                 return;
             }
 
@@ -94,13 +96,32 @@ public class StaminaHelper {
                 emitInfo("Stamina read: " + reading);
                 persistence.setStamina(accountKey, reading);
             }
+        } catch (CancellationException cancelled) {
+            // Cancellation is a stop request, not a stamina error. QuitDialogGuard turns an
+            // interrupted sleep into this, and the broad catch below used to log it as an "error"
+            // and carry on -- so a stop landing during a post-tap delay was ignored and the routine
+            // kept driving the emulator. Rethrow so the caller actually stops.
+            throw cancelled;
         } catch (Exception ex) {
             emitWarn("Stamina update error: " + ex.getMessage());
         } finally {
-            // Safety navigation back
+            // Safety navigation back. QuitDialogStuckException means the
+            // guard confirmed the quit dialog is still up after every dismiss attempt -- that's
+            // not a routine cleanup hiccup to swallow, it's the exact "don't proceed blind" signal
+            // the guard exists to raise. Let it propagate to TaskQueue.routeError() so the profile
+            // re-initializes instead of the next scheduled task walking into a stuck dialog too.
             try {
-                device.pressBack(deviceSlot);
-                device.pressBack(deviceSlot);
+                QuitDialogGuard.pressBackSafely(device, deviceSlot);
+                QuitDialogGuard.pressBackSafely(device, deviceSlot);
+            } catch (QuitDialogStuckException stuck) {
+                throw stuck;
+            } catch (CancellationException cancelled) {
+                // Same reasoning as the stuck-dialog case above, for the same reason it was easy to
+                // miss: this cleanup runs in a finally, so an interrupt arriving during either
+                // guarded Back landed in the broad catch below and was written off as a "cleanup
+                // error". Cancellation has to reach the caller, or a stop issued while stamina is
+                // being read does nothing at all.
+                throw cancelled;
             } catch (Exception ex) {
                 emitDebug("Press-back cleanup error: " + ex.getMessage());
             }
@@ -121,9 +142,9 @@ public class StaminaHelper {
         pause(1000);
 
         StaminaTopUpResult result = useItemsInOpenDialog(targetStamina, itemReserve);
-        device.pressBack(deviceSlot);
+        QuitDialogGuard.pressBackSafely(device, deviceSlot);
         pause(500);
-        device.pressBack(deviceSlot);
+        QuitDialogGuard.pressBackSafely(device, deviceSlot);
         pause(500);
         return result;
     }
