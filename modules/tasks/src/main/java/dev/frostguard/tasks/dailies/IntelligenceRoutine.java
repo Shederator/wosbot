@@ -18,6 +18,7 @@ import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.schedule.TaskQueue;
+import dev.frostguard.engine.schedule.TroopSlotPolicy;
 import dev.frostguard.engine.service.StaminaService;
 import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.engine.service.TaskManagementService;
@@ -106,7 +107,7 @@ private int maxIntelMarches;
 
 private int intelMarchesRemaining;
 
-// Changed by pernerch | Date: 2026-07-04 | Why: keep runtime Intel capacity override when march capacity drops (e.g., VIP expiry).
+// Keep runtime Intel capacity override when march capacity drops (e.g., VIP expiry).
 private Integer intelMarchCapacityOverride;
 
 private int survivorMissionsSincePause;
@@ -117,16 +118,20 @@ private final IntelPatternPreference intelPatternPreference = new IntelPatternPr
 
 private final IntelCyclePolicy intelCyclePolicy = new IntelCyclePolicy();
 
-// Changed by pernerch | Date: 2026-07-02 | Why: ensure gather and autojoin can be resumed after Intel priority handling.
+// Ensure gather and autojoin can be resumed after Intel priority handling.
 private boolean shouldRequeueGatherAfterIntel;
 
-// Changed by pernerch | Date: 2026-07-02 | Why: restore autojoin after Intel processing so helping rallies continues.
+// Restore autojoin after Intel processing so helping rallies continues.
 private boolean shouldRequeueAutoJoinAfterIntel;
 
-// Changed by pernerch | Date: 2026-07-02 | Why: track beast march dispatch to keep intel rescheduling accurate.
+// Track beast march dispatch to keep intel rescheduling accurate.
 private boolean beastMarchSent;
 
 private final List<LocalDateTime> intelBeastReturnTimes = new ArrayList<>();
+
+// Running count of beast/fire-beast marches actually dispatched this pass, so the troop-slot
+// claim below is sized to real demand instead of a guessed constant.
+private int intelMarchesSentThisPass;
 
 private TaskStateData autoJoinTask;
 
@@ -146,6 +151,7 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 @Override
 	protected void execute() {
 		intelBeastReturnTimes.clear();
+		intelMarchesSentThisPass = 0;
 
 
 		hydrateConfiguration();
@@ -153,7 +159,7 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 
 		processingTask = true;
 		beastMarchSent = false;
-		// Changed by pernerch | Date: 2026-07-04 | Why: reset per-run Intel march-capacity override before processing cycle starts.
+		// Reset per-run Intel march-capacity override before processing cycle starts.
 		intelMarchCapacityOverride = null;
 		shouldRequeueGatherAfterIntel = false;
 		shouldRequeueAutoJoinAfterIntel = false;
@@ -174,6 +180,10 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 			logInfo(routineLogIntelligenceLine("Daily sidebar has no green Intel availability evidence and no "
 					+ "Intel cycle is active. Planning the next UTC Intel refresh at: "
 					+ entryDecision.nextRun().format(DATETIME_FORMATTER)));
+			// No Intel availability this pass, so GatherRoutine must not keep deferring for an
+			// Intel run that is not coming. Left unwritten the flag holds its previous value, and
+			// a stale true is what produced the Gather/Intel stand-off before.
+			updateIntelMissionsAvailableFlag(false);
 			reschedule(entryDecision.nextRun());
 			processingTask = false;
 			return;
@@ -184,6 +194,10 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 			intelScreenHelper.resumeIntelCycleFromWilderness();
 		}
 		boolean intelMissionsDetected = hasVisibleIntelMissionFlow();
+		// GatherRoutine reads INTEL_LAST_RUN_HAD_MISSIONS_BOOL to decide whether to defer or recall
+		// for an imminent Intel pass -- written here, right where the board is actually checked, so
+		// it reflects what this pass genuinely found rather than a stale or default value.
+		updateIntelMissionsAvailableFlag(intelMissionsDetected);
 		if (!intelMissionsDetected) {
 			logInfo(routineLogIntelligenceLine("Daily reported Intel, but no enabled mission marker was detected."));
 			tryRescheduleFromCooldownFlow();
@@ -415,6 +429,26 @@ private LocalDateTime readCooldownFlow(AreaData area, String layout) {
 		return cooldown;
 	}
 
+/**
+	 * Writes INTEL_LAST_RUN_HAD_MISSIONS_BOOL, which GatherRoutine reads to decide whether to
+	 * defer/recall for an imminent Intel pass.
+	 *
+	 * <p>Two real bugs fixed here: (1) {@code profile.setConfig(...)} alone only mutates the
+	 * in-memory profile -- {@code DelayedTask.run()} only persists changed settings to the DB when
+	 * {@code shouldUpdateConfig} is set, and this call never set it, so the write was silently lost
+	 * the moment the profile reloaded from DB before the next task. Every write site now goes
+	 * through this method, which sets that flag. (2) The flag used to be written once from the
+	 * INITIAL board scan and never touched again -- if this same pass then drains the board
+	 * (processes every mission down to none), the flag stayed {@code true} from the stale initial
+	 * read, so GatherRoutine kept deferring/recalling for an Intel pass that no longer had anything
+	 * to do. Now also called from {@link #manageRescheduling} the moment a re-scan genuinely finds
+	 * the board empty.</p>
+	 */
+	void updateIntelMissionsAvailableFlag(boolean hasMissions) {
+		profile.setConfig(ConfigurationKeyEnum.INTEL_LAST_RUN_HAD_MISSIONS_BOOL, hasMissions);
+		setShouldUpdateConfig(true);
+	}
+
 private String routineLogIntelligenceLine(String note) {
         return "IntelligenceRoutine | " + note;
     }
@@ -593,6 +627,20 @@ private void requeueAutoJoinTaskFlow() {
 	}
 
 private void finalizePostIntelTaskFlow() {
+		// This used to release unconditionally at the end of every pass --
+		// but under the real serial per-profile TaskQueue, Gather only ever runs as a SEPARATE task
+		// dispatch after Intel's own execute() has fully returned. Releasing here meant the claim's
+		// entire lifetime was contained within Intel's own execute() call, so Gather could never
+		// actually observe it -- exactly backwards from the point of publishing demand in the first
+		// place, and worse, it released while a beast march the claim was protecting was still
+		// physically traveling (not yet home). Only release when nothing was actually claimed this
+		// pass (a genuine no-op, matching the documented behavior); a real claim is instead left to
+		// expire on its own via the round-trip ETA now-real timestamp set at the claim() call site,
+		// so the slot stays reserved for as long as the march is actually out.
+		if (intelMarchesSentThisPass == 0) {
+			TroopSlotPolicy.release(profile, TpDailyTaskEnum.INTEL);
+		}
+
 		if (shouldRequeueGatherAfterIntel) {
 			requeueGatherTasksFlow();
 		}
@@ -639,7 +687,7 @@ private void recallGatherTroopsFlow() {
 					foundReturning, foundView, foundSpeedup, attempt)));
 
 			if (!foundReturning && !foundView && !foundSpeedup) {
-				// Changed by pernerch | Date: 2026-07-04 | Why: replace hard-coded march ceiling with configured/adjusted runtime capacity.
+				// Replace hard-coded march ceiling with configured/adjusted runtime capacity.
 				int configuredMarches = resolveConfiguredIntelMarchesFlow();
 				int idleMarches = countIdleMarchesFlow();
 				if (idleMarches >= configuredMarches) {
@@ -649,7 +697,7 @@ private void recallGatherTroopsFlow() {
 				}
 
 				int vipAdjustedMarches = Math.max(MIN_INTEL_MARCH_SLOTS, configuredMarches - 1);
-				// Changed by pernerch | Date: 2026-07-04 | Why: treat configured-1 idle marches with zero indicators as possible VIP slot expiry.
+				// Treat configured-1 idle marches with zero indicators as possible VIP slot expiry.
 				if (configuredMarches > MIN_INTEL_MARCH_SLOTS && idleMarches == vipAdjustedMarches) {
 					applyIntelMarchCapacityOverrideFlow(vipAdjustedMarches,
 							"No recall/view/speedup indicators and only " + idleMarches + "/" + configuredMarches
@@ -683,7 +731,7 @@ private void recallGatherTroopsFlow() {
 		logError(routineLogIntelligenceLine("recallGatherTroopsFlow exceeded max attempts (" + maxRetries + "), exiting to avoid deadlock"));
 	}
 
-	// Changed by pernerch | Date: 2026-07-02 | Why: keep detection and recall click in the same
+	// Keep detection and recall click in the same
 	// tab-open cycle so a found recall button can be acted on immediately without UI drift.
 	private TabRecallResult inspectAndRecallForTabFlow(boolean cityTab, SearchConfig searchConfig) {
 		int tapped = 0;
@@ -700,7 +748,7 @@ private void recallGatherTroopsFlow() {
 					TemplatesEnum.MARCHES_AREA_SPEEDUP_BUTTON,
 					searchConfig);
 
-			// Changed by pernerch | Date: 2026-07-02 | Why: gather recall must act on the full set
+			// Gather recall must act on the full set
 			// of visible recall buttons in the opened tab instead of repeatedly probing one button.
 			if (returningArrow != null && returningArrow.isFound()) {
 				List<ImageSearchResultData> recallButtons = locateAllPatternsWithMonoFallback(
@@ -974,6 +1022,10 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 
 		if (!missionsStillAvailable) {
 			logInfo(routineLogIntelligenceLine("No intel missions found after re-scan. Intel run is complete for now."));
+			// The board is genuinely drained now -- refresh the flag from the stale "true" the
+			// initial scan wrote, so GatherRoutine doesn't keep deferring/recalling for an Intel
+			// pass that has nothing left to do.
+			updateIntelMissionsAvailableFlag(false);
 			tryRescheduleFromCooldownFlow();
 			processingTask = false;
 			return;
@@ -1054,7 +1106,7 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 	}
 
 	private int resolveConfiguredIntelMarchesFlow() {
-		// Changed by pernerch | Date: 2026-07-04 | Why: keep one source of truth for configured march capacity plus runtime override.
+		// Keep one source of truth for configured march capacity plus runtime override.
 		Integer configuredMarches = profile.getConfig(ConfigurationKeyEnum.GATHER_ACTIVE_MARCH_QUEUE_INT, Integer.class);
 		int resolved = configuredMarches != null ? configuredMarches : MAX_INTEL_MARCH_SLOTS;
 		resolved = Math.max(MIN_INTEL_MARCH_SLOTS, Math.min(MAX_INTEL_MARCH_SLOTS, resolved));
@@ -1065,7 +1117,7 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 	}
 
 	private void applyIntelMarchCapacityOverrideFlow(int adjustedCapacity, String reason) {
-		// Changed by pernerch | Date: 2026-07-04 | Why: clamp and apply temporary capacity downgrade when VIP-expiry conditions are detected.
+		// Clamp and apply temporary capacity downgrade when VIP-expiry conditions are detected.
 		int normalized = Math.max(MIN_INTEL_MARCH_SLOTS, Math.min(MAX_INTEL_MARCH_SLOTS, adjustedCapacity));
 		if (intelMarchCapacityOverride != null && intelMarchCapacityOverride == normalized) {
 			return;
@@ -1398,6 +1450,16 @@ private void handleBeast(ImageSearchResultData beast) {
 
 		logInfo(routineLogIntelligenceLine("Beast march deployed finished cleanly."));
 		beastMarchSent = true;
+		// A beast march is genuinely out holding a slot -- publish demand so Gather leaves that
+		// slot alone instead of recalling into it. A fixed 10-minute placeholder expiry is used
+		// here since the real round-trip travel time isn't OCR'd until a few lines below (and can
+		// itself fail to parse); re-claimed with the real ETA once it's known.
+		intelMarchesSentThisPass++;
+		// claimDeployed(), not claim(): this march is already out, already reflected as not-idle by
+		// Gather's own live march-queue read. A plain claim() here double-counts an already-occupied
+		// slot on top of that, and can recall an extra gather march that was never actually needed.
+		TroopSlotPolicy.claimDeployed(profile, TpDailyTaskEnum.INTEL, intelMarchesSentThisPass,
+				LocalDateTime.now().plusMinutes(10));
 		intelMarchesRemaining = Math.max(0, intelMarchesRemaining - 1);
 		if (intelMarchesRemaining <= 0) {
 			marchQueueLimitReached = true;
@@ -1413,6 +1475,13 @@ private void handleBeast(ImageSearchResultData beast) {
 		if (useSmartProcessing) {
 			LocalDateTime rescheduleTime = LocalDateTime.now().plusSeconds(travelTimeSeconds * 2);
 			intelBeastReturnTimes.add(rescheduleTime);
+			// The earlier claimDeployed() call (right after deployment) had to use a flat 10-minute
+			// guess because the real travel time isn't OCR'd until here. Now that the actual
+			// round-trip ETA is known, re-claim with it -- claim (and claimDeployed) are documented
+			// idempotent per task, so this simply replaces the earlier estimate with real data. Still
+			// claimDeployed(), not claim(): this march is still the same already-out march, not new
+			// unmet demand.
+			TroopSlotPolicy.claimDeployed(profile, TpDailyTaskEnum.INTEL, intelMarchesSentThisPass, rescheduleTime);
 			if (useFlag) {
 				logInfo(routineLogIntelligenceLine("Intel beast march return ETA: "
 						+ GameTimeUtils.formatCountdown(rescheduleTime)

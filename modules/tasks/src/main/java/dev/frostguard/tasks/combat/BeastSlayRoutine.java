@@ -13,6 +13,7 @@ import dev.frostguard.data.entity.DailyTask;
 import dev.frostguard.data.repository.DailyTaskRepository;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.engine.schedule.TroopSlotPolicy;
 import dev.frostguard.engine.helper.DeploymentHelper;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.nav.SearchConfigConstants;
@@ -33,6 +34,12 @@ public class BeastSlayRoutine extends DelayedTask {
 	/** Tracks the earliest time this task should resume (like GatherRoutine pattern). */
 	private LocalDateTime earliestReschedule;
 
+	/** True when this pass found every march slot occupied and published unmet demand for one.
+	 *  Prevents {@link #finalizeReschedule()} from releasing that claim in the same pass it was
+	 *  made -- the same claim/release lifetime bug fixed for Intel: releasing before returning
+	 *  would mean Gather (a separate task dispatch) could never actually observe the demand. */
+	private boolean queueFullThisPass;
+
 	public BeastSlayRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 		super(profile, tpTask);
 	}
@@ -45,6 +52,7 @@ public class BeastSlayRoutine extends DelayedTask {
 	@Override
 	protected void execute() {
 		earliestReschedule = null;
+		queueFullThisPass = false;
 
 		// Load configuration
 		Integer configMarches = profile.getConfig(ConfigurationKeyEnum.BEAST_HUNTING_MARCHES_INT, Integer.class);
@@ -118,6 +126,19 @@ public class BeastSlayRoutine extends DelayedTask {
 			
 			sleepTask(3000);
 
+			// Every march slot is already occupied (usually by Gather). Unlike an already-deployed
+			// march -- which Gather's own live march-screen read already sees as busy, no
+			// coordination needed -- this is genuine unmet demand: Beast Hunting wants a slot right
+			// now and can't get one. Publish it so Gather recalls one of its own on its next pass,
+			// instead of Beast Hunting just quietly retrying later against the same full queue.
+			if (deploymentHelper.isMarchQueueFull()) {
+				logWarning("March queue is full; no slot available for Beast Hunting this pass.");
+				LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+				TroopSlotPolicy.claim(profile, TpDailyTaskEnum.BEAST_HUNTING, 1, retryAt.plusMinutes(2));
+				queueFullThisPass = true;
+				updateReschedule(retryAt);
+				break;
+			}
 
 			try {
 				if (deploymentHelper.hasNoDeployableTroops()) {
@@ -182,6 +203,15 @@ public class BeastSlayRoutine extends DelayedTask {
 				long returnSeconds = (travelSeconds > 0) ? travelSeconds * 2 : 120;
 				LocalDateTime marchReturn = LocalDateTime.now().plusSeconds(returnSeconds);
 				updateReschedule(marchReturn);
+
+				// Observed live (troop-slot economy): a beast attack is genuinely out holding a slot.
+				// claimDeployed(), not claim(): these marches are already sent and already reflected
+				// as not-idle by Gather's own live march-queue read (same class of bug flagged on
+				// Intel's identical pattern -- a plain claim() here double-counted an already-occupied
+				// slot on top of that and could recall an extra gather march for nothing). Still
+				// reserves the slot from Gather until the marches return; self-expires at the latest
+				// return time.
+				TroopSlotPolicy.claimDeployed(profile, TpDailyTaskEnum.BEAST_HUNTING, attacksDone, marchReturn);
 
 				logInfo("Beast attacked. March returns in ~" + returnSeconds
 						+ "s. Cost: " + staminaCost + ", remaining stamina: " + currentStamina
@@ -259,6 +289,17 @@ public class BeastSlayRoutine extends DelayedTask {
 	}
 
 	private void finalizeReschedule() {
+		// This pass is done dispatching -- release the slot demand (release also pulls Gather
+		// forward). Marches already out are self-tracked via their own return time and occupy real
+		// slots Gather already sees as busy, so gathering can safely resume now. The one exception
+		// is queueFullThisPass: that claim represents demand Beast Hunting still has NOT been able
+		// to satisfy, and releasing it here -- in the same pass it was published -- would mean
+		// Gather (a separate task dispatch under the serial queue) could never actually observe it,
+		// the same claim/release lifetime bug fixed for Intel.
+		if (!queueFullThisPass) {
+			TroopSlotPolicy.release(profile, TpDailyTaskEnum.BEAST_HUNTING);
+		}
+
 		if (earliestReschedule != null) {
 			logInfo("Beast Hunting finished. Rescheduling to " + earliestReschedule + " (earliest march return).");
 			reschedule(earliestReschedule);
