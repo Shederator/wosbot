@@ -1,5 +1,6 @@
 package dev.frostguard.tasks.pets;
 
+import java.awt.image.BufferedImage;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -7,8 +8,11 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
+import dev.frostguard.vision.color.ColorBlobFinder;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
@@ -16,6 +20,7 @@ import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
+import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -29,14 +34,20 @@ public class LifeEssenceRoutine extends DelayedTask {
 	private static final PointData SHOP_TAB_BUTTON = new PointData(670, 195);
 	private static final PointData EXIT_BUTTON = new PointData(40, 30);
 
-	// Search areas
-	private static final AreaData LIFE_ESSENCE_SEARCH_AREA = new AreaData(
-			new PointData(0, 65),
-			new PointData(720, 1280));
+	// Claim badge identification lives in IslandClaimBadges.
+	//
+	// A claimed badge disappears, so one found again in the same place was not claimed.
+	private static final int SAME_BADGE_RADIUS = 40;
 
 	// Retry limits
-	private static final int MAX_CLAIM_SEARCH_ATTEMPTS = 5;
-	private static final int MAX_CLAIM_RESULTS = 5;
+	private static final int MAX_CLAIM_SCANS = 5;
+	private static final int MAX_UNREADABLE_SCANS = 3;
+	private static final int EMPTY_SCANS_BEFORE_DONE = 2;
+	private static final int CLAIM_SETTLE_MILLIS = 700;
+
+	// Gap between the two captures a scan compares, long enough that a flying reward crystal has
+	// clearly moved while a bouncing badge has not.
+	private static final int BADGE_SETTLE_MILLIS = 700;
 
 	// Default configuration values
 	private static final int DEFAULT_OFFSET_MINUTES = Integer.parseInt(
@@ -67,7 +78,7 @@ public class LifeEssenceRoutine extends DelayedTask {
 		}
 
 		// Claim available Life Essence
-		int claimedCount = claimLifeEssence();
+		int claimedCount = claimVisibleBadges();
 
 		// Buy weekly free scroll if enabled and available
 		if (buyWeeklyScroll && shouldBuyWeeklyScroll()) {
@@ -139,73 +150,117 @@ public class LifeEssenceRoutine extends DelayedTask {
 	}
 
 	/**
-	 * Claim all available Life Essence items
-	 * 
-	 * Strategy:
-	 * - Search multiple times in case new essence appears after claiming
-	 * - Stop early if no essence found on consecutive attempts
-	 * 
-	 * @return number of essence items claimed
+	 * Taps every claim badge currently on the island and reports how many were claimed.
+	 *
+	 * <p>Rescans after each pass because claiming one badge can uncover another behind its reward
+	 * animation, and stops once a pass adds nothing new. A badge still in place after being tapped is
+	 * reported rather than counted again, so the total stays a real count of what was collected.
 	 */
-	private int claimLifeEssence() {
-		logInfo("Searching for claimable Life Essence");
-		int totalClaimed = 0;
-		int emptySearches = 0;
+	private int claimVisibleBadges() {
+		logInfo("Scanning the island for claim badges");
+		List<PointData> claimed = new ArrayList<>();
+		int emptyScans = 0;
+		int readableScans = 0;
+		int unreadableScans = 0;
 
-		for (int searchAttempt = 1; searchAttempt <= MAX_CLAIM_SEARCH_ATTEMPTS; searchAttempt++) {
-			logDebug("Claim search attempt " + searchAttempt + "/" + MAX_CLAIM_SEARCH_ATTEMPTS);
-
-			// Search for claimable essence in the defined area
-			List<ImageSearchResultData> essenceList = locateClaimableEssence(
-					TemplatesEnum.LIFE_ESSENCE_CLAIM_CURRENT);
-			if (essenceList.isEmpty()) {
-				essenceList = locateClaimableEssence(TemplatesEnum.LIFE_ESSENCE_CLAIM);
-			}
-
-			if (essenceList.isEmpty()) {
-				emptySearches++;
-				logDebug("No claimable essence found on attempt " + searchAttempt);
-
-				// If we've had 2 consecutive empty searches, likely done
-				if (emptySearches >= 2) {
-					logDebug("Two consecutive empty searches. Stopping claim attempts.");
-					break;
-				}
-
-				// Wait a bit in case essence is still loading
-				sleepTask(500);
+		while (readableScans < MAX_CLAIM_SCANS && unreadableScans < MAX_UNREADABLE_SCANS) {
+			Optional<List<PointData>> reading = locateClaimBadges();
+			if (reading.isEmpty()) {
+				unreadableScans++;
+				logWarning("Could not read the island on this scan; it was off screen or mid transition."
+						+ " Retrying rather than reading it as an empty island.");
+				sleepTask(CLAIM_SETTLE_MILLIS);
 				continue;
 			}
 
-			// Reset empty counter if we found something
-			emptySearches = 0;
+			readableScans++;
+			List<PointData> badges = reading.get();
+			int newlyClaimed = 0;
+			int unchanged = 0;
 
-			// Claim each found essence
-			logDebug("Found " + essenceList.size() + " claimable essence items");
-			for (ImageSearchResultData essence : essenceList) {
-				tapInside(essence);
-				sleepTask(500); // Wait for claim animation
-				totalClaimed++;
+			for (PointData badge : badges) {
+				if (seenBefore(claimed, badge)) {
+					unchanged++;
+					continue;
+				}
+				logDebug("Claiming badge at " + badge);
+				tapNear(badge);
+				sleepTask(CLAIM_SETTLE_MILLIS);
+				claimed.add(badge);
+				newlyClaimed++;
 			}
 
-			// Wait for UI to update after claiming
-			sleepTask(500);
+			if (unchanged > 0) {
+				logWarning(unchanged + " badge(s) still showing after being tapped."
+						+ " The claim may not be registering; they are not counted again.");
+			}
+
+			if (newlyClaimed == 0) {
+				emptyScans++;
+				if (emptyScans >= EMPTY_SCANS_BEFORE_DONE) {
+					break;
+				}
+				sleepTask(CLAIM_SETTLE_MILLIS);
+				continue;
+			}
+
+			emptyScans = 0;
+			sleepTask(CLAIM_SETTLE_MILLIS);
 		}
 
-		logInfo("Claimed " + totalClaimed + " Life Essence items");
-		return totalClaimed;
+		if (claimed.isEmpty() && unreadableScans > 0) {
+			logWarning("Claimed nothing, but " + unreadableScans + " scan(s) could not be read."
+					+ " Badges may have been missed rather than absent.");
+		}
+
+		return claimed.size();
 	}
 
-	private List<ImageSearchResultData> locateClaimableEssence(TemplatesEnum template) {
-		return templateSearchHelper.locateAllPatterns(
-				template,
-				SearchConfig.builder()
-						.withArea(new AreaData(LIFE_ESSENCE_SEARCH_AREA.topLeft(),
-								LIFE_ESSENCE_SEARCH_AREA.bottomRight()))
-						.withThreshold(90)
-						.withMaxAttempts(1)
-						.withMaxResults(MAX_CLAIM_RESULTS)
-						.build());
+	/**
+	 * The centre of every claim badge on the island, or empty when the island could not be read.
+	 *
+	 * <p>Both captures must show the island. Claiming triggers a screen transition, and a capture
+	 * landing on the blank frame mid transition would otherwise contribute no blobs and be
+	 * indistinguishable from an island with nothing left to claim - which is how a real badge came to
+	 * be reported as "Claimed: 0" on a live run. An unreadable island is unknown, never empty.
+	 */
+	private Optional<List<PointData>> locateClaimBadges() {
+		BufferedImage first = captureFrame();
+		if (first == null || !IslandClaimBadges.onIslandScreen(first)) {
+			return Optional.empty();
+		}
+
+		sleepTask(BADGE_SETTLE_MILLIS);
+		BufferedImage second = captureFrame();
+		if (second == null || !IslandClaimBadges.onIslandScreen(second)) {
+			return Optional.empty();
+		}
+
+		List<ColorBlobFinder.Blob> candidates = IslandClaimBadges.candidates(second);
+		List<ColorBlobFinder.Blob> badges =
+				IslandClaimBadges.settled(IslandClaimBadges.candidates(first), candidates);
+
+		for (ColorBlobFinder.Blob blob : candidates) {
+			if (!badges.contains(blob)) {
+				logDebug("Ignored green blob at " + blob.centre() + ": " + blob.width() + "x" + blob.height()
+						+ " fill=" + String.format("%.2f", blob.fillRatio()));
+			}
+		}
+		return Optional.of(badges.stream().map(ColorBlobFinder.Blob::centre).toList());
+	}
+
+	private static boolean seenBefore(List<PointData> claimed, PointData badge) {
+		return claimed.stream().anyMatch(point -> point.manhattanDistanceTo(badge) <= SAME_BADGE_RADIUS);
+	}
+
+	private BufferedImage captureFrame() {
+		try {
+			RawImageData frame = emuManager.captureScreen(String.valueOf(EMULATOR_NUMBER));
+			return dev.frostguard.vision.convert.ImageConverter.toBufferedImage(frame);
+		} catch (Exception e) {
+			logWarning("Failed to capture frame for badge scan: " + e.getMessage());
+			return null;
+		}
 	}
 
 	/**
