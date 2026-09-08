@@ -40,6 +40,26 @@ private static final ZoneId UTC = ZoneId.of("UTC");
     }
 
     /**
+     * Returns the next occurrence of {@code hhmm} ("HH:mm", local JVM time) --
+     * today if that time hasn't passed yet, otherwise tomorrow. Used for tasks the operator wants pinned to
+     * a picked local clock time (e.g. "kick Labyrinth off at noon every day") instead of following
+     * the game's own UTC reset boundary, which lands at a different local hour depending on DST.
+     * Falls back to noon if {@code hhmm} is missing or unparsable.
+     */
+    public static LocalDateTime nextLocalTime(String hhmm) {
+        LocalTime target;
+        try {
+            target = LocalTime.parse(hhmm == null ? "" : hhmm.trim(),
+                    DateTimeFormatter.ofPattern("H:mm"));
+        } catch (Exception e) {
+            target = LocalTime.NOON;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime candidate = now.toLocalDate().atTime(target);
+        return candidate.isAfter(now) ? candidate : candidate.plusDays(1);
+    }
+
+    /**
      * Returns whichever of the two daily cycle boundaries (00:00 UTC or
      * 12:00 UTC) comes soonest, expressed in local time.
      */
