@@ -22,9 +22,8 @@
                 <TabPane maxWidth="Infinity" styleClass="horizontal-tab-pane" tabClosingPolicy="UNAVAILABLE">
                     <Tab text="Arena">
                         <VBox maxWidth="Infinity" spacing="14" styleClass="task-section-inner">
-                            <Label styleClass="task-card-description"
-                                   text="Arena target filters use the selected profile's Character Information: Alliance and Server."
-                                   wrapText="true" />
+                            <Label styleClass="task-card-description" wrapText="true"
+                                   text="Once a day the arena is opened and every free challenge attempt is spent on the safest opponent showing. An opponent whose power is printed in green is weaker than you; red is stronger and is never attacked." />
 
                             <Separator style="-fx-opacity: 0.25;" />
 
@@ -35,28 +34,45 @@
                                 </columnConstraints>
 
                                 <Label styleClass="task-field-label" text="Status" GridPane.columnIndex="0" GridPane.rowIndex="0" />
-                                <CheckBox fx:id="checkBoxArena" mnemonicParsing="false" text="Enable arena"
-                                          GridPane.columnIndex="1" GridPane.rowIndex="0" />
+                                <VBox maxWidth="Infinity" spacing="4" GridPane.columnIndex="1" GridPane.rowIndex="0">
+                                    <CheckBox fx:id="checkBoxArena" mnemonicParsing="false" text="Enable arena" />
+                                    <Label maxWidth="Infinity" styleClass="task-card-description" wrapText="true"
+                                           text="Runs once a day, then reschedules itself for the next day." />
+                                </VBox>
 
                                 <Label styleClass="task-field-label" text="Activation time (UTC)" GridPane.columnIndex="0" GridPane.rowIndex="1" />
-                                <TextField fx:id="textFieldArenaActivationHour" maxWidth="100.0" prefWidth="90.0"
-                                           promptText="HH:mm" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+                                <VBox maxWidth="Infinity" spacing="4" GridPane.columnIndex="1" GridPane.rowIndex="1">
+                                    <TextField fx:id="textFieldArenaActivationHour" maxWidth="100.0" prefWidth="90.0"
+                                               promptText="HH:mm" />
+                                    <Label maxWidth="Infinity" styleClass="task-card-description" wrapText="true"
+                                           text="UTC, not your local time, and no later than 23:55 — attempts you have not spent are lost when the arena day rolls over." />
+                                </VBox>
                                 <Label fx:id="labelDateTimeError" maxWidth="Infinity" wrapText="true"
                                        GridPane.columnIndex="0" GridPane.columnSpan="2" GridPane.rowIndex="2" />
 
                                 <Label styleClass="task-field-label" text="Extra attempts" GridPane.columnIndex="0" GridPane.rowIndex="3" />
-                                <ComboBox fx:id="comboBoxArenaExtraAttempts" maxWidth="100.0" prefWidth="90.0"
-                                          promptText="0" GridPane.columnIndex="1" GridPane.rowIndex="3" />
+                                <VBox maxWidth="Infinity" spacing="4" GridPane.columnIndex="1" GridPane.rowIndex="3">
+                                    <ComboBox fx:id="comboBoxArenaExtraAttempts" maxWidth="100.0" prefWidth="90.0"
+                                              promptText="0" />
+                                    <Label fx:id="labelArenaExtraAttemptsHelp" maxWidth="Infinity"
+                                           styleClass="task-card-description" wrapText="true" />
+                                </VBox>
 
                                 <Label styleClass="task-field-label" text="List refresh" GridPane.columnIndex="0" GridPane.rowIndex="4" />
-                                <CheckBox fx:id="checkBoxArenaRefreshWithGems" mnemonicParsing="false"
-                                          text="Allow paid list refreshes"
-                                          GridPane.columnIndex="1" GridPane.rowIndex="4" />
+                                <VBox maxWidth="Infinity" spacing="4" GridPane.columnIndex="1" GridPane.rowIndex="4">
+                                    <CheckBox fx:id="checkBoxArenaRefreshWithGems" mnemonicParsing="false"
+                                              text="Allow paid list refreshes" />
+                                    <Label fx:id="labelArenaListRefreshHelp" maxWidth="Infinity"
+                                           styleClass="task-card-description" wrapText="true" />
+                                </VBox>
 
                                 <Label styleClass="task-field-label" text="Attack formation" GridPane.columnIndex="0" GridPane.rowIndex="5" />
-                                <CheckBox fx:id="checkBoxArenaAttackQuickDeploy" mnemonicParsing="false"
-                                          text="Use Quick Deploy for attacks"
-                                          GridPane.columnIndex="1" GridPane.rowIndex="5" />
+                                <VBox maxWidth="Infinity" spacing="4" GridPane.columnIndex="1" GridPane.rowIndex="5">
+                                    <CheckBox fx:id="checkBoxArenaAttackQuickDeploy" mnemonicParsing="false"
+                                              text="Use Quick Deploy for attacks" />
+                                    <Label maxWidth="Infinity" styleClass="task-card-description" wrapText="true"
+                                           text="Attacks with the lineup the game suggests. Untick to attack with the formation you saved instead. Your defence formation is never touched." />
+                                </VBox>
                             </GridPane>
 
                             <Separator style="-fx-opacity: 0.15;" />
@@ -66,6 +82,8 @@
                                        text="Target filters use the selected profile's Character Information: Alliance and Server."
                                        wrapText="true" />
 
+                                <Label styleClass="task-field-label" text="Target filters" />
+
                                 <GridPane hgap="14" maxWidth="Infinity" vgap="12">
                                     <columnConstraints>
                                         <ColumnConstraints halignment="LEFT" maxWidth="170.0" minWidth="140.0" prefWidth="155.0" />
@@ -73,20 +91,36 @@
                                     </columnConstraints>
 
                                     <Label styleClass="task-field-label" text="Profile alliance" GridPane.columnIndex="0" GridPane.rowIndex="0" />
-                                    <Label fx:id="labelArenaProfileAlliance" maxWidth="Infinity" text="Not set" wrapText="true"
-                                           GridPane.columnIndex="1" GridPane.rowIndex="0" />
+                                    <VBox maxWidth="Infinity" spacing="4" GridPane.columnIndex="1" GridPane.rowIndex="0">
+                                        <TextField fx:id="textFieldArenaProfileAlliance" maxWidth="260.0" prefWidth="220.0"
+                                                   promptText="ABC" />
+                                        <Label maxWidth="Infinity" styleClass="task-card-description" wrapText="true"
+                                               text="Your own three-letter alliance tag, saved to this profile. The filter below has nothing to compare against until it is set." />
+                                    </VBox>
 
                                     <Label styleClass="task-field-label" text="Alliance filter" GridPane.columnIndex="0" GridPane.rowIndex="1" />
-                                    <ComboBox fx:id="comboBoxArenaAlliancePolicy" maxWidth="260.0" prefWidth="220.0"
-                                              promptText="Any alliance" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+                                    <VBox maxWidth="Infinity" spacing="4" GridPane.columnIndex="1" GridPane.rowIndex="1">
+                                        <ComboBox fx:id="comboBoxArenaAlliancePolicy" maxWidth="260.0" prefWidth="220.0"
+                                                  promptText="Any alliance" />
+                                        <Label fx:id="labelArenaAlliancePolicyHelp" maxWidth="Infinity"
+                                               styleClass="task-card-description" wrapText="true" />
+                                    </VBox>
 
                                     <Label styleClass="task-field-label" text="Profile server" GridPane.columnIndex="0" GridPane.rowIndex="2" />
-                                    <Label fx:id="labelArenaProfileServer" maxWidth="Infinity" text="Not set" wrapText="true"
-                                           GridPane.columnIndex="1" GridPane.rowIndex="2" />
+                                    <VBox maxWidth="Infinity" spacing="4" GridPane.columnIndex="1" GridPane.rowIndex="2">
+                                        <TextField fx:id="textFieldArenaProfileServer" maxWidth="260.0" prefWidth="220.0"
+                                                   promptText="1234" />
+                                        <Label maxWidth="Infinity" styleClass="task-card-description" wrapText="true"
+                                               text="Your own state number, saved to this profile. The policy below has nothing to compare against until it is set." />
+                                    </VBox>
 
                                     <Label styleClass="task-field-label" text="Server policy" GridPane.columnIndex="0" GridPane.rowIndex="3" />
-                                    <ComboBox fx:id="comboBoxArenaServerPolicy" maxWidth="260.0" prefWidth="220.0"
-                                              promptText="Any server" GridPane.columnIndex="1" GridPane.rowIndex="3" />
+                                    <VBox maxWidth="Infinity" spacing="4" GridPane.columnIndex="1" GridPane.rowIndex="3">
+                                        <ComboBox fx:id="comboBoxArenaServerPolicy" maxWidth="260.0" prefWidth="220.0"
+                                                  promptText="Any server" />
+                                        <Label fx:id="labelArenaServerPolicyHelp" maxWidth="Infinity"
+                                               styleClass="task-card-description" wrapText="true" />
+                                    </VBox>
                                 </GridPane>
                             </VBox>
 
