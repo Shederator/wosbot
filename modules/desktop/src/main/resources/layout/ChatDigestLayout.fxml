@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<!-- What the chat adds up to. Counted, never written: every figure on this page is arithmetic over
+     the stored messages, so there is nothing here that can be confidently wrong about what somebody
+     said. See ChatDigest for why it stops short of prose. -->
+<BorderPane maxHeight="Infinity" maxWidth="Infinity" styleClass="chat-root"
+            stylesheets="@chat.css"
+            HBox.hgrow="ALWAYS" VBox.vgrow="ALWAYS"
+            xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1">
+
+    <top>
+        <VBox spacing="6" style="-fx-padding: 10 16 8 16;">
+            <HBox alignment="CENTER_LEFT" spacing="8">
+                <ToggleButton fx:id="tabWorld" minWidth="-Infinity" mnemonicParsing="false"
+                              onAction="#rebuild" styleClass="action-button-timeline"
+                              text="World" userData="world" />
+                <ToggleButton fx:id="tabAlliance" minWidth="-Infinity" mnemonicParsing="false"
+                              onAction="#rebuild" selected="true"
+                              styleClass="action-button-timeline"
+                              text="Alliance" userData="alliance" />
+                <Separator orientation="VERTICAL" />
+                <!-- Three windows and no more. The transcript is kept for thirty days, so a longer
+                     one would point at nothing, and nobody reaches for "three weeks". -->
+                <Label styleClass="label-muted" text="Window" />
+                <ComboBox fx:id="windowBox" minWidth="-Infinity" prefWidth="130" />
+                <Pane HBox.hgrow="ALWAYS" />
+                <Button minWidth="-Infinity" mnemonicParsing="false" onAction="#rebuild"
+                        styleClass="action-button-timeline" text="Recalculate" />
+                <Button minWidth="-Infinity" mnemonicParsing="false" onAction="#copyDigest"
+                        styleClass="action-button-timeline" text="Copy" />
+            </HBox>
+            <HBox alignment="CENTER_LEFT" spacing="8">
+                <Label fx:id="statusLabel" styleClass="label-muted" text="Working it out..." />
+            </HBox>
+        </VBox>
+    </top>
+
+    <center>
+        <ScrollPane fx:id="scrollPane" fitToWidth="true" hbarPolicy="NEVER" vbarPolicy="AS_NEEDED"
+                    style="-fx-background-color: transparent;">
+            <VBox fx:id="digestBody" spacing="14" style="-fx-padding: 4 8 20 8;" />
+        </ScrollPane>
+    </center>
+</BorderPane>

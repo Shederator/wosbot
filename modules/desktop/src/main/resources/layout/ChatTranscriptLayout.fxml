@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<!-- Live transcript - the chat itself, laid out like a chat client. Drawn with ordinary controls
+     rather than a browser view: javafx-web would carry WebKit natives, and this feature has to add
+     no meaningful install size. -->
+<BorderPane fx:id="root" maxHeight="Infinity" maxWidth="Infinity" styleClass="chat-root"
+            stylesheets="@chat.css"
+            HBox.hgrow="ALWAYS" VBox.vgrow="ALWAYS"
+            xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1">
+
+    <top>
+        <!-- Two rows, and every control pinned to its preferred width. One row let the HBox
+             shrink its children below their own text, and JavaFX answers that by drawing an
+             ellipsis, so at the window size this panel is actually used at every button read as
+             three dots. Wrapping is the fix rather than a smaller font, because the truncation
+             returns at the next width down. -->
+        <VBox spacing="6" style="-fx-padding: 10 16 8 16;">
+            <HBox alignment="CENTER_LEFT" spacing="8">
+                <!-- Channels are separate conversations, and reading them interleaved is the main
+                     reason the transcript was hard to follow. There is no combined view: one feed
+                     mixing world chatter into an alliance conversation is the thing the tabs exist
+                     to undo. Alliance opens first because it is the one worth reading. -->
+                <ToggleButton fx:id="tabWorld" minWidth="-Infinity" mnemonicParsing="false"
+                              onAction="#selectChannel" styleClass="action-button-timeline"
+                              text="World" userData="world" />
+                <ToggleButton fx:id="tabAlliance" minWidth="-Infinity" mnemonicParsing="false"
+                              onAction="#selectChannel" selected="true"
+                              styleClass="action-button-timeline"
+                              text="Alliance" userData="alliance" />
+                <Separator orientation="VERTICAL" />
+                <CheckBox fx:id="checkHideChatter" minWidth="-Infinity" mnemonicParsing="false"
+                          onAction="#refresh" selected="true" text="Hide game chatter" />
+                <Pane HBox.hgrow="ALWAYS" />
+                <!-- Reload reads what is already stored; Capture Now sends the bot to go and get
+                     more. Two different waits, so two different buttons rather than one that
+                     sometimes takes five minutes. -->
+                <Button minWidth="-Infinity" mnemonicParsing="false" onAction="#refresh"
+                        styleClass="action-button-timeline" text="Reload" />
+                <Button fx:id="captureNowButton" minWidth="-Infinity" mnemonicParsing="false"
+                        onAction="#captureNow" styleClass="action-button-timeline"
+                        text="Capture Now" />
+                <Button minWidth="-Infinity" mnemonicParsing="false" onAction="#exportHtml"
+                        styleClass="action-button-timeline" text="Export HTML" />
+            </HBox>
+            <!-- Hidden until Ctrl+F. managed follows visible so it takes no height when closed,
+                 rather than leaving a band of empty toolbar above the conversation. -->
+            <HBox fx:id="findBar" alignment="CENTER_LEFT" spacing="6" visible="false"
+                  managed="false">
+                <Label styleClass="label-muted" text="Find" />
+                <TextField fx:id="findField" prefWidth="240" promptText="text, name or @mention" />
+                <Label fx:id="findCount" minWidth="-Infinity" styleClass="label-muted" text="" />
+                <Button minWidth="-Infinity" mnemonicParsing="false" onAction="#findPrevious"
+                        styleClass="action-button-timeline" text="Prev" />
+                <Button minWidth="-Infinity" mnemonicParsing="false" onAction="#findNext"
+                        styleClass="action-button-timeline" text="Next" />
+                <Button minWidth="-Infinity" mnemonicParsing="false" onAction="#closeFind"
+                        styleClass="action-button-timeline" text="Close" />
+            </HBox>
+            <HBox alignment="CENTER_LEFT" spacing="8">
+                <Label fx:id="statusLabel" styleClass="label-muted" text="Loading transcript..." />
+                <Pane HBox.hgrow="ALWAYS" />
+                <!-- Re-reads the stored transcript on a timer. It does not capture: nothing is
+                     sent to the emulator, so this is safe to leave on a short interval. -->
+                <Label styleClass="label-muted" text="Auto-reload" />
+                <ComboBox fx:id="autoReloadBox" minWidth="-Infinity" prefWidth="110" />
+                <Separator orientation="VERTICAL" />
+                <!-- Chat is read for a long time on a small panel, so the size it is drawn at is
+                     worth being able to change without changing it everywhere else. -->
+                <Label styleClass="label-muted" text="Zoom" />
+                <Slider fx:id="zoomSlider" blockIncrement="10" majorTickUnit="25" max="200"
+                        min="70" minWidth="-Infinity" prefWidth="130" value="100" />
+                <Label fx:id="zoomLabel" minWidth="-Infinity" styleClass="label-muted" text="100%" />
+            </HBox>
+        </VBox>
+    </top>
+
+    <center>
+        <ScrollPane fx:id="scrollPane" fitToWidth="true" hbarPolicy="NEVER" vbarPolicy="AS_NEEDED"
+                    style="-fx-background-color: transparent;">
+            <VBox fx:id="messageList" spacing="0" style="-fx-padding: 4 8 16 8;" />
+        </ScrollPane>
+    </center>
+</BorderPane>

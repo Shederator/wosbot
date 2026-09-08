@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<!-- Chat Capture — sidebar panel; controller is injected programmatically by
+     LauncherLayoutController.initializeModules(), same as every other panel
+     in this list. -->
+<StackPane maxHeight="Infinity" maxWidth="Infinity"
+           HBox.hgrow="ALWAYS" VBox.vgrow="ALWAYS"
+           xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1">
+    <ScrollPane fitToWidth="true" hbarPolicy="NEVER" vbarPolicy="AS_NEEDED"
+                styleClass="task-page-scroll">
+        <VBox spacing="14" styleClass="task-page-root" maxWidth="Infinity">
+
+            <VBox maxWidth="Infinity" styleClass="content-card">
+                <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
+                    <Label style="-fx-font-weight: bold; -fx-text-fill: -fg-bg-app; -fx-font-size: 13px;"
+                           text="Chat Capture" />
+                </HBox>
+
+                <VBox maxWidth="Infinity" spacing="10" styleClass="task-section-inner">
+
+                    <HBox alignment="CENTER_LEFT" maxWidth="Infinity">
+                        <CheckBox fx:id="checkBoxEnableChatCapture" mnemonicParsing="false"
+                                  style="-fx-font-weight: bold;" text="Enable" />
+                    </HBox>
+                    <Label styleClass="task-card-description" wrapText="true"
+                           text="Screenshots World, Alliance, and Personal chat on a schedule and saves them for the dashboard. Repeat runs only save messages that are actually new - it diffs against what it already captured rather than re-saving the same history every cycle." />
+
+                    <Separator style="-fx-opacity: 0.25;" />
+
+                    <HBox alignment="CENTER_LEFT" spacing="14">
+                        <Label styleClass="task-field-label" text="Check every" minWidth="140" />
+                        <ComboBox fx:id="comboBoxChatFrequency" prefWidth="150.0" />
+                    </HBox>
+
+                    <Separator style="-fx-opacity: 0.25;" />
+
+                    <Label styleClass="task-field-label" text="Channels" minWidth="140" />
+                    <HBox alignment="CENTER_LEFT" spacing="14">
+                        <CheckBox fx:id="checkBoxChatIncludeWorld" mnemonicParsing="false" text="World" />
+                    </HBox>
+                    <HBox alignment="CENTER_LEFT" spacing="14">
+                        <CheckBox fx:id="checkBoxChatIncludeAlliance" mnemonicParsing="false" text="Alliance" />
+                    </HBox>
+
+                    <Separator style="-fx-opacity: 0.25;" />
+
+                    <HBox alignment="CENTER_LEFT" spacing="14">
+                        <CheckBox fx:id="checkBoxChatFilterNoise" mnemonicParsing="false"
+                                  text="Filter out emote/sticker-only messages" />
+                    </HBox>
+                    <Label styleClass="task-card-note" wrapText="true"
+                           text="Applied during capture, not just tagged for later: a message with no letters or digits in it (just an emoji or sticker) is dropped before saving." />
+
+                    <Separator style="-fx-opacity: 0.25;" />
+
+                    <HBox alignment="CENTER_LEFT" spacing="14">
+                        <Label styleClass="task-field-label" text="Show times in" minWidth="140" />
+                        <ComboBox fx:id="comboBoxChatTimezone" prefWidth="260.0" />
+                    </HBox>
+                    <Label styleClass="task-card-note" wrapText="true"
+                           text="Changes how times are displayed in the Chat and Digest tabs, nothing else. Messages are stored as exact moments, so switching this re-labels what is already captured rather than re-reading anything - useful for reading an alliance spread across timezones in the hours they actually keep." />
+
+                    <Separator style="-fx-opacity: 0.25;" />
+
+                    <HBox alignment="CENTER_LEFT" spacing="14">
+                        <Label styleClass="task-field-label" text="Show in Chat tab" minWidth="140" />
+                        <ComboBox fx:id="comboBoxChatViewMessages" prefWidth="220.0" />
+                    </HBox>
+                    <Label styleClass="task-card-note" wrapText="true"
+                           text="How many of the most recent messages the Chat tab draws. This is a limit on the panel, not on the transcript - nothing is deleted, the older messages are simply not built. Raise it to scroll further back; lower it if the tab feels slow to open." />
+
+                    <Separator style="-fx-opacity: 0.25;" />
+
+                    <HBox alignment="CENTER_LEFT" spacing="14">
+                        <Label styleClass="task-field-label" text="Keep screens" minWidth="140" />
+                        <ComboBox fx:id="comboBoxChatFrameCache" prefWidth="220.0" />
+                    </HBox>
+                    <Label styleClass="task-card-note" wrapText="true"
+                           text="Screens are read and thrown away, so nothing is written to disk unless you set a figure here. Keeping some lets a capture be read again later without waiting for the alliance to repeat itself - useful if the reader misses something and you want it retried. These are pictures of your chat: the oldest are deleted once the figure is reached." />
+
+                </VBox>
+            </VBox>
+
+        </VBox>
+    </ScrollPane>
+</StackPane>
