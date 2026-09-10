@@ -1365,7 +1365,8 @@ private void handleBeast(ImageSearchResultData beast) {
 		sleepTask(1000);
 
 		boolean deployDisappeared = false;
-		int absenceConfirmations = 0;
+		DeploymentCompletionTracker completion =
+				new DeploymentCompletionTracker(POST_DEPLOY_ABSENCE_CONFIRMATIONS);
 		for (int attempt = 0; attempt < DEPLOYMENT_STATE_ATTEMPTS; attempt++) {
 			var postTap = deploymentHelper.readPostTapScreen();
 			if (postTap.marchQueueFull()) {
@@ -1385,7 +1386,7 @@ private void handleBeast(ImageSearchResultData beast) {
 				sleepTask(300);
 				tapNear(new PointData(509, 789));
 				sleepTask(300);
-				absenceConfirmations = 0;
+				completion.reset();
 				continue;
 			}
 
@@ -1399,9 +1400,7 @@ private void handleBeast(ImageSearchResultData beast) {
 				return;
 			}
 
-			if (postTap.deployButton().isFound()) {
-				absenceConfirmations = 0;
-			} else if (++absenceConfirmations >= POST_DEPLOY_ABSENCE_CONFIRMATIONS) {
+			if (completion.observe(postTap.deployButton().isFound())) {
 				deployDisappeared = true;
 				break;
 			}
