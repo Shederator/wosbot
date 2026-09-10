@@ -37,6 +37,10 @@ public class DeploymentHelper {
     private static final int COST_RED_PIXEL_MIN = 10;
     // The ticked preparation option shows ~390 green pixels; the three others show none.
     private static final int SET_TIME_TICK_PIXEL_MIN = 50;
+    // The odds warning measures ~1790 red pixels across its band and the band is otherwise empty, so
+    // the bar sits high: the loudest incidental red text found in 440 stored frames (a rally toast on
+    // the city view, not this screen) reached 287, and this stays clear of it.
+    static final int ODDS_WARNING_PIXEL_MIN = 600;
 
     private final EmulatorController emu;
     private final String device;
@@ -186,6 +190,105 @@ public class DeploymentHelper {
         return false;
     }
 
+    /** What the deploy screen's red odds line says, if it says anything. */
+    public enum OddsWarning {
+        /** No red line: the game is not warning about this march. */
+        NONE,
+        /** "You are not likely to prevail" -- the odds are against it, but it can still win. */
+        UNLIKELY,
+        /** "...almost certain to fail" -- the game saying this march is lost. Never send it. */
+        CERTAIN_FAILURE,
+        /**
+         * The odds line could not be checked at all -- the screen capture or the pixel scan threw.
+         *
+         * <p>Distinct from {@link #CERTAIN_FAILURE} on purpose. Both refuse to send the march, but
+         * this one carries no claim about the beast: it means we did not get to look. Treating a
+         * dropped frame as a verdict would abandon Fire Beasts for the whole run on one bad
+         * capture, and treating it as NONE would deploy into a warning nobody read.
+         */
+        UNREADABLE
+    }
+
+    /**
+     * Reads the odds line and says which of the two warnings it is.
+     *
+     * <p>The pixel count says whether a red line is there at all; it cannot tell the two apart,
+     * because both are red text in the same band. Only one of them is survivable, so the line is
+     * read: "not likely to prevail" is odds and callers may still deploy, while the stronger
+     * "almost certain to fail" is the game telling us the troops are gone. Anything red that does
+     * not read as the survivable phrase is treated as the fatal one -- a march is worth more than a
+     * retry.
+     */
+    public OddsWarning readOddsWarning() {
+        int redPixels;
+        try {
+            redPixels = PixelStats.count(captureImage(), CommonGameAreas.DEPLOY_ODDS_WARNING_AREA,
+                    GameColors::isBlockedRed);
+        } catch (Exception ex) {
+            // Fail closed. This used to return NONE, which let a march the game may have been
+            // calling almost certain to fail deploy anyway on a dropped frame -- the opposite of
+            // what the classifyOddsLine contract below promises, where an unreadable red line is
+            // deliberately treated as fatal because the cost of being wrong one way is a wasted
+            // retry and the other way is an army.
+            log.warn("Deploy odds warning check failed, treating as unreadable: " + ex.getMessage());
+            return OddsWarning.UNREADABLE;
+        }
+        if (redPixels < ODDS_WARNING_PIXEL_MIN) {
+            log.debug("Deploy odds line: redPixels=" + redPixels + " -> NONE");
+            return OddsWarning.NONE;
+        }
+        String line = readOddsLineText();
+        OddsWarning verdict = classifyOddsLine(line);
+        log.info("Deploy odds line: redPixels=" + redPixels + " text=\"" + line + "\" -> " + verdict);
+        return verdict;
+    }
+
+    /**
+     * Which warning a red odds line is, by its words.
+     *
+     * <p>Only "you are not likely to prevail" is survivable. Everything else red -- the stronger
+     * "almost certain to fail", or a line OCR could not read -- is treated as fatal, because the
+     * cost of being wrong one way is a wasted retry and the other way is an army.
+     */
+    static OddsWarning classifyOddsLine(String line) {
+        String normalised = line == null ? "" : line.toLowerCase()
+                .replaceAll("[^a-z ]", " ").replaceAll("\s+", " ").trim();
+        return normalised.contains("prevail") && !normalised.contains("fail")
+                ? OddsWarning.UNLIKELY
+                : OddsWarning.CERTAIN_FAILURE;
+    }
+
+    private String readOddsLineText() {
+        try {
+            RawImageData frame = emu.captureScreen(device);
+            return OcrEngine.recognizeText(frame,
+                    CommonGameAreas.DEPLOY_ODDS_TEXT_AREA.topLeft(),
+                    CommonGameAreas.DEPLOY_ODDS_TEXT_AREA.bottomRight(),
+                    CommonOCRSettings.DEPLOY_ODDS_SETTINGS).trim();
+        } catch (Exception ex) {
+            log.warn("Deploy odds line OCR failed: " + ex.getMessage());
+            return "";
+        }
+    }
+
+    /**
+     * True when the game prints its red "You are not likely to prevail" line above the troop rows,
+     * which is it saying this march loses. Red text is the only red thing in that band, so this is a
+     * pixel count rather than OCR, like every other answer this screen gives.
+     */
+    public boolean isUnlikelyToPrevail() {
+        try {
+            int redPixels = PixelStats.count(captureImage(), CommonGameAreas.DEPLOY_ODDS_WARNING_AREA,
+                    GameColors::isBlockedRed);
+            boolean warned = redPixels >= ODDS_WARNING_PIXEL_MIN;
+            log.debug("Deploy odds warning check: redPixels=" + redPixels + " result=" + warned);
+            return warned;
+        } catch (Exception ex) {
+            log.warn("Deploy odds warning check failed: " + ex.getMessage());
+            return false;
+        }
+    }
+
     /** Equalises the troop sliders. Its x shifts with the Balance button, so it is matched, not tapped blind. */
     public boolean tapEqualize() {
         ImageSearchResultData equalize = templates.locatePattern(
@@ -197,6 +300,34 @@ public class DeploymentHelper {
         }
         taps.tapInside(equalize);
         return true;
+    }
+
+    // Calibrated live on the 3-troop-type beast deployment screen (720x1280); that 3-row layout is
+    // specific to this screen.
+    private static final dev.frostguard.api.domain.PointData[] TROOP_SLIDER_LEFT = {
+            new dev.frostguard.api.domain.PointData(225, 730),
+            new dev.frostguard.api.domain.PointData(225, 870),
+            new dev.frostguard.api.domain.PointData(225, 1010),
+    };
+    private static final dev.frostguard.api.domain.PointData[] TROOP_SLIDER_RIGHT = {
+            new dev.frostguard.api.domain.PointData(640, 730),
+            new dev.frostguard.api.domain.PointData(640, 870),
+            new dev.frostguard.api.domain.PointData(640, 1010),
+    };
+
+    /**
+     * Drags every troop-type slider on the current deployment screen to its maximum.
+     *
+     * <p>Equalize spreads a march thinly and evenly across the three troop types, and the game
+     * answers that with its red "You are not likely to prevail" line -- a verdict on the lineup we
+     * just chose rather than on the target. Beast and Fire Beast deployments send the whole army
+     * instead.
+     */
+    public void maxAllTroopSliders() {
+        for (int i = 0; i < TROOP_SLIDER_LEFT.length; i++) {
+            emu.swipeScreen(device, TROOP_SLIDER_LEFT[i], TROOP_SLIDER_RIGHT[i]);
+        }
+        log.info("Dragged all troop sliders to max.");
     }
 
     private BufferedImage captureImage() {
