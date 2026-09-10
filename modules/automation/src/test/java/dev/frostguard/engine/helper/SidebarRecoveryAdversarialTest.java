@@ -6,6 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.util.ArrayDeque;
+import java.util.Optional;
+import java.util.Queue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
@@ -40,6 +43,13 @@ class SidebarRecoveryAdversarialTest {
         return RawImageData.capture(pixels, 720, 1280, 4);
     }
 
+    private static RawImageData sectionFrame(SidebarSection section) {
+        byte[] pixels = new byte[720 * 1280 * 4];
+        paint(pixels, CommonGameAreas.LEFT_MENU_CLOSE, 255);
+        paint(pixels, CommonGameAreas.sidebarTabSample(section), 170);
+        return RawImageData.capture(pixels, 720, 1280, 4);
+    }
+
     private static void paint(byte[] pixels, AreaData area, int value) {
         for (int y = area.topLeft().getY(); y <= area.bottomRight().getY(); y++) {
             for (int x = area.topLeft().getX(); x <= area.bottomRight().getX(); x++) {
@@ -54,6 +64,10 @@ class SidebarRecoveryAdversarialTest {
         private RawImageData current = frame(false);
         private boolean interruptOnSwipe;
         private boolean preserveSectionOnSwipe;
+        private boolean loseSectionAfterFirstCapture;
+        private int captures;
+        private int swipeCount;
+        private Queue<RawImageData> captureFrames;
 
         private Backend() {
             super("unused-review-backend");
@@ -81,11 +95,16 @@ class SidebarRecoveryAdversarialTest {
 
         @Override
         public RawImageData captureScreenshot(String index) {
-            return current;
+            RawImageData captured = captureFrames.isEmpty() ? current : captureFrames.remove();
+            if (loseSectionAfterFirstCapture && captures++ == 0) {
+                current = frame(false);
+            }
+            return captured;
         }
 
         @Override
         public void swipe(String index, PointData from, PointData to, int duration) {
+            swipeCount++;
             if (!preserveSectionOnSwipe) {
                 current = frame(false);
             }
@@ -109,6 +128,7 @@ class SidebarRecoveryAdversarialTest {
             unsafeField.setAccessible(true);
             backend = (Backend) ((sun.misc.Unsafe) unsafeField.get(null)).allocateInstance(Backend.class);
             backend.current = frame(false);
+            backend.captureFrames = new ArrayDeque<>();
             Constructor<EmulatorController> constructor = EmulatorController.class.getDeclaredConstructor();
             constructor.setAccessible(true);
             emu = constructor.newInstance();
@@ -143,6 +163,17 @@ class SidebarRecoveryAdversarialTest {
 
         assertEquals(SidebarRowLookup.Status.SIDEBAR_UNAVAILABLE,
                 rig.nav.findRowWithStatus(SidebarDestination.LIGHTHOUSE_INTEL).status());
+    }
+
+    @Test
+    void lostSectionBeforeFirstScanMustNotSwipe() throws Exception {
+        Rig rig = new Rig();
+        rig.backend.current = frame(true);
+        rig.backend.loseSectionAfterFirstCapture = true;
+
+        assertEquals(SidebarRowLookup.Status.SIDEBAR_UNAVAILABLE,
+                rig.nav.findRowWithStatus(SidebarDestination.LIGHTHOUSE_INTEL).status());
+        assertEquals(0, rig.backend.swipeCount, "No swipe is safe after section evidence is lost");
     }
 
     @Test
@@ -198,5 +229,18 @@ class SidebarRecoveryAdversarialTest {
 
         assertFalse(rig.nav.openSection(SidebarSection.DAILY));
         assertEquals(1, rig.taps.get());
+    }
+
+    @Test
+    void sectionSwitchWaitsPastThePreviousAndUnknownFrames() throws Exception {
+        Rig rig = new Rig();
+        put(rig.nav, "screenStates", (SidebarNavigator.ScreenStateReader) () ->
+                new SidebarNavigator.ScreenState(Optional.of(SidebarSection.CITY), false));
+        rig.backend.captureFrames.add(sectionFrame(SidebarSection.CITY));
+        rig.backend.captureFrames.add(frame(false));
+        rig.backend.captureFrames.add(frame(true));
+
+        assertTrue(rig.nav.openSection(SidebarSection.DAILY));
+        assertEquals(1, rig.taps.get(), "A section switch must tap the requested tab once");
     }
 }

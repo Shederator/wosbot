@@ -33,8 +33,9 @@ The left City and Daily icons provide row identity. Row order, text, height, and
 controls do not: completed rows may disappear when `Hide after mission completion` is enabled,
 and a row can expose either Go or Claim. The navigator first matches the destination icon, derives
 that row's action area, and only then accepts an allowed Go or Claim pattern inside the same row.
-Go has saved variants with and without the notification badge. A scan that loses the selected
-section or is interrupted is reported as an unavailable sidebar, never as a missing destination.
+Go has saved variants with and without the notification badge. The first scan frame must still
+show the requested section before any row match or swipe. A scan that loses the selected section
+or is interrupted is reported as an unavailable sidebar, never as a missing destination.
 
 Opening the collapsed sidebar or changing its section resets the game's list to the top. A
 destination scan therefore checks that initial viewport and then moves only toward the bottom in
