@@ -67,3 +67,9 @@ Wilderness Intel shortcut, and the Hero's Journey victory screen. Full-queue
 and no-troops deployment states reuse `DeploymentHelper`; forcing those states
 on a live account remains optional because it can interfere with unrelated
 marches.
+
+Intel marker variants are classified from one fresh map frame per stable scan.
+Deployment vision is similarly grouped into formation, preflight, and
+post-Deploy frames; OCR, colour, and template checks within a group reuse that
+exact frame. Every tap starts a new group, and a successful deployment requires
+the Deploy button to be absent on two consecutive fresh post-tap frames.
