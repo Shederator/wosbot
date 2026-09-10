@@ -3,6 +3,7 @@ package dev.frostguard.engine.service;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
@@ -35,13 +36,13 @@ public final class StaminaService {
     private static final int REGEN_CEILING = 200;
 
     /** Compact snapshot of a single account's energy state. */
-    private record EnergySlot(int level, Instant lastTouched) {
+    private record EnergySlot(int level, Instant lastTouched, boolean observed) {
         EnergySlot withLevel(int newLevel) {
-            return new EnergySlot(Math.max(0, newLevel), Instant.now());
+            return new EnergySlot(Math.max(0, newLevel), Instant.now(), observed);
         }
         EnergySlot bumped() {
             return (level < REGEN_CEILING)
-                    ? new EnergySlot(level + 1, lastTouched)
+                    ? new EnergySlot(level + 1, lastTouched, observed)
                     : this;
         }
         boolean isStale() {
@@ -99,7 +100,7 @@ public final class StaminaService {
 
     public void setStamina(Long profileId, int stamina) {
         requireId(profileId);
-        EnergySlot fresh = new EnergySlot(Math.max(0, stamina), Instant.now());
+        EnergySlot fresh = new EnergySlot(Math.max(0, stamina), Instant.now(), true);
         slots.put(profileId, fresh);
         broadcastChange(profileId, fresh.level());
         broadcastSynchronization(profileId, fresh.level());
@@ -134,10 +135,17 @@ public final class StaminaService {
         return (slot != null) ? slot.level() : 0;
     }
 
+    /** Returns an observed stamina value without converting missing state to zero. */
+    public OptionalInt findCurrentStamina(Long profileId) {
+        requireId(profileId);
+        EnergySlot slot = slots.get(profileId);
+        return slot == null || !slot.observed() ? OptionalInt.empty() : OptionalInt.of(slot.level());
+    }
+
     public boolean requiresUpdate(Long profileId) {
         requireId(profileId);
         EnergySlot slot = slots.get(profileId);
-        return slot == null || slot.isStale();
+        return slot == null || !slot.observed() || slot.isStale();
     }
 
     public static long minutesToRegenerate(int currentStamina, int targetStamina) {
@@ -155,7 +163,10 @@ public final class StaminaService {
             int base = (existing != null) ? existing.level() : 0;
             int updated = Math.max(0, base + delta);
             result.set(updated);
-            return new EnergySlot(updated, (existing != null) ? existing.lastTouched() : Instant.now());
+            return new EnergySlot(
+                    updated,
+                    (existing != null) ? existing.lastTouched() : Instant.now(),
+                    existing != null && existing.observed());
         });
         return result.get();
     }
