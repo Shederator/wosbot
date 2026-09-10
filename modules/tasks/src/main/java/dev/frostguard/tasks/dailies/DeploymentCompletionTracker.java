@@ -5,6 +5,7 @@ final class DeploymentCompletionTracker {
 
     private final int requiredAbsences;
     private int consecutiveAbsences;
+    private boolean retryClaimed;
 
     DeploymentCompletionTracker(int requiredAbsences) {
         if (requiredAbsences < 1) {
@@ -19,6 +20,15 @@ final class DeploymentCompletionTracker {
             return false;
         }
         return ++consecutiveAbsences >= requiredAbsences;
+    }
+
+    boolean claimRetry(boolean deployButtonVisible) {
+        if (!deployButtonVisible || retryClaimed) {
+            return false;
+        }
+        retryClaimed = true;
+        reset();
+        return true;
     }
 
     void reset() {

@@ -16,4 +16,13 @@ class DeploymentCompletionTrackerTest {
         assertFalse(tracker.observe(false), "the confirmation count starts again after a reset");
         assertTrue(tracker.observe(false), "two consecutive absent frames confirm completion");
     }
+
+    @Test
+    void permitsExactlyOneRetryWhenDeployRemainsVisible() {
+        DeploymentCompletionTracker tracker = new DeploymentCompletionTracker(2);
+
+        assertTrue(tracker.claimRetry(true), "the first unchanged Deploy screen should recover a missed tap");
+        assertFalse(tracker.claimRetry(true), "a persistent Deploy screen must not trigger an unbounded tap loop");
+        assertFalse(tracker.claimRetry(false), "a disappeared Deploy button never needs another tap");
+    }
 }

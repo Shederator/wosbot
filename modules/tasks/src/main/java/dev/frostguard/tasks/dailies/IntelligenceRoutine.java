@@ -1400,6 +1400,14 @@ private void handleBeast(ImageSearchResultData beast) {
 				return;
 			}
 
+			if (completion.claimRetry(postTap.deployButton().isFound())) {
+				logWarning(routineLogIntelligenceLine(
+						"Deploy button remained visible after the first tap. Retrying the freshly detected button once."));
+				tapInside(postTap.deployButton());
+				sleepTask(1000);
+				continue;
+			}
+
 			if (completion.observe(postTap.deployButton().isFound())) {
 				deployDisappeared = true;
 				break;
