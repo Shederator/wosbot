@@ -269,7 +269,7 @@ boolean navigateToCrystalLaboratoryViaSidebar() {
 
     boolean openCrystalLaboratoryFromCity() {
         ImageSearchResultData entryResult = templateSearchHelper.locatePattern(
-                CRYSTAL_LAB_FC_BUTTON,
+                CRYSTAL_LAB_BUILDING_MARKER,
                 SearchConfig.builder()
                         .withMaxAttempts(3)
                         .withDelay(500)
