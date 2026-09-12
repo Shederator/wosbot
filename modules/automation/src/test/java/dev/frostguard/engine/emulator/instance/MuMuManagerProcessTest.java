@@ -28,6 +28,22 @@ class MuMuManagerProcessTest {
     }
 
     @Test
+    void rejectsStoppedStateWhenManagerExits() throws Exception {
+        boolean running = MuMuEmulatorInstance.readRunningState(
+                childProcess("stopped", tempDir.resolve("stopped.pid")), Duration.ofSeconds(5));
+
+        assertFalse(running);
+    }
+
+    @Test
+    void rejectsRunningTokenFromFailedManagerCommand() throws Exception {
+        boolean running = MuMuEmulatorInstance.readRunningState(
+                childProcess("failed", tempDir.resolve("failed.pid")), Duration.ofSeconds(5));
+
+        assertFalse(running);
+    }
+
+    @Test
     void timesOutAndKillsManagerThatKeepsOutputOpen() throws Exception {
         Path pidFile = tempDir.resolve("timeout.pid");
         long startedAt = System.nanoTime();
@@ -104,8 +120,15 @@ class MuMuManagerProcessTest {
     static final class ChildProcess {
         public static void main(String[] args) throws Exception {
             Files.writeString(Path.of(args[1]), Long.toString(ProcessHandle.current().pid()));
+            if ("stopped".equals(args[0])) {
+                System.out.println("state=stopped");
+                return;
+            }
             System.out.println("state=start_finished");
             System.out.flush();
+            if ("failed".equals(args[0])) {
+                System.exit(7);
+            }
             if ("hang".equals(args[0])) {
                 Thread.sleep(30_000);
             }
