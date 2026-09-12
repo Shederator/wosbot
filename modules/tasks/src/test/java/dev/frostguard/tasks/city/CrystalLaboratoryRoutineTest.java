@@ -17,6 +17,8 @@ import org.junit.jupiter.api.Test;
 
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.api.domain.ImageSearchResultData;
+import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.runtime.WorkspacePaths;
 
 class CrystalLaboratoryRoutineTest {
@@ -102,6 +104,21 @@ class CrystalLaboratoryRoutineTest {
                 .anyMatch(message -> message.contains("stopped at the safety limit after 25 claim(s).")));
     }
 
+    @Test
+    void purchasesDiscountedRfcWhenTheOfferAndRefineButtonArePresent() {
+        TestRoutine routine = new TestRoutine();
+        routine.discountedOfferFound = true;
+        routine.refineButtonFound = true;
+
+        routine.purchaseDiscountedRFCFlow();
+
+        assertEquals(1, routine.discountedOfferSearches);
+        assertEquals(1, routine.refineButtonSearches);
+        assertEquals(1, routine.discountedRfcTaps);
+        assertTrue(routine.infoMessages.stream()
+                .anyMatch(message -> message.contains("Discounted RFC purchased finished cleanly.")));
+    }
+
     private static final class TestRoutine extends CrystalLaboratoryRoutine {
         private final Queue<Boolean> validationResults;
         private final List<LocalDateTime> scheduledTimes = new ArrayList<>();
@@ -113,6 +130,11 @@ class CrystalLaboratoryRoutineTest {
         private int crystalEntryAttempts;
         private int screenValidationAttempts;
         private int recoveryAttempts;
+        private boolean discountedOfferFound;
+        private boolean refineButtonFound;
+        private int discountedOfferSearches;
+        private int refineButtonSearches;
+        private int discountedRfcTaps;
         private CrystalClaimLoop.Result claimResult = new CrystalClaimLoop.Result(0, 3, false);
 
         private TestRoutine(Boolean... validationResults) {
@@ -165,6 +187,23 @@ class CrystalLaboratoryRoutineTest {
         }
 
         @Override
+        ImageSearchResultData locateDailyDiscountedRfc() {
+            discountedOfferSearches++;
+            return imageSearchResult(discountedOfferFound);
+        }
+
+        @Override
+        ImageSearchResultData locateRfcRefineButton() {
+            refineButtonSearches++;
+            return imageSearchResult(refineButtonFound);
+        }
+
+        @Override
+        void tapDiscountedRfc(ImageSearchResultData refineResult) {
+            discountedRfcTaps++;
+        }
+
+        @Override
         protected void sleepTask(long millis) {
             // Keep bounded retry verification deterministic and fast.
         }
@@ -182,6 +221,13 @@ class CrystalLaboratoryRoutineTest {
         @Override
         public void logWarning(String message) {
             warningMessages.add(message);
+        }
+
+        private ImageSearchResultData imageSearchResult(boolean found) {
+            return new ImageSearchResultData(
+                    found,
+                    found ? new PointData(360, 650) : null,
+                    found ? 100.0 : 0.0);
         }
     }
 }

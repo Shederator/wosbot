@@ -128,19 +128,27 @@ private String routineLogCrystalLaboratoryLine(String note) {
         return "CrystalLaboratoryRoutine | " + note;
     }
 
-private void performDiscountedRFCPurchase() {
-        ImageSearchResultData refineResult = templateSearchHelper.locatePattern(
-                CRYSTAL_LAB_RFC_REFINE_BUTTON,
-                SearchConfig.builder().build());
+void performDiscountedRFCPurchase() {
+        ImageSearchResultData refineResult = locateRfcRefineButton();
 
         if (refineResult.isFound()) {
-            tapInside(refineResult);
-            sleepTask(500);
+            tapDiscountedRfc(refineResult);
 
             logInfo(routineLogCrystalLaboratoryLine("Discounted RFC purchased finished cleanly."));
         } else {
             logWarning(routineLogCrystalLaboratoryLine("Could not find RFC refine button for discounted purchase."));
         }
+    }
+
+ImageSearchResultData locateRfcRefineButton() {
+        return templateSearchHelper.locatePattern(
+                CRYSTAL_LAB_RFC_REFINE_BUTTON,
+                SearchConfig.builder().build());
+    }
+
+void tapDiscountedRfc(ImageSearchResultData refineResult) {
+        tapInside(refineResult);
+        sleepTask(500);
     }
 
 private void performBulkRefinementsFlow(int currentRFC) {
@@ -160,10 +168,8 @@ private void performBulkRefinementsFlow(int currentRFC) {
         }
     }
 
-private void purchaseDiscountedRFCFlow() {
-        ImageSearchResultData discountedResult = templateSearchHelper.locatePattern(
-                CRYSTAL_LAB_DAILY_DISCOUNTED_RFC,
-                SearchConfig.builder().build());
+void purchaseDiscountedRFCFlow() {
+        ImageSearchResultData discountedResult = locateDailyDiscountedRfc();
 
         if (!discountedResult.isFound()) {
             logInfo(routineLogCrystalLaboratoryLine("Zero discounted RFC available today."));
@@ -172,6 +178,12 @@ private void purchaseDiscountedRFCFlow() {
 
         logInfo(routineLogCrystalLaboratoryLine("50% discounted RFC available. Attempting to purchase."));
         performDiscountedRFCPurchase();
+    }
+
+ImageSearchResultData locateDailyDiscountedRfc() {
+        return templateSearchHelper.locatePattern(
+                CRYSTAL_LAB_DAILY_DISCOUNTED_RFC,
+                SearchConfig.builder().build());
     }
 
 private boolean validateCrystalLabInterface() {
