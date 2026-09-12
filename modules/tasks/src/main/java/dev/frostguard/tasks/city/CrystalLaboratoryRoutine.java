@@ -244,7 +244,9 @@ boolean reachCrystalLaboratory() {
         logInfo(routineLogCrystalLaboratoryLine("Moving to Crystal Laboratory"));
 
         for (int attempt = 1; attempt <= MAX_NAVIGATION_ATTEMPTS; attempt++) {
-            if (navigateToCrystalLaboratoryViaSidebar() && validateCrystalLabInterface()) {
+            if (navigateToCrystalLaboratoryViaSidebar()
+                    && openCrystalLaboratoryFromCity()
+                    && validateCrystalLabInterface()) {
                 return true;
             }
 
@@ -263,6 +265,24 @@ boolean reachCrystalLaboratory() {
 
 boolean navigateToCrystalLaboratoryViaSidebar() {
         return navigationHelper.navigateToSidebarDestination(SidebarDestination.CRYSTAL_LABORATORY);
+    }
+
+    boolean openCrystalLaboratoryFromCity() {
+        ImageSearchResultData entryResult = templateSearchHelper.locatePattern(
+                CRYSTAL_LAB_FC_BUTTON,
+                SearchConfig.builder()
+                        .withMaxAttempts(3)
+                        .withDelay(500)
+                        .build());
+        if (!entryResult.isFound()) {
+            logWarning(routineLogCrystalLaboratoryLine(
+                    "Crystal Laboratory building marker was not found after sidebar navigation."));
+            return false;
+        }
+
+        tapInside(entryResult);
+        sleepTask(1000);
+        return true;
     }
 
 void recoverCrystalLaboratoryNavigation() {

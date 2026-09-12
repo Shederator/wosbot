@@ -35,6 +35,7 @@ class CrystalLaboratoryRoutineTest {
 
         assertTrue(routine.reachCrystalLaboratory());
         assertEquals(1, routine.sidebarNavigationAttempts);
+        assertEquals(1, routine.crystalEntryAttempts);
         assertEquals(2, routine.screenValidationAttempts);
         assertEquals(0, routine.recoveryAttempts);
     }
@@ -45,7 +46,20 @@ class CrystalLaboratoryRoutineTest {
 
         assertFalse(routine.reachCrystalLaboratory());
         assertEquals(2, routine.sidebarNavigationAttempts);
+        assertEquals(2, routine.crystalEntryAttempts);
         assertEquals(6, routine.screenValidationAttempts);
+        assertEquals(1, routine.recoveryAttempts);
+    }
+
+    @Test
+    void retriesWithoutValidationWhenTheCrystalBuildingCannotBeOpened() {
+        TestRoutine routine = new TestRoutine();
+        routine.crystalEntrySucceeds = false;
+
+        assertFalse(routine.reachCrystalLaboratory());
+        assertEquals(2, routine.sidebarNavigationAttempts);
+        assertEquals(2, routine.crystalEntryAttempts);
+        assertEquals(0, routine.screenValidationAttempts);
         assertEquals(1, routine.recoveryAttempts);
     }
 
@@ -94,7 +108,9 @@ class CrystalLaboratoryRoutineTest {
         private final List<String> infoMessages = new ArrayList<>();
         private final List<String> warningMessages = new ArrayList<>();
         private boolean navigationSucceeds = true;
+        private boolean crystalEntrySucceeds = true;
         private int sidebarNavigationAttempts;
+        private int crystalEntryAttempts;
         private int screenValidationAttempts;
         private int recoveryAttempts;
         private CrystalClaimLoop.Result claimResult = new CrystalClaimLoop.Result(0, 3, false);
@@ -114,6 +130,12 @@ class CrystalLaboratoryRoutineTest {
         boolean navigateToCrystalLaboratoryViaSidebar() {
             sidebarNavigationAttempts++;
             return navigationSucceeds;
+        }
+
+        @Override
+        boolean openCrystalLaboratoryFromCity() {
+            crystalEntryAttempts++;
+            return crystalEntrySucceeds;
         }
 
         @Override
