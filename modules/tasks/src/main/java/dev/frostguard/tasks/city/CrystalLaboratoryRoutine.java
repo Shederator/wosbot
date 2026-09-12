@@ -23,6 +23,10 @@ private static final int MAX_CONSECUTIVE_FAILED_CLAIMS_LIMIT = 3;
 
 private static final int MAX_OCR_RETRIES_LIMIT = 5;
 
+private static final int MAX_SCREEN_VALIDATION_ATTEMPTS = 3;
+
+private static final int MAX_NAVIGATION_ATTEMPTS = 2;
+
 private static final int INSUFFICIENT_FC_RETRY_HOURS_VALUE = 2;
 
 private static final int RFC_COST_TIER_1_VALUE = 20;
@@ -171,16 +175,27 @@ private void purchaseDiscountedRFCFlow() {
     }
 
 private boolean validateCrystalLabInterface() {
+        for (int attempt = 1; attempt <= MAX_SCREEN_VALIDATION_ATTEMPTS; attempt++) {
+            if (isCrystalLabInterfaceVisible()) {
+                logInfo(routineLogCrystalLaboratoryLine("Successfully navigated to Crystal Laboratory"));
+                return true;
+            }
+
+            if (attempt < MAX_SCREEN_VALIDATION_ATTEMPTS) {
+                sleepTask(500);
+            }
+        }
+
+        logWarning(routineLogCrystalLaboratoryLine(
+                "Crystal Lab UI not detected after " + MAX_SCREEN_VALIDATION_ATTEMPTS + " checks."));
+        return false;
+    }
+
+boolean isCrystalLabInterfaceVisible() {
         ImageSearchResultData validationResult = templateSearchHelper.locatePattern(
                 VALIDATION_CRYSTAL_LAB_UI,
                 SearchConfig.builder().build());
-
-        if (!validationResult.isFound()) {
-            logWarning(routineLogCrystalLaboratoryLine("Crystal Lab UI not detected after sidebar navigation."));
-            return false;
-        }
-        logInfo(routineLogCrystalLaboratoryLine("Successfully navigated to Crystal Laboratory"));
-        return true;
+        return validationResult.isFound();
     }
 
 private int extractNumberWithOCRFlow(PointData topLeft, PointData bottomRight, String description) {
@@ -218,23 +233,40 @@ private int extractNumberWithOCRFlow(PointData topLeft, PointData bottomRight, S
         return -1;
     }
 
-private CrystalClaimLoop.Result performCrystalClaimLoop() {
+CrystalClaimLoop.Result performCrystalClaimLoop() {
         return CrystalClaimLoop.collect(
                 this::locateAndClaimCrystal,
                 () -> sleepTask(250),
                 MAX_CONSECUTIVE_FAILED_CLAIMS_LIMIT);
     }
 
-private boolean reachCrystalLaboratory() {
+boolean reachCrystalLaboratory() {
         logInfo(routineLogCrystalLaboratoryLine("Moving to Crystal Laboratory"));
 
-        if (!navigationHelper.navigateToSidebarDestination(SidebarDestination.CRYSTAL_LABORATORY)) {
-            logWarning(routineLogCrystalLaboratoryLine(
-                    "Crystal Laboratory row or its Go action was not found in the Daily sidebar."));
-            return false;
+        for (int attempt = 1; attempt <= MAX_NAVIGATION_ATTEMPTS; attempt++) {
+            if (navigateToCrystalLaboratoryViaSidebar() && validateCrystalLabInterface()) {
+                return true;
+            }
+
+            if (attempt < MAX_NAVIGATION_ATTEMPTS) {
+                logWarning(routineLogCrystalLaboratoryLine(
+                        "Crystal Laboratory navigation was not confirmed. Recovering and retrying."));
+                recoverCrystalLaboratoryNavigation();
+                sleepTask(500);
+            }
         }
 
-        return validateCrystalLabInterface();
+        logWarning(routineLogCrystalLaboratoryLine(
+                "Crystal Laboratory row, its Go action, or the resulting screen could not be confirmed."));
+        return false;
+    }
+
+boolean navigateToCrystalLaboratoryViaSidebar() {
+        return navigationHelper.navigateToSidebarDestination(SidebarDestination.CRYSTAL_LABORATORY);
+    }
+
+void recoverCrystalLaboratoryNavigation() {
+        navigationHelper.ensureCorrectScreenLocation(LaunchPoint.HOME);
     }
 
 private boolean locateAndClaimCrystal() {
@@ -253,13 +285,21 @@ private boolean locateAndClaimCrystal() {
 
 private void scheduleNavigationRetry() {
         consecutiveNavigationFailures++;
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = currentTime();
         LocalDateTime retryAt = CrystalLaboratoryRetryPolicy.retryAt(
-                now, GameTimeUtils.dailyResetTime(), consecutiveNavigationFailures);
+                now, dailyResetTime(), consecutiveNavigationFailures);
         logWarning(routineLogCrystalLaboratoryLine(
                 "Navigation failed " + consecutiveNavigationFailures + " time(s). Next attempt at "
                         + retryAt.format(DATETIME_FORMATTER) + "."));
         reschedule(retryAt);
+    }
+
+LocalDateTime currentTime() {
+        return LocalDateTime.now();
+    }
+
+LocalDateTime dailyResetTime() {
+        return GameTimeUtils.dailyResetTime();
     }
 
 private int resolveRefinementCost(int refineLevel) {
@@ -335,7 +375,7 @@ private Integer decodeNumberFromOCR(String ocrText) {
         }
     }
 
-private void redeemAllCrystals() {
+void redeemAllCrystals() {
         logInfo(routineLogCrystalLaboratoryLine("Initiating crystal collecting process"));
         CrystalClaimLoop.Result result = performCrystalClaimLoop();
 
