@@ -1,16 +1,15 @@
 package dev.frostguard.engine.emulator.instance;
 
+import dev.frostguard.engine.emulator.BoundedProcessRunner;
 import dev.frostguard.engine.emulator.EmulatorInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Controls MuMu Player emulator instances through the {@code MuMuManager.exe}
@@ -23,7 +22,8 @@ public class MuMuEmulatorInstance extends EmulatorInstance {
 
     private static final int ADB_BASE_PORT = 16384;
     private static final int ADB_PORT_STRIDE = 32;
-    private static final int PROCESS_TIMEOUT_SECS = 45;
+    private static final Duration STATE_PROBE_TIMEOUT = Duration.ofSeconds(5);
+    private static final Duration ACTION_TIMEOUT = Duration.ofSeconds(45);
     private static final String RUNNING_TOKEN = "state=start_finished";
 
     public MuMuEmulatorInstance(String executablePath) {
@@ -54,10 +54,8 @@ public class MuMuEmulatorInstance extends EmulatorInstance {
     @Override
     public boolean isRunning(String identifier) {
         try {
-            Process proc = buildManagerProcess(identifier, "player_state");
-            boolean running = scanOutputForToken(proc);
-            proc.waitFor(30, TimeUnit.SECONDS);
-            return running;
+            return readRunningState(
+                    buildManagerProcess(identifier, "player_state"), STATE_PROBE_TIMEOUT);
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
             log.debug("State probe interrupted for MuMu #{}", identifier);
@@ -73,38 +71,41 @@ public class MuMuEmulatorInstance extends EmulatorInstance {
         return Paths.get(consolePath, "MuMuManager.exe");
     }
 
-    private Process buildManagerProcess(String instanceId, String action)
-            throws IOException {
+    private ProcessBuilder buildManagerProcess(String instanceId, String action) {
         List<String> cmd = List.of(
                 resolveManagerBinary().toString(),
                 "api", "-v", instanceId, action);
         ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.directory(Paths.get(consolePath).getParent().toFile());
-        return pb.start();
+        return pb;
     }
 
     private void executeManagerAction(String instanceId, String action) {
         try {
-            Process proc = buildManagerProcess(instanceId, action);
-            proc.waitFor(PROCESS_TIMEOUT_SECS, TimeUnit.SECONDS);
+            BoundedProcessRunner.ProcessResult result = BoundedProcessRunner.run(
+                    buildManagerProcess(instanceId, action), ACTION_TIMEOUT);
+            if (result.timedOut()) {
+                log.error("MuMu action '{}' timed out after {} seconds; killed the manager process",
+                        action, ACTION_TIMEOUT.toSeconds());
+            } else if (result.exitCode() != 0) {
+                log.error("MuMu action '{}' exited with code {}", action, result.exitCode());
+            }
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
-            log.error("MuMu action '{}' interrupted", action, ie);
+            log.debug("MuMu action '{}' interrupted; killed the manager process", action);
         } catch (IOException ioe) {
             log.error("Failed to execute MuMu action '{}'", action, ioe);
         }
     }
 
-    private boolean scanOutputForToken(Process proc) throws IOException {
-        try (BufferedReader reader =
-                     new BufferedReader(new InputStreamReader(proc.getInputStream()))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (line.contains(RUNNING_TOKEN)) {
-                    return true;
-                }
-            }
+    static boolean readRunningState(ProcessBuilder managerProcess, Duration timeout)
+            throws IOException, InterruptedException {
+        BoundedProcessRunner.ProcessResult result = BoundedProcessRunner.run(managerProcess, timeout);
+        if (result.timedOut()) {
+            log.warn("MuMu state probe timed out after {} seconds; killed the manager process",
+                    timeout.toSeconds());
+            return false;
         }
-        return false;
+        return result.exitCode() == 0 && result.output().contains(RUNNING_TOKEN);
     }
 }
