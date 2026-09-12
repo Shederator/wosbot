@@ -76,11 +76,12 @@ public class TaskManagerLayoutController implements ProfileDataChangeListener {
 			.thenComparingLong(TaskManagerAux::getNearestMinutesUntilExecution);
 
 	private final Image iconTrue = loadIndicator("green.png");
-	private final Image iconFalse = loadIndicator("red.png");
 	private final Image iconWaiting = loadIndicator("yellow.png");
 	private final Image iconIdle = loadIndicator("grey.png");
+	private final Image iconSelected = loadIndicator("blue.png");
 	private final ObjectProperty<LocalDateTime> globalClock = new SimpleObjectProperty<>(LocalDateTime.now());
 	private final Map<Long, Tab> profileTabsMap = new HashMap<>();
+	private final Map<Long, AccountDescriptor> profileById = new HashMap<>();
 	private final Map<Long, ObservableList<TaskManagerAux>> tasks = new HashMap<>();
 	private final Map<Long, FilteredList<TaskManagerAux>> filteredTasks = new HashMap<>();
 	private final TaskManagerActionController taskManagerActionController = new TaskManagerActionController(this);
@@ -109,9 +110,17 @@ public class TaskManagerLayoutController implements ProfileDataChangeListener {
 	public void initialize() {
 		ProfileService.obtain().registerDataObserver(this);
 		configureFilter();
+		configureProfileTabSelection();
 		setToggleButtonLabel();
 		loadProfiles();
 		startClock();
+	}
+
+	private void configureProfileTabSelection() {
+		if (tabPaneProfiles == null) {
+			return;
+		}
+		tabPaneProfiles.getSelectionModel().selectedItemProperty().addListener((obs, prev, selected) -> refreshTabIcons());
 	}
 
 	@FXML
@@ -248,6 +257,7 @@ public class TaskManagerLayoutController implements ProfileDataChangeListener {
 				.collect(Collectors.toSet());
 		removeMissingTabs(currentProfileIds);
 		accounts.forEach(this::upsertProfileTab);
+		refreshTabIcons();
 	}
 
 	private void removeMissingTabs(Set<Long> currentProfileIds) {
@@ -256,6 +266,7 @@ public class TaskManagerLayoutController implements ProfileDataChangeListener {
 				return false;
 			}
 			tabPaneProfiles.getTabs().remove(entry.getValue());
+			profileById.remove(entry.getKey());
 			tasks.remove(entry.getKey());
 			filteredTasks.remove(entry.getKey());
 			return true;
@@ -263,6 +274,7 @@ public class TaskManagerLayoutController implements ProfileDataChangeListener {
 	}
 
 	private void upsertProfileTab(AccountDescriptor profile) {
+		profileById.put(profile.getId(), profile);
 		Tab existingTab = profileTabsMap.get(profile.getId());
 		if (existingTab == null) {
 			Tab newTab = createProfileTab(profile);
@@ -306,7 +318,13 @@ public class TaskManagerLayoutController implements ProfileDataChangeListener {
 
 	@Override
 	public void onAccountDataModified(AccountDescriptor profile) {
-		Platform.runLater(this::loadProfiles);
+		Platform.runLater(() -> {
+			if (profile != null && profile.getId() != null) {
+				profileById.put(profile.getId(), profile);
+				refreshTabIcons();
+			}
+			loadProfiles();
+		});
 	}
 
 	private void reloadTaskRows(AccountDescriptor profile, Consumer<List<TaskManagerAux>> onListReady) {
@@ -545,18 +563,12 @@ public class TaskManagerLayoutController implements ProfileDataChangeListener {
 	}
 
 	public void updateTabOrder() {
-		profileTabsMap.forEach((profileId, tab) -> {
-			TaskQueue queue = ScheduleService.obtain().getCoordinator().getQueue(profileId);
-			if (queue != null) {
-				tab.setGraphic(tabIconFor(queue.getProfile()));
-			}
-		});
-
 		List<Tab> sortedTabs = profileTabsMap.entrySet().stream()
 				.sorted((left, right) -> compareProfileTabs(left.getKey(), right.getKey()))
 				.map(Map.Entry::getValue)
 				.collect(Collectors.toList());
 		tabPaneProfiles.getTabs().setAll(sortedTabs);
+		refreshTabIcons();
 	}
 
 	private int compareProfileTabs(Long leftProfileId, Long rightProfileId) {
@@ -577,18 +589,39 @@ public class TaskManagerLayoutController implements ProfileDataChangeListener {
 		return Integer.compare(leftPosition, rightPosition);
 	}
 
-	private ImageView tabIconFor(AccountDescriptor profile) {
-		Image image;
-		if (profile.getQueuePosition() == 0) {
-			image = iconTrue;
-		} else if (profile.getQueuePosition() == Integer.MAX_VALUE && profile.getEnabled()) {
-			image = iconIdle;
-		} else if (!profile.getEnabled()) {
-			image = iconFalse;
-		} else {
-			image = iconWaiting;
+	private void refreshTabIcons() {
+		if (tabPaneProfiles == null) {
+			return;
 		}
-		return iconView(image);
+		Tab selectedTab = tabPaneProfiles.getSelectionModel().getSelectedItem();
+		profileTabsMap.forEach((profileId, tab) -> {
+			AccountDescriptor profile = resolveProfile(profileId);
+			if (profile == null) {
+				return;
+			}
+			tab.setGraphic(tabIconFor(profile, tab == selectedTab));
+		});
+	}
+
+	private AccountDescriptor resolveProfile(Long profileId) {
+		// Prefer the ProfileService snapshot so enabled/disabled tab colors stay
+		// correct; TaskQueue may still hold a stale AccountDescriptor copy.
+		AccountDescriptor cached = profileById.get(profileId);
+		if (cached != null) {
+			return cached;
+		}
+		TaskQueue queue = ScheduleService.obtain().getCoordinator().getQueue(profileId);
+		return queue == null ? null : queue.getProfile();
+	}
+
+	private ImageView tabIconFor(AccountDescriptor profile, boolean selected) {
+		if (selected) {
+			return iconView(iconSelected);
+		}
+		if (Boolean.TRUE.equals(profile.getEnabled())) {
+			return iconView(iconTrue);
+		}
+		return iconView(iconIdle);
 	}
 
 	private ImageView statusIconFor(TaskManagerAux task) {
