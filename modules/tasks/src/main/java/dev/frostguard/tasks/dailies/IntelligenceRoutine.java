@@ -11,6 +11,7 @@ import dev.frostguard.api.domain.MarchSlotState;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.TaskStateData;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
+import dev.frostguard.engine.helper.TemplateSearchHelper.Frame;
 import dev.frostguard.engine.helper.DeploymentHelper;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.CommonOCRSettings;
@@ -43,6 +44,12 @@ private static final int JOURNEY_STAMINA_COST_VALUE = 10;
 private static final int SMART_PROCESSING_MIN_IDLE_MARCHES_FOR_INTEL = 2;
 
 private static final int MAX_INTEL_MARCH_SLOTS = 6;
+
+private static final int DEPLOYMENT_STATE_ATTEMPTS = 3;
+
+private static final long DEPLOYMENT_STATE_RETRY_DELAY_MS = 200L;
+
+private static final int POST_DEPLOY_ABSENCE_CONFIRMATIONS = 2;
 
 private static final int MIN_INTEL_MARCH_SLOTS = 1;
 
@@ -266,12 +273,10 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 				waitForSurvivorBatchCooldownFlow();
 				intelScreenHelper.ensureOnIntelScreen();
 				logDebug(routineLogIntelligenceLine("Scanning for survivor camps using grayscale matching."));
-				for (TemplatesEnum template : survivorTemplates()) {
-					if (seekAndProcessGrayscale(template, this::handleSurvivor)) {
-						anyIntelProcessed = true;
-						nonBeastIntelProcessed = true;
-						break;
-					}
+				Frame frame = templateSearchHelper.captureFrame();
+				if (seekAndProcessGrayscale(frame, survivorTemplates(), this::handleSurvivor)) {
+					anyIntelProcessed = true;
+					nonBeastIntelProcessed = true;
 				}
 				if (!processingTask) {
 					return;
@@ -282,12 +287,10 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 			if (explorationsEnabled) {
 				intelScreenHelper.ensureOnIntelScreen();
 				logDebug(routineLogIntelligenceLine("Scanning for explorations using grayscale matching."));
-				for (TemplatesEnum template : journeyTemplates()) {
-					if (seekAndProcessGrayscale(template, this::handleJourney)) {
-						anyIntelProcessed = true;
-						nonBeastIntelProcessed = true;
-						break;
-					}
+				Frame frame = templateSearchHelper.captureFrame();
+				if (seekAndProcessGrayscale(frame, journeyTemplates(), this::handleJourney)) {
+					anyIntelProcessed = true;
+					nonBeastIntelProcessed = true;
 				}
 				if (!processingTask) {
 					return;
@@ -308,35 +311,27 @@ private boolean hasEnabledIntelMissionType() {
 	}
 
 private boolean hasVisibleIntelMissionFlow() {
+		Frame frame = templateSearchHelper.captureFrame();
 
-		if (fireBeastsEnabled && locateIntelPatternMono(
-				TemplatesEnum.INTEL_FIRE_BEAST, SearchConfigConstants.DEFAULT_SINGLE)
-				.isFound()) {
+		if (fireBeastsEnabled && locateFirstIntelPatternMono(frame,
+				new TemplatesEnum[] {TemplatesEnum.INTEL_FIRE_BEAST},
+				SearchConfigConstants.DEFAULT_SINGLE).found()) {
 			return true;
 		}
 
-		if (beastsEnabled) {
-			for (TemplatesEnum template : beastTemplates()) {
-				if (locateIntelPatternMono(template, SearchConfigConstants.DEFAULT_SINGLE).isFound()) {
-					return true;
-				}
-			}
+		if (beastsEnabled && locateFirstIntelPatternMono(
+				frame, beastTemplates(), SearchConfigConstants.DEFAULT_SINGLE).found()) {
+			return true;
 		}
 
-		if (survivorCampsEnabled) {
-			for (TemplatesEnum template : survivorTemplates()) {
-				if (locateIntelPatternMono(template, SearchConfigConstants.DEFAULT_SINGLE).isFound()) {
-					return true;
-				}
-			}
+		if (survivorCampsEnabled && locateFirstIntelPatternMono(
+				frame, survivorTemplates(), SearchConfigConstants.DEFAULT_SINGLE).found()) {
+			return true;
 		}
 
-		if (explorationsEnabled) {
-			for (TemplatesEnum template : journeyTemplates()) {
-				if (locateIntelPatternMono(template, SearchConfigConstants.DEFAULT_SINGLE).isFound()) {
-					return true;
-				}
-			}
+		if (explorationsEnabled && locateFirstIntelPatternMono(
+				frame, journeyTemplates(), SearchConfigConstants.DEFAULT_SINGLE).found()) {
+			return true;
 		}
 
 		return false;
@@ -446,16 +441,17 @@ private boolean shouldProcessBeastsFlow() {
 		return true;
 	}
 
-private boolean seekAndProcessGrayscale(TemplatesEnum template, Consumer<ImageSearchResultData> processMethod) {
-		logDebug(routineLogIntelligenceLine("Scanning for grayscale template '" + template + "'"));
-		ImageSearchResultData result = locateIntelPatternMono(template, SearchConfigConstants.SINGLE_WITH_RETRIES);
+private boolean seekAndProcessGrayscale(
+		Frame frame, TemplatesEnum[] templates, Consumer<ImageSearchResultData> processMethod) {
+		IntelMissionFrameScanner.Match match = locateFirstIntelPatternMono(
+				frame, templates, SearchConfigConstants.SINGLE_WITH_RETRIES);
 
-		if (result.isFound()) {
-			logInfo(routineLogIntelligenceLine("Grayscale template detected: " + template));
-			processMethod.accept(result);
+		if (match.found()) {
+			logInfo(routineLogIntelligenceLine("Grayscale template detected: " + match.template()));
+			processMethod.accept(match.result());
 			return true;
 		}
-		logDebug(routineLogIntelligenceLine("Grayscale template not detected: " + template));
+		logDebug(routineLogIntelligenceLine("No configured grayscale marker detected in captured frame."));
 		return false;
 	}
 
@@ -959,8 +955,10 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 		intelScreenHelper.ensureOnIntelScreen();
 		releaseElapsedIntelMarchesFlow();
 		marchQueueLimitReached = !marchesAvailable.available() || intelMarchesRemaining <= 0;
-		boolean nonMarchBoundMissionAvailable = hasNonMarchBoundIntelMissionAvailableFlow();
-		boolean missionsStillAvailable = nonMarchBoundMissionAvailable || hasMarchBoundIntelMissionAvailableFlow();
+		Frame missionFrame = templateSearchHelper.captureFrame();
+		boolean nonMarchBoundMissionAvailable = hasNonMarchBoundIntelMissionAvailableFlow(missionFrame);
+		boolean missionsStillAvailable = nonMarchBoundMissionAvailable
+				|| hasMarchBoundIntelMissionAvailableFlow(missionFrame);
 		boolean onlyMarchBoundMissionsLeft = missionsStillAvailable && !nonMarchBoundMissionAvailable;
 
 		if (onlyMarchBoundMissionsLeft && marchQueueLimitReached) {
@@ -1083,76 +1081,69 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 		}
 	}
 
-	private boolean hasNonMarchBoundIntelMissionAvailableFlow() {
-		if (survivorCampsEnabled) {
-			for (TemplatesEnum template : survivorTemplates()) {
-				if (locateIntelPatternMono(template, SearchConfigConstants.DEFAULT_SINGLE).isFound()) {
-					return true;
-				}
-			}
-		}
-
-		if (explorationsEnabled) {
-			for (TemplatesEnum template : journeyTemplates()) {
-				if (locateIntelPatternMono(template, SearchConfigConstants.DEFAULT_SINGLE).isFound()) {
-					return true;
-				}
-			}
-		}
-
-		return false;
-	}
-
-	private boolean hasMarchBoundIntelMissionAvailableFlow() {
-		if (fireBeastsEnabled && locateIntelPatternMono(
-				TemplatesEnum.INTEL_FIRE_BEAST, SearchConfigConstants.DEFAULT_SINGLE)
-				.isFound()) {
+	private boolean hasNonMarchBoundIntelMissionAvailableFlow(Frame frame) {
+		if (survivorCampsEnabled && locateFirstIntelPatternMono(
+				frame, survivorTemplates(), SearchConfigConstants.DEFAULT_SINGLE).found()) {
 			return true;
 		}
 
-		if (beastsEnabled) {
-			for (TemplatesEnum template : beastTemplates()) {
-				if (locateIntelPatternMono(template, SearchConfigConstants.DEFAULT_SINGLE).isFound()) {
-					return true;
-				}
-			}
+		if (explorationsEnabled && locateFirstIntelPatternMono(
+				frame, journeyTemplates(), SearchConfigConstants.DEFAULT_SINGLE).found()) {
+			return true;
+		}
+
+		return false;
+	}
+
+	private boolean hasMarchBoundIntelMissionAvailableFlow(Frame frame) {
+		if (fireBeastsEnabled && locateFirstIntelPatternMono(frame,
+				new TemplatesEnum[] {TemplatesEnum.INTEL_FIRE_BEAST},
+				SearchConfigConstants.DEFAULT_SINGLE).found()) {
+			return true;
+		}
+
+		if (beastsEnabled && locateFirstIntelPatternMono(
+				frame, beastTemplates(), SearchConfigConstants.DEFAULT_SINGLE).found()) {
+			return true;
 		}
 		return false;
 	}
 
-	private ImageSearchResultData locateIntelPatternMono(TemplatesEnum template, SearchConfig config) {
-		ImageSearchResultData result = templateSearchHelper.locatePatternMono(template, config);
-		if (result.isFound() && intelPatternPreference.recordMatch(template)) {
-			logInfo(routineLogIntelligenceLine("Fire Crystal Intel marker confirmed by " + template
+	private IntelMissionFrameScanner.Match locateFirstIntelPatternMono(
+			Frame frame, TemplatesEnum[] templates, SearchConfig config) {
+		IntelMissionFrameScanner.Match match = IntelMissionFrameScanner.findFirst(frame, templates, config);
+		if (match.found() && intelPatternPreference.recordMatch(match.template())) {
+			logInfo(routineLogIntelligenceLine("Fire Crystal Intel marker confirmed by " + match.template()
 					+ ". Prioritizing Fire Crystal marker variants for the rest of this run."));
 		}
-		return result;
+		return match;
 	}
 
 	private boolean handleBeastIntel() {
 		intelScreenHelper.ensureOnIntelScreen();
 		boolean beastFound = false;
+		Frame frame = templateSearchHelper.captureFrame();
 
 
 		if (fireBeastsEnabled && !(useFlag && beastMarchSent)) {
 			logDebug(routineLogIntelligenceLine("Scanning for fire beasts."));
-			if (seekAndProcessGrayscale(TemplatesEnum.INTEL_FIRE_BEAST, this::handleBeast)) {
+			if (seekAndProcessGrayscale(frame,
+					new TemplatesEnum[] {TemplatesEnum.INTEL_FIRE_BEAST}, this::handleBeast)) {
 				beastFound = true;
 				if (useFlag) {
 					return true;
 
 				}
+				intelScreenHelper.ensureOnIntelScreen();
+				frame = templateSearchHelper.captureFrame();
 			}
 		}
 
 
 		if (!(useFlag && beastMarchSent)) {
 			logDebug(routineLogIntelligenceLine("Scanning for beasts using grayscale matching."));
-			for (TemplatesEnum beast_screening : beastTemplates()) {
-				if (seekAndProcessGrayscale(beast_screening, this::handleBeast)) {
-					beastFound = true;
-					break;
-				}
+			if (seekAndProcessGrayscale(frame, beastTemplates(), this::handleBeast)) {
+				beastFound = true;
 			}
 		}
 
@@ -1277,7 +1268,17 @@ private void handleBeast(ImageSearchResultData beast) {
 		}
 		tapInside(attack);
 		sleepTask(500);
-		if (deploymentHelper.isMarchQueueFull()) {
+
+		var formation = deploymentHelper.readFormationScreen();
+		for (int attempt = 1; attempt < DEPLOYMENT_STATE_ATTEMPTS
+				&& !formation.marchQueueFull()
+				&& (!formation.deployButton().isFound()
+						|| (!useFlag && !formation.equalizeButton().isFound())); attempt++) {
+			sleepTask(DEPLOYMENT_STATE_RETRY_DELAY_MS);
+			formation = deploymentHelper.readFormationScreen();
+		}
+		if (formation.marchQueueFull()) {
+			deploymentHelper.dismissMarchQueueFullPopup();
 			logInfo(routineLogIntelligenceLine(
 					"March Queue popup confirmed that no slot is available. Retrying in 5 minutes."));
 			reschedule(LocalDateTime.now().plusMinutes(5));
@@ -1287,8 +1288,7 @@ private void handleBeast(ImageSearchResultData beast) {
 		}
 
 
-		ImageSearchResultData deployButton = templateSearchHelper.locatePattern(TemplatesEnum.DEPLOY_BUTTON,
-				SearchConfigConstants.SINGLE_WITH_RETRIES);
+		ImageSearchResultData deployButton = formation.deployButton();
 		if (!deployButton.isFound()) {
 			logWarning(routineLogIntelligenceLine(
 					"Deploy screen was not confirmed after Attack. No march was sent; retrying in 5 minutes."));
@@ -1309,15 +1309,20 @@ private void handleBeast(ImageSearchResultData beast) {
 				return;
 			}
 			logInfo(routineLogIntelligenceLine("Formation setup: flag #" + flagNumber + " confirmed."));
-		} else if (deploymentHelper.tapEqualize()) {
+		} else if (formation.equalizeButton().isFound()) {
+			tapInside(formation.equalizeButton());
 			logInfo(routineLogIntelligenceLine("Formation setup: no flag configured; using Equalize."));
 			sleepTask(300);
+		} else {
+			logWarning(routineLogIntelligenceLine(
+					"Equalize button was not found after the bounded formation scan; validating the current lineup."));
 		}
 
-		var deployment = deploymentHelper.readScreen(DeploymentHelper.MAX_ATTACK_STAMINA_COST);
+		var preflightScreen = deploymentHelper.readPreflightScreen(DeploymentHelper.MAX_ATTACK_STAMINA_COST);
+		var deployment = preflightScreen.deployment();
 		long travelTimeSeconds = deployment.travelTimeSeconds();
 		int spentStamina = deployment.staminaCost();
-		if (deploymentHelper.hasNoDeployableTroops()) {
+		if (preflightScreen.noDeployableTroops()) {
 			logWarning(routineLogIntelligenceLine(
 					"Deployment has no available troops. No march was sent; retrying in 5 minutes."));
 			pressBack();
@@ -1325,7 +1330,7 @@ private void handleBeast(ImageSearchResultData beast) {
 			processingTask = false;
 			return;
 		}
-		if (deploymentHelper.isDeployCostRed()) {
+		if (preflightScreen.deployCostRed()) {
 			logWarning(routineLogIntelligenceLine(
 					"Deployment stamina cost is red. No march was sent or deducted; retrying in 5 minutes."));
 			pressBack();
@@ -1345,7 +1350,7 @@ private void handleBeast(ImageSearchResultData beast) {
 		}
 
 
-		ImageSearchResultData deploy = templateSearchHelper.locatePattern(TemplatesEnum.DEPLOY_BUTTON, SearchConfigConstants.SINGLE_WITH_RETRIES);
+		ImageSearchResultData deploy = preflightScreen.deployButton();
 		if (!deploy.isFound()) {
 			logError(routineLogIntelligenceLine("Deploy button not detected. Planning next run to try again in 5 minutes."));
 			reschedule(LocalDateTime.now().plusMinutes(5));
@@ -1358,37 +1363,61 @@ private void handleBeast(ImageSearchResultData beast) {
 				+ travelTimeSeconds + ", staminaCost=" + spentStamina + "."));
 		tapInside(deploy);
 		sleepTask(1000);
-		if (deploymentHelper.isMarchQueueFull()) {
-			logInfo(routineLogIntelligenceLine(
-					"March Queue became full before Deploy completed. Retrying in 5 minutes."));
-			reschedule(LocalDateTime.now().plusMinutes(5));
-			marchQueueLimitReached = true;
-			processingTask = false;
-			return;
+
+		boolean deployDisappeared = false;
+		DeploymentCompletionTracker completion =
+				new DeploymentCompletionTracker(POST_DEPLOY_ABSENCE_CONFIRMATIONS);
+		for (int attempt = 0; attempt < DEPLOYMENT_STATE_ATTEMPTS; attempt++) {
+			var postTap = deploymentHelper.readPostTapScreen();
+			if (postTap.marchQueueFull()) {
+				deploymentHelper.dismissMarchQueueFullPopup();
+				logInfo(routineLogIntelligenceLine(
+						"March Queue became full before Deploy completed. Retrying in 5 minutes."));
+				reschedule(LocalDateTime.now().plusMinutes(5));
+				marchQueueLimitReached = true;
+				processingTask = false;
+				return;
+			}
+
+			if (postTap.confirmationDialog().isFound()) {
+				logInfo(routineLogIntelligenceLine(
+						"Deployment confirmation dialog detected (troop imbalance). Confirming deployment."));
+				tapNear(new PointData(211, 713));
+				sleepTask(300);
+				tapNear(new PointData(509, 789));
+				sleepTask(300);
+				completion.reset();
+				continue;
+			}
+
+			if (postTap.sameTargetDialog()) {
+				logInfo(routineLogIntelligenceLine(
+						"Another march is already targeting this beast. Cancelling deployment without stamina deduction."));
+				pressBack();
+				pressBack();
+				reschedule(LocalDateTime.now().plusMinutes(1));
+				processingTask = false;
+				return;
+			}
+
+			if (completion.claimRetry(postTap.deployButton().isFound())) {
+				logWarning(routineLogIntelligenceLine(
+						"Deploy button remained visible after the first tap. Retrying the freshly detected button once."));
+				tapInside(postTap.deployButton());
+				sleepTask(1000);
+				continue;
+			}
+
+			if (completion.observe(postTap.deployButton().isFound())) {
+				deployDisappeared = true;
+				break;
+			}
+			if (attempt < DEPLOYMENT_STATE_ATTEMPTS - 1) {
+				sleepTask(DEPLOYMENT_STATE_RETRY_DELAY_MS);
+			}
 		}
 
-
-		ImageSearchResultData confirmDialog = templateSearchHelper.locatePattern(TemplatesEnum.DEPLOY_CONFIRMATION_DIALOG, SearchConfigConstants.SINGLE_WITH_RETRIES);
-		if (confirmDialog.isFound()) {
-			logInfo(routineLogIntelligenceLine("Deployment confirmation dialog detected (troop imbalance). Confirming deployment."));
-			tapNear(new PointData(211, 713));
-			sleepTask(300);
-			tapNear(new PointData(509, 789));
-			sleepTask(300);
-		}
-
-		if (deploymentHelper.isSameTargetDialog()) {
-			logInfo(routineLogIntelligenceLine(
-					"Another march is already targeting this beast. Cancelling deployment without stamina deduction."));
-			pressBack();
-			pressBack();
-			reschedule(LocalDateTime.now().plusMinutes(1));
-			processingTask = false;
-			return;
-		}
-
-		deploy = templateSearchHelper.locatePattern(TemplatesEnum.DEPLOY_BUTTON, SearchConfigConstants.SINGLE_WITH_RETRIES);
-		if (deploy.isFound()) {
+		if (!deployDisappeared) {
 			logWarning(routineLogIntelligenceLine("Deploy button still present after deployment attempt. March may not have completed. Planning next run in 5 minutes."));
 			reschedule(LocalDateTime.now().plusMinutes(5));
 			processingTask = false;
