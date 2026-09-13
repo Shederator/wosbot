@@ -5,6 +5,7 @@ import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
+import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.vision.convert.GameTimeUtils;
@@ -22,7 +23,9 @@ private static final int MAX_CONSECUTIVE_FAILED_CLAIMS_LIMIT = 3;
 
 private static final int MAX_OCR_RETRIES_LIMIT = 5;
 
-private static final int NAVIGATION_RETRY_MINUTES_VALUE = 5;
+private static final int MAX_SCREEN_VALIDATION_ATTEMPTS = 3;
+
+private static final int MAX_NAVIGATION_ATTEMPTS = 2;
 
 private static final int INSUFFICIENT_FC_RETRY_HOURS_VALUE = 2;
 
@@ -60,6 +63,8 @@ private boolean useDiscountedDailyRFC;
 
 private int weeklyRFCTarget;
 
+private int consecutiveNavigationFailures;
+
 public CrystalLaboratoryRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDailyTask) {
         super(profile, tpDailyTask);
     }
@@ -81,9 +86,10 @@ protected void loadConfiguration() {
         loadConfiguration();
 
         if (!reachCrystalLaboratory()) {
-            reschedule(LocalDateTime.now().plusMinutes(NAVIGATION_RETRY_MINUTES_VALUE));
+            scheduleNavigationRetry();
             return;
         }
+        consecutiveNavigationFailures = 0;
 
         redeemAllCrystals();
 
@@ -122,19 +128,27 @@ private String routineLogCrystalLaboratoryLine(String note) {
         return "CrystalLaboratoryRoutine | " + note;
     }
 
-private void performDiscountedRFCPurchase() {
-        ImageSearchResultData refineResult = templateSearchHelper.locatePattern(
-                CRYSTAL_LAB_RFC_REFINE_BUTTON,
-                SearchConfig.builder().build());
+void performDiscountedRFCPurchase() {
+        ImageSearchResultData refineResult = locateRfcRefineButton();
 
         if (refineResult.isFound()) {
-            tapInside(refineResult);
-            sleepTask(500);
+            tapDiscountedRfc(refineResult);
 
             logInfo(routineLogCrystalLaboratoryLine("Discounted RFC purchased finished cleanly."));
         } else {
             logWarning(routineLogCrystalLaboratoryLine("Could not find RFC refine button for discounted purchase."));
         }
+    }
+
+ImageSearchResultData locateRfcRefineButton() {
+        return templateSearchHelper.locatePattern(
+                CRYSTAL_LAB_RFC_REFINE_BUTTON,
+                SearchConfig.builder().build());
+    }
+
+void tapDiscountedRfc(ImageSearchResultData refineResult) {
+        tapInside(refineResult);
+        sleepTask(500);
     }
 
 private void performBulkRefinementsFlow(int currentRFC) {
@@ -154,10 +168,8 @@ private void performBulkRefinementsFlow(int currentRFC) {
         }
     }
 
-private void purchaseDiscountedRFCFlow() {
-        ImageSearchResultData discountedResult = templateSearchHelper.locatePattern(
-                CRYSTAL_LAB_DAILY_DISCOUNTED_RFC,
-                SearchConfig.builder().build());
+void purchaseDiscountedRFCFlow() {
+        ImageSearchResultData discountedResult = locateDailyDiscountedRfc();
 
         if (!discountedResult.isFound()) {
             logInfo(routineLogCrystalLaboratoryLine("Zero discounted RFC available today."));
@@ -168,35 +180,34 @@ private void purchaseDiscountedRFCFlow() {
         performDiscountedRFCPurchase();
     }
 
-private boolean openUpCrystalLabInterface() {
-        tapInside(new PointData(637, 903), new PointData(692, 914), 1, 500);
+ImageSearchResultData locateDailyDiscountedRfc() {
+        return templateSearchHelper.locatePattern(
+                CRYSTAL_LAB_DAILY_DISCOUNTED_RFC,
+                SearchConfig.builder().build());
+    }
 
+private boolean validateCrystalLabInterface() {
+        for (int attempt = 1; attempt <= MAX_SCREEN_VALIDATION_ATTEMPTS; attempt++) {
+            if (isCrystalLabInterfaceVisible()) {
+                logInfo(routineLogCrystalLaboratoryLine("Successfully navigated to Crystal Laboratory"));
+                return true;
+            }
+
+            if (attempt < MAX_SCREEN_VALIDATION_ATTEMPTS) {
+                sleepTask(500);
+            }
+        }
+
+        logWarning(routineLogCrystalLaboratoryLine(
+                "Crystal Lab UI not detected after " + MAX_SCREEN_VALIDATION_ATTEMPTS + " checks."));
+        return false;
+    }
+
+boolean isCrystalLabInterfaceVisible() {
         ImageSearchResultData validationResult = templateSearchHelper.locatePattern(
                 VALIDATION_CRYSTAL_LAB_UI,
                 SearchConfig.builder().build());
-
-        if (!validationResult.isFound()) {
-            logWarning(routineLogCrystalLaboratoryLine("Crystal Lab UI not detected. Retrying in 5min."));
-            return false;
-        }
-        logInfo(routineLogCrystalLaboratoryLine("Successfully navigated to Crystal Laboratory"));
-        return true;
-    }
-
-private boolean locateAndTapTroopsButton() {
-        ImageSearchResultData troopsResult = templateSearchHelper.locatePattern(
-                GAME_HOME_SHORTCUTS_LANCER,
-                SearchConfig.builder().build());
-
-        if (!troopsResult.isFound()) {
-            logWarning(routineLogCrystalLaboratoryLine("Could not locate troops button. Navigation did not complete."));
-            return false;
-        }
-
-        tapInside(troopsResult);
-        sleepTask(1000);
-
-        return true;
+        return validationResult.isFound();
     }
 
 private int extractNumberWithOCRFlow(PointData topLeft, PointData bottomRight, String description) {
@@ -234,52 +245,93 @@ private int extractNumberWithOCRFlow(PointData topLeft, PointData bottomRight, S
         return -1;
     }
 
-private void performCrystalClaimLoop(ImageSearchResultData initialClaimResult) {
-        ImageSearchResultData claimResult = initialClaimResult;
-        int consecutiveFailures = 0;
+CrystalClaimLoop.Result performCrystalClaimLoop() {
+        return CrystalClaimLoop.collect(
+                this::locateAndClaimCrystal,
+                () -> sleepTask(250),
+                MAX_CONSECUTIVE_FAILED_CLAIMS_LIMIT);
+    }
 
-        while (claimResult.isFound() && consecutiveFailures < MAX_CONSECUTIVE_FAILED_CLAIMS_LIMIT) {
-            logDebug(routineLogCrystalLaboratoryLine("Collecting crystal..."));
+boolean reachCrystalLaboratory() {
+        logInfo(routineLogCrystalLaboratoryLine("Moving to Crystal Laboratory"));
 
-            tapInside(claimResult.getPoint(), claimResult.getPoint());
-            sleepTask(100);
+        for (int attempt = 1; attempt <= MAX_NAVIGATION_ATTEMPTS; attempt++) {
+            if (navigateToCrystalLaboratoryViaSidebar()
+                    && openCrystalLaboratoryFromCity()
+                    && validateCrystalLabInterface()) {
+                return true;
+            }
 
-
-            claimResult = templateSearchHelper.locatePattern(
-                    CRYSTAL_LAB_REFINE_BUTTON,
-                    SearchConfig.builder().build());
-
-            if (!claimResult.isFound()) {
-                consecutiveFailures++;
-                logDebug(routineLogCrystalLaboratoryLine("Claim button not detected. Consecutive failures: " +
-                        consecutiveFailures + "/" + MAX_CONSECUTIVE_FAILED_CLAIMS_LIMIT));
-            } else {
-                consecutiveFailures = 0;
-
+            if (attempt < MAX_NAVIGATION_ATTEMPTS) {
+                logWarning(routineLogCrystalLaboratoryLine(
+                        "Crystal Laboratory navigation was not confirmed. Recovering and retrying."));
+                recoverCrystalLaboratoryNavigation();
+                sleepTask(500);
             }
         }
 
-        logClaimLoopResultFlow(consecutiveFailures);
+        logWarning(routineLogCrystalLaboratoryLine(
+                "Crystal Laboratory row, its Go action, or the resulting screen could not be confirmed."));
+        return false;
     }
 
-private boolean reachCrystalLaboratory() {
-        logInfo(routineLogCrystalLaboratoryLine("Moving to Crystal Laboratory"));
+boolean navigateToCrystalLaboratoryViaSidebar() {
+        return navigationHelper.navigateToSidebarDestination(SidebarDestination.CRYSTAL_LABORATORY);
+    }
 
-        marchHelper.openLeftMenuCitySection(true);
-
-        if (!locateAndTapTroopsButton()) {
+    boolean openCrystalLaboratoryFromCity() {
+        ImageSearchResultData entryResult = templateSearchHelper.locatePattern(
+                CRYSTAL_LAB_BUILDING_MARKER,
+                SearchConfig.builder()
+                        .withMaxAttempts(3)
+                        .withDelay(500)
+                        .build());
+        if (!entryResult.isFound()) {
+            logWarning(routineLogCrystalLaboratoryLine(
+                    "Crystal Laboratory building marker was not found after sidebar navigation."));
             return false;
         }
 
-        return openUpCrystalLabInterface();
+        tapInside(entryResult);
+        sleepTask(1000);
+        return true;
     }
 
-private void logClaimLoopResultFlow(int consecutiveFailures) {
-        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILED_CLAIMS_LIMIT) {
-            logInfo(routineLogCrystalLaboratoryLine("Crystal collecting completed - no more claims available."));
-        } else {
-            logInfo(routineLogCrystalLaboratoryLine("Crystal collecting process finished finished cleanly."));
+void recoverCrystalLaboratoryNavigation() {
+        navigationHelper.ensureCorrectScreenLocation(LaunchPoint.HOME);
+    }
+
+private boolean locateAndClaimCrystal() {
+        ImageSearchResultData claimResult = templateSearchHelper.locatePattern(
+                CRYSTAL_LAB_REFINE_BUTTON,
+                SearchConfig.builder().build());
+
+        if (!claimResult.isFound()) {
+            return false;
         }
+
+        logDebug(routineLogCrystalLaboratoryLine("Collecting crystal..."));
+        tapInside(claimResult.getPoint(), claimResult.getPoint());
+        return true;
+    }
+
+private void scheduleNavigationRetry() {
+        consecutiveNavigationFailures++;
+        LocalDateTime now = currentTime();
+        LocalDateTime retryAt = CrystalLaboratoryRetryPolicy.retryAt(
+                now, dailyResetTime(), consecutiveNavigationFailures);
+        logWarning(routineLogCrystalLaboratoryLine(
+                "Navigation failed " + consecutiveNavigationFailures + " time(s). Next attempt at "
+                        + retryAt.format(DATETIME_FORMATTER) + "."));
+        reschedule(retryAt);
+    }
+
+LocalDateTime currentTime() {
+        return LocalDateTime.now();
+    }
+
+LocalDateTime dailyResetTime() {
+        return GameTimeUtils.dailyResetTime();
     }
 
 private int resolveRefinementCost(int refineLevel) {
@@ -355,18 +407,21 @@ private Integer decodeNumberFromOCR(String ocrText) {
         }
     }
 
-private void redeemAllCrystals() {
-        ImageSearchResultData claimResult = templateSearchHelper.locatePattern(
-                CRYSTAL_LAB_REFINE_BUTTON,
-                SearchConfig.builder().build());
-
-        if (!claimResult.isFound()) {
-            logInfo(routineLogCrystalLaboratoryLine("Zero crystals available to claim."));
-            return;
-        }
-
+void redeemAllCrystals() {
         logInfo(routineLogCrystalLaboratoryLine("Initiating crystal collecting process"));
-        performCrystalClaimLoop(claimResult);
+        CrystalClaimLoop.Result result = performCrystalClaimLoop();
+
+        if (result.attemptLimitReached()) {
+            logWarning(routineLogCrystalLaboratoryLine(
+                    "Crystal collecting stopped at the safety limit after " + result.claims() + " claim(s)."));
+        } else if (result.claims() == 0) {
+            logInfo(routineLogCrystalLaboratoryLine(
+                    "Zero crystals available after " + result.consecutiveMisses() + " checks."));
+        } else {
+            logInfo(routineLogCrystalLaboratoryLine(
+                    "Crystal collecting completed after " + result.claims() + " claim(s) and "
+                            + result.consecutiveMisses() + " final misses."));
+        }
     }
 
 private WeeklyRFCResultShape handleWeeklyRFC() {

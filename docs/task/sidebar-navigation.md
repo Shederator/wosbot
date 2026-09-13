@@ -47,7 +47,10 @@ entry followed by the supply counter.
 
 Saved evidence lives under
 `modules/automation/src/test/resources/navigation/sidebar-update-20260817` and
-`modules/automation/src/test/resources/navigation/sidebar-dynamic-20260821`. It covers City,
+`modules/automation/src/test/resources/navigation/sidebar-dynamic-20260821`. A sanitized current
+Crystal Laboratory frame lives under `sidebar-update-20260912`. It proves that Crystal Laboratory
+is a Daily destination with its own stable cube icon and a row-relative Go action, replacing the
+old Lancer-icon/fixed-coordinate route. The evidence covers City,
 Wilderness, multiple Daily positions, notification and non-notification Go actions, Claim,
 the active-tab classifier, Research Center, Arena, Pet Adventure, Land of Heroes, Life Essence,
 and the dynamic shift caused by hiding completed rows. Other destinations must not be migrated

@@ -25,6 +25,7 @@ import dev.frostguard.vision.logging.ProfileContextLogger;
 public final class SidebarNavigator {
 
     private static final int SECTION_SETTLE_MS = 400;
+    static final int SIDEBAR_OPEN_SETTLE_MS = 2_000;
     static final int SCROLL_SETTLE_MS = 2_000;
     static final int SCROLL_DISTANCE_PX = 120;
     private static final int SCROLL_DURATION_MS = 500;
@@ -127,7 +128,7 @@ public final class SidebarNavigator {
                 return false;
             }
             log.debug("Sidebar closed; opening it once before selecting " + target);
-            taps.tapInside(CommonGameAreas.LEFT_MENU_TRIGGER, 1, SECTION_SETTLE_MS);
+            taps.tapInside(CommonGameAreas.LEFT_MENU_TRIGGER, 1, SIDEBAR_OPEN_SETTLE_MS);
             current = selectedSection();
             if (current.isEmpty()) {
                 log.warn("Sidebar did not open after one verified trigger tap");

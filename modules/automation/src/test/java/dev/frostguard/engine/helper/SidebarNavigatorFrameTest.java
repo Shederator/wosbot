@@ -55,6 +55,14 @@ class SidebarNavigatorFrameTest {
     }
 
     @Test
+    void detectsCrystalLaboratoryAndItsGoActionInARealCurrentFrame() throws IOException {
+        byte[] frame = resource("/navigation/sidebar-update-20260912/daily-crystal-laboratory.png");
+
+        assertDestination(frame, TemplatesEnum.SIDEBAR_DAILY_CRYSTAL_LABORATORY, 46, 695);
+        assertRowAction(frame, SidebarDestination.CRYSTAL_LABORATORY, SidebarRowAction.GO);
+    }
+
+    @Test
     void waitsTwoSecondsAfterEverySidebarScanSwipe() {
         assertEquals(2_000, SidebarNavigator.SCROLL_SETTLE_MS);
     }
@@ -113,6 +121,19 @@ class SidebarNavigatorFrameTest {
                     CommonGameAreas.SIDEBAR_ROW_ICON_COLUMN.bottomRight(), 88);
 
             assertFalse(hit.isFound(), () -> "Trek Supplies false positive in " + frameName + ": " + hit);
+        }
+    }
+
+    @Test
+    void doesNotConfuseCrystalLaboratoryWithOtherSidebarRows() throws IOException {
+        for (String frameName : new String[] { "daily-top.png", "daily-middle.png", "daily-bottom.png" }) {
+            byte[] frame = resource("/navigation/sidebar-update-20260817/" + frameName);
+            ImageSearchResultData hit = OpenCvPatternLocator.locatePattern(frame,
+                    TemplatesEnum.SIDEBAR_DAILY_CRYSTAL_LABORATORY,
+                    CommonGameAreas.SIDEBAR_ROW_ICON_COLUMN.topLeft(),
+                    CommonGameAreas.SIDEBAR_ROW_ICON_COLUMN.bottomRight(), 88);
+
+            assertFalse(hit.isFound(), () -> "Crystal Laboratory false positive in " + frameName + ": " + hit);
         }
     }
 
