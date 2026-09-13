@@ -937,20 +937,29 @@ private void hydrateConfiguration() {
 				+ beastsEnabled));
 	}
 
-private boolean hasEnoughStaminaFlow() {
-		int staminaValue = StaminaService.getServices().getCurrentStamina(profile.getId());
+boolean hasEnoughStaminaFlow() {
+		IntelStaminaGate.Outcome outcome = IntelStaminaGate.evaluate(
+				StaminaService.getServices(), profile.getId(), MIN_STAMINA_REQUIRED_FLOOR,
+				LocalDateTime.now(), this);
 
-		if (staminaValue < MIN_STAMINA_REQUIRED_FLOOR) {
+		if (mayProcessForStamina(outcome)) {
+			return true;
+		}
+
+		if (outcome.status() == IntelStaminaGate.Status.UNKNOWN) {
+			logWarning(routineLogIntelligenceLine("Stamina is unreadable, so Intel will retry at: "
+					+ outcome.retryAt().format(DATETIME_FORMATTER) + "."));
+		} else {
+			int staminaValue = outcome.stamina().orElseThrow();
 			logWarning(routineLogIntelligenceLine("Not enough stamina to process intel. Current stamina: " + staminaValue +
 					". Required: " + MIN_STAMINA_REQUIRED_FLOOR + "."));
-			long minutesToRegen = StaminaService.minutesToRegenerate(
-					staminaValue, MIN_STAMINA_REQUIRED_FLOOR);
-			LocalDateTime rescheduleTime = LocalDateTime.now().plusMinutes(minutesToRegen);
-			deferForStamina(MIN_STAMINA_REQUIRED_FLOOR, MIN_STAMINA_REQUIRED_FLOOR, rescheduleTime);
-			return false;
 		}
-		return true;
+		return false;
 	}
+
+static boolean mayProcessForStamina(IntelStaminaGate.Outcome outcome) {
+	return outcome.allowed();
+}
 
 private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntelProcessed,
 			MarchesAvailable marchesAvailable) {

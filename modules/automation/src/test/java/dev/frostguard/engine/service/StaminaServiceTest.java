@@ -1,6 +1,10 @@
 package dev.frostguard.engine.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.OptionalInt;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -8,6 +12,73 @@ import dev.frostguard.engine.listener.StaminaChangeListener;
 import org.junit.jupiter.api.Test;
 
 class StaminaServiceTest {
+
+    @Test
+    void missingStaminaRemainsUnknownInsteadOfBecomingMeasuredZero() {
+        StaminaService service = StaminaService.getServices();
+
+        OptionalInt stamina = service.findCurrentStamina(9101L);
+
+        assertTrue(stamina.isEmpty());
+    }
+
+    @Test
+    void measuredZeroRemainsDistinctFromUnknown() {
+        StaminaService service = StaminaService.getServices();
+        service.setStamina(9102L, 0);
+
+        OptionalInt stamina = service.findCurrentStamina(9102L);
+
+        assertTrue(stamina.isPresent());
+        assertEquals(0, stamina.getAsInt());
+    }
+
+    @Test
+    void deductionBeforeFirstObservationRemainsUnknownAndRefreshable() {
+        StaminaService service = StaminaService.getServices();
+
+        service.subtractStamina(9110L, 10);
+
+        assertTrue(service.findCurrentStamina(9110L).isEmpty());
+        assertTrue(service.requiresUpdate(9110L));
+    }
+
+    @Test
+    void inferredRewardsAndSpendingRemainUnknownUntilObserved() {
+        StaminaService service = StaminaService.getServices();
+
+        service.addExternalStamina(9111L, 120);
+        service.subtractStamina(9111L, 100);
+
+        assertEquals(20, service.getCurrentStamina(9111L));
+        assertTrue(service.findCurrentStamina(9111L).isEmpty());
+        assertTrue(service.requiresUpdate(9111L));
+    }
+
+    @Test
+    void deltasAfterAnAbsoluteReadPreserveObservedState() {
+        StaminaService service = StaminaService.getServices();
+        service.setStamina(9112L, 20);
+
+        service.addExternalStamina(9112L, 120);
+        service.subtractStamina(9112L, 100);
+
+        assertEquals(40, service.findCurrentStamina(9112L).orElseThrow());
+    }
+
+    @Test
+    void concurrentProfilesKeepIndependentStaminaKnowledge() {
+        StaminaService service = StaminaService.getServices();
+
+        CompletableFuture.allOf(
+                CompletableFuture.runAsync(() -> service.setStamina(9103L, 20)),
+                CompletableFuture.runAsync(() -> service.setStamina(9104L, 200)))
+                .join();
+
+        assertEquals(20, service.findCurrentStamina(9103L).orElseThrow());
+        assertEquals(200, service.findCurrentStamina(9104L).orElseThrow());
+        assertTrue(service.findCurrentStamina(9105L).isEmpty());
+    }
 
     @Test
     void setStaminaKeepsOverfilledValues() {

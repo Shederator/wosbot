@@ -21,6 +21,11 @@ import java.time.LocalDateTime;
 // availability gating, item top-ups, and travel time parsing.
 public class StaminaHelper {
 
+    private static final int PROFILE_SCREEN_SETTLE_MS = 800;
+    private static final int STAMINA_DIALOG_SETTLE_MS = 1000;
+    private static final int STAMINA_OCR_ATTEMPTS = 5;
+    private static final long STAMINA_OCR_RETRY_MS = 200L;
+
     private final EmulatorController device;
     private final String deviceSlot;
     private final TapInteractionService taps;
@@ -32,6 +37,14 @@ public class StaminaHelper {
     private final String accountLabel;
     private final LoggingService centralLog;
     private final StaminaItemTopUpFlow itemTopUpFlow;
+    private final ProfileStaminaUi profileStaminaUi;
+
+    interface ProfileStaminaUi {
+        void openProfile(int settleMs) throws Exception;
+        void openStaminaDialog(int settleMs) throws Exception;
+        Integer readStamina(int attempts, long retryMs) throws Exception;
+        void cleanup() throws Exception;
+    }
 
     public StaminaHelper(EmulatorController emuManager, String emulatorNumber,
                          ResilientOcrExecutor<Integer> integerHelper,
@@ -51,42 +64,61 @@ public class StaminaHelper {
             persistence.setStamina(accountKey, observed);
             emitInfo("Obtain-more dialog: synchronized tracked stamina " + tracked + " -> " + observed);
         });
+        this.profileStaminaUi = new ProfileStaminaUi() {
+            @Override
+            public void openProfile(int settleMs) {
+                taps.tapInside(CommonGameAreas.PROFILE_AVATAR, 1, settleMs);
+            }
+
+            @Override
+            public void openStaminaDialog(int settleMs) {
+                taps.tapInside(CommonGameAreas.STAMINA_BUTTON, 1, settleMs);
+            }
+
+            @Override
+            public Integer readStamina(int attempts, long retryMs) {
+                return numberReader.attemptRecognition(
+                        CommonGameAreas.STAMINA_OCR_AREA.topLeft(),
+                        CommonGameAreas.STAMINA_OCR_AREA.bottomRight(),
+                        attempts, retryMs,
+                        CommonOCRSettings.STAMINA_FRACTION_SETTINGS,
+                        RegexNumberParser::hasFractionSyntax,
+                        RegexNumberParser::numerator);
+            }
+
+            @Override
+            public void cleanup() {
+                device.pressBack(deviceSlot);
+                device.pressBack(deviceSlot);
+            }
+        };
     }
 
-    // Opens avatar screen, reads stamina via OCR, persists, then navigates back.
-    // Changed by pernerch | Date: 2026-07-02 | Why: add timeout guards to prevent stamina reads from blocking for 1+ seconds when OCR is slow or UI is unresponsive.
+    StaminaHelper(StaminaService persistence, Long accountKey, ProfileStaminaUi profileStaminaUi) {
+        this.device = null;
+        this.deviceSlot = null;
+        this.taps = null;
+        this.numberReader = null;
+        this.persistence = persistence;
+        this.accountKey = accountKey;
+        this.trace = null;
+        this.marchSupport = null;
+        this.accountLabel = "test";
+        this.centralLog = null;
+        this.itemTopUpFlow = null;
+        this.profileStaminaUi = profileStaminaUi;
+    }
+
+    // Opens avatar screen, reads stamina via bounded OCR retries, persists, then navigates back.
     public void updateStaminaFromProfile() {
         emitDebug("Opening profile to read stamina");
         long startMs = System.currentTimeMillis();
-        long maxDurationMs = 3000; // 3 second timeout for entire operation
 
         try {
-            // Touch profile avatar (timeout guard: skip if over 1 sec elapsed)
-            if (System.currentTimeMillis() - startMs < 1000) {
-                taps.tapInside(CommonGameAreas.PROFILE_AVATAR, 1, 200);
-            } else {
-                emitWarn("Stamina read timeout: profile open exceeded 1s, aborting");
-                return;
-            }
+            profileStaminaUi.openProfile(PROFILE_SCREEN_SETTLE_MS);
+            profileStaminaUi.openStaminaDialog(STAMINA_DIALOG_SETTLE_MS);
 
-            // Touch stamina button (timeout guard)
-            if (System.currentTimeMillis() - startMs < 1500) {
-                taps.tapInside(CommonGameAreas.STAMINA_BUTTON, 1, 200);
-            } else {
-                emitWarn("Stamina read timeout: stamina button click exceeded 1.5s, aborting");
-                device.pressBack(deviceSlot);
-                return;
-            }
-
-            // Reduced OCR attempts (3 instead of 5) with shorter delay (100ms instead of 200ms)
-            // to avoid blocking for 1+ second when UI is sluggish.
-            Integer reading = numberReader.attemptRecognition(
-                    CommonGameAreas.STAMINA_OCR_AREA.topLeft(),
-                    CommonGameAreas.STAMINA_OCR_AREA.bottomRight(),
-                    3, 100L,
-                    CommonOCRSettings.STAMINA_FRACTION_SETTINGS,
-                    RegexNumberParser::hasFractionSyntax,
-                    RegexNumberParser::numerator);
+            Integer reading = profileStaminaUi.readStamina(STAMINA_OCR_ATTEMPTS, STAMINA_OCR_RETRY_MS);
 
             if (reading == null) {
                 emitWarn("OCR could not parse stamina (elapsed " + (System.currentTimeMillis() - startMs) + "ms)");
@@ -99,8 +131,7 @@ public class StaminaHelper {
         } finally {
             // Safety navigation back
             try {
-                device.pressBack(deviceSlot);
-                device.pressBack(deviceSlot);
+                profileStaminaUi.cleanup();
             } catch (Exception ex) {
                 emitDebug("Press-back cleanup error: " + ex.getMessage());
             }
@@ -278,19 +309,19 @@ public class StaminaHelper {
 
     private void emitInfo(String msg) {
         String full = accountLabel + " - " + msg;
-        trace.info(full);
-        centralLog.emit(TpMessageSeverityEnum.INFO, "StaminaHelper", accountLabel, msg);
+        if (trace != null) trace.info(full);
+        if (centralLog != null) centralLog.emit(TpMessageSeverityEnum.INFO, "StaminaHelper", accountLabel, msg);
     }
 
     private void emitWarn(String msg) {
         String full = accountLabel + " - " + msg;
-        trace.warn(full);
-        centralLog.emit(TpMessageSeverityEnum.WARNING, "StaminaHelper", accountLabel, msg);
+        if (trace != null) trace.warn(full);
+        if (centralLog != null) centralLog.emit(TpMessageSeverityEnum.WARNING, "StaminaHelper", accountLabel, msg);
     }
 
     private void emitDebug(String msg) {
         String full = accountLabel + " - " + msg;
-        trace.debug(full);
-        centralLog.emit(TpMessageSeverityEnum.DEBUG, "StaminaHelper", accountLabel, msg);
+        if (trace != null) trace.debug(full);
+        if (centralLog != null) centralLog.emit(TpMessageSeverityEnum.DEBUG, "StaminaHelper", accountLabel, msg);
     }
 }
