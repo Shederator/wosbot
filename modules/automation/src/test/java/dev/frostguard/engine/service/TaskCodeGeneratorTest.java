@@ -91,4 +91,37 @@ class TaskCodeGeneratorTest {
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                 () -> new TaskCodeGenerator().generate(blueprint, "invalid_shop", "Invalid Shop"));
     }
+
+    @Test
+    void generatesBothSidebarOperationsWithSafeFailureHandling() {
+        AutomationBlueprint blueprint = new AutomationBlueprint("Sidebar probe");
+        AutomationStep section = new AutomationStep(1, FlowStepKind.SIDEBAR_NAVIGATION);
+        section.setParam(AutomationStep.PARAM_SIDEBAR_MODE, "SECTION");
+        section.setParam(AutomationStep.PARAM_SIDEBAR_TARGET, "DAILY");
+        blueprint.addNode(section);
+        AutomationStep destination = new AutomationStep(2, FlowStepKind.SIDEBAR_NAVIGATION);
+        destination.setParam(AutomationStep.PARAM_SIDEBAR_MODE, "DESTINATION");
+        destination.setParam(AutomationStep.PARAM_SIDEBAR_TARGET, "ARENA");
+        blueprint.addNode(destination);
+
+        String source = new TaskCodeGenerator().generate(blueprint, "sidebar_probe", "Sidebar probe");
+
+        assertTrue(source.contains("navigationHelper.openSidebarSection(SidebarSection.DAILY)"));
+        assertTrue(source.contains("navigationHelper.navigateToSidebarDestination(SidebarDestination.ARENA)"));
+        assertTrue(source.contains("logWarning(\"Sidebar navigation failed: SECTION DAILY\")"));
+        assertTrue(source.contains("logWarning(\"Sidebar navigation failed: DESTINATION ARENA\")"));
+        assertTrue(source.contains("__state = -1;"));
+    }
+
+    @Test
+    void rejectsSidebarNavigationWithMismatchedModeAndTarget() {
+        AutomationBlueprint blueprint = new AutomationBlueprint("Invalid Sidebar");
+        AutomationStep step = new AutomationStep(7, FlowStepKind.SIDEBAR_NAVIGATION);
+        step.setParam(AutomationStep.PARAM_SIDEBAR_MODE, "SECTION");
+        step.setParam(AutomationStep.PARAM_SIDEBAR_TARGET, "ARENA");
+        blueprint.addNode(step);
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> new TaskCodeGenerator().generate(blueprint, "invalid_sidebar", "Invalid Sidebar"));
+    }
 }

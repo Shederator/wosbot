@@ -139,6 +139,27 @@ class AutomationBlueprintSerializationTest {
                 reloaded.getSteps().get(0).getParam(AutomationStep.PARAM_SHOP_TAB));
     }
 
+    @Test
+    void preservesSidebarSectionAndDestinationAcrossSaveAndReload() throws Exception {
+        AutomationBlueprint blueprint = new AutomationBlueprint("sidebar probe");
+        AutomationStep section = new AutomationStep(3, FlowStepKind.SIDEBAR_NAVIGATION);
+        section.setParam(AutomationStep.PARAM_SIDEBAR_MODE, "SECTION");
+        section.setParam(AutomationStep.PARAM_SIDEBAR_TARGET, "WILDERNESS");
+        blueprint.addNode(section);
+        AutomationStep destination = new AutomationStep(4, FlowStepKind.SIDEBAR_NAVIGATION);
+        destination.setParam(AutomationStep.PARAM_SIDEBAR_MODE, "DESTINATION");
+        destination.setParam(AutomationStep.PARAM_SIDEBAR_TARGET, "LIGHTHOUSE_INTEL");
+        blueprint.addNode(destination);
+
+        AutomationBlueprint reloaded =
+                mapper.readValue(mapper.writeValueAsString(blueprint), AutomationBlueprint.class);
+
+        assertEquals("SECTION", reloaded.getSteps().get(0).getParam(AutomationStep.PARAM_SIDEBAR_MODE));
+        assertEquals("WILDERNESS", reloaded.getSteps().get(0).getParam(AutomationStep.PARAM_SIDEBAR_TARGET));
+        assertEquals("DESTINATION", reloaded.getSteps().get(1).getParam(AutomationStep.PARAM_SIDEBAR_MODE));
+        assertEquals("LIGHTHOUSE_INTEL", reloaded.getSteps().get(1).getParam(AutomationStep.PARAM_SIDEBAR_TARGET));
+    }
+
     /** Flows saved by earlier builds used the duplicated legacy key spellings. */
     @Test
     void loadsFlowsSavedWithLegacyKeyNames() throws Exception {

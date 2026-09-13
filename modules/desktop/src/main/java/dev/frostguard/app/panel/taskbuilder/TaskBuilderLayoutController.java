@@ -2,6 +2,7 @@ package dev.frostguard.app.panel.taskbuilder;
 
 import dev.frostguard.vision.ocr.OcrEngine;
 import dev.frostguard.api.configs.FlowStepKind;
+import dev.frostguard.api.configs.SidebarNavigationMode;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.api.domain.AccountDescriptor;
@@ -14,6 +15,8 @@ import dev.frostguard.engine.service.TaskBuilderService;
 import dev.frostguard.engine.service.TaskCodeGenerator;
 import dev.frostguard.engine.service.TemplatePathResolver;
 import dev.frostguard.engine.nav.ShopTab;
+import dev.frostguard.engine.nav.SidebarDestination;
+import dev.frostguard.engine.nav.SidebarSection;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.event.ActionEvent;
@@ -92,6 +95,9 @@ public class TaskBuilderLayoutController {
     @FXML private VBox backPropsBox;
     @FXML private VBox shopNavigationPropsBox;
     @FXML private ComboBox<ShopTab> shopTabCombo;
+    @FXML private VBox sidebarNavigationPropsBox;
+    @FXML private ComboBox<SidebarNavigationMode> sidebarModeCombo;
+    @FXML private ComboBox<String> sidebarTargetCombo;
     @FXML private VBox ocrPropsBox;
     @FXML private TextField ocrTlXField, ocrTlYField, ocrBrXField, ocrBrYField;
     @FXML private ComboBox<String> ocrConditionCombo;
@@ -243,6 +249,39 @@ public class TaskBuilderLayoutController {
             });
             shopTabCombo.setValue(ShopTab.MYSTERY_SHOP);
         }
+        if (sidebarModeCombo != null && sidebarTargetCombo != null) {
+            sidebarModeCombo.setItems(FXCollections.observableArrayList(SidebarNavigationMode.values()));
+            sidebarModeCombo.setConverter(new javafx.util.StringConverter<>() {
+                @Override
+                public String toString(SidebarNavigationMode mode) {
+                    return mode == null ? "" : mode.displayName();
+                }
+
+                @Override
+                public SidebarNavigationMode fromString(String displayName) {
+                    return Arrays.stream(SidebarNavigationMode.values())
+                            .filter(mode -> mode.displayName().equals(displayName))
+                            .findFirst().orElse(null);
+                }
+            });
+            sidebarTargetCombo.setConverter(new javafx.util.StringConverter<>() {
+                @Override
+                public String toString(String target) {
+                    if (target == null || target.isEmpty()) return "";
+                    String readable = target.replace('_', ' ').toLowerCase(Locale.ROOT);
+                    return Character.toUpperCase(readable.charAt(0)) + readable.substring(1);
+                }
+
+                @Override
+                public String fromString(String displayName) {
+                    return sidebarTargetCombo.getItems().stream()
+                            .filter(target -> toString(target).equals(displayName))
+                            .findFirst().orElse(null);
+                }
+            });
+            sidebarModeCombo.setValue(SidebarNavigationMode.SECTION);
+            setSidebarTargets(SidebarNavigationMode.SECTION, SidebarSection.CITY.name());
+        }
         addAutoApplyListeners();
         setStatus("Ready — add nodes from the toolbox");
     }
@@ -294,6 +333,21 @@ public class TaskBuilderLayoutController {
         if (shopTabCombo != null) {
             shopTabCombo.valueProperty().addListener((obs, oldV, newV) -> {
                 if (!isBinding) handleApplyShopNavigationProps(null);
+            });
+        }
+        if (sidebarModeCombo != null && sidebarTargetCombo != null) {
+            sidebarModeCombo.valueProperty().addListener((obs, oldV, newV) -> {
+                if (isBinding) return;
+                isBinding = true;
+                try {
+                    setSidebarTargets(newV, "");
+                } finally {
+                    isBinding = false;
+                }
+                handleApplySidebarNavigationProps(null);
+            });
+            sidebarTargetCombo.valueProperty().addListener((obs, oldV, newV) -> {
+                if (!isBinding) handleApplySidebarNavigationProps(null);
             });
         }
 
@@ -929,6 +983,7 @@ public class TaskBuilderLayoutController {
     @FXML private void handleAddOcrNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.OCR_READ); }
     @FXML private void handleAddTemplateNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.TEMPLATE_SEARCH); }
     @FXML private void handleAddShopNavigationNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.SHOP_NAVIGATION); }
+    @FXML private void handleAddSidebarNavigationNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.SIDEBAR_NAVIGATION); }
 
     private void addNodeToCanvas(FlowStepKind type) {
         ensureSession();
@@ -941,6 +996,10 @@ public class TaskBuilderLayoutController {
                            node.setParam("endX","0"); node.setParam("endY","0"); }
             case SHOP_NAVIGATION -> node.setParam(
                     AutomationStep.PARAM_SHOP_TAB, ShopTab.MYSTERY_SHOP.name());
+            case SIDEBAR_NAVIGATION -> {
+                node.setParam(AutomationStep.PARAM_SIDEBAR_MODE, SidebarNavigationMode.SECTION.name());
+                node.setParam(AutomationStep.PARAM_SIDEBAR_TARGET, SidebarSection.CITY.name());
+            }
             default -> {}
         }
 
@@ -1589,6 +1648,10 @@ public class TaskBuilderLayoutController {
             shopNavigationPropsBox.setVisible(false);
             shopNavigationPropsBox.setManaged(false);
         }
+        if (sidebarNavigationPropsBox != null) {
+            sidebarNavigationPropsBox.setVisible(false);
+            sidebarNavigationPropsBox.setManaged(false);
+        }
         ocrPropsBox.setVisible(false); ocrPropsBox.setManaged(false);
         if (templatePropsBox != null) { templatePropsBox.setVisible(false); templatePropsBox.setManaged(false); }
         
@@ -1632,6 +1695,20 @@ public class TaskBuilderLayoutController {
                         shopTabCombo.setValue(null);
                     }
                 }
+            }
+            case SIDEBAR_NAVIGATION -> {
+                sidebarNavigationPropsBox.setVisible(true);
+                sidebarNavigationPropsBox.setManaged(true);
+                SidebarNavigationMode mode;
+                try {
+                    mode = SidebarNavigationMode.valueOf(
+                            node.getParam(AutomationStep.PARAM_SIDEBAR_MODE));
+                } catch (IllegalArgumentException | NullPointerException exception) {
+                    mode = null;
+                }
+                sidebarModeCombo.setValue(mode);
+                setSidebarTargets(mode, node.getParam(AutomationStep.PARAM_SIDEBAR_TARGET) == null
+                        ? "" : node.getParam(AutomationStep.PARAM_SIDEBAR_TARGET));
             }
             case OCR_READ -> {
                 ocrPropsBox.setVisible(true); ocrPropsBox.setManaged(true);
@@ -1749,6 +1826,29 @@ public class TaskBuilderLayoutController {
     @FXML private void handleApplyShopNavigationProps(ActionEvent e) {
         if (selectedNode == null || shopTabCombo == null || shopTabCombo.getValue() == null) return;
         selectedNode.setParam(AutomationStep.PARAM_SHOP_TAB, shopTabCombo.getValue().name());
+        refreshCard(selectedNode);
+    }
+
+    private void setSidebarTargets(SidebarNavigationMode mode, String selectedTarget) {
+        if (mode == SidebarNavigationMode.SECTION) {
+            sidebarTargetCombo.getItems().setAll(Arrays.stream(SidebarSection.values())
+                    .map(Enum::name).toList());
+        } else if (mode == SidebarNavigationMode.DESTINATION) {
+            sidebarTargetCombo.getItems().setAll(Arrays.stream(SidebarDestination.values())
+                    .map(Enum::name).toList());
+        } else {
+            sidebarTargetCombo.getItems().clear();
+        }
+        sidebarTargetCombo.setValue(sidebarTargetCombo.getItems().contains(selectedTarget)
+                ? selectedTarget : null);
+    }
+
+    @FXML private void handleApplySidebarNavigationProps(ActionEvent e) {
+        if (selectedNode == null) return;
+        SidebarNavigationMode mode = sidebarModeCombo.getValue();
+        String target = sidebarTargetCombo.getValue();
+        selectedNode.setParam(AutomationStep.PARAM_SIDEBAR_MODE, mode == null ? "" : mode.name());
+        selectedNode.setParam(AutomationStep.PARAM_SIDEBAR_TARGET, target == null ? "" : target);
         refreshCard(selectedNode);
     }
 

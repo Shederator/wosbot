@@ -1,9 +1,12 @@
 package dev.frostguard.engine.service;
 
 import dev.frostguard.api.configs.FlowStepKind;
+import dev.frostguard.api.configs.SidebarNavigationMode;
 import dev.frostguard.api.domain.AutomationBlueprint;
 import dev.frostguard.api.domain.AutomationStep;
 import dev.frostguard.engine.nav.ShopTab;
+import dev.frostguard.engine.nav.SidebarDestination;
+import dev.frostguard.engine.nav.SidebarSection;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -71,6 +74,8 @@ public class TaskCodeGenerator {
         out.append("import dev.frostguard.api.domain.ImageSearchResultData;\n");
         out.append("import dev.frostguard.engine.helper.TemplateSearchHelper;\n");
         out.append("import dev.frostguard.engine.nav.ShopTab;\n");
+        out.append("import dev.frostguard.engine.nav.SidebarSection;\n");
+        out.append("import dev.frostguard.engine.nav.SidebarDestination;\n");
         out.append("import dev.frostguard.engine.schedule.DelayedTask;\n");
         out.append("import dev.frostguard.engine.schedule.LaunchPoint;\n");
         out.append("import dev.frostguard.engine.service.TemplatePathResolver;\n");
@@ -181,12 +186,14 @@ public class TaskCodeGenerator {
             case OCR_READ        -> writeOcr(out, node, nodeEdges);
             case TEMPLATE_SEARCH -> writeTemplateSearch(out, node, nodeEdges);
             case SHOP_NAVIGATION -> writeShopNavigation(out, node, nodeEdges);
+            case SIDEBAR_NAVIGATION -> writeSidebarNavigation(out, node, nodeEdges);
             default              -> out.append(i5).append("// Unrecognised action\n");
         }
 
         if (node.getType() != FlowStepKind.OCR_READ
                 && node.getType() != FlowStepKind.TEMPLATE_SEARCH
-                && node.getType() != FlowStepKind.SHOP_NAVIGATION) {
+                && node.getType() != FlowStepKind.SHOP_NAVIGATION
+                && node.getType() != FlowStepKind.SIDEBAR_NAVIGATION) {
             int nextId = node.getNextNodeId();
             LoopDetector.BackEdge edge = pickEdge(nodeEdges, false);
             if (edge != null && nextId > 0) {
@@ -263,6 +270,41 @@ public class TaskCodeGenerator {
         out.append(i6).append("__state = -1;\n");
         out.append(i5).append("} else {\n");
 
+        int nextId = node.getNextNodeId();
+        LoopDetector.BackEdge edge = pickEdge(nodeEdges, false);
+        if (edge != null && nextId > 0) {
+            writeLoopGuard(out, node, edge, nextId, -1, 6);
+        } else {
+            out.append(i6).append("__state = ").append(nextId > 0 ? nextId : -1).append(";\n");
+        }
+        out.append(i5).append("}\n");
+    }
+
+    private void writeSidebarNavigation(StringBuilder out, AutomationStep node,
+                                        List<LoopDetector.BackEdge> nodeEdges) {
+        String configuredMode = node.getParam(AutomationStep.PARAM_SIDEBAR_MODE);
+        String configuredTarget = node.getParam(AutomationStep.PARAM_SIDEBAR_TARGET);
+        String call;
+        try {
+            SidebarNavigationMode mode = SidebarNavigationMode.valueOf(configuredMode);
+            if (mode == SidebarNavigationMode.SECTION) {
+                SidebarSection section = SidebarSection.valueOf(configuredTarget);
+                call = "openSidebarSection(SidebarSection." + section.name() + ")";
+            } else {
+                SidebarDestination destination = SidebarDestination.valueOf(configuredTarget);
+                call = "navigateToSidebarDestination(SidebarDestination." + destination.name() + ")";
+            }
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            throw new IllegalArgumentException("Sidebar Navigation node #" + node.getId()
+                    + " has invalid mode=" + configuredMode + " target=" + configuredTarget, exception);
+        }
+
+        String i5 = indent(5), i6 = indent(6);
+        out.append(i5).append("if (!navigationHelper.").append(call).append(") {\n");
+        out.append(i6).append("logWarning(\"Sidebar navigation failed: ")
+                .append(escapeJavaString(configuredMode + " " + configuredTarget)).append("\");\n");
+        out.append(i6).append("__state = -1;\n");
+        out.append(i5).append("} else {\n");
         int nextId = node.getNextNodeId();
         LoopDetector.BackEdge edge = pickEdge(nodeEdges, false);
         if (edge != null && nextId > 0) {

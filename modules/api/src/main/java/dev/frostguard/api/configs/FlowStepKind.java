@@ -13,6 +13,7 @@ public enum FlowStepKind {
     OCR_READ("OCR Read", "Read text from a screen region"),
     TEMPLATE_SEARCH("Template Search", "Search for an image on screen"),
     SHOP_NAVIGATION("Shop Navigation", "Open a selected Shop tab"),
+    SIDEBAR_NAVIGATION("Sidebar Navigation", "Open a sidebar section or destination"),
     NAVIGATE("Navigate", "Ensure correct screen location (Home/World)");
 
     private final String label;

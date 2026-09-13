@@ -23,6 +23,7 @@ import java.util.Map;
  *   <li><b>OCR_READ</b> — tlX, tlY, brX, brY, condition, expectedValue</li>
  *   <li><b>TEMPLATE_SEARCH</b> — templatePath, threshold, grayscale, tlX, brX</li>
  *   <li><b>SHOP_NAVIGATION</b> — shopTab</li>
+ *   <li><b>SIDEBAR_NAVIGATION</b> — sidebarMode, sidebarTarget</li>
  *   <li><b>NAVIGATE</b> — location</li>
  * </ul>
  *
@@ -47,6 +48,8 @@ import java.util.Map;
 public class AutomationStep {
     public static final String PARAM_NODE_NAME = "nodeName";
     public static final String PARAM_SHOP_TAB = "shopTab";
+    public static final String PARAM_SIDEBAR_MODE = "sidebarMode";
+    public static final String PARAM_SIDEBAR_TARGET = "sidebarTarget";
     public static final int NODE_NAME_MAX_LENGTH = 30;
 
     @JsonAlias("id")
@@ -346,6 +349,18 @@ public class AutomationStep {
 
             case SHOP_NAVIGATION -> String.format("Shop: %s",
                     humanizeEnumValue(resolveAttrOr(PARAM_SHOP_TAB, "MYSTERY_SHOP")));
+
+            case SIDEBAR_NAVIGATION -> {
+                String mode = getAttribute(PARAM_SIDEBAR_MODE);
+                String target = getAttribute(PARAM_SIDEBAR_TARGET);
+                if ((!"SECTION".equals(mode) && !"DESTINATION".equals(mode))
+                        || target == null || target.isBlank()) {
+                    yield "Sidebar: invalid selection";
+                }
+                yield String.format("Sidebar %s: %s",
+                        "DESTINATION".equals(mode) ? "destination" : "section",
+                        humanizeEnumValue(target));
+            }
 
             case NAVIGATE -> String.format("Navigate: %s",
                     resolveAttrOr("location", "HOME"));

@@ -2,10 +2,13 @@ package dev.frostguard.engine.service;
 
 import dev.frostguard.vision.ocr.OcrEngine;
 import dev.frostguard.api.configs.FlowStepKind;
+import dev.frostguard.api.configs.SidebarNavigationMode;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.helper.NavigationHelper;
 import dev.frostguard.engine.nav.ShopTab;
+import dev.frostguard.engine.nav.SidebarDestination;
+import dev.frostguard.engine.nav.SidebarSection;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
@@ -50,6 +53,7 @@ public class TaskBuilderService {
     private final Path customTasksDir;
     private final ObjectMapper mapper;
     private final ShopNavigationAction shopNavigationAction;
+    private final SidebarNavigationAction sidebarNavigationAction;
     private AutomationBlueprint currentDefinition;
     private Path currentDefinitionDirectory;
     private String activeEmulatorNumber;
@@ -67,10 +71,29 @@ public class TaskBuilderService {
     }
 
     TaskBuilderService(ObjectMapper mapper, ShopNavigationAction shopNavigationAction) {
+        this(mapper, shopNavigationAction, new SidebarNavigationAction() {
+            @Override
+            public boolean openSection(String emulatorNumber, AccountDescriptor profile, SidebarSection section) {
+                return new NavigationHelper(EmulatorController.getInstance(), emulatorNumber, profile)
+                        .openSidebarSection(section);
+            }
+
+            @Override
+            public boolean navigateTo(String emulatorNumber, AccountDescriptor profile,
+                                      SidebarDestination destination) {
+                return new NavigationHelper(EmulatorController.getInstance(), emulatorNumber, profile)
+                        .navigateToSidebarDestination(destination);
+            }
+        });
+    }
+
+    TaskBuilderService(ObjectMapper mapper, ShopNavigationAction shopNavigationAction,
+                       SidebarNavigationAction sidebarNavigationAction) {
         this.emuManager = EmulatorController.getInstance();
         this.customTasksDir = WorkspacePaths.current().customTasks();
         this.mapper = mapper;
         this.shopNavigationAction = Objects.requireNonNull(shopNavigationAction);
+        this.sidebarNavigationAction = Objects.requireNonNull(sidebarNavigationAction);
         try {
             Files.createDirectories(customTasksDir);
         } catch (IOException e) {
@@ -83,6 +106,12 @@ public class TaskBuilderService {
     @FunctionalInterface
     interface ShopNavigationAction {
         boolean navigate(String emulatorNumber, AccountDescriptor profile, ShopTab target);
+    }
+
+    interface SidebarNavigationAction {
+        boolean openSection(String emulatorNumber, AccountDescriptor profile, SidebarSection section);
+
+        boolean navigateTo(String emulatorNumber, AccountDescriptor profile, SidebarDestination destination);
     }
 
     private static ObjectMapper defaultMapper() {
@@ -401,6 +430,7 @@ public class TaskBuilderService {
             case OCR_READ        -> executeOcr(node);
             case TEMPLATE_SEARCH -> executeTemplateSearch(node);
             case SHOP_NAVIGATION -> executeShopNavigation(node);
+            case SIDEBAR_NAVIGATION -> executeSidebarNavigation(node);
             case NAVIGATE        -> { logger.info("Navigate node recorded"); yield true; }
         };
     }
@@ -415,19 +445,68 @@ public class TaskBuilderService {
             return false;
         }
 
-        if (activeProfile == null) {
-            logger.warn("Cannot navigate to {}: no Task Builder profile is selected", target.displayName());
-            return false;
-        }
-        if (!Objects.equals(activeProfile.getEmulatorNumber(), activeEmulatorNumber)) {
-            logger.warn("Cannot navigate to {}: selected profile emulator {} does not match active emulator {}",
-                    target.displayName(), activeProfile.getEmulatorNumber(), activeEmulatorNumber);
+        if (!hasNavigationProfile(target.displayName())) {
             return false;
         }
 
         logger.info("Task Builder navigating profile '{}' on emulator {} to {}",
                 activeProfile.getName(), activeEmulatorNumber, target.displayName());
         return shopNavigationAction.navigate(activeEmulatorNumber, activeProfile, target);
+    }
+
+    private boolean executeSidebarNavigation(AutomationStep node) {
+        String configuredMode = node.getParam(AutomationStep.PARAM_SIDEBAR_MODE);
+        String configuredTarget = node.getParam(AutomationStep.PARAM_SIDEBAR_TARGET);
+        SidebarNavigationMode mode;
+        try {
+            mode = SidebarNavigationMode.valueOf(configuredMode);
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            return rejectInvalidSidebarSelection(node, configuredMode, configuredTarget);
+        }
+        if (mode == SidebarNavigationMode.SECTION) {
+            SidebarSection section;
+            try {
+                section = SidebarSection.valueOf(configuredTarget);
+            } catch (IllegalArgumentException | NullPointerException exception) {
+                return rejectInvalidSidebarSelection(node, configuredMode, configuredTarget);
+            }
+            if (!hasNavigationProfile("sidebar section " + section)) {
+                return false;
+            }
+            logger.info("Task Builder opening sidebar section {} for profile '{}' on emulator {}",
+                    section, activeProfile.getName(), activeEmulatorNumber);
+            return sidebarNavigationAction.openSection(activeEmulatorNumber, activeProfile, section);
+        }
+        SidebarDestination destination;
+        try {
+            destination = SidebarDestination.valueOf(configuredTarget);
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            return rejectInvalidSidebarSelection(node, configuredMode, configuredTarget);
+        }
+        if (!hasNavigationProfile("sidebar destination " + destination)) {
+            return false;
+        }
+        logger.info("Task Builder navigating sidebar destination {} for profile '{}' on emulator {}",
+                destination, activeProfile.getName(), activeEmulatorNumber);
+        return sidebarNavigationAction.navigateTo(activeEmulatorNumber, activeProfile, destination);
+    }
+
+    private boolean rejectInvalidSidebarSelection(AutomationStep node, String mode, String target) {
+        logger.warn("Sidebar Navigation node #{} has invalid mode={} target={}", node.getId(), mode, target);
+        return false;
+    }
+
+    private boolean hasNavigationProfile(String target) {
+        if (activeProfile == null) {
+            logger.warn("Cannot navigate to {}: no Task Builder profile is selected", target);
+            return false;
+        }
+        if (!Objects.equals(activeProfile.getEmulatorNumber(), activeEmulatorNumber)) {
+            logger.warn("Cannot navigate to {}: selected profile emulator {} does not match active emulator {}",
+                    target, activeProfile.getEmulatorNumber(), activeEmulatorNumber);
+            return false;
+        }
+        return true;
     }
 
     // ── Tap ────────────────────────────────────────────────────────────────
