@@ -15,7 +15,6 @@ import dev.frostguard.engine.service.TaskBuilderService;
 import dev.frostguard.engine.service.TaskCodeGenerator;
 import dev.frostguard.engine.service.TemplatePathResolver;
 import dev.frostguard.engine.nav.ShopTab;
-import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.nav.SidebarSection;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -267,9 +266,7 @@ public class TaskBuilderLayoutController {
             sidebarTargetCombo.setConverter(new javafx.util.StringConverter<>() {
                 @Override
                 public String toString(String target) {
-                    if (target == null || target.isEmpty()) return "";
-                    String readable = target.replace('_', ' ').toLowerCase(Locale.ROOT);
-                    return Character.toUpperCase(readable.charAt(0)) + readable.substring(1);
+                    return SidebarNavigationOptions.displayTarget(target);
                 }
 
                 @Override
@@ -1830,17 +1827,8 @@ public class TaskBuilderLayoutController {
     }
 
     private void setSidebarTargets(SidebarNavigationMode mode, String selectedTarget) {
-        if (mode == SidebarNavigationMode.SECTION) {
-            sidebarTargetCombo.getItems().setAll(Arrays.stream(SidebarSection.values())
-                    .map(Enum::name).toList());
-        } else if (mode == SidebarNavigationMode.DESTINATION) {
-            sidebarTargetCombo.getItems().setAll(Arrays.stream(SidebarDestination.values())
-                    .map(Enum::name).toList());
-        } else {
-            sidebarTargetCombo.getItems().clear();
-        }
-        sidebarTargetCombo.setValue(sidebarTargetCombo.getItems().contains(selectedTarget)
-                ? selectedTarget : null);
+        sidebarTargetCombo.getItems().setAll(SidebarNavigationOptions.targetsFor(mode));
+        sidebarTargetCombo.setValue(SidebarNavigationOptions.chooseTarget(mode, selectedTarget));
     }
 
     @FXML private void handleApplySidebarNavigationProps(ActionEvent e) {
