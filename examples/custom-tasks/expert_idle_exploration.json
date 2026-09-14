@@ -67,7 +67,7 @@
       },
       "layoutX": 2179.299490708609,
       "layoutY": 283.2297764537757,
-      "successorId": -1,
+      "successorId": 22,
       "alternateId": -1
     },
     {
@@ -152,8 +152,42 @@
       "layoutY": 69.39074726355828,
       "successorId": 16,
       "alternateId": -1
+    },
+    {
+      "stepId": 21,
+      "kind": "BACK_BUTTON",
+      "attributes": {
+        "nodeName": "event main screen"
+      },
+      "layoutX": 2762.210640903559,
+      "layoutY": 506.2490698086003,
+      "successorId": 23,
+      "alternateId": -1
+    },
+    {
+      "stepId": 22,
+      "kind": "WAIT",
+      "attributes": {
+        "nodeName": "no bag case, exit screen safel",
+        "durationMs": "300"
+      },
+      "layoutX": 2462.00159286457,
+      "layoutY": 491.5550246006991,
+      "successorId": 21,
+      "alternateId": -1
+    },
+    {
+      "stepId": 23,
+      "kind": "BACK_BUTTON",
+      "attributes": {
+        "nodeName": "world screen"
+      },
+      "layoutX": 2891.0087607551313,
+      "layoutY": 506.4912250902572,
+      "successorId": -1,
+      "alternateId": -1
     }
   ],
   "createdEpochMs": 1783364400000,
-  "modifiedEpochMs": 1789415905252
+  "modifiedEpochMs": 1789420891116
 }
