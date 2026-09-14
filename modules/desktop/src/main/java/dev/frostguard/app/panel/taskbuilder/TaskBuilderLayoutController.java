@@ -143,6 +143,7 @@ public class TaskBuilderLayoutController {
     private final List<javafx.scene.Node> wireOverlays = new ArrayList<>(); // wire label bg+text
 
     private AutomationStep selectedNode = null;
+    private int runningNodeId = -1;
     private double ocrDragStartX = 0, ocrDragStartY = 0;
     private boolean hasPreviewImage = false;
     private boolean previewRegionDismissed = false;
@@ -669,6 +670,7 @@ public class TaskBuilderLayoutController {
     }
 
     private void clearFlowNodesFromCanvas() {
+        showRunningNode(-1);
         for (int id : new ArrayList<>(nodeCards.keySet())) {
             flowCanvas.getChildren().removeAll(nodeCards.get(id), inputPorts.get(id), outputPorts.get(id));
             Circle falsePort = outputPortsFalse.get(id);
@@ -2145,6 +2147,20 @@ public class TaskBuilderLayoutController {
         );
     }
 
+    private void showRunningNode(int nodeId) {
+        VBox previous = nodeCards.get(runningNodeId);
+        if (previous != null) previous.getStyleClass().remove("flow-node-running");
+        runningNodeId = nodeId;
+        VBox current = nodeCards.get(nodeId);
+        if (current != null && !current.getStyleClass().contains("flow-node-running")) {
+            current.getStyleClass().add("flow-node-running");
+        }
+    }
+
+    private void clearRunningNode(int nodeId) {
+        if (runningNodeId == nodeId) showRunningNode(-1);
+    }
+
 
     // ==================== EXECUTION ====================
 
@@ -2194,7 +2210,14 @@ public class TaskBuilderLayoutController {
                 AutomationStep current = nodeMap.get(currentId);
                 if (current == null) break;
 
-                boolean ok = builderService.executeNode(current);
+                int executingId = current.getId();
+                Platform.runLater(() -> showRunningNode(executingId));
+                boolean ok;
+                try {
+                    ok = builderService.executeNode(current);
+                } finally {
+                    Platform.runLater(() -> clearRunningNode(executingId));
+                }
                 final AutomationStep nodeRef = current;
                 Platform.runLater(() -> {
                     refreshCard(nodeRef);
@@ -2228,8 +2251,14 @@ public class TaskBuilderLayoutController {
         if (profile == null) { setStatus("⚠ Select a profile"); return; }
         builderService.setActiveProfile(profile);
         setStatus("▶ " + node.getSummary() + "...");
+        showRunningNode(node.getId());
         Thread t = new Thread(() -> {
-            boolean ok = builderService.executeNode(node);
+            boolean ok;
+            try {
+                ok = builderService.executeNode(node);
+            } finally {
+                Platform.runLater(() -> clearRunningNode(node.getId()));
+            }
             Platform.runLater(() -> {
                 refreshCard(node);
                 propStatusLabel.setText(node.isExecuted() ? "✅ Executed" : "❌ Failed");
@@ -2251,6 +2280,7 @@ public class TaskBuilderLayoutController {
     @FXML private void handleClearAll(ActionEvent e) {
         AutomationBlueprint def = builderService.getCurrentDefinition();
         if (def == null) return;
+        showRunningNode(-1);
         // Remove all node cards and their ports (in, out, outFalse)
         for (int id : new ArrayList<>(nodeCards.keySet())) {
             flowCanvas.getChildren().removeAll(nodeCards.get(id), inputPorts.get(id), outputPorts.get(id));
@@ -2271,6 +2301,7 @@ public class TaskBuilderLayoutController {
     }
 
     private void removeNode(AutomationStep node) {
+        if (runningNodeId == node.getId()) showRunningNode(-1);
         Circle falsePort = outputPortsFalse.remove(node.getId());
         if (falsePort != null) flowCanvas.getChildren().remove(falsePort);
         HBox hm = hoverMenus.remove(node.getId());
