@@ -178,7 +178,7 @@ public class TaskBuilderLayoutController {
     private static final double NODE_START_X = 180;
     private static final double NODE_START_Y = 150;
     private static final double NODE_SPACING_X = 260;
-    private static final double START_X = 40;
+    private static final double START_X = 10;
     private static final double START_Y = 170;
 
     // Emulator aspect ratio (720x1280 = 9:16)
@@ -1335,7 +1335,10 @@ public class TaskBuilderLayoutController {
 
     private void completeConnection(int targetId) {
         if (dragWireSourceId < 0 || targetId == dragWireSourceId) { cancelDrag(); return; }
-        if (dragWireSourceId > 0) {
+        if (dragWireSourceId == 0) {
+            AutomationBlueprint def = builderService.getCurrentDefinition();
+            if (def == null || !def.moveStepToFront(targetId)) { cancelDrag(); return; }
+        } else {
             AutomationStep s = findNode(dragWireSourceId);
             if (s != null) {
                 if (dragWireIsFalseBranch) {

@@ -160,6 +160,25 @@ class AutomationBlueprintSerializationTest {
         assertEquals("LIGHTHOUSE_INTEL", reloaded.getSteps().get(1).getParam(AutomationStep.PARAM_SIDEBAR_TARGET));
     }
 
+    @Test
+    void keepsInsertedEntryStepAndConnectionsAcrossSaveAndReload() throws Exception {
+        AutomationBlueprint imported = mapper.readValue(
+                mapper.writeValueAsString(sampleFlow()), AutomationBlueprint.class);
+        AutomationStep originalFirst = imported.getSteps().get(0);
+        AutomationStep sidebar = imported.addNode(new AutomationStep(0, FlowStepKind.SIDEBAR_NAVIGATION));
+        sidebar.setNextNodeId(originalFirst.getId());
+        originalFirst.setNextNodeId(imported.getSteps().get(1).getId());
+
+        assertTrue(imported.moveStepToFront(sidebar.getId()));
+        assertFalse(imported.moveStepToFront(999));
+        AutomationBlueprint reloaded = mapper.readValue(
+                mapper.writeValueAsString(imported), AutomationBlueprint.class);
+
+        assertEquals(sidebar.getId(), reloaded.getSteps().get(0).getId());
+        assertEquals(originalFirst.getId(), reloaded.getSteps().get(0).getNextNodeId());
+        assertEquals(imported.getSteps().get(2).getId(), reloaded.getSteps().get(1).getNextNodeId());
+    }
+
     /** Flows saved by earlier builds used the duplicated legacy key spellings. */
     @Test
     void loadsFlowsSavedWithLegacyKeyNames() throws Exception {

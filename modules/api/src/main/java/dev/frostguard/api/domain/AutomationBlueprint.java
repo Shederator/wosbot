@@ -81,6 +81,20 @@ public class AutomationBlueprint {
         }
     }
 
+    /** Selects the entry step without changing step IDs or graph connections. */
+    public boolean moveStepToFront(int stepId) {
+        for (int position = 0; position < steps.size(); position++) {
+            if (steps.get(position).getStepId() == stepId) {
+                if (position > 0) {
+                    steps.add(0, steps.remove(position));
+                    this.modifiedEpochMs = System.currentTimeMillis();
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+
     public int nextStepId() {
         return steps.size() + 1;
     }
