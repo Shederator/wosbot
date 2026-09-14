@@ -3,6 +3,7 @@ package dev.frostguard.api.domain;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -78,9 +79,30 @@ class AutomationBlueprintSerializationTest {
         step.fieldNames().forEachRemaining(actual::add);
         java.util.Collections.sort(actual);
 
-        assertEquals(List.of("alternateId", "attributes", "completed", "kind",
-                        "lastReadValue", "layoutX", "layoutY", "stepId", "successorId"),
+        assertEquals(List.of("alternateId", "attributes", "kind", "layoutX", "layoutY",
+                        "stepId", "successorId"),
                 actual);
+    }
+
+    @Test
+    void excludesExecutionFeedbackFromSavedAndImportedFlows() throws Exception {
+        AutomationBlueprint blueprint = sampleFlow();
+        AutomationStep step = blueprint.getSteps().get(0);
+        step.setCompleted(true);
+        step.setLastReadValue("previous OCR result");
+
+        JsonNode saved = mapper.readTree(mapper.writeValueAsString(blueprint)).path("steps").path(0);
+        assertFalse(saved.has("completed"));
+        assertFalse(saved.has("lastReadValue"));
+
+        String olderJson = """
+                {"title":"older flow","steps":[{"stepId":1,"kind":"OCR_READ",
+                  "completed":true,"lastReadValue":"stale OCR result"}]}
+                """;
+        AutomationStep imported = mapper.readValue(olderJson, AutomationBlueprint.class)
+                .getSteps().get(0);
+        assertFalse(imported.isCompleted());
+        assertNull(imported.getLastReadValue());
     }
 
     @Test
@@ -215,12 +237,12 @@ class AutomationBlueprintSerializationTest {
         assertEquals(FlowStepKind.WAIT, step.getKind());
         assertEquals("500", step.getParam("durationMs"));
         assertEquals("pause", step.getNodeName());
-        assertTrue(step.isCompleted());
+        assertFalse(step.isCompleted());
         assertEquals(12.0, step.getLayoutX());
         assertEquals(34.0, step.getLayoutY());
         assertEquals(9, step.getSuccessorId());
         assertEquals(-1, step.getAlternateId());
-        assertEquals("read", step.getLastReadValue());
+        assertNull(step.getLastReadValue());
     }
 
     /** A hand-edited file may spell a collection as null; that must not crash the editor. */
