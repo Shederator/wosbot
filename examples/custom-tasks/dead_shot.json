@@ -21,12 +21,10 @@
         "offsetY": "0",
         "tapIfFound": "true"
       },
-      "completed": false,
       "layoutX": 259.0,
       "layoutY": 266.0,
       "successorId": 2,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 2,
@@ -38,12 +36,10 @@
         "startY": "118",
         "startX": "617"
       },
-      "completed": false,
       "layoutX": 638.0,
       "layoutY": 240.0,
       "successorId": 3,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 3,
@@ -52,12 +48,10 @@
         "nodeName": "wait swipe finished",
         "durationMs": "1500"
       },
-      "completed": false,
       "layoutX": 624.3774456235769,
       "layoutY": 442.9292929292929,
       "successorId": 4,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 4,
@@ -77,12 +71,10 @@
         "offsetY": "0",
         "tapIfFound": "true"
       },
-      "completed": false,
       "layoutX": 609.6299708761022,
       "layoutY": 643.4693784539039,
       "successorId": 5,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 5,
@@ -91,12 +83,10 @@
         "nodeName": "wait tab appear",
         "durationMs": "200"
       },
-      "completed": false,
       "layoutX": 633.2166942920076,
       "layoutY": 985.951009823606,
       "successorId": 6,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 6,
@@ -110,12 +100,10 @@
         "y": "0",
         "brX": "467"
       },
-      "completed": false,
       "layoutX": 607.1374962225136,
       "layoutY": 1160.0071673848854,
       "successorId": 21,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 7,
@@ -129,12 +117,10 @@
         "y": "0",
         "brX": "151"
       },
-      "completed": false,
       "layoutX": 580.2317384210451,
       "layoutY": 1388.3749501918471,
       "successorId": 9,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 8,
@@ -148,12 +134,10 @@
         "y": "0",
         "brX": "308"
       },
-      "completed": false,
       "layoutX": 568.2563946858739,
       "layoutY": 1574.193060319894,
       "successorId": 10,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 9,
@@ -161,12 +145,10 @@
       "attributes": {
         "durationMs": "2000"
       },
-      "completed": false,
       "layoutX": 884.5192680723928,
       "layoutY": 1364.6313985191207,
       "successorId": 8,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 10,
@@ -174,12 +156,10 @@
       "attributes": {
         "durationMs": "2000"
       },
-      "completed": false,
       "layoutX": 879.6141817586006,
       "layoutY": 1579.6355856473008,
       "successorId": 11,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 11,
@@ -193,12 +173,10 @@
         "y": "0",
         "brX": "474"
       },
-      "completed": false,
       "layoutX": 553.3333333333333,
       "layoutY": 1793.3333333333337,
       "successorId": 12,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 12,
@@ -206,12 +184,10 @@
       "attributes": {
         "durationMs": "2000"
       },
-      "completed": false,
       "layoutX": 926.1848525698946,
       "layoutY": 1800.4346073728527,
       "successorId": 13,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 13,
@@ -225,12 +201,10 @@
         "y": "0",
         "brX": "620"
       },
-      "completed": false,
       "layoutX": 545.585942489274,
       "layoutY": 2007.7230547141226,
       "successorId": 14,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 14,
@@ -238,12 +212,10 @@
       "attributes": {
         "durationMs": "2000"
       },
-      "completed": false,
       "layoutX": 939.0597251006438,
       "layoutY": 2021.2264489479617,
       "successorId": 15,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 15,
@@ -257,12 +229,10 @@
         "y": "0",
         "brX": "149"
       },
-      "completed": false,
       "layoutX": 520.0,
       "layoutY": 2214.501646331604,
       "successorId": 16,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 16,
@@ -270,12 +240,10 @@
       "attributes": {
         "durationMs": "2000"
       },
-      "completed": false,
       "layoutX": 873.3333333333333,
       "layoutY": 2251.6228062725645,
       "successorId": 17,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 17,
@@ -288,12 +256,10 @@
         "y": "0",
         "brX": "308"
       },
-      "completed": false,
       "layoutX": 524.6184776314318,
       "layoutY": 2443.3333333333335,
       "successorId": 18,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 18,
@@ -301,12 +267,10 @@
       "attributes": {
         "durationMs": "2000"
       },
-      "completed": false,
       "layoutX": 863.8554328942953,
       "layoutY": 2465.2612048182327,
       "successorId": 19,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 19,
@@ -320,12 +284,10 @@
         "expectedValue": "Tap",
         "brX": "290"
       },
-      "completed": false,
       "layoutX": 516.6666666666666,
       "layoutY": 2620.9655479324556,
       "successorId": 20,
-      "alternateId": 22,
-      "lastReadValue": null
+      "alternateId": 22
     },
     {
       "stepId": 20,
@@ -339,12 +301,10 @@
         "y": "0",
         "brX": "662"
       },
-      "completed": false,
       "layoutX": 868.7228112799438,
       "layoutY": 2641.845456237708,
       "successorId": -1,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 21,
@@ -353,12 +313,10 @@
         "nodeName": "wait chest screen animation",
         "durationMs": "5000"
       },
-      "completed": false,
       "layoutX": 917.6047062115761,
       "layoutY": 1193.0663081680457,
       "successorId": 7,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 22,
@@ -366,12 +324,10 @@
       "attributes": {
         "nodeName": "quit"
       },
-      "completed": false,
       "layoutX": 896.6666666666666,
       "layoutY": 2960.0,
       "successorId": 23,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 23,
@@ -385,12 +341,10 @@
         "y": "0",
         "brX": "292"
       },
-      "completed": false,
       "layoutX": 1120.0,
       "layoutY": 2993.333333333333,
       "successorId": 24,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     },
     {
       "stepId": 24,
@@ -404,12 +358,10 @@
         "y": "0",
         "brX": "319"
       },
-      "completed": false,
       "layoutX": 1456.7395939218018,
       "layoutY": 2989.231297764812,
       "successorId": -1,
-      "alternateId": -1,
-      "lastReadValue": null
+      "alternateId": -1
     }
   ],
   "createdEpochMs": 1786281333164,

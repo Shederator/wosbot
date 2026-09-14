@@ -1,16 +1,15 @@
-Title: Empty the Exploration bag using idle mode
+Title: Handle Trek Supplies with idle exploration
 Status: Editable Task Builder example.
-When: Run at startup and then twice a day after validation on your account.
+When: Run only after validating the destination, OCR region, and tap areas on your account.
 
 How to test:
 1. Stop the normal task queue after initialization.
 2. Open Task Builder and import expert_idle_exploration.json.
-3. Inspect or execute each node, then save and re-import the JSON.
+3. Check the End Idle and start-idle branches on the relevant game screens.
+4. Save and re-import the JSON to verify the flow and its connections.
 
 Flow:
-- Expand the dashboard.
-- Swipe up twice.
-- Go to Trek Supplies.
-- Open and close the bag preview.
-- Open Tundra Trek and select Idle.
-- Confirm the quantity and return to the world screen.
+- From World, open Trek Supplies through Sidebar Navigation and wait for the screen.
+- Read the configured region for the End Idle action.
+- If End Idle is present, tap it, wait briefly, then exit the screen.
+- Otherwise, open the bag preview, wait for its animation, select Idle, and confirm the quantity.

@@ -42,6 +42,18 @@ class AutomationStepTest {
         assertEquals("Shop: Alliance Championship Shop", step.describeBriefly());
     }
 
+    @Test
+    void summarizesSidebarSelectionsForTheEditor() {
+        AutomationStep step = new AutomationStep(1, FlowStepKind.SIDEBAR_NAVIGATION);
+        step.setParam(AutomationStep.PARAM_SIDEBAR_MODE, "SECTION");
+        step.setParam(AutomationStep.PARAM_SIDEBAR_TARGET, "WILDERNESS");
+        assertEquals("Sidebar section: Wilderness", step.describeBriefly());
+
+        step.setParam(AutomationStep.PARAM_SIDEBAR_MODE, "DESTINATION");
+        step.setParam(AutomationStep.PARAM_SIDEBAR_TARGET, "LIGHTHOUSE_INTEL");
+        assertEquals("Sidebar destination: Lighthouse Intel", step.describeBriefly());
+    }
+
     /** Every kind must produce a summary; none may throw. */
     @Test
     void summarizesEveryStepKind() {

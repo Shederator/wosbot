@@ -23,6 +23,8 @@ import dev.frostguard.api.domain.AutomationBlueprint;
 import dev.frostguard.api.domain.AutomationStep;
 import dev.frostguard.api.runtime.WorkspacePaths;
 import dev.frostguard.engine.nav.ShopTab;
+import dev.frostguard.engine.nav.SidebarDestination;
+import dev.frostguard.engine.nav.SidebarSection;
 
 class TaskBuilderServiceTest {
 
@@ -79,6 +81,120 @@ class TaskBuilderServiceTest {
             assertFalse(service.executeNode(step));
 
             assertFalse(called.get());
+            assertFalse(step.isExecuted());
+        } finally {
+            restoreWorkspace(originalWorkspace);
+        }
+    }
+
+    @Test
+    void executesBothSidebarModesThroughTheSelectedProfile() {
+        String originalWorkspace = System.getProperty(WorkspacePaths.WORKSPACE_PROPERTY);
+        System.setProperty(WorkspacePaths.WORKSPACE_PROPERTY, tempDir.toString());
+        try {
+            AtomicReference<String> observed = new AtomicReference<>();
+            TaskBuilderService.SidebarNavigationAction sidebar = new TaskBuilderService.SidebarNavigationAction() {
+                @Override
+                public boolean openSection(String device, AccountDescriptor profile, SidebarSection section) {
+                    observed.set(device + ":" + profile.getName() + ":" + section);
+                    return true;
+                }
+
+                @Override
+                public boolean navigateTo(String device, AccountDescriptor profile,
+                                          SidebarDestination destination) {
+                    observed.set(device + ":" + profile.getName() + ":" + destination);
+                    return true;
+                }
+            };
+            TaskBuilderService service = new TaskBuilderService(new ObjectMapper(),
+                    (device, profile, tab) -> true, sidebar);
+            AccountDescriptor profile = new AccountDescriptor(
+                    42L, "Test Profile", "3", true, 1L, 30L);
+            service.startSession("Sidebar probe", profile);
+
+            AutomationStep section = new AutomationStep(1, FlowStepKind.SIDEBAR_NAVIGATION);
+            section.setParam(AutomationStep.PARAM_SIDEBAR_MODE, "SECTION");
+            section.setParam(AutomationStep.PARAM_SIDEBAR_TARGET, "WILDERNESS");
+            assertTrue(service.executeNode(section));
+            assertEquals("3:Test Profile:WILDERNESS", observed.get());
+
+            AutomationStep destination = new AutomationStep(2, FlowStepKind.SIDEBAR_NAVIGATION);
+            destination.setParam(AutomationStep.PARAM_SIDEBAR_MODE, "DESTINATION");
+            destination.setParam(AutomationStep.PARAM_SIDEBAR_TARGET, "LIGHTHOUSE_INTEL");
+            assertTrue(service.executeNode(destination));
+            assertEquals("3:Test Profile:LIGHTHOUSE_INTEL", observed.get());
+        } finally {
+            restoreWorkspace(originalWorkspace);
+        }
+    }
+
+    @Test
+    void refusesInvalidSidebarTargetsAndMissingProfileWithoutCallingNavigator() {
+        String originalWorkspace = System.getProperty(WorkspacePaths.WORKSPACE_PROPERTY);
+        System.setProperty(WorkspacePaths.WORKSPACE_PROPERTY, tempDir.toString());
+        try {
+            AtomicBoolean called = new AtomicBoolean();
+            TaskBuilderService.SidebarNavigationAction sidebar = new TaskBuilderService.SidebarNavigationAction() {
+                @Override
+                public boolean openSection(String device, AccountDescriptor profile, SidebarSection section) {
+                    called.set(true);
+                    return true;
+                }
+
+                @Override
+                public boolean navigateTo(String device, AccountDescriptor profile,
+                                          SidebarDestination destination) {
+                    called.set(true);
+                    return true;
+                }
+            };
+            TaskBuilderService service = new TaskBuilderService(new ObjectMapper(),
+                    (device, profile, tab) -> true, sidebar);
+            service.startSession("Sidebar probe", "3");
+            AutomationStep missingProfile = new AutomationStep(1, FlowStepKind.SIDEBAR_NAVIGATION);
+            missingProfile.setParam(AutomationStep.PARAM_SIDEBAR_MODE, "SECTION");
+            missingProfile.setParam(AutomationStep.PARAM_SIDEBAR_TARGET, "CITY");
+            assertFalse(service.executeNode(missingProfile));
+
+            AutomationStep invalid = new AutomationStep(2, FlowStepKind.SIDEBAR_NAVIGATION);
+            invalid.setParam(AutomationStep.PARAM_SIDEBAR_MODE, "DESTINATION");
+            invalid.setParam(AutomationStep.PARAM_SIDEBAR_TARGET, "UNKNOWN_ROW");
+            assertFalse(service.executeNode(invalid));
+            assertFalse(called.get());
+            assertFalse(missingProfile.isExecuted());
+            assertFalse(invalid.isExecuted());
+        } finally {
+            restoreWorkspace(originalWorkspace);
+        }
+    }
+
+    @Test
+    void stopsSidebarNodeWhenSharedNavigatorReportsFailure() {
+        String originalWorkspace = System.getProperty(WorkspacePaths.WORKSPACE_PROPERTY);
+        System.setProperty(WorkspacePaths.WORKSPACE_PROPERTY, tempDir.toString());
+        try {
+            TaskBuilderService.SidebarNavigationAction sidebar = new TaskBuilderService.SidebarNavigationAction() {
+                @Override
+                public boolean openSection(String device, AccountDescriptor profile, SidebarSection section) {
+                    return false;
+                }
+
+                @Override
+                public boolean navigateTo(String device, AccountDescriptor profile,
+                                          SidebarDestination destination) {
+                    return false;
+                }
+            };
+            TaskBuilderService service = new TaskBuilderService(new ObjectMapper(),
+                    (device, profile, tab) -> true, sidebar);
+            service.startSession("Sidebar probe", new AccountDescriptor(
+                    42L, "Test Profile", "3", true, 1L, 30L));
+            AutomationStep step = new AutomationStep(1, FlowStepKind.SIDEBAR_NAVIGATION);
+            step.setParam(AutomationStep.PARAM_SIDEBAR_MODE, "SECTION");
+            step.setParam(AutomationStep.PARAM_SIDEBAR_TARGET, "DAILY");
+
+            assertFalse(service.executeNode(step));
             assertFalse(step.isExecuted());
         } finally {
             restoreWorkspace(originalWorkspace);

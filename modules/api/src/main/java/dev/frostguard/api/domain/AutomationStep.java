@@ -2,6 +2,7 @@ package dev.frostguard.api.domain;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSetter;
 import com.fasterxml.jackson.annotation.Nulls;
 import dev.frostguard.api.configs.FlowStepKind;
@@ -23,6 +24,7 @@ import java.util.Map;
  *   <li><b>OCR_READ</b> — tlX, tlY, brX, brY, condition, expectedValue</li>
  *   <li><b>TEMPLATE_SEARCH</b> — templatePath, threshold, grayscale, tlX, brX</li>
  *   <li><b>SHOP_NAVIGATION</b> — shopTab</li>
+ *   <li><b>SIDEBAR_NAVIGATION</b> — sidebarMode, sidebarTarget</li>
  *   <li><b>NAVIGATE</b> — location</li>
  * </ul>
  *
@@ -36,7 +38,8 @@ import java.util.Map;
  * midway and leaves a truncated, unparseable document on disk. Field-only
  * visibility keeps the saved file canonical and makes future helper methods
  * inert by default instead of silently joining the output. {@link JsonAlias}
- * still accepts the historical key spellings when reading older files.</p>
+ * still accepts the historical key spellings when reading older files.
+ * Execution feedback is transient and ignored in saved or imported flows.</p>
  */
 @JsonAutoDetect(
         fieldVisibility = JsonAutoDetect.Visibility.ANY,
@@ -44,9 +47,12 @@ import java.util.Map;
         isGetterVisibility = JsonAutoDetect.Visibility.NONE,
         setterVisibility = JsonAutoDetect.Visibility.NONE,
         creatorVisibility = JsonAutoDetect.Visibility.NONE)
+@JsonIgnoreProperties({"completed", "executed", "lastReadValue", "lastOcrResult"})
 public class AutomationStep {
     public static final String PARAM_NODE_NAME = "nodeName";
     public static final String PARAM_SHOP_TAB = "shopTab";
+    public static final String PARAM_SIDEBAR_MODE = "sidebarMode";
+    public static final String PARAM_SIDEBAR_TARGET = "sidebarTarget";
     public static final int NODE_NAME_MAX_LENGTH = 30;
 
     @JsonAlias("id")
@@ -59,7 +65,6 @@ public class AutomationStep {
     @JsonSetter(nulls = Nulls.SKIP)
     private Map<String, String> attributes;
 
-    @JsonAlias("executed")
     private boolean completed;
 
     @JsonAlias("canvasX")
@@ -74,7 +79,6 @@ public class AutomationStep {
     @JsonAlias("nextNodeFalseId")
     private int alternateId  = -1;
 
-    @JsonAlias("lastOcrResult")
     private String lastReadValue = null;
 
     /** Creates a blank step with an empty attribute map. */
@@ -346,6 +350,18 @@ public class AutomationStep {
 
             case SHOP_NAVIGATION -> String.format("Shop: %s",
                     humanizeEnumValue(resolveAttrOr(PARAM_SHOP_TAB, "MYSTERY_SHOP")));
+
+            case SIDEBAR_NAVIGATION -> {
+                String mode = getAttribute(PARAM_SIDEBAR_MODE);
+                String target = getAttribute(PARAM_SIDEBAR_TARGET);
+                if ((!"SECTION".equals(mode) && !"DESTINATION".equals(mode))
+                        || target == null || target.isBlank()) {
+                    yield "Sidebar: invalid selection";
+                }
+                yield String.format("Sidebar %s: %s",
+                        "DESTINATION".equals(mode) ? "destination" : "section",
+                        humanizeEnumValue(target));
+            }
 
             case NAVIGATE -> String.format("Navigate: %s",
                     resolveAttrOr("location", "HOME"));

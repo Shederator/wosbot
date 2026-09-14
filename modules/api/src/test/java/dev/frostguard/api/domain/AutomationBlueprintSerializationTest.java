@@ -3,6 +3,7 @@ package dev.frostguard.api.domain;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -78,9 +79,30 @@ class AutomationBlueprintSerializationTest {
         step.fieldNames().forEachRemaining(actual::add);
         java.util.Collections.sort(actual);
 
-        assertEquals(List.of("alternateId", "attributes", "completed", "kind",
-                        "lastReadValue", "layoutX", "layoutY", "stepId", "successorId"),
+        assertEquals(List.of("alternateId", "attributes", "kind", "layoutX", "layoutY",
+                        "stepId", "successorId"),
                 actual);
+    }
+
+    @Test
+    void excludesExecutionFeedbackFromSavedAndImportedFlows() throws Exception {
+        AutomationBlueprint blueprint = sampleFlow();
+        AutomationStep step = blueprint.getSteps().get(0);
+        step.setCompleted(true);
+        step.setLastReadValue("previous OCR result");
+
+        JsonNode saved = mapper.readTree(mapper.writeValueAsString(blueprint)).path("steps").path(0);
+        assertFalse(saved.has("completed"));
+        assertFalse(saved.has("lastReadValue"));
+
+        String olderJson = """
+                {"title":"older flow","steps":[{"stepId":1,"kind":"OCR_READ",
+                  "completed":true,"lastReadValue":"stale OCR result"}]}
+                """;
+        AutomationStep imported = mapper.readValue(olderJson, AutomationBlueprint.class)
+                .getSteps().get(0);
+        assertFalse(imported.isCompleted());
+        assertNull(imported.getLastReadValue());
     }
 
     @Test
@@ -139,6 +161,46 @@ class AutomationBlueprintSerializationTest {
                 reloaded.getSteps().get(0).getParam(AutomationStep.PARAM_SHOP_TAB));
     }
 
+    @Test
+    void preservesSidebarSectionAndDestinationAcrossSaveAndReload() throws Exception {
+        AutomationBlueprint blueprint = new AutomationBlueprint("sidebar probe");
+        AutomationStep section = new AutomationStep(3, FlowStepKind.SIDEBAR_NAVIGATION);
+        section.setParam(AutomationStep.PARAM_SIDEBAR_MODE, "SECTION");
+        section.setParam(AutomationStep.PARAM_SIDEBAR_TARGET, "WILDERNESS");
+        blueprint.addNode(section);
+        AutomationStep destination = new AutomationStep(4, FlowStepKind.SIDEBAR_NAVIGATION);
+        destination.setParam(AutomationStep.PARAM_SIDEBAR_MODE, "DESTINATION");
+        destination.setParam(AutomationStep.PARAM_SIDEBAR_TARGET, "LIGHTHOUSE_INTEL");
+        blueprint.addNode(destination);
+
+        AutomationBlueprint reloaded =
+                mapper.readValue(mapper.writeValueAsString(blueprint), AutomationBlueprint.class);
+
+        assertEquals("SECTION", reloaded.getSteps().get(0).getParam(AutomationStep.PARAM_SIDEBAR_MODE));
+        assertEquals("WILDERNESS", reloaded.getSteps().get(0).getParam(AutomationStep.PARAM_SIDEBAR_TARGET));
+        assertEquals("DESTINATION", reloaded.getSteps().get(1).getParam(AutomationStep.PARAM_SIDEBAR_MODE));
+        assertEquals("LIGHTHOUSE_INTEL", reloaded.getSteps().get(1).getParam(AutomationStep.PARAM_SIDEBAR_TARGET));
+    }
+
+    @Test
+    void keepsInsertedEntryStepAndConnectionsAcrossSaveAndReload() throws Exception {
+        AutomationBlueprint imported = mapper.readValue(
+                mapper.writeValueAsString(sampleFlow()), AutomationBlueprint.class);
+        AutomationStep originalFirst = imported.getSteps().get(0);
+        AutomationStep sidebar = imported.addNode(new AutomationStep(0, FlowStepKind.SIDEBAR_NAVIGATION));
+        sidebar.setNextNodeId(originalFirst.getId());
+        originalFirst.setNextNodeId(imported.getSteps().get(1).getId());
+
+        assertTrue(imported.moveStepToFront(sidebar.getId()));
+        assertFalse(imported.moveStepToFront(999));
+        AutomationBlueprint reloaded = mapper.readValue(
+                mapper.writeValueAsString(imported), AutomationBlueprint.class);
+
+        assertEquals(sidebar.getId(), reloaded.getSteps().get(0).getId());
+        assertEquals(originalFirst.getId(), reloaded.getSteps().get(0).getNextNodeId());
+        assertEquals(imported.getSteps().get(2).getId(), reloaded.getSteps().get(1).getNextNodeId());
+    }
+
     /** Flows saved by earlier builds used the duplicated legacy key spellings. */
     @Test
     void loadsFlowsSavedWithLegacyKeyNames() throws Exception {
@@ -175,12 +237,12 @@ class AutomationBlueprintSerializationTest {
         assertEquals(FlowStepKind.WAIT, step.getKind());
         assertEquals("500", step.getParam("durationMs"));
         assertEquals("pause", step.getNodeName());
-        assertTrue(step.isCompleted());
+        assertFalse(step.isCompleted());
         assertEquals(12.0, step.getLayoutX());
         assertEquals(34.0, step.getLayoutY());
         assertEquals(9, step.getSuccessorId());
         assertEquals(-1, step.getAlternateId());
-        assertEquals("read", step.getLastReadValue());
+        assertNull(step.getLastReadValue());
     }
 
     /** A hand-edited file may spell a collection as null; that must not crash the editor. */
