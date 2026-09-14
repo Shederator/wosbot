@@ -243,4 +243,16 @@ class SidebarRecoveryAdversarialTest {
         assertTrue(rig.nav.openSection(SidebarSection.DAILY));
         assertEquals(1, rig.taps.get(), "A section switch must tap the requested tab once");
     }
+
+    @Test
+    void interruptionDuringTriggerPollMustNotRetry() throws Exception {
+        Rig rig = new Rig();
+        put(rig.nav, "transitionWaiter", (SidebarNavigator.Waiter) millis -> false);
+        put(rig.nav, "screenStates", (SidebarNavigator.ScreenStateReader) () ->
+                new SidebarNavigator.ScreenState(Optional.empty(), true));
+
+        assertFalse(rig.nav.openSection(SidebarSection.DAILY));
+        assertEquals(1, rig.taps.get(),
+                "interrupted waiting must never issue a second trigger tap");
+    }
 }

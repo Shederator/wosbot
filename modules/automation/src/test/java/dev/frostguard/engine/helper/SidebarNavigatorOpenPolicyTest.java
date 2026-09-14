@@ -21,7 +21,7 @@ import dev.frostguard.engine.nav.SidebarSection;
 class SidebarNavigatorOpenPolicyTest {
 
     @Test
-    void allowsTheSidebarAnimationToFinishBeforeClassifyingIt() {
+    void allowsSidebarAnimationToFinishBeforeClassifyingIt() {
         assertEquals(2_000, SidebarNavigator.SIDEBAR_OPEN_SETTLE_MS);
     }
 
@@ -116,15 +116,24 @@ class SidebarNavigatorOpenPolicyTest {
         assertTrue(observation.section().isEmpty());
         assertEquals(1, observation.checks());
         assertEquals(1, reads.get());
+        assertTrue(observation.interrupted());
         assertFalse(Thread.currentThread().isInterrupted());
     }
 
     @Test
     void retriesOnlyTheFirstUnconfirmedTriggerOnAFreshRootScreen() {
-        assertTrue(SidebarNavigator.shouldRetryTrigger(1, Optional.empty(), true));
-        assertFalse(SidebarNavigator.shouldRetryTrigger(2, Optional.empty(), true));
+        assertTrue(SidebarNavigator.shouldRetryTrigger(1,
+                new SidebarNavigator.TransitionObservation(Optional.empty(), 1, false), Optional.empty(), true));
+        assertFalse(SidebarNavigator.shouldRetryTrigger(2,
+                new SidebarNavigator.TransitionObservation(Optional.empty(), 2, false),
+                Optional.empty(), true));
         assertFalse(SidebarNavigator.shouldRetryTrigger(1,
+                new SidebarNavigator.TransitionObservation(Optional.empty(), 1, false),
                 Optional.of(SidebarSection.DAILY), true));
-        assertFalse(SidebarNavigator.shouldRetryTrigger(1, Optional.empty(), false));
+        assertFalse(SidebarNavigator.shouldRetryTrigger(1,
+                new SidebarNavigator.TransitionObservation(Optional.empty(), 1, false), Optional.empty(), false));
+        assertFalse(SidebarNavigator.shouldRetryTrigger(1,
+                new SidebarNavigator.TransitionObservation(Optional.empty(), 1, true),
+                Optional.empty(), true));
     }
 }
