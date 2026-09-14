@@ -13,3 +13,4 @@ Flow:
 - Read the configured region for the End Idle action.
 - If End Idle is present, tap it, wait briefly, then exit the screen.
 - Otherwise, open the bag preview, wait for its animation, select Idle, and confirm the quantity.
+- After confirmation, wait briefly and press Back twice to return to World if the empty bag remains open. Both Back actions run even when the game has already returned to World.
