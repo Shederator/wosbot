@@ -145,6 +145,8 @@ public class TaskBuilderLayoutController {
     private AutomationStep selectedNode = null;
     private double ocrDragStartX = 0, ocrDragStartY = 0;
     private boolean hasPreviewImage = false;
+    private boolean previewRegionDismissed = false;
+    private boolean previewRegionWasShownOnPress = false;
     private boolean isBinding = false;
 
     // Start location toggle
@@ -190,6 +192,7 @@ public class TaskBuilderLayoutController {
         setupCanvasClipping();
         setupCanvasInteractions();
         setupPreviewPanelSizing();
+        previewImageView.boundsInLocalProperty().addListener((obs, oldBounds, newBounds) -> refreshConfiguredPreviewRegion());
         setupNodeNameField();
         drawCanvasGrid();
         drawStartNode();
@@ -525,7 +528,14 @@ public class TaskBuilderLayoutController {
             if (raw != null) {
                 BufferedImage bi = dev.frostguard.vision.convert.ImageConverter.toBufferedImage(raw);
                 Image fx = toFxImage(bi);
-                Platform.runLater(() -> { previewImageView.setImage(fx); previewHint.setVisible(false); hasPreviewImage=true; setStatus("📷 Preview updated"); });
+                Platform.runLater(() -> {
+                    previewImageView.setImage(fx);
+                    previewHint.setVisible(false);
+                    hasPreviewImage = true;
+                    previewRegionDismissed = false;
+                    refreshConfiguredPreviewRegion();
+                    setStatus("📷 Preview updated");
+                });
             } else { Platform.runLater(() -> setStatus("❌ Capture failed")); }
         } catch (Exception e) { Platform.runLater(() -> setStatus("❌ " + e.getMessage())); }
     }
@@ -1618,6 +1628,7 @@ public class TaskBuilderLayoutController {
         isBinding = true;
         deselectNode();
         selectedNode = node;
+        previewRegionDismissed = false;
         VBox card = nodeCards.get(node.getId());
         if (card != null) {
             card.getStyleClass().add("flow-node-selected");
@@ -1723,10 +1734,7 @@ public class TaskBuilderLayoutController {
                 if (ocrExpectedField != null) {
                     ocrExpectedField.setText(node.getParam("expectedValue") != null ? node.getParam("expectedValue") : "");
                 }
-                if (hasPreviewImage) {
-                    selectionBox.setVisible(true);
-                    setStatus("Drag on the preview to draw bounds. Has 2 outputs: Yes / No.");
-                }
+                if (hasPreviewImage) setStatus("Drag on the preview to draw bounds. Has 2 outputs: Yes / No.");
             }
             case TEMPLATE_SEARCH -> {
                 if (templatePropsBox != null) {
@@ -1783,6 +1791,7 @@ public class TaskBuilderLayoutController {
             default -> {}
         }
         isBinding = false;
+        refreshConfiguredPreviewRegion();
     }
 
     private void deselectNode() {
@@ -1791,6 +1800,8 @@ public class TaskBuilderLayoutController {
             if (c != null) c.getStyleClass().remove("flow-node-selected");
         }
         selectedNode = null;
+        if (selectionBox != null) selectionBox.setVisible(false);
+        if (previewCrosshairPane != null) previewCrosshairPane.setVisible(false);
         // Hide the properties drawer
         propsDrawer.setVisible(false); propsDrawer.setManaged(false);
     }
@@ -1806,6 +1817,8 @@ public class TaskBuilderLayoutController {
         selectedNode.setParam("brX", tapBrXField.getText());
         selectedNode.setParam("brY", tapBrYField.getText());
         refreshCard(selectedNode);
+        previewRegionDismissed = false;
+        refreshConfiguredPreviewRegion();
     }
 
     @FXML private void handleApplySwipeProps(ActionEvent e) {
@@ -1854,6 +1867,8 @@ public class TaskBuilderLayoutController {
         if (ocrExpectedField != null)
             selectedNode.setParam("expectedValue", ocrExpectedField.getText());
         refreshCard(selectedNode);
+        previewRegionDismissed = false;
+        refreshConfiguredPreviewRegion();
     }
 
     @FXML
@@ -1913,8 +1928,33 @@ public class TaskBuilderLayoutController {
 
     @FXML private void handlePreviewClicked(MouseEvent e) { } // Migrated logic to Released
 
+    private void refreshConfiguredPreviewRegion() {
+        if (selectionBox == null || previewCrosshairPane == null) return;
+        if (previewRegionDismissed || !hasPreviewImage || previewImageView.getImage() == null) {
+            selectionBox.setVisible(false);
+            return;
+        }
+
+        var image = previewImageView.getImage();
+        var viewBounds = previewImageView.getBoundsInLocal();
+        var region = ConfiguredPreviewRegion.forNode(selectedNode,
+                image.getWidth(), image.getHeight(), viewBounds.getWidth(), viewBounds.getHeight());
+        if (region.isEmpty()) {
+            selectionBox.setVisible(false);
+            return;
+        }
+
+        ConfiguredPreviewRegion bounds = region.get();
+        selectionBox.setX(bounds.x());
+        selectionBox.setY(bounds.y());
+        selectionBox.setWidth(bounds.width());
+        selectionBox.setHeight(bounds.height());
+        selectionBox.setVisible(true);
+        previewCrosshairPane.setVisible(true);
+    }
+
     @FXML private void handlePreviewMousePressed(MouseEvent e) {
-        if (selectedNode == null) return;
+        if (selectedNode == null || previewImageView.getImage() == null) return;
         if (selectedNode.getType() != FlowStepKind.OCR_READ && 
             selectedNode.getType() != FlowStepKind.TAP_POINT && 
             selectedNode.getType() != FlowStepKind.SWIPE &&
@@ -1926,6 +1966,10 @@ public class TaskBuilderLayoutController {
         double relY = e.getY() - 2.0;
         if (relX < 0 || relX > previewImageView.getBoundsInLocal().getWidth() || relY < 0 || relY > previewImageView.getBoundsInLocal().getHeight()) return;
 
+        previewRegionWasShownOnPress = selectionBox.isVisible()
+                && (selectedNode.getType() == FlowStepKind.TAP_POINT
+                        || selectedNode.getType() == FlowStepKind.OCR_READ);
+        previewRegionDismissed = true;
         ocrDragStartX = e.getX();
         ocrDragStartY = e.getY();
         
@@ -1976,6 +2020,13 @@ public class TaskBuilderLayoutController {
         double currentY = Math.max(2, Math.min(e.getY(), previewImageView.getBoundsInLocal().getHeight() + 2));
 
         if (selectedNode.getType() == FlowStepKind.TAP_POINT || selectedNode.getType() == FlowStepKind.OCR_READ) {
+            if (previewRegionWasShownOnPress
+                    && selectionBox.getWidth() <= 1 && selectionBox.getHeight() <= 1) {
+                selectionBox.setVisible(false);
+                previewRegionWasShownOnPress = false;
+                return;
+            }
+            previewRegionWasShownOnPress = false;
             int tlX, tlY, brX, brY;
             if (selectionBox.getWidth() <= 1 && selectionBox.getHeight() <= 1) {
                 // it was a simple click
@@ -2033,7 +2084,10 @@ public class TaskBuilderLayoutController {
     }
 
     @FXML private void handlePreviewMouseExited(MouseEvent e) {
-        if (previewCrosshairPane != null) previewCrosshairPane.setVisible(false);
+        if (previewCrossX != null) previewCrossX.setVisible(false);
+        if (previewCrossY != null) previewCrossY.setVisible(false);
+        if (previewCoordsLabel != null) previewCoordsLabel.setVisible(false);
+        if (previewCrosshairPane != null) previewCrosshairPane.setVisible(selectionBox.isVisible());
     }
 
     @FXML private void handlePreviewMouseMoved(MouseEvent e) {
@@ -2043,7 +2097,10 @@ public class TaskBuilderLayoutController {
         double relY = e.getY() - 2.0;
         
         if (relX < 0 || relX > previewImageView.getBoundsInLocal().getWidth() || relY < 0 || relY > previewImageView.getBoundsInLocal().getHeight()) {
-            previewCrosshairPane.setVisible(false);
+            previewCrossX.setVisible(false);
+            previewCrossY.setVisible(false);
+            previewCoordsLabel.setVisible(false);
+            previewCrosshairPane.setVisible(selectionBox.isVisible());
             return;
         }
 
@@ -2056,10 +2113,10 @@ public class TaskBuilderLayoutController {
 
         if (!previewCrosshairPane.isVisible()) {
             previewCrosshairPane.setVisible(true);
-            previewCrossX.setVisible(true);
-            previewCrossY.setVisible(true);
-            previewCoordsLabel.setVisible(true);
         }
+        previewCrossX.setVisible(true);
+        previewCrossY.setVisible(true);
+        previewCoordsLabel.setVisible(true);
 
         previewCrossX.setStartY(2.0); previewCrossX.setEndY(previewImageView.getBoundsInLocal().getHeight() + 2.0);
         previewCrossX.setStartX(e.getX()); previewCrossX.setEndX(e.getX());
