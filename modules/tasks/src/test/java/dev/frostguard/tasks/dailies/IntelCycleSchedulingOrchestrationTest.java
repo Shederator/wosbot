@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.UUID;
@@ -47,12 +48,15 @@ class IntelCycleSchedulingOrchestrationTest {
         runSchedulerTick(queue);
         assertEquals(2, task.executionCount);
         assertEquals(IntelCyclePolicy.Action.RESUME_ACTIVE_CYCLE, task.lastAction);
-        assertTrue(task.getScheduled().isAfter(LocalDateTime.now().plusHours(1)));
+        LocalDateTime expectedRefresh = IntelCyclePolicy.nextRefresh(task.completedAt, ZoneId.systemDefault());
+        assertCloseTo(expectedRefresh, task.getScheduled());
+        assertTrue(task.getScheduled().isAfter(task.completedAt),
+                "the next UTC refresh may be seconds away, but must be after cycle completion");
 
         TaskStateData persisted = TaskManagementService.shared().lookupTaskState(
                 profile.getId(), TpDailyTaskEnum.INTEL.getId());
         assertNotNull(persisted);
-        assertTrue(persisted.getNextExecutionTime().isAfter(LocalDateTime.now().plusHours(1)));
+        assertCloseTo(expectedRefresh, persisted.getNextExecutionTime());
         assertEquals(0, queue.gameStopCount);
         assertEquals(0, queue.slotReleaseCount);
 
@@ -60,6 +64,12 @@ class IntelCycleSchedulingOrchestrationTest {
         runSchedulerTick(queue);
         assertEquals(completedExecutions, task.executionCount,
                 "the completed cycle must remain parked until its persisted refresh time");
+    }
+
+    private static void assertCloseTo(LocalDateTime expected, LocalDateTime actual) {
+        // DelayedTask.reschedule reconstructs wall time from a millisecond duration.
+        assertTrue(Duration.between(expected, actual).abs().compareTo(Duration.ofSeconds(1)) < 0,
+                () -> "expected refresh " + expected + " but was " + actual);
     }
 
     private static void runSchedulerTick(TaskQueue queue) {
@@ -79,6 +89,7 @@ class IntelCycleSchedulingOrchestrationTest {
         private final IntelCyclePolicy policy = new IntelCyclePolicy();
         private int executionCount;
         private IntelCyclePolicy.Action lastAction;
+        private LocalDateTime completedAt;
 
         private PolicyDrivenIntelTask(AccountDescriptor profile) {
             super(profile, TpDailyTaskEnum.INTEL);
@@ -102,7 +113,8 @@ class IntelCycleSchedulingOrchestrationTest {
             }
 
             policy.completeCycle();
-            reschedule(IntelCyclePolicy.nextRefresh(LocalDateTime.now(), ZoneId.systemDefault()));
+            completedAt = LocalDateTime.now();
+            reschedule(IntelCyclePolicy.nextRefresh(completedAt, ZoneId.systemDefault()));
         }
     }
 
