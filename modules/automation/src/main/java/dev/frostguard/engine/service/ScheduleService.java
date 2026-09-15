@@ -84,6 +84,12 @@ public class ScheduleService {
 	}
 
 	public synchronized void launchEngine() {
+		if (ControlledTaskExecutionService.obtain().hasActiveRun()) {
+			log(TpMessageSeverityEnum.WARNING, "ScheduleService", "-",
+					"Engine launch blocked while a Task Workbench run is active");
+			notifyBotState(false, false);
+			return;
+		}
 		if (dispatcher.hasManagedQueues()) {
 			log(TpMessageSeverityEnum.ERROR, "ScheduleService", "-",
 					"Engine launch blocked because a previous queue shutdown is incomplete");
@@ -126,6 +132,10 @@ public class ScheduleService {
 		if (observer != null) {
 			queueListeners.addIfAbsent(observer);
 		}
+	}
+
+	public boolean isEngineRunning() {
+		return dispatcher.hasManagedQueues();
 	}
 
 	public void haltEngine() {
