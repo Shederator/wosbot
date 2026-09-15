@@ -9,6 +9,19 @@ import dev.frostguard.api.domain.PointData;
  */
 public final class CommonGameAreas {
 
+    public static final AreaData FISHING_FREE_BAIT = AreaData.of(497, 1095, 579, 1129);
+    public static final AreaData FISHING_DEPTH = AreaData.of(20, 20, 140, 93);
+    public static final AreaData FISHING_DEPTH_HUD = AreaData.of(0, 0, 175, 100);
+    public static final AreaData FISHING_CAPACITY_HUD = AreaData.of(0, 108, 175, 157);
+    public static final AreaData FISHING_PROTECTION_HUD = AreaData.of(0, 167, 175, 215);
+    public static final AreaData FISHING_CURRENT_DEPTH = AreaData.of(20, 20, 150, 63);
+    // Keep the lower/right HUD border outside the text region.
+    public static final AreaData FISHING_MAXIMUM_DEPTH = AreaData.of(35, 64, 125, 91);
+    public static final AreaData FISHING_LINE_LENGTH = AreaData.of(145, 870, 225, 905);
+    public static final AreaData FISHING_HAUL_HEADING = AreaData.of(265, 193, 455, 264);
+    public static final AreaData FISHING_HAUL_EXIT_LABEL = AreaData.of(170, 1090, 275, 1147);
+    public static final AreaData FISHING_HAUL_EXIT_BUTTON = AreaData.of(100, 1090, 325, 1155);
+
     private CommonGameAreas() {}
 
     // ── micro-factories ──────────────────────────────────────────────
