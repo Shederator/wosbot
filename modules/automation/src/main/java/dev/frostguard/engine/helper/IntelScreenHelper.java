@@ -10,6 +10,7 @@ import dev.frostguard.engine.error.HomeNotFoundException;
 import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.nav.SidebarDestination;
+import dev.frostguard.engine.nav.SidebarRowLookup;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.vision.color.GameColors;
 import dev.frostguard.vision.color.PixelStats;
@@ -54,9 +55,10 @@ public class IntelScreenHelper {
     /** Uses Daily only as an OCR-free availability gate, then enters Intel from Wilderness. */
     public boolean enterIntelFromDailyIfAvailable() {
         nav.ensureCorrectScreenLocation(LaunchPoint.ANY);
-        ImageSearchResultData lighthouseRow = nav.findSidebarDestinationRow(
+        SidebarRowLookup lighthouseLookup = nav.findSidebarDestinationRowWithStatus(
                 SidebarDestination.LIGHTHOUSE_INTEL);
-        if (lighthouseRow == null || !lighthouseRow.isFound()) {
+        ImageSearchResultData lighthouseRow = requireSidebarReady(lighthouseLookup);
+        if (!lighthouseLookup.isFound()) {
             log.info("Lighthouse Intel row icon is absent after the bounded Daily scan; "
                     + "the completed row may be hidden, so Intel is unavailable.");
             if (!nav.closeSidebar()) {
@@ -88,6 +90,14 @@ public class IntelScreenHelper {
 
         enterIntelFromWilderness();
         return true;
+    }
+
+    static ImageSearchResultData requireSidebarReady(SidebarRowLookup lookup) {
+        if (lookup.status() == SidebarRowLookup.Status.SIDEBAR_UNAVAILABLE) {
+            throw new HomeNotFoundException(
+                    "Failed to open Daily sidebar while checking Lighthouse Intel availability");
+        }
+        return lookup.rowIcon();
     }
 
     /** Returns from a mission's Wilderness end state without routing through City or Daily. */
