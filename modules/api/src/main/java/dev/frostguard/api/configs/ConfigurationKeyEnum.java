@@ -30,6 +30,7 @@ public enum ConfigurationKeyEnum {
     ANALYTICS_ID_STRING                 ("",                 String.class,        ConfigCategory.ANALYTICS),
     HIDE_ANALYTICS_LOGS_BOOL            ("true",             Boolean.class,       ConfigCategory.ANALYTICS),
     STATISTICS_JSON_STRING              ("{}",               String.class,        ConfigCategory.ANALYTICS),
+    TELEMETRY_INTERVAL_HOURS_INT        ("6",                Integer.class,       ConfigCategory.ANALYTICS),
 
     /* ─────────── alliance ─────────── */
 
@@ -226,6 +227,23 @@ public enum ConfigurationKeyEnum {
     GATHER_LAST_RECALL_TIME_STRING  ("",                    String.class,   ConfigCategory.GATHERING),
     GATHER_SPEED_BOOL               ("false",               Boolean.class,  ConfigCategory.GATHERING),
     GATHER_SPEED_BOOST_TYPE_STRING  ("24h (600 gems)",      String.class,   ConfigCategory.GATHERING),
+    // Cache written by ResourceStockpileRoutine and read by GatherRoutine and telemetry.
+    // Source screen: Research Center -> Research -> any non-maxed tech node's "Research Cost"
+    // panel, which shows all 4 resources as current/cost.
+    RESOURCE_STOCKPILE_MEAT_LONG        ("0",  Long.class,    ConfigCategory.GATHERING),
+    RESOURCE_STOCKPILE_WOOD_LONG        ("0",  Long.class,    ConfigCategory.GATHERING),
+    RESOURCE_STOCKPILE_COAL_LONG        ("0",  Long.class,    ConfigCategory.GATHERING),
+    RESOURCE_STOCKPILE_IRON_LONG        ("0",  Long.class,    ConfigCategory.GATHERING),
+    // Added 2026-08-10 for the Backpack "Resource & Speedup Summary" reader. Steel is the 5th
+    // resource (no "Total Items" column, so its "Total Resources" value is read instead), and the
+    // five speedup buckets are stored in MINUTES (parsed from the game's "6 day(s)3 hr(s)3 min" form).
+    RESOURCE_STOCKPILE_STEEL_LONG       ("0",  Long.class,    ConfigCategory.GATHERING),
+    SPEEDUP_GENERAL_MIN_LONG            ("0",  Long.class,    ConfigCategory.GATHERING),
+    SPEEDUP_TRAINING_MIN_LONG          ("0",  Long.class,    ConfigCategory.GATHERING),
+    SPEEDUP_CONSTRUCTION_MIN_LONG      ("0",  Long.class,    ConfigCategory.GATHERING),
+    SPEEDUP_RESEARCH_MIN_LONG          ("0",  Long.class,    ConfigCategory.GATHERING),
+    SPEEDUP_HEALING_MIN_LONG           ("0",  Long.class,    ConfigCategory.GATHERING),
+    RESOURCE_STOCKPILE_LAST_READ_STRING ("",   String.class,  ConfigCategory.GATHERING),
     GATHER_TASK_BOOL                ("false",               Boolean.class,  ConfigCategory.GATHERING),
     GATHER_WOOD_BOOL                ("false",               Boolean.class,  ConfigCategory.GATHERING),
     GATHER_WOOD_LEVEL_INT           ("8",                   Integer.class,  ConfigCategory.GATHERING),
@@ -277,9 +295,9 @@ public enum ConfigurationKeyEnum {
     DISCORD_TOKEN_STRING                ("",            String.class,   ConfigCategory.SYSTEM),
     GAME_VERSION_STRING                 ("GLOBAL",      String.class,   ConfigCategory.SYSTEM),
     IDLE_BEHAVIOR_STRING                ("CLOSE_EMULATOR", String.class, ConfigCategory.SYSTEM),
-    // Changed by pernerch | Date: 2026-07-04 | Why: allow explicit stop-policy selection for GUI stop action.
+    // Allow explicit stop-policy selection for GUI stop action.
     STOP_BEHAVIOR_STRING                ("DO_NOTHING",  String.class,   ConfigCategory.SYSTEM),
-    // Changed by pernerch | Date: 2026-07-04 | Why: separate Telegram stop behavior from local GUI stop behavior.
+    // Separate Telegram stop behavior from local GUI stop behavior.
     STOP_BEHAVIOR_TELEGRAM_STRING       ("DO_NOTHING",  String.class,   ConfigCategory.SYSTEM),
     LDPLAYER_PATH_STRING                ("",            String.class,   ConfigCategory.SYSTEM),
     MAX_IDLE_TIME_INT                   ("15",          Integer.class,  ConfigCategory.SYSTEM),
