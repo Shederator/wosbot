@@ -184,14 +184,32 @@ public class FishingMinigameRoutine extends DelayedTask {
         var ice = waitFor(TemplatesEnum.FISHING_ICE_BUTTON, AreaData.of(370, 1140, 675, 1240), 5000);
         if (!ice.isFound()) return false;
         safeTap(ice);
-        var normal = waitFor(TemplatesEnum.FISHING_NORMAL_CAST, AreaData.of(50, 760, 360, 885), 5000);
-        if (!normal.isFound()) return false;
+        long deadline = System.nanoTime() + 5_000_000_000L;
+        while (System.nanoTime() < deadline) {
+            freshFrame();
+            var normal = normalCastControl(observation, loadoutHasItems, System::nanoTime);
+            if (!normal.isFound()) continue;
+            safeTap(normal);
+            if (loadoutHasItems) specialCastsUsed++;
+            logInfo("Started one verified Normal Cast; special items=" + loadoutHasItems + " boosted casts=" + specialCastsUsed + "/" + maxSpecialCasts);
+            return true;
+        }
+        return false;
+    }
+
+    static ImageSearchResultData normalCastControl(AndroidFrameStream.Frame frame, boolean hasItems,
+            java.util.function.LongSupplier clock) {
+        if (frame == null) return ImageSearchResultData.miss();
+        var normal = OpenCvPatternLocator.locatePattern(frame.image(), TemplatesEnum.FISHING_NORMAL_CAST.getTemplate(),
+                AreaData.of(50, 760, 360, 885).topLeft(), AreaData.of(50, 760, 360, 885).bottomRight(), 90);
+        if (!normal.isFound()) return normal;
         // A selected loadout is independently verified on the overview before opening this dialog.
-        if (!loadoutHasItems && !find(TemplatesEnum.FISHING_NO_SPECIAL_ITEM, AreaData.of(100, 580, 650, 730)).isFound()) return false;
-        safeTap(normal);
-        if (loadoutHasItems) specialCastsUsed++;
-        logInfo("Started one verified Normal Cast; special items=" + loadoutHasItems + " boosted casts=" + specialCastsUsed + "/" + maxSpecialCasts);
-        return true;
+        if (!hasItems && !OpenCvPatternLocator.locatePattern(frame.image(), TemplatesEnum.FISHING_NO_SPECIAL_ITEM.getTemplate(),
+                AreaData.of(100, 580, 650, 730).topLeft(), AreaData.of(100, 580, 650, 730).bottomRight(), 90).isFound()) {
+            return ImageSearchResultData.miss();
+        }
+        // Both matches can outlive the input freshness budget. Poll another frame, never tap that old result.
+        return clock.getAsLong() - frame.receivedNanos() > 250_000_000L ? ImageSearchResultData.miss() : normal;
     }
 
     private boolean loadoutHasItems;

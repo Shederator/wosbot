@@ -42,6 +42,17 @@ class FishingHaulValidationTest {
         assertFalse(FishingMinigameRoutine.haulControlsStillVisible(before, null));
     }
 
+    @Test
+    void staleNormalCastEvidenceMustBeReplacedRatherThanAuthorizeInput() throws Exception {
+        var dialog = new dev.frostguard.engine.emulator.AndroidFrameStream.Frame(fixture("cast-dialog"), 1, 1_000L);
+        assertFalse(FishingMinigameRoutine.normalCastControl(dialog, false, () -> 250_001_001L).isFound());
+        var fresh = new dev.frostguard.engine.emulator.AndroidFrameStream.Frame(dialog.image(), 2, 250_001_000L);
+        assertTrue(FishingMinigameRoutine.normalCastControl(fresh, false, () -> 250_001_001L).isFound());
+        assertFalse(FishingMinigameRoutine.normalCastControl(
+                new dev.frostguard.engine.emulator.AndroidFrameStream.Frame(fixture("event"), 3, 250_001_000L),
+                false, () -> 250_001_001L).isFound());
+    }
+
     private static void erase(RawImageData frame, dev.frostguard.api.domain.AreaData area) {
         for (int y = area.topLeft().getY(); y < area.bottomRight().getY(); y++) {
             Arrays.fill(frame.getData(), (y * frame.getWidth() + area.topLeft().getX()) * 4,
