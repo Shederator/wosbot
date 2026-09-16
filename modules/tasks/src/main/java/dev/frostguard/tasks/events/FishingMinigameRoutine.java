@@ -436,15 +436,22 @@ public class FishingMinigameRoutine extends DelayedTask {
                     CommonOCRSettings.FISHING_RESULT_SETTINGS).trim().equalsIgnoreCase("Exit")) return false;
             // Slow OCR must not authorize input against a screen that changed during recognition.
             freshFrame();
-            if (!ImageRegionStability.unchanged(recognized, observation.image(), heading)
-                    || !ImageRegionStability.unchanged(recognized, observation.image(),
-                            CommonGameAreas.FISHING_HAUL_EXIT_BUTTON)) return false;
+            if (!haulControlsStillVisible(recognized, observation.image())) return false;
             checkPreemption();
             requireRecentObservation();
             tapInside(CommonGameAreas.FISHING_HAUL_EXIT_BUTTON);
             return waitFor(TemplatesEnum.FISHING_ICE_BUTTON, AreaData.of(370, 1140, 675, 1240), 8000).isFound()
                     && find(TemplatesEnum.FISHING_TITLE, AreaData.of(85, 0, 500, 80)).isFound();
         } catch (dev.frostguard.vision.ocr.OcrException error) { return false; }
+    }
+
+    static boolean haulControlsStillVisible(dev.frostguard.api.domain.RawImageData before,
+            dev.frostguard.api.domain.RawImageData after) {
+        // The title background animates; re-identify its glyphs instead of freezing the whole light effect.
+        var heading = CommonGameAreas.FISHING_HAUL_HEADING;
+        return ImageRegionStability.unchanged(before, after, CommonGameAreas.FISHING_HAUL_EXIT_BUTTON)
+                && OpenCvPatternLocator.locatePattern(after, TemplatesEnum.FISHING_HAUL_TITLE.getTemplate(),
+                        heading.topLeft(), heading.bottomRight(), 90).isFound();
     }
 
     private void swipe(int x, int hookY, int target, boolean ascending) throws java.io.IOException, InterruptedException {

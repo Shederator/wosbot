@@ -51,8 +51,10 @@ Experimental rewards-first workflow; not ready for unattended operation.
   color histograms and raw feature-match counts were unreliable gameplay IDs.
 - Retain rope evidence above the bright indicator halo. Hook occlusion by the
   HUD or caught stack must not itself prove a phase change or suppress retries.
-- A haul needs both Haul and Exit OCR plus unchanged control regions on a fresh
-  frame before tapping. Receipt time alone does not prove capture latency.
+- A haul needs both Haul and Exit OCR, an unchanged Exit button and a freshly
+  matched Haul title before tapping. The heading's background light animates;
+  freezing its entire region blocked a live 20/20 haul despite correct OCR.
+  Receipt time alone does not prove capture latency.
 
 ## Settings and retries
 
@@ -88,6 +90,8 @@ No boosters, gems, vouchers, chest claims or Treasure Hunt spins were consumed.
 
 Automatic retry, booster restoration, first-cast tutorial variants, value/head
 recognition, full runtime resource/performance evidence and unattended production
-validation remain unverified. Full-reactor testing was attempted but stopped at
-the existing cold-child PID assumption in `BoundedProcessRunnerTest`; full-suite
-green and installed-build changes are not claimed.
+validation remain unverified. Subsequent Linux and Windows installer/smoke CI
+passed, and the integrated local build passed 855 tests before the latest exit
+correction. The local EXE now includes this workflow. Its first authorized
+production cast reached 20/20 and a 360-point haul but timed out at the animated
+heading guard; that is not a complete cast-to-exit pass.
