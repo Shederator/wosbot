@@ -16,6 +16,8 @@ import dev.frostguard.vision.ocr.OcrEngine;
 
 /** Free Winter casts only; unknown screens never authorize another cast or premium spending. */
 public class FishingMinigameRoutine extends DelayedTask {
+    // Animated shortcut art is weaker evidence than the separately verified cast controls.
+    static final int HOME_ENTRY_MATCH_THRESHOLD = 85;
     private static final Pattern BAIT = Pattern.compile("(\\d+)\\s*/\\s*(\\d+)");
     private AndroidFrameStream stream;
     private AndroidTouchSession realtimeInput;
@@ -82,7 +84,7 @@ public class FishingMinigameRoutine extends DelayedTask {
                     if (!resumed) {
                         freshFrame();
                         if (!find(TemplatesEnum.FISHING_TITLE, AreaData.of(85, 0, 500, 80)).isFound()) {
-                            var entry = waitFor(TemplatesEnum.FISHING_HOME_ICON, AreaData.of(475, 120, 630, 250), 8000);
+                            var entry = waitFor(TemplatesEnum.FISHING_HOME_ICON, CommonGameAreas.FISHING_HOME_ENTRY, 8000);
                             if (!entry.isFound()) { defer(15, "Fishing entry unavailable"); return; }
                             safeTap(entry);
                         }
@@ -449,7 +451,8 @@ public class FishingMinigameRoutine extends DelayedTask {
     }
 
     private ImageSearchResultData find(TemplatesEnum template, AreaData area) {
-        return OpenCvPatternLocator.locatePattern(observation.image(), template.getTemplate(), area.topLeft(), area.bottomRight(), 90);
+        int threshold = template == TemplatesEnum.FISHING_HOME_ICON ? HOME_ENTRY_MATCH_THRESHOLD : 90;
+        return OpenCvPatternLocator.locatePattern(observation.image(), template.getTemplate(), area.topLeft(), area.bottomRight(), threshold);
     }
 
     private ImageSearchResultData waitFor(TemplatesEnum template, AreaData area, long timeoutMs) {

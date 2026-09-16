@@ -8,6 +8,9 @@ Experimental rewards-first workflow; not ready for unattended operation.
 - Verified layout: 720x1280 portrait, Winter season. Descent avoids all
   foreground objects, not just fish. Practice uses a 100m line and ten slots;
   the observed ordinary cast uses a 550m line and twenty slots.
+- Home shortcut detection covers the shifting event column down to 320px and
+  tolerates its animated art at 85% matching. This only opens the event page;
+  the title and bait-spending controls retain independent 90% verification.
 - A real paid stage can be suspended through Pause -> Exit. Its locked
   overview offers Go Fish, which restarts the same stage without another bait.
   Practice Exit instead returns to an ordinary overview. Do not confuse these
