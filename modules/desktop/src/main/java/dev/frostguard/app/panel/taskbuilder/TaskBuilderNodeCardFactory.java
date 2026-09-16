@@ -39,6 +39,8 @@ public class TaskBuilderNodeCardFactory {
             case TEMPLATE_SEARCH -> "🔍";
             case SHOP_NAVIGATION -> "🛒";
             case SIDEBAR_NAVIGATION -> "☰";
+            case ALLIANCE_NAVIGATION -> "⚔";
+            case EVENT_NAVIGATION -> "🎉";
             case NAVIGATE        -> "🏠";
         };
     }
@@ -53,6 +55,8 @@ public class TaskBuilderNodeCardFactory {
             case TEMPLATE_SEARCH -> "flow-node-header-template";
             case SHOP_NAVIGATION -> "flow-node-header-shop";
             case SIDEBAR_NAVIGATION -> "flow-node-header-sidebar";
+            case ALLIANCE_NAVIGATION -> "flow-node-header-alliance";
+            case EVENT_NAVIGATION -> "flow-node-header-event";
             case NAVIGATE        -> "flow-node-header-tap";
         };
     }
@@ -67,6 +71,8 @@ public class TaskBuilderNodeCardFactory {
             case TEMPLATE_SEARCH -> "#ef4444";
             case SHOP_NAVIGATION -> "#fcd176";
             case SIDEBAR_NAVIGATION -> "#82c7e8";
+            case ALLIANCE_NAVIGATION -> "#e5a4a4";
+            case EVENT_NAVIGATION -> "#d6a5e8";
             case NAVIGATE        -> "#7c3aed";
         };
     }

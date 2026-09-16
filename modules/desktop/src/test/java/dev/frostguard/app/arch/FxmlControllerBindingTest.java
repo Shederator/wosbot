@@ -174,6 +174,21 @@ class FxmlControllerBindingTest {
         assertTrue(document.contains("onAction=\"#handleAddSidebarNavigationNode\""));
     }
 
+    @Test
+    void taskBuilderDocumentDeclaresAllianceAndEventNavigationControls() throws IOException {
+        String document = Files.readString(layoutDirectory.resolve("TaskBuilderLayout.fxml"));
+        Set<String> declaredIds = matches(FX_ID, document);
+
+        assertTrue(declaredIds.contains("allianceNavigationPropsBox"));
+        assertTrue(declaredIds.contains("allianceMenuCombo"));
+        assertTrue(declaredIds.contains("allianceMenuInvalidLabel"));
+        assertTrue(declaredIds.contains("eventNavigationPropsBox"));
+        assertTrue(declaredIds.contains("eventMenuCombo"));
+        assertTrue(declaredIds.contains("eventMenuInvalidLabel"));
+        assertTrue(document.contains("onAction=\"#handleAddAllianceNavigationNode\""));
+        assertTrue(document.contains("onAction=\"#handleAddEventNavigationNode\""));
+    }
+
     /**
      * The opposite mismatch is louder — an unresolved handler makes
      * {@code FXMLLoader.load} throw — but it still escapes compilation, so it is
