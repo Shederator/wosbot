@@ -21,7 +21,13 @@ Experimental rewards-first workflow; not ready for unattended operation.
 - A real paid stage can be suspended through Pause -> Exit. Its locked
   overview offers Go Fish, which restarts the same stage without another bait.
   Practice Exit instead returns to an ordinary overview. Do not confuse these
-  states or select replacement bait during recovery.
+  states or select replacement bait during recovery. Re-check recovery after
+  opening the event from home. Go Fish gets a bounded 15-second HUD transition
+  wait without a second trigger tap; the observed five-second wait expired
+  before the resumed gameplay was recognized.
+- Normal Cast and no-item recognition must finish inside the 250ms input frame
+  budget. A stale result is discarded and another frame checked within five
+  seconds; only the verified fresh result can send the single cast tap.
 - Ascent color alone is unreliable: a returning hook can remain green.
   Confirm phase with depth trend and hook evidence. Fish-head contact matters;
   ordinary foreground segmentation does not positively identify heads, species,
@@ -88,10 +94,19 @@ Manual same-bait suspension/replay was observed; the latest policy run filled
 its haul before the retry gate and did not validate automatic short-haul retry.
 No boosters, gems, vouchers, chest claims or Treasure Hunt spins were consumed.
 
-Automatic retry, booster restoration, first-cast tutorial variants, value/head
-recognition, full runtime resource/performance evidence and unattended production
-validation remain unverified. Subsequent Linux and Windows installer/smoke CI
-passed, and the integrated local build passed 855 tests before the latest exit
-correction. The local EXE now includes this workflow. Its first authorized
-production cast reached 20/20 and a 360-point haul but timed out at the animated
-heading guard; that is not a complete cast-to-exit pass.
+An actual production EXE cast reached 20/20 and a 360-point Haul, but timed out
+at the animated heading guard. The corrected guard has saved-frame coverage.
+A subsequent authorized ordinary cast was interrupted by an unexplained game
+reload; its paid stage survived. The EXE reopened the event and tapped Go Fish,
+but its five-second HUD wait expired before gameplay verification. That stage
+yielded 270 points. A private component probe invoked only the packaged
+production `exitVerifiedHaul` method and verified automatic Exit plus return to
+the overview: total points 1,720, bait 5/10, item counts unchanged. This is live
+exit-component proof, not an uninterrupted production EXE cast-to-exit pass.
+
+The local EXE includes this workflow. Integrated full testing passed 855 tests
+before these latest corrections; subsequent Linux and Windows installer/smoke
+CI passed. Automatic short-haul retry, the extended Go Fish transition wait,
+booster restoration, first-cast tutorial variants, value/head recognition, full
+runtime resource/performance evidence and unattended production validation
+remain unverified live.

@@ -41,7 +41,8 @@ final class FishingRetryNavigator {
         if (!hit(port, TemplatesEnum.FISHING_TITLE, TITLE))
             throw new IllegalStateException("Suspended Fishing title unverified");
         tapVerified(port, TemplatesEnum.FISHING_GO_FISH, GO_FISH);
-        await(port, TemplatesEnum.FISHING_PAUSE, PAUSE);
+        // Go Fish can reload the paid stage before its HUD appears; never re-tap during that transition.
+        await(port, TemplatesEnum.FISHING_PAUSE, PAUSE, 15000);
     }
 
     private static boolean hit(Port port, TemplatesEnum template, AreaData area) {
@@ -61,7 +62,11 @@ final class FishingRetryNavigator {
     }
 
     private static void await(Port port, TemplatesEnum template, AreaData area) {
-        long deadline = System.nanoTime() + 5_000_000_000L;
+        await(port, template, area, 5000);
+    }
+
+    private static void await(Port port, TemplatesEnum template, AreaData area, long timeoutMs) {
+        long deadline = System.nanoTime() + timeoutMs * 1_000_000L;
         do {
             port.checkCancellation();
             port.fresh();

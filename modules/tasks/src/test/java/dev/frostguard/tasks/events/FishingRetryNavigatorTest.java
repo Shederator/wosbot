@@ -37,6 +37,14 @@ class FishingRetryNavigatorTest {
         assertTrue(port.taps.isEmpty());
     }
 
+    @Test void stageLoadingAfterGoFishWaitsWithoutAnotherTriggerTap() throws Exception {
+        var port = new FakePort("suspended-after-reload", "event", "event", "active");
+        FishingRetryNavigator.resume(port);
+        assertEquals(1, port.taps.size());
+        assertEquals(4, port.sequence);
+        assertTrue(port.taps.getFirst().topLeft().getY() >= 1040);
+    }
+
     @Test void interruptionAfterPauseCannotTapExitOrSelectAnotherCast() throws Exception {
         var port = new FakePort("active", "paused", "suspended");
         port.cancelAfterTap = 1;
