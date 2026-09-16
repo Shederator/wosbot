@@ -6,6 +6,8 @@ import dev.frostguard.api.configs.SidebarNavigationMode;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.helper.NavigationHelper;
+import dev.frostguard.engine.helper.NavigationHelper.AllianceMenu;
+import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
 import dev.frostguard.engine.nav.ShopTab;
 import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.nav.SidebarSection;
@@ -54,6 +56,8 @@ public class TaskBuilderService {
     private final ObjectMapper mapper;
     private final ShopNavigationAction shopNavigationAction;
     private final SidebarNavigationAction sidebarNavigationAction;
+    private final AllianceNavigationAction allianceNavigationAction;
+    private final EventNavigationAction eventNavigationAction;
     private AutomationBlueprint currentDefinition;
     private Path currentDefinitionDirectory;
     private String activeEmulatorNumber;
@@ -89,11 +93,26 @@ public class TaskBuilderService {
 
     TaskBuilderService(ObjectMapper mapper, ShopNavigationAction shopNavigationAction,
                        SidebarNavigationAction sidebarNavigationAction) {
+        this(mapper, shopNavigationAction, sidebarNavigationAction,
+                (emulatorNumber, profile, target) ->
+                        new NavigationHelper(EmulatorController.getInstance(), emulatorNumber, profile)
+                                .navigateToAllianceMenu(target),
+                (emulatorNumber, profile, target) ->
+                        new NavigationHelper(EmulatorController.getInstance(), emulatorNumber, profile)
+                                .navigateToEventMenu(target));
+    }
+
+    TaskBuilderService(ObjectMapper mapper, ShopNavigationAction shopNavigationAction,
+                       SidebarNavigationAction sidebarNavigationAction,
+                       AllianceNavigationAction allianceNavigationAction,
+                       EventNavigationAction eventNavigationAction) {
         this.emuManager = EmulatorController.getInstance();
         this.customTasksDir = WorkspacePaths.current().customTasks();
         this.mapper = mapper;
         this.shopNavigationAction = Objects.requireNonNull(shopNavigationAction);
         this.sidebarNavigationAction = Objects.requireNonNull(sidebarNavigationAction);
+        this.allianceNavigationAction = Objects.requireNonNull(allianceNavigationAction);
+        this.eventNavigationAction = Objects.requireNonNull(eventNavigationAction);
         try {
             Files.createDirectories(customTasksDir);
         } catch (IOException e) {
@@ -112,6 +131,16 @@ public class TaskBuilderService {
         boolean openSection(String emulatorNumber, AccountDescriptor profile, SidebarSection section);
 
         boolean navigateTo(String emulatorNumber, AccountDescriptor profile, SidebarDestination destination);
+    }
+
+    @FunctionalInterface
+    interface AllianceNavigationAction {
+        boolean navigate(String emulatorNumber, AccountDescriptor profile, AllianceMenu target);
+    }
+
+    @FunctionalInterface
+    interface EventNavigationAction {
+        boolean navigate(String emulatorNumber, AccountDescriptor profile, EventMenu target);
     }
 
     private static ObjectMapper defaultMapper() {
@@ -431,6 +460,8 @@ public class TaskBuilderService {
             case TEMPLATE_SEARCH -> executeTemplateSearch(node);
             case SHOP_NAVIGATION -> executeShopNavigation(node);
             case SIDEBAR_NAVIGATION -> executeSidebarNavigation(node);
+            case ALLIANCE_NAVIGATION -> executeAllianceNavigation(node);
+            case EVENT_NAVIGATION -> executeEventNavigation(node);
             case NAVIGATE        -> { logger.info("Navigate node recorded"); yield true; }
         };
     }
@@ -452,6 +483,40 @@ public class TaskBuilderService {
         logger.info("Task Builder navigating profile '{}' on emulator {} to {}",
                 activeProfile.getName(), activeEmulatorNumber, target.displayName());
         return shopNavigationAction.navigate(activeEmulatorNumber, activeProfile, target);
+    }
+
+    private boolean executeAllianceNavigation(AutomationStep node) {
+        String configuredTarget = node.getParam(AutomationStep.PARAM_ALLIANCE_MENU);
+        AllianceMenu target;
+        try {
+            target = AllianceMenu.valueOf(configuredTarget);
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            logger.warn("Alliance Navigation node #{} has invalid allianceMenu: '{}'", node.getId(), configuredTarget);
+            return false;
+        }
+        if (!hasNavigationProfile("alliance menu " + target)) {
+            return false;
+        }
+        logger.info("Task Builder navigating profile '{}' on emulator {} to alliance menu {}",
+                activeProfile.getName(), activeEmulatorNumber, target);
+        return allianceNavigationAction.navigate(activeEmulatorNumber, activeProfile, target);
+    }
+
+    private boolean executeEventNavigation(AutomationStep node) {
+        String configuredTarget = node.getParam(AutomationStep.PARAM_EVENT_MENU);
+        EventMenu target;
+        try {
+            target = EventMenu.valueOf(configuredTarget);
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            logger.warn("Event Navigation node #{} has invalid eventMenu: '{}'", node.getId(), configuredTarget);
+            return false;
+        }
+        if (!hasNavigationProfile("event menu " + target)) {
+            return false;
+        }
+        logger.info("Task Builder navigating profile '{}' on emulator {} to event menu {}",
+                activeProfile.getName(), activeEmulatorNumber, target);
+        return eventNavigationAction.navigate(activeEmulatorNumber, activeProfile, target);
     }
 
     private boolean executeSidebarNavigation(AutomationStep node) {

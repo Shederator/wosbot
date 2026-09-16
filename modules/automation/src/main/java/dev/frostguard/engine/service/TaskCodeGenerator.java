@@ -7,6 +7,8 @@ import dev.frostguard.api.domain.AutomationStep;
 import dev.frostguard.engine.nav.ShopTab;
 import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.nav.SidebarSection;
+import dev.frostguard.engine.helper.NavigationHelper.AllianceMenu;
+import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -76,6 +78,8 @@ public class TaskCodeGenerator {
         out.append("import dev.frostguard.engine.nav.ShopTab;\n");
         out.append("import dev.frostguard.engine.nav.SidebarSection;\n");
         out.append("import dev.frostguard.engine.nav.SidebarDestination;\n");
+        out.append("import dev.frostguard.engine.helper.NavigationHelper.AllianceMenu;\n");
+        out.append("import dev.frostguard.engine.helper.NavigationHelper.EventMenu;\n");
         out.append("import dev.frostguard.engine.schedule.DelayedTask;\n");
         out.append("import dev.frostguard.engine.schedule.LaunchPoint;\n");
         out.append("import dev.frostguard.engine.service.TemplatePathResolver;\n");
@@ -187,13 +191,17 @@ public class TaskCodeGenerator {
             case TEMPLATE_SEARCH -> writeTemplateSearch(out, node, nodeEdges);
             case SHOP_NAVIGATION -> writeShopNavigation(out, node, nodeEdges);
             case SIDEBAR_NAVIGATION -> writeSidebarNavigation(out, node, nodeEdges);
+            case ALLIANCE_NAVIGATION -> writeAllianceNavigation(out, node, nodeEdges);
+            case EVENT_NAVIGATION -> writeEventNavigation(out, node, nodeEdges);
             default              -> out.append(i5).append("// Unrecognised action\n");
         }
 
         if (node.getType() != FlowStepKind.OCR_READ
                 && node.getType() != FlowStepKind.TEMPLATE_SEARCH
                 && node.getType() != FlowStepKind.SHOP_NAVIGATION
-                && node.getType() != FlowStepKind.SIDEBAR_NAVIGATION) {
+                && node.getType() != FlowStepKind.SIDEBAR_NAVIGATION
+                && node.getType() != FlowStepKind.ALLIANCE_NAVIGATION
+                && node.getType() != FlowStepKind.EVENT_NAVIGATION) {
             int nextId = node.getNextNodeId();
             LoopDetector.BackEdge edge = pickEdge(nodeEdges, false);
             if (edge != null && nextId > 0) {
@@ -303,6 +311,54 @@ public class TaskCodeGenerator {
         out.append(i5).append("if (!navigationHelper.").append(call).append(") {\n");
         out.append(i6).append("logWarning(\"Sidebar navigation failed: ")
                 .append(escapeJavaString(configuredMode + " " + configuredTarget)).append("\");\n");
+        out.append(i6).append("__state = -1;\n");
+        out.append(i5).append("} else {\n");
+        int nextId = node.getNextNodeId();
+        LoopDetector.BackEdge edge = pickEdge(nodeEdges, false);
+        if (edge != null && nextId > 0) {
+            writeLoopGuard(out, node, edge, nextId, -1, 6);
+        } else {
+            out.append(i6).append("__state = ").append(nextId > 0 ? nextId : -1).append(";\n");
+        }
+        out.append(i5).append("}\n");
+    }
+
+    private void writeAllianceNavigation(StringBuilder out, AutomationStep node,
+                                         List<LoopDetector.BackEdge> nodeEdges) {
+        String configuredTarget = node.getParam(AutomationStep.PARAM_ALLIANCE_MENU);
+        AllianceMenu target;
+        try {
+            target = AllianceMenu.valueOf(configuredTarget);
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            throw new IllegalArgumentException("Alliance Navigation node #" + node.getId()
+                    + " has invalid allianceMenu: " + configuredTarget, exception);
+        }
+        writeMenuNavigation(out, node, nodeEdges,
+                "navigateToAllianceMenu(AllianceMenu." + target.name() + ")",
+                "Alliance navigation failed: " + target.name());
+    }
+
+    private void writeEventNavigation(StringBuilder out, AutomationStep node,
+                                      List<LoopDetector.BackEdge> nodeEdges) {
+        String configuredTarget = node.getParam(AutomationStep.PARAM_EVENT_MENU);
+        EventMenu target;
+        try {
+            target = EventMenu.valueOf(configuredTarget);
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            throw new IllegalArgumentException("Event Navigation node #" + node.getId()
+                    + " has invalid eventMenu: " + configuredTarget, exception);
+        }
+        writeMenuNavigation(out, node, nodeEdges,
+                "navigateToEventMenu(EventMenu." + target.name() + ")",
+                "Event navigation failed: " + target.name());
+    }
+
+    private void writeMenuNavigation(StringBuilder out, AutomationStep node,
+                                     List<LoopDetector.BackEdge> nodeEdges,
+                                     String call, String failureMessage) {
+        String i5 = indent(5), i6 = indent(6);
+        out.append(i5).append("if (!navigationHelper.").append(call).append(") {\n");
+        out.append(i6).append("logWarning(\"").append(escapeJavaString(failureMessage)).append("\");\n");
         out.append(i6).append("__state = -1;\n");
         out.append(i5).append("} else {\n");
         int nextId = node.getNextNodeId();

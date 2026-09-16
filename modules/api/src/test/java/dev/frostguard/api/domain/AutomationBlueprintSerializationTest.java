@@ -183,6 +183,25 @@ class AutomationBlueprintSerializationTest {
     }
 
     @Test
+    void preservesAllianceAndEventTargetsAcrossSaveAndReload() throws Exception {
+        AutomationBlueprint blueprint = new AutomationBlueprint("menu probe");
+        AutomationStep alliance = new AutomationStep(3, FlowStepKind.ALLIANCE_NAVIGATION);
+        alliance.setParam(AutomationStep.PARAM_ALLIANCE_MENU, "TERRITORY");
+        blueprint.addNode(alliance);
+        AutomationStep event = new AutomationStep(4, FlowStepKind.EVENT_NAVIGATION);
+        event.setParam(AutomationStep.PARAM_EVENT_MENU, "ALLIANCE_CHAMPIONSHIP");
+        blueprint.addNode(event);
+
+        AutomationBlueprint reloaded =
+                mapper.readValue(mapper.writeValueAsString(blueprint), AutomationBlueprint.class);
+
+        assertEquals(FlowStepKind.ALLIANCE_NAVIGATION, reloaded.getSteps().get(0).getKind());
+        assertEquals("TERRITORY", reloaded.getSteps().get(0).getParam(AutomationStep.PARAM_ALLIANCE_MENU));
+        assertEquals(FlowStepKind.EVENT_NAVIGATION, reloaded.getSteps().get(1).getKind());
+        assertEquals("ALLIANCE_CHAMPIONSHIP", reloaded.getSteps().get(1).getParam(AutomationStep.PARAM_EVENT_MENU));
+    }
+
+    @Test
     void keepsInsertedEntryStepAndConnectionsAcrossSaveAndReload() throws Exception {
         AutomationBlueprint imported = mapper.readValue(
                 mapper.writeValueAsString(sampleFlow()), AutomationBlueprint.class);

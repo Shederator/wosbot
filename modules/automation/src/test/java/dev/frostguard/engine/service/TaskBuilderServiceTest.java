@@ -25,6 +25,8 @@ import dev.frostguard.api.runtime.WorkspacePaths;
 import dev.frostguard.engine.nav.ShopTab;
 import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.nav.SidebarSection;
+import dev.frostguard.engine.helper.NavigationHelper.AllianceMenu;
+import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
 
 class TaskBuilderServiceTest {
 
@@ -196,6 +198,130 @@ class TaskBuilderServiceTest {
 
             assertFalse(service.executeNode(step));
             assertFalse(step.isExecuted());
+        } finally {
+            restoreWorkspace(originalWorkspace);
+        }
+    }
+
+    @Test
+    void executesAllianceAndEventNavigationWithTheSelectedProfile() {
+        String originalWorkspace = System.getProperty(WorkspacePaths.WORKSPACE_PROPERTY);
+        System.setProperty(WorkspacePaths.WORKSPACE_PROPERTY, tempDir.toString());
+        try {
+            AtomicReference<String> observed = new AtomicReference<>();
+            TaskBuilderService service = new TaskBuilderService(new ObjectMapper(),
+                    (device, profile, tab) -> true, unusedSidebarNavigation(),
+                    (device, profile, target) -> {
+                        observed.set(device + ":" + profile.getName() + ":" + target);
+                        return true;
+                    },
+                    (device, profile, target) -> {
+                        observed.set(device + ":" + profile.getName() + ":" + target);
+                        return true;
+                    });
+            service.startSession("Menu probe", new AccountDescriptor(
+                    42L, "Test Profile", "3", true, 1L, 30L));
+
+            AutomationStep alliance = new AutomationStep(1, FlowStepKind.ALLIANCE_NAVIGATION);
+            alliance.setParam(AutomationStep.PARAM_ALLIANCE_MENU, AllianceMenu.TERRITORY.name());
+            assertTrue(service.executeNode(alliance));
+            assertEquals("3:Test Profile:TERRITORY", observed.get());
+
+            AutomationStep event = new AutomationStep(2, FlowStepKind.EVENT_NAVIGATION);
+            event.setParam(AutomationStep.PARAM_EVENT_MENU, EventMenu.ALLIANCE_CHAMPIONSHIP.name());
+            assertTrue(service.executeNode(event));
+            assertEquals("3:Test Profile:ALLIANCE_CHAMPIONSHIP", observed.get());
+        } finally {
+            restoreWorkspace(originalWorkspace);
+        }
+    }
+
+    @Test
+    void refusesInvalidMenuTargetsAndMissingProfileWithoutNavigating() {
+        String originalWorkspace = System.getProperty(WorkspacePaths.WORKSPACE_PROPERTY);
+        System.setProperty(WorkspacePaths.WORKSPACE_PROPERTY, tempDir.toString());
+        try {
+            AtomicBoolean called = new AtomicBoolean();
+            TaskBuilderService service = new TaskBuilderService(new ObjectMapper(),
+                    (device, profile, tab) -> true, unusedSidebarNavigation(),
+                    (device, profile, target) -> {
+                        called.set(true);
+                        return true;
+                    },
+                    (device, profile, target) -> {
+                        called.set(true);
+                        return true;
+                    });
+            service.startSession("Menu probe", "3");
+
+            AutomationStep alliance = new AutomationStep(1, FlowStepKind.ALLIANCE_NAVIGATION);
+            alliance.setParam(AutomationStep.PARAM_ALLIANCE_MENU, "UNKNOWN");
+            assertFalse(service.executeNode(alliance));
+
+            AutomationStep event = new AutomationStep(2, FlowStepKind.EVENT_NAVIGATION);
+            event.setParam(AutomationStep.PARAM_EVENT_MENU, EventMenu.MERCENARY.name());
+            assertFalse(service.executeNode(event));
+
+            assertFalse(called.get());
+            assertFalse(alliance.isExecuted());
+            assertFalse(event.isExecuted());
+        } finally {
+            restoreWorkspace(originalWorkspace);
+        }
+    }
+
+    @Test
+    void stopsMenuNodesWhenSharedNavigationReportsFailure() {
+        String originalWorkspace = System.getProperty(WorkspacePaths.WORKSPACE_PROPERTY);
+        System.setProperty(WorkspacePaths.WORKSPACE_PROPERTY, tempDir.toString());
+        try {
+            TaskBuilderService service = new TaskBuilderService(new ObjectMapper(),
+                    (device, profile, tab) -> true, unusedSidebarNavigation(),
+                    (device, profile, target) -> false,
+                    (device, profile, target) -> false);
+            service.startSession("Menu probe", new AccountDescriptor(
+                    42L, "Test Profile", "3", true, 1L, 30L));
+            AutomationStep alliance = new AutomationStep(1, FlowStepKind.ALLIANCE_NAVIGATION);
+            alliance.setParam(AutomationStep.PARAM_ALLIANCE_MENU, AllianceMenu.WAR.name());
+            AutomationStep event = new AutomationStep(2, FlowStepKind.EVENT_NAVIGATION);
+            event.setParam(AutomationStep.PARAM_EVENT_MENU, EventMenu.HERO_MISSION.name());
+
+            assertFalse(service.executeNode(alliance));
+            assertFalse(service.executeNode(event));
+            assertFalse(alliance.isExecuted());
+            assertFalse(event.isExecuted());
+        } finally {
+            restoreWorkspace(originalWorkspace);
+        }
+    }
+
+    @Test
+    void savesAndImportsAllianceAndEventSelections() throws Exception {
+        String originalWorkspace = System.getProperty(WorkspacePaths.WORKSPACE_PROPERTY);
+        System.setProperty(WorkspacePaths.WORKSPACE_PROPERTY, tempDir.toString());
+        try {
+            TaskBuilderService service = new TaskBuilderService();
+            service.startSession("Menu probe", "3");
+            AutomationStep alliance = new AutomationStep(1, FlowStepKind.ALLIANCE_NAVIGATION);
+            alliance.setParam(AutomationStep.PARAM_ALLIANCE_MENU, AllianceMenu.TERRITORY.name());
+            service.addNode(alliance);
+            AutomationStep event = new AutomationStep(2, FlowStepKind.EVENT_NAVIGATION);
+            event.setParam(AutomationStep.PARAM_EVENT_MENU, EventMenu.ALLIANCE_CHAMPIONSHIP.name());
+            service.addNode(event);
+
+            TaskBuilderService.CustomTaskSaveResult saved =
+                    service.saveCurrentTaskToCustomTasks("Menu probe", tempDir.resolve("menu.json"));
+            AutomationBlueprint imported = service.loadDefinition(saved.builderFile().toFile(), "3");
+
+            assertEquals(FlowStepKind.ALLIANCE_NAVIGATION, imported.getNodes().get(0).getType());
+            assertEquals(AllianceMenu.TERRITORY.name(),
+                    imported.getNodes().get(0).getParam(AutomationStep.PARAM_ALLIANCE_MENU));
+            assertEquals(FlowStepKind.EVENT_NAVIGATION, imported.getNodes().get(1).getType());
+            assertEquals(EventMenu.ALLIANCE_CHAMPIONSHIP.name(),
+                    imported.getNodes().get(1).getParam(AutomationStep.PARAM_EVENT_MENU));
+            String javaSource = Files.readString(saved.javaFile());
+            assertTrue(javaSource.contains("navigateToAllianceMenu(AllianceMenu.TERRITORY)"));
+            assertTrue(javaSource.contains("navigateToEventMenu(EventMenu.ALLIANCE_CHAMPIONSHIP)"));
         } finally {
             restoreWorkspace(originalWorkspace);
         }
@@ -392,5 +518,19 @@ class TaskBuilderServiceTest {
         } else {
             System.setProperty(WorkspacePaths.WORKSPACE_PROPERTY, originalWorkspace);
         }
+    }
+
+    private static TaskBuilderService.SidebarNavigationAction unusedSidebarNavigation() {
+        return new TaskBuilderService.SidebarNavigationAction() {
+            @Override
+            public boolean openSection(String device, AccountDescriptor profile, SidebarSection section) {
+                return true;
+            }
+
+            @Override
+            public boolean navigateTo(String device, AccountDescriptor profile, SidebarDestination destination) {
+                return true;
+            }
+        };
     }
 }

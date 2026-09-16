@@ -124,4 +124,38 @@ class TaskCodeGeneratorTest {
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                 () -> new TaskCodeGenerator().generate(blueprint, "invalid_sidebar", "Invalid Sidebar"));
     }
+
+    @Test
+    void generatesAllianceAndEventNavigationWithSafeFailureHandling() {
+        AutomationBlueprint blueprint = new AutomationBlueprint("Menu probe");
+        AutomationStep alliance = new AutomationStep(1, FlowStepKind.ALLIANCE_NAVIGATION);
+        alliance.setParam(AutomationStep.PARAM_ALLIANCE_MENU, "TERRITORY");
+        blueprint.addNode(alliance);
+        AutomationStep event = new AutomationStep(2, FlowStepKind.EVENT_NAVIGATION);
+        event.setParam(AutomationStep.PARAM_EVENT_MENU, "ALLIANCE_CHAMPIONSHIP");
+        blueprint.addNode(event);
+
+        String source = new TaskCodeGenerator().generate(blueprint, "menu_probe", "Menu probe");
+
+        assertTrue(source.contains("navigationHelper.navigateToAllianceMenu(AllianceMenu.TERRITORY)"));
+        assertTrue(source.contains("navigationHelper.navigateToEventMenu(EventMenu.ALLIANCE_CHAMPIONSHIP)"));
+        assertTrue(source.contains("logWarning(\"Alliance navigation failed: TERRITORY\")"));
+        assertTrue(source.contains("logWarning(\"Event navigation failed: ALLIANCE_CHAMPIONSHIP\")"));
+        assertTrue(source.contains("__state = -1;"));
+    }
+
+    @Test
+    void rejectsInvalidAllianceAndEventTargets() {
+        for (FlowStepKind kind : new FlowStepKind[] {
+                FlowStepKind.ALLIANCE_NAVIGATION, FlowStepKind.EVENT_NAVIGATION }) {
+            AutomationBlueprint blueprint = new AutomationBlueprint("Invalid menu");
+            AutomationStep step = new AutomationStep(7, kind);
+            step.setParam(kind == FlowStepKind.ALLIANCE_NAVIGATION
+                    ? AutomationStep.PARAM_ALLIANCE_MENU : AutomationStep.PARAM_EVENT_MENU, "UNKNOWN");
+            blueprint.addNode(step);
+
+            org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                    () -> new TaskCodeGenerator().generate(blueprint, "invalid_menu", "Invalid menu"));
+        }
+    }
 }

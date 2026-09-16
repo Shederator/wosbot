@@ -25,6 +25,8 @@ import java.util.Map;
  *   <li><b>TEMPLATE_SEARCH</b> — templatePath, threshold, grayscale, tlX, brX</li>
  *   <li><b>SHOP_NAVIGATION</b> — shopTab</li>
  *   <li><b>SIDEBAR_NAVIGATION</b> — sidebarMode, sidebarTarget</li>
+ *   <li><b>ALLIANCE_NAVIGATION</b> — allianceMenu</li>
+ *   <li><b>EVENT_NAVIGATION</b> — eventMenu</li>
  *   <li><b>NAVIGATE</b> — location</li>
  * </ul>
  *
@@ -53,6 +55,8 @@ public class AutomationStep {
     public static final String PARAM_SHOP_TAB = "shopTab";
     public static final String PARAM_SIDEBAR_MODE = "sidebarMode";
     public static final String PARAM_SIDEBAR_TARGET = "sidebarTarget";
+    public static final String PARAM_ALLIANCE_MENU = "allianceMenu";
+    public static final String PARAM_EVENT_MENU = "eventMenu";
     public static final int NODE_NAME_MAX_LENGTH = 30;
 
     @JsonAlias("id")
@@ -363,6 +367,10 @@ public class AutomationStep {
                         humanizeEnumValue(target));
             }
 
+            case ALLIANCE_NAVIGATION -> navigationSummary("Alliance", PARAM_ALLIANCE_MENU);
+
+            case EVENT_NAVIGATION -> navigationSummary("Event", PARAM_EVENT_MENU);
+
             case NAVIGATE -> String.format("Navigate: %s",
                     resolveAttrOr("location", "HOME"));
         };
@@ -370,6 +378,13 @@ public class AutomationStep {
 
     /** Alias retained for backward compatibility. */
     public String getSummary() { return describeBriefly(); }
+
+    private String navigationSummary(String label, String parameter) {
+        String target = getAttribute(parameter);
+        return target == null || target.isBlank()
+                ? label + ": invalid selection"
+                : label + ": " + humanizeEnumValue(target);
+    }
 
     /* ---- private attribute helpers ---- */
 

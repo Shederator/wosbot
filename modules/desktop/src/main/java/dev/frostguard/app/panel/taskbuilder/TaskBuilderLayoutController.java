@@ -5,6 +5,8 @@ import dev.frostguard.api.configs.FlowStepKind;
 import dev.frostguard.api.configs.SidebarNavigationMode;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.engine.helper.NavigationHelper.AllianceMenu;
+import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.domain.AutomationBlueprint;
@@ -97,6 +99,12 @@ public class TaskBuilderLayoutController {
     @FXML private VBox sidebarNavigationPropsBox;
     @FXML private ComboBox<SidebarNavigationMode> sidebarModeCombo;
     @FXML private ComboBox<String> sidebarTargetCombo;
+    @FXML private VBox allianceNavigationPropsBox;
+    @FXML private ComboBox<AllianceMenu> allianceMenuCombo;
+    @FXML private Label allianceMenuInvalidLabel;
+    @FXML private VBox eventNavigationPropsBox;
+    @FXML private ComboBox<EventMenu> eventMenuCombo;
+    @FXML private Label eventMenuInvalidLabel;
     @FXML private VBox ocrPropsBox;
     @FXML private TextField ocrTlXField, ocrTlYField, ocrBrXField, ocrBrYField;
     @FXML private ComboBox<String> ocrConditionCombo;
@@ -283,8 +291,50 @@ public class TaskBuilderLayoutController {
             sidebarModeCombo.setValue(SidebarNavigationMode.SECTION);
             setSidebarTargets(SidebarNavigationMode.SECTION, SidebarSection.CITY.name());
         }
+        if (allianceMenuCombo != null) {
+            allianceMenuCombo.setItems(FXCollections.observableArrayList(AllianceMenu.values()));
+            allianceMenuCombo.setConverter(menuConverter(AllianceMenu.class));
+            allianceMenuCombo.setValue(AllianceMenu.WAR);
+        }
+        if (eventMenuCombo != null) {
+            eventMenuCombo.setItems(FXCollections.observableArrayList(EventMenu.values()));
+            eventMenuCombo.setConverter(menuConverter(EventMenu.class));
+            eventMenuCombo.setValue(EventMenu.HERO_MISSION);
+        }
         addAutoApplyListeners();
         setStatus("Ready — add nodes from the toolbox");
+    }
+
+    private static <T extends Enum<T>> javafx.util.StringConverter<T> menuConverter(Class<T> type) {
+        return new javafx.util.StringConverter<>() {
+            @Override
+            public String toString(T value) {
+                return value == null ? "" : SidebarNavigationOptions.displayTarget(value.name());
+            }
+
+            @Override
+            public T fromString(String displayName) {
+                return Arrays.stream(type.getEnumConstants())
+                        .filter(value -> toString(value).equals(displayName))
+                        .findFirst().orElse(null);
+            }
+        };
+    }
+
+    private static <T extends Enum<T>> T menuSelection(String storedValue, Class<T> type) {
+        try {
+            return Enum.valueOf(type, storedValue);
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            return null;
+        }
+    }
+
+    private static void showInvalidMenuSelection(Label label, String storedValue, Enum<?> selection) {
+        boolean invalid = selection == null;
+        label.setText(invalid ? "Invalid saved target: "
+                + (storedValue == null || storedValue.isBlank() ? "(missing)" : storedValue) : "");
+        label.setVisible(invalid);
+        label.setManaged(invalid);
     }
 
     private void setupNodeNameField() {
@@ -334,6 +384,16 @@ public class TaskBuilderLayoutController {
         if (shopTabCombo != null) {
             shopTabCombo.valueProperty().addListener((obs, oldV, newV) -> {
                 if (!isBinding) handleApplyShopNavigationProps(null);
+            });
+        }
+        if (allianceMenuCombo != null) {
+            allianceMenuCombo.valueProperty().addListener((obs, oldV, newV) -> {
+                if (!isBinding) handleApplyAllianceNavigationProps(null);
+            });
+        }
+        if (eventMenuCombo != null) {
+            eventMenuCombo.valueProperty().addListener((obs, oldV, newV) -> {
+                if (!isBinding) handleApplyEventNavigationProps(null);
             });
         }
         if (sidebarModeCombo != null && sidebarTargetCombo != null) {
@@ -993,6 +1053,8 @@ public class TaskBuilderLayoutController {
     @FXML private void handleAddTemplateNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.TEMPLATE_SEARCH); }
     @FXML private void handleAddShopNavigationNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.SHOP_NAVIGATION); }
     @FXML private void handleAddSidebarNavigationNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.SIDEBAR_NAVIGATION); }
+    @FXML private void handleAddAllianceNavigationNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.ALLIANCE_NAVIGATION); }
+    @FXML private void handleAddEventNavigationNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.EVENT_NAVIGATION); }
 
     private void addNodeToCanvas(FlowStepKind type) {
         ensureSession();
@@ -1009,6 +1071,10 @@ public class TaskBuilderLayoutController {
                 node.setParam(AutomationStep.PARAM_SIDEBAR_MODE, SidebarNavigationMode.SECTION.name());
                 node.setParam(AutomationStep.PARAM_SIDEBAR_TARGET, SidebarSection.CITY.name());
             }
+            case ALLIANCE_NAVIGATION -> node.setParam(
+                    AutomationStep.PARAM_ALLIANCE_MENU, AllianceMenu.WAR.name());
+            case EVENT_NAVIGATION -> node.setParam(
+                    AutomationStep.PARAM_EVENT_MENU, EventMenu.HERO_MISSION.name());
             default -> {}
         }
 
@@ -1665,6 +1731,14 @@ public class TaskBuilderLayoutController {
             sidebarNavigationPropsBox.setVisible(false);
             sidebarNavigationPropsBox.setManaged(false);
         }
+        if (allianceNavigationPropsBox != null) {
+            allianceNavigationPropsBox.setVisible(false);
+            allianceNavigationPropsBox.setManaged(false);
+        }
+        if (eventNavigationPropsBox != null) {
+            eventNavigationPropsBox.setVisible(false);
+            eventNavigationPropsBox.setManaged(false);
+        }
         ocrPropsBox.setVisible(false); ocrPropsBox.setManaged(false);
         if (templatePropsBox != null) { templatePropsBox.setVisible(false); templatePropsBox.setManaged(false); }
         
@@ -1722,6 +1796,22 @@ public class TaskBuilderLayoutController {
                 sidebarModeCombo.setValue(mode);
                 setSidebarTargets(mode, node.getParam(AutomationStep.PARAM_SIDEBAR_TARGET) == null
                         ? "" : node.getParam(AutomationStep.PARAM_SIDEBAR_TARGET));
+            }
+            case ALLIANCE_NAVIGATION -> {
+                allianceNavigationPropsBox.setVisible(true);
+                allianceNavigationPropsBox.setManaged(true);
+                String storedTarget = node.getParam(AutomationStep.PARAM_ALLIANCE_MENU);
+                AllianceMenu selection = menuSelection(storedTarget, AllianceMenu.class);
+                allianceMenuCombo.setValue(selection);
+                showInvalidMenuSelection(allianceMenuInvalidLabel, storedTarget, selection);
+            }
+            case EVENT_NAVIGATION -> {
+                eventNavigationPropsBox.setVisible(true);
+                eventNavigationPropsBox.setManaged(true);
+                String storedTarget = node.getParam(AutomationStep.PARAM_EVENT_MENU);
+                EventMenu selection = menuSelection(storedTarget, EventMenu.class);
+                eventMenuCombo.setValue(selection);
+                showInvalidMenuSelection(eventMenuInvalidLabel, storedTarget, selection);
             }
             case OCR_READ -> {
                 ocrPropsBox.setVisible(true); ocrPropsBox.setManaged(true);
@@ -1841,6 +1931,22 @@ public class TaskBuilderLayoutController {
     @FXML private void handleApplyShopNavigationProps(ActionEvent e) {
         if (selectedNode == null || shopTabCombo == null || shopTabCombo.getValue() == null) return;
         selectedNode.setParam(AutomationStep.PARAM_SHOP_TAB, shopTabCombo.getValue().name());
+        refreshCard(selectedNode);
+    }
+
+    @FXML private void handleApplyAllianceNavigationProps(ActionEvent e) {
+        if (selectedNode == null || allianceMenuCombo.getValue() == null) return;
+        selectedNode.setParam(AutomationStep.PARAM_ALLIANCE_MENU, allianceMenuCombo.getValue().name());
+        showInvalidMenuSelection(allianceMenuInvalidLabel, allianceMenuCombo.getValue().name(),
+                allianceMenuCombo.getValue());
+        refreshCard(selectedNode);
+    }
+
+    @FXML private void handleApplyEventNavigationProps(ActionEvent e) {
+        if (selectedNode == null || eventMenuCombo.getValue() == null) return;
+        selectedNode.setParam(AutomationStep.PARAM_EVENT_MENU, eventMenuCombo.getValue().name());
+        showInvalidMenuSelection(eventMenuInvalidLabel, eventMenuCombo.getValue().name(),
+                eventMenuCombo.getValue());
         refreshCard(selectedNode);
     }
 
