@@ -28,6 +28,18 @@
 
 	<!-- ─── Dependencies (versions managed centrally by parent POM) ─── -->
 	<dependencies>
+		<!-- Decode Android video without pulling native libraries for every platform. -->
+		<dependency><groupId>org.bytedeco</groupId><artifactId>javacv</artifactId></dependency>
+		<dependency><groupId>org.bytedeco</groupId><artifactId>javacpp</artifactId></dependency>
+		<dependency><groupId>org.bytedeco</groupId><artifactId>ffmpeg</artifactId></dependency>
+		<dependency>
+			<groupId>org.bytedeco</groupId><artifactId>javacpp</artifactId>
+			<classifier>${video.native.platform}</classifier><scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.bytedeco</groupId><artifactId>ffmpeg</artifactId>
+			<classifier>${video.native.platform}</classifier><scope>runtime</scope>
+		</dependency>
 		<!-- ═══ Logging Infrastructure ═══ -->
 		
 		<!-- SLF4J: Logging facade for abstraction -->

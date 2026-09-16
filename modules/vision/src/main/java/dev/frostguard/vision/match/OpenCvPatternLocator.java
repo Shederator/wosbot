@@ -298,6 +298,28 @@ public class OpenCvPatternLocator {
                 capture.getBpp(), spritePath, topLeft, bottomRight, threshold, limit);
     }
 
+    /** Crops RGBA pixels before conversion, retaining full-frame match coordinates and sizes. */
+    public static List<ImageSearchResultData> locateAllPatternsMonoCropped(RawImageData capture,
+            String spritePath, PointData topLeft, PointData bottomRight, double threshold, int limit) {
+        if (capture.getBpp() != 32) {
+            return locateAllPatternsMono(capture, spritePath, topLeft, bottomRight, threshold, limit);
+        }
+        int left = topLeft.getX(), top = topLeft.getY();
+        int width = bottomRight.getX() - left, height = bottomRight.getY() - top;
+        if (left < 0 || top < 0 || width <= 0 || height <= 0
+                || bottomRight.getX() > capture.getWidth() || bottomRight.getY() > capture.getHeight()
+                || capture.getData().length < (long) capture.getWidth() * capture.getHeight() * 4) return List.of();
+        byte[] pixels = new byte[Math.multiplyExact(Math.multiplyExact(width, height), 4)];
+        for (int row = 0; row < height; row++) {
+            System.arraycopy(capture.getData(), ((top + row) * capture.getWidth() + left) * 4,
+                    pixels, row * width * 4, width * 4);
+        }
+        var hits = scanCaptureMonoMulti(pixels, width, height, 32, spritePath,
+                new PointData(0, 0), new PointData(width, height), threshold, limit);
+        return hits.stream().map(hit -> ImageSearchResultData.hit(hit.getX() + left, hit.getY() + top,
+                hit.getMatchScore(), hit.getTemplateSize())).toList();
+    }
+
     /* ================================================================== */
     /*  Public entry points – encoded byte[] (PNG/JPEG) overloads          */
     /* ================================================================== */

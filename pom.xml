@@ -62,6 +62,9 @@
 		<!-- Vision / OCR -->
 		<opencv.version>4.9.0-0</opencv.version>
 		<tess4j.version>5.14.0</tess4j.version>
+		<javacv.version>1.5.11</javacv.version>
+		<ffmpeg.version>7.1-1.5.11</ffmpeg.version>
+		<video.native.platform>linux-x86_64</video.native.platform>
 
 		<!-- Engine integrations -->
 		<ddmlib.version>31.11.1</ddmlib.version>
@@ -120,6 +123,26 @@
 	     ────────────────────────────────────────────── -->
 	<dependencyManagement>
 		<dependencies>
+			<dependency>
+				<groupId>org.bytedeco</groupId>
+				<artifactId>javacv</artifactId>
+				<version>${javacv.version}</version>
+				<exclusions><exclusion><groupId>*</groupId><artifactId>*</artifactId></exclusion></exclusions>
+			</dependency>
+			<dependency>
+				<groupId>org.bytedeco</groupId><artifactId>javacpp</artifactId><version>${javacv.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.bytedeco</groupId><artifactId>ffmpeg</artifactId><version>${ffmpeg.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.bytedeco</groupId><artifactId>javacpp</artifactId><version>${javacv.version}</version>
+				<classifier>${video.native.platform}</classifier>
+			</dependency>
+			<dependency>
+				<groupId>org.bytedeco</groupId><artifactId>ffmpeg</artifactId><version>${ffmpeg.version}</version>
+				<classifier>${video.native.platform}</classifier>
+			</dependency>
 			<!-- ── Internal reactor modules ── -->
 			<dependency>
 				<groupId>dev.frostguard</groupId>
@@ -376,4 +399,16 @@
 			</plugin>
 		</plugins>
 	</build>
+	<profiles>
+		<profile>
+			<id>video-windows</id>
+			<activation><os><family>Windows</family></os></activation>
+			<properties><video.native.platform>windows-x86_64</video.native.platform></properties>
+		</profile>
+		<profile>
+			<id>video-macos-arm</id>
+			<activation><os><family>mac</family><arch>aarch64</arch></os></activation>
+			<properties><video.native.platform>macosx-arm64</video.native.platform></properties>
+		</profile>
+	</profiles>
 </project>
