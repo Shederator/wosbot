@@ -92,6 +92,15 @@ public class FishingMinigameRoutine extends DelayedTask {
                         if (!waitFor(TemplatesEnum.FISHING_TITLE, AreaData.of(85, 0, 500, 80), 8000).isFound()) {
                             defer(5, "Fishing page unverified"); return;
                         }
+                        // Reopening from home can reveal a paid stage that was invisible at task entry.
+                        resumed = resumeExistingCast();
+                        if (resumed) recoveryOnly = true;
+                        else if (exitVerifiedHaul()) {
+                            defer(30, "Existing haul recovered; preserving remaining bait");
+                            return;
+                        }
+                    }
+                    if (!resumed) {
                         // The common event title also appears on the remembered Club/leaderboard tabs.
                         if (!find(TemplatesEnum.FISHING_ICE_BUTTON, CommonGameAreas.FISHING_ICE_CAST_BUTTON).isFound()) {
                             checkPreemption();

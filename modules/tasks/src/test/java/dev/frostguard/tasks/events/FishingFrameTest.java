@@ -64,6 +64,14 @@ class FishingFrameTest {
     }
 
     @Test
+    void reopeningAfterReloadRevealsRecoveryControlsNotANewCast() throws IOException {
+        assertHit("suspended-after-reload", TemplatesEnum.FISHING_TITLE, 85, 0, 500, 80);
+        assertHit("suspended-after-reload", TemplatesEnum.FISHING_GO_FISH, 270, 1040, 465, 1130);
+        assertFalse(match("suspended-after-reload", TemplatesEnum.FISHING_NORMAL_CAST, 50, 760, 360, 875).isFound());
+        assertFalse(match("suspended-after-reload", TemplatesEnum.FISHING_ICE_BUTTON, 370, 1140, 675, 1240).isFound());
+    }
+
+    @Test
     void distinguishesPausedAndAlreadyPaidSuspendedStagesFromANewCast() throws IOException {
         assertHit("paused", TemplatesEnum.FISHING_CONTINUE, 390, 570, 535, 710);
         assertHit("paused", TemplatesEnum.FISHING_PAUSE_EXIT, 185, 570, 330, 710);
