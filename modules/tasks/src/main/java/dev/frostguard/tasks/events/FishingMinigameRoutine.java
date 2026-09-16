@@ -18,6 +18,7 @@ import dev.frostguard.vision.ocr.OcrEngine;
 public class FishingMinigameRoutine extends DelayedTask {
     // Animated shortcut art is weaker evidence than the separately verified cast controls.
     static final int HOME_ENTRY_MATCH_THRESHOLD = 85;
+    private static final long BAIT_CONFIRMATION_TIMEOUT_NANOS = 4_000_000_000L;
     private static final Pattern BAIT = Pattern.compile("(\\d+)\\s*/\\s*(\\d+)");
     private AndroidFrameStream stream;
     private AndroidTouchSession realtimeInput;
@@ -144,10 +145,29 @@ public class FishingMinigameRoutine extends DelayedTask {
 
     private int readFreeBait() {
         var region = CommonGameAreas.FISHING_FREE_BAIT;
-        try {
-            return parseBait(OcrEngine.recognizeText(observation.image(), region.topLeft(), region.bottomRight(),
-                    CommonOCRSettings.STAMINA_FRACTION_SETTINGS));
-        } catch (Exception error) { return -1; }
+        var confirmation = new FishingBaitConfirmation();
+        try (var ocr = new dev.frostguard.vision.ocr.TesseractOcrSession(CommonOCRSettings.STAMINA_FRACTION_SETTINGS)) {
+            ocr.prepare();
+            long deadline = System.nanoTime() + BAIT_CONFIRMATION_TIMEOUT_NANOS;
+            while (System.nanoTime() < deadline) {
+                freshFrame();
+                if (!find(TemplatesEnum.FISHING_TITLE, AreaData.of(85, 0, 500, 80)).isFound()
+                        || !find(TemplatesEnum.FISHING_ICE_BUTTON, CommonGameAreas.FISHING_ICE_CAST_BUTTON).isFound()) return -1;
+                String text;
+                try {
+                    text = ocr.recognize(observation.image(), region);
+                } catch (dev.frostguard.vision.ocr.OcrException error) {
+                    text = null;
+                }
+                int bait = confirmation.accept(text, observation.sequence());
+                if (bait >= 0) {
+                    logInfo("Free bait verified on two fresh frames: " + bait);
+                    return bait;
+                }
+                sleepTask(100);
+            }
+            return -1;
+        }
     }
 
     static int parseBait(String text) {

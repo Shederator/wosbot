@@ -14,6 +14,10 @@ Experimental rewards-first workflow; not ready for unattended operation.
 - The event remembers Club/leaderboard tabs under the same title. Verify the
   overview's Ice Fishing control, selecting the first tournament tab once when
   absent, before reading bait. Unverified navigation never authorizes a cast.
+- On live event entry the first decoded frame read `710`, then subsequent
+  frames read `7/10`. Bait verification uses a four-second polling budget for two
+  agreeing distinct fresh frames using one retained OCR engine. Malformed text
+  resets agreement; never infer a missing slash or spend on one observation.
 - A real paid stage can be suspended through Pause -> Exit. Its locked
   overview offers Go Fish, which restarts the same stage without another bait.
   Practice Exit instead returns to an ordinary overview. Do not confuse these
