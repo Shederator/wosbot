@@ -9,6 +9,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -27,11 +29,37 @@ import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.nav.SidebarSection;
 import dev.frostguard.engine.helper.NavigationHelper.AllianceMenu;
 import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
+import dev.frostguard.vision.logging.ProfileContextLogger;
 
 class TaskBuilderServiceTest {
 
     @TempDir
     Path tempDir;
+
+    @Test
+    void emitsNodeExecutionMessagesToSelectedProfileCapture() {
+        String originalWorkspace = System.getProperty(WorkspacePaths.WORKSPACE_PROPERTY);
+        System.setProperty(WorkspacePaths.WORKSPACE_PROPERTY, tempDir.toString());
+        try {
+            AccountDescriptor profile = new AccountDescriptor(90003L, "Log Test", "3", true, 1L, 30L);
+            TaskBuilderService service = new TaskBuilderService(new ObjectMapper());
+            service.startSession("Log probe", profile);
+            AutomationStep step = new AutomationStep(1, FlowStepKind.WAIT);
+            step.setParam("durationMs", "0");
+            List<String> lines = new ArrayList<>();
+
+            try (ProfileContextLogger.CaptureScope capture = ProfileContextLogger.captureCurrentThread(
+                    profile.getId(), lines::add)) {
+                assertTrue(service.executeNode(step));
+            }
+
+            assertTrue(lines.stream().anyMatch(line -> line.contains("Executing node #1")));
+            assertTrue(lines.stream().anyMatch(line -> line.contains("Node executed successfully")));
+        } finally {
+            ProfileContextLogger.shutdown();
+            restoreWorkspace(originalWorkspace);
+        }
+    }
 
     @Test
     void executesShopNavigationWithTheSelectedProfileAndTab() {

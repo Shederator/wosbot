@@ -18,6 +18,7 @@ import dev.frostguard.engine.service.TaskCodeGenerator;
 import dev.frostguard.engine.service.TemplatePathResolver;
 import dev.frostguard.engine.nav.ShopTab;
 import dev.frostguard.engine.nav.SidebarSection;
+import dev.frostguard.vision.logging.ProfileContextLogger;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.event.ActionEvent;
@@ -74,6 +75,7 @@ public class TaskBuilderLayoutController {
     @FXML private Button btnCapture;
     @FXML private TextField taskNameField;
     @FXML private ToggleButton btnTogglePreview;
+    @FXML private ToggleButton btnToggleRunLog;
     @FXML private Button btnFullscreen;
 
     // ===== Canvas =====
@@ -83,6 +85,8 @@ public class TaskBuilderLayoutController {
 
     // ===== Properties Drawer (bottom of canvas) =====
     @FXML private VBox propsDrawer;
+    @FXML private VBox runLogPanel;
+    @FXML private TextArea runLogTextArea;
     @FXML private Label propNodeIcon;
     @FXML private Label propNodeTitle;
     @FXML private Label propStatusLabel;
@@ -152,6 +156,11 @@ public class TaskBuilderLayoutController {
 
     private AutomationStep selectedNode = null;
     private int runningNodeId = -1;
+    private static final int MAX_PENDING_RUN_LOGS = 500;
+    private final TaskBuilderRunLog runLog = new TaskBuilderRunLog();
+    private record PendingRunLog(long generation, String entry) {}
+    private final Deque<PendingRunLog> pendingRunLogs = new ArrayDeque<>();
+    private boolean runLogDrainScheduled;
     private double ocrDragStartX = 0, ocrDragStartY = 0;
     private boolean hasPreviewImage = false;
     private boolean previewRegionDismissed = false;
@@ -2270,6 +2279,59 @@ public class TaskBuilderLayoutController {
 
     // ==================== EXECUTION ====================
 
+    @FXML private void handleToggleRunLog(ActionEvent e) {
+        boolean visible = btnToggleRunLog.isSelected();
+        runLogPanel.setVisible(visible);
+        runLogPanel.setManaged(visible);
+        btnToggleRunLog.getTooltip().setText(visible ? "Hide execution logs" : "Show execution logs");
+        if (visible) runLogTextArea.setScrollTop(Double.MAX_VALUE);
+    }
+
+    private long beginExecution(AccountDescriptor profile) {
+        long generation = runLog.begin(profile.getId());
+        if (generation < 0) {
+            setStatus("⚠ Task Builder execution already running");
+            return -1;
+        }
+        runLogTextArea.clear();
+        return generation;
+    }
+
+    private void appendExecutionLog(long generation, String entry) {
+        synchronized (pendingRunLogs) {
+            pendingRunLogs.addLast(new PendingRunLog(generation, entry));
+            while (pendingRunLogs.size() > MAX_PENDING_RUN_LOGS) pendingRunLogs.removeFirst();
+            if (runLogDrainScheduled) return;
+            runLogDrainScheduled = true;
+        }
+        Platform.runLater(this::drainExecutionLogs);
+    }
+
+    private void drainExecutionLogs() {
+        List<PendingRunLog> batch;
+        synchronized (pendingRunLogs) {
+            batch = new ArrayList<>(pendingRunLogs);
+            pendingRunLogs.clear();
+            runLogDrainScheduled = false;
+        }
+        ScrollBar vertical = (ScrollBar) runLogTextArea.lookup(".scroll-bar:vertical");
+        boolean follow = vertical == null
+                || vertical.getValue() >= vertical.getMax() - Math.max(0.01, vertical.getMax() * 0.02);
+        double previousScrollTop = runLogTextArea.getScrollTop();
+        boolean changed = false;
+        for (PendingRunLog pending : batch) {
+            changed |= runLog.append(pending.generation(), pending.entry());
+        }
+        if (changed) {
+            runLogTextArea.setText(runLog.text());
+            runLogTextArea.setScrollTop(follow ? Double.MAX_VALUE : previousScrollTop);
+        }
+    }
+
+    private void finishExecution() {
+        Platform.runLater(runLog::finish);
+    }
+
     @FXML private void handleExecuteSelected(ActionEvent e) {
         if (selectedNode == null) return;
         execNode(selectedNode);
@@ -2288,89 +2350,117 @@ public class TaskBuilderLayoutController {
         // Determine the first node (connected from Start, or first in list)
         int firstId = def.getNodes().get(0).getId();
 
-        setStatus("▶ Executing DAG...");
+        long generation = beginExecution(profile);
+        if (generation < 0) return;
         builderService.setActiveProfile(profile);
+        setStatus("▶ Executing DAG...");
         Thread t = new Thread(() -> {
-            try {
-                String startLocStr = def.getStartLocation();
-                if (profile != null && startLocStr != null && !startLocStr.equalsIgnoreCase("ANY")) {
-                    Platform.runLater(() -> setStatus("▶ Navigating to " + startLocStr + "..."));
-                    dev.frostguard.engine.schedule.LaunchPoint loc = 
-                        dev.frostguard.engine.schedule.LaunchPoint.valueOf(startLocStr.toUpperCase());
-                    dev.frostguard.engine.helper.NavigationHelper navHelper = 
-                        new dev.frostguard.engine.helper.NavigationHelper(
-                                dev.frostguard.engine.emulator.EmulatorController.getInstance(), 
-                                profile.getEmulatorNumber(), 
-                                profile
-                        );
-                    navHelper.ensureCorrectScreenLocation(loc);
-                }
+            try (ProfileContextLogger.CaptureScope capture = ProfileContextLogger.captureCurrentThread(
+                    profile.getId(), line -> appendExecutionLog(generation, line))) {
+                executeGraph(def, profile, nodeMap, firstId);
             } catch (Exception ex) {
-                Platform.runLater(() -> setStatus("❌ Start Navigation failed: " + ex.getMessage()));
-                return;
+                new ProfileContextLogger(TaskBuilderLayoutController.class, profile)
+                        .error("Task Builder execution stopped unexpectedly", ex);
+                Platform.runLater(() -> setStatus("❌ Execution stopped: " + ex.getMessage()));
+            } finally {
+                finishExecution();
             }
-
-            int currentId = firstId;
-            int failedNodeId = -1;
-            while (currentId > 0) {
-                AutomationStep current = nodeMap.get(currentId);
-                if (current == null) break;
-
-                int executingId = current.getId();
-                Platform.runLater(() -> showRunningNode(executingId));
-                boolean ok;
-                try {
-                    ok = builderService.executeNode(current);
-                } finally {
-                    Platform.runLater(() -> clearRunningNode(executingId));
-                }
-                final AutomationStep nodeRef = current;
-                Platform.runLater(() -> {
-                    refreshCard(nodeRef);
-                    if (selectedNode != null && selectedNode.getId() == nodeRef.getId())
-                        propStatusLabel.setText(nodeRef.isExecuted() ? "✅" : "❌");
-                });
-
-                if (!ok) {
-                    failedNodeId = nodeRef.getId();
-                    Platform.runLater(() -> setStatus("❌ Failed at node #" + nodeRef.getId()));
-                    break;
-                }
-
-                // Determine next node based on branching (unified via BranchEvaluator)
-                currentId = BranchEvaluator.resolveNextNode(current);
-
-                try { Thread.sleep(400); } catch (InterruptedException ignored) { return; }
-            }
-            final int failure = failedNodeId;
-            capturePreview();
-            Platform.runLater(() -> setStatus(failure < 0
-                    ? "✅ DAG execution complete"
-                    : "❌ Failed at node #" + failure));
         });
         t.setDaemon(true); t.start();
+    }
+
+    private void executeGraph(AutomationBlueprint def, AccountDescriptor profile,
+                              Map<Integer, AutomationStep> nodeMap, int firstId) {
+        try {
+            String startLocStr = def.getStartLocation();
+            if (startLocStr != null && !startLocStr.equalsIgnoreCase("ANY")) {
+                Platform.runLater(() -> setStatus("▶ Navigating to " + startLocStr + "..."));
+                dev.frostguard.engine.schedule.LaunchPoint loc =
+                        dev.frostguard.engine.schedule.LaunchPoint.valueOf(startLocStr.toUpperCase());
+                dev.frostguard.engine.helper.NavigationHelper navHelper =
+                        new dev.frostguard.engine.helper.NavigationHelper(
+                                dev.frostguard.engine.emulator.EmulatorController.getInstance(),
+                                profile.getEmulatorNumber(), profile);
+                navHelper.ensureCorrectScreenLocation(loc);
+            }
+        } catch (Exception ex) {
+            new ProfileContextLogger(TaskBuilderLayoutController.class, profile)
+                    .error("Task Builder start navigation failed", ex);
+            Platform.runLater(() -> setStatus("❌ Start Navigation failed: " + ex.getMessage()));
+            return;
+        }
+
+        int currentId = firstId;
+        int failedNodeId = -1;
+        while (currentId > 0) {
+            AutomationStep current = nodeMap.get(currentId);
+            if (current == null) break;
+
+            int executingId = current.getId();
+            Platform.runLater(() -> showRunningNode(executingId));
+            boolean ok;
+            try {
+                ok = builderService.executeNode(current);
+            } finally {
+                Platform.runLater(() -> clearRunningNode(executingId));
+            }
+            Platform.runLater(() -> {
+                refreshCard(current);
+                if (selectedNode != null && selectedNode.getId() == current.getId())
+                    propStatusLabel.setText(current.isExecuted() ? "✅" : "❌");
+            });
+
+            if (!ok) {
+                failedNodeId = current.getId();
+                Platform.runLater(() -> setStatus("❌ Failed at node #" + current.getId()));
+                break;
+            }
+
+            currentId = BranchEvaluator.resolveNextNode(current);
+            try { Thread.sleep(400); } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+        final int failure = failedNodeId;
+        capturePreview();
+        Platform.runLater(() -> setStatus(failure < 0
+                ? "✅ DAG execution complete"
+                : "❌ Failed at node #" + failure));
     }
 
 
     private void execNode(AutomationStep node) {
         AccountDescriptor profile = profileComboBox.getValue();
         if (profile == null) { setStatus("⚠ Select a profile"); return; }
+        long generation = beginExecution(profile);
+        if (generation < 0) return;
         builderService.setActiveProfile(profile);
         setStatus("▶ " + node.getSummary() + "...");
         showRunningNode(node.getId());
         Thread t = new Thread(() -> {
-            boolean ok;
-            try {
-                ok = builderService.executeNode(node);
+            try (ProfileContextLogger.CaptureScope capture = ProfileContextLogger.captureCurrentThread(
+                    profile.getId(), line -> appendExecutionLog(generation, line))) {
+                boolean ok = builderService.executeNode(node);
+                Platform.runLater(() -> {
+                    refreshCard(node);
+                    propStatusLabel.setText(node.isExecuted() ? "✅ Executed" : "❌ Failed");
+                    setStatus(ok ? "✅ Done" : "❌ Failed");
+                });
+                if (ok) {
+                    try { Thread.sleep(800); } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                    }
+                    capturePreview();
+                }
+            } catch (Exception ex) {
+                new ProfileContextLogger(TaskBuilderLayoutController.class, profile)
+                        .error("Task Builder node execution stopped unexpectedly", ex);
+                Platform.runLater(() -> setStatus("❌ Execution stopped: " + ex.getMessage()));
             } finally {
+                finishExecution();
                 Platform.runLater(() -> clearRunningNode(node.getId()));
             }
-            Platform.runLater(() -> {
-                refreshCard(node);
-                propStatusLabel.setText(node.isExecuted() ? "✅ Executed" : "❌ Failed");
-                setStatus(ok ? "✅ Done" : "❌ Failed");
-            });
-            if (ok) { try { Thread.sleep(800); } catch (InterruptedException ignored) {} capturePreview(); }
         });
         t.setDaemon(true); t.start();
     }
@@ -2429,6 +2519,14 @@ public class TaskBuilderLayoutController {
 
     private void setupProfiles() {
         if (profileComboBox == null) return;
+        profileComboBox.valueProperty().addListener((obs, oldProfile, newProfile) -> {
+            Long oldId = oldProfile == null ? null : oldProfile.getId();
+            Long newId = newProfile == null ? null : newProfile.getId();
+            if (!Objects.equals(oldId, newId)) {
+                runLog.selectProfile(newId);
+                runLogTextArea.clear();
+            }
+        });
         profileComboBox.setOnShowing(e -> {
             try {
                 List<AccountDescriptor> profiles = ProfileService.obtain().fetchAllAccounts();

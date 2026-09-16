@@ -10,7 +10,9 @@ import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 import java.util.zip.GZIPOutputStream;
 
 /**
@@ -22,6 +24,28 @@ public final class ProfileContextLogger {
 
     private static final Logger rootLog = LoggerFactory.getLogger(ProfileContextLogger.class);
     private static final Map<Long, PrintWriter> writerRegistry = new ConcurrentHashMap<>();
+    private static final ThreadLocal<Capture> currentCapture = new ThreadLocal<>();
+
+    private record Capture(long profileId, Consumer<String> listener) {}
+
+    public interface CaptureScope extends AutoCloseable {
+        @Override
+        void close();
+    }
+
+    /** Captures profile log lines produced on the calling execution thread. */
+    public static CaptureScope captureCurrentThread(long profileId, Consumer<String> listener) {
+        Objects.requireNonNull(listener);
+        Capture previous = currentCapture.get();
+        currentCapture.set(new Capture(profileId, listener));
+        return () -> {
+            if (previous == null) {
+                currentCapture.remove();
+            } else {
+                currentCapture.set(previous);
+            }
+        };
+    }
     
     private static final SimpleDateFormat logTimestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     private static final SimpleDateFormat fileTimestamp = new SimpleDateFormat("yyyy-MM-dd");
@@ -158,22 +182,33 @@ public final class ProfileContextLogger {
 
     public void error(String msg, Throwable cause) {
         targetLog.error(msg, cause);
-        if (profile != null) {
+        dispatch("ERROR", msg);
+        if (profile != null && cause != null) {
             PrintWriter pw = writerRegistry.get(profile.getId());
-            if (pw != null) {
-                enforceSizeLimit();
-                pw.println(decorate("ERROR", msg));
-                cause.printStackTrace(pw);
-            }
+            if (pw != null) cause.printStackTrace(pw);
+            notifyCapture(cause.toString());
         }
     }
 
     private void dispatch(String level, String msg) {
         if (profile != null) {
+            String line = decorate(level, msg);
+            enforceSizeLimit();
             PrintWriter pw = writerRegistry.get(profile.getId());
             if (pw != null) {
-                enforceSizeLimit();
-                pw.println(decorate(level, msg));
+                pw.println(line);
+            }
+            notifyCapture(line);
+        }
+    }
+
+    private void notifyCapture(String line) {
+        Capture capture = currentCapture.get();
+        if (capture != null && profile != null && capture.profileId() == profile.getId()) {
+            try {
+                capture.listener().accept(line);
+            } catch (RuntimeException failure) {
+                rootLog.warn("Profile log observer failed", failure);
             }
         }
     }

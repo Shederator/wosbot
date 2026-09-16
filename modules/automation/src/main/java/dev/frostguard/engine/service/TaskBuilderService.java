@@ -24,8 +24,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.input.TapJitterPolicy;
+import dev.frostguard.vision.logging.ProfileContextLogger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.helpers.MessageFormatter;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -62,6 +64,7 @@ public class TaskBuilderService {
     private Path currentDefinitionDirectory;
     private String activeEmulatorNumber;
     private AccountDescriptor activeProfile;
+    private ProfileContextLogger executionLogger;
     private TapInteractionService tapService;
 
     public TaskBuilderService() {
@@ -164,6 +167,7 @@ public class TaskBuilderService {
         this.currentDefinitionDirectory = customTasksDir;
         this.activeEmulatorNumber = emulatorNumber;
         this.activeProfile = null;
+        this.executionLogger = null;
         this.tapService = TapInteractionService.forController(emuManager, emulatorNumber);
         logger.info("Task Builder session started: '{}' on emulator {}", taskName, emulatorNumber);
     }
@@ -172,7 +176,7 @@ public class TaskBuilderService {
     public void startSession(String taskName, AccountDescriptor profile) {
         Objects.requireNonNull(profile, "Task Builder profile is required");
         startSession(taskName, profile.getEmulatorNumber());
-        this.activeProfile = profile;
+        setActiveProfile(profile);
     }
 
     /**
@@ -390,22 +394,42 @@ public class TaskBuilderService {
      */
     public boolean executeNode(AutomationStep node) {
         if (activeEmulatorNumber == null) {
-            logger.warn("Cannot execute node: no active emulator");
+            runWarn("Cannot execute node: no active emulator");
             return false;
         }
 
         try {
+            runInfo("Executing node #{}: {}", node.getId(), node.getSummary());
             boolean success = performNodeAction(node);
             node.setExecuted(success);
             if (success) {
-                logger.info("Node executed successfully: {}", node.getSummary());
+                runInfo("Node executed successfully: {}", node.getSummary());
+            } else {
+                runWarn("Node failed: {}", node.getSummary());
             }
             return success;
         } catch (Exception e) {
             node.setExecuted(false);
-            logger.error("Failed to execute node: {}", node.getSummary(), e);
+            runError("Failed to execute node: " + node.getSummary(), e);
             return false;
         }
+    }
+
+    private void runInfo(String pattern, Object... args) {
+        String message = MessageFormatter.arrayFormat(pattern, args).getMessage();
+        if (executionLogger == null) logger.info(message);
+        else executionLogger.info(message);
+    }
+
+    private void runWarn(String pattern, Object... args) {
+        String message = MessageFormatter.arrayFormat(pattern, args).getMessage();
+        if (executionLogger == null) logger.warn(message);
+        else executionLogger.warn(message);
+    }
+
+    private void runError(String message, Throwable cause) {
+        if (executionLogger == null) logger.error(message, cause);
+        else executionLogger.error(message, cause);
     }
 
     /**
@@ -462,7 +486,7 @@ public class TaskBuilderService {
             case SIDEBAR_NAVIGATION -> executeSidebarNavigation(node);
             case ALLIANCE_NAVIGATION -> executeAllianceNavigation(node);
             case EVENT_NAVIGATION -> executeEventNavigation(node);
-            case NAVIGATE        -> { logger.info("Navigate node recorded"); yield true; }
+            case NAVIGATE        -> { runInfo("Navigate node recorded"); yield true; }
         };
     }
 
@@ -472,7 +496,7 @@ public class TaskBuilderService {
         try {
             target = ShopTab.valueOf(configuredTab);
         } catch (IllegalArgumentException | NullPointerException exception) {
-            logger.warn("Shop Navigation node has invalid shopTab: '{}'", configuredTab);
+            runWarn("Shop Navigation node has invalid shopTab: '{}'", configuredTab);
             return false;
         }
 
@@ -480,7 +504,7 @@ public class TaskBuilderService {
             return false;
         }
 
-        logger.info("Task Builder navigating profile '{}' on emulator {} to {}",
+        runInfo("Task Builder navigating profile '{}' on emulator {} to {}",
                 activeProfile.getName(), activeEmulatorNumber, target.displayName());
         return shopNavigationAction.navigate(activeEmulatorNumber, activeProfile, target);
     }
@@ -491,13 +515,13 @@ public class TaskBuilderService {
         try {
             target = AllianceMenu.valueOf(configuredTarget);
         } catch (IllegalArgumentException | NullPointerException exception) {
-            logger.warn("Alliance Navigation node #{} has invalid allianceMenu: '{}'", node.getId(), configuredTarget);
+            runWarn("Alliance Navigation node #{} has invalid allianceMenu: '{}'", node.getId(), configuredTarget);
             return false;
         }
         if (!hasNavigationProfile("alliance menu " + target)) {
             return false;
         }
-        logger.info("Task Builder navigating profile '{}' on emulator {} to alliance menu {}",
+        runInfo("Task Builder navigating profile '{}' on emulator {} to alliance menu {}",
                 activeProfile.getName(), activeEmulatorNumber, target);
         return allianceNavigationAction.navigate(activeEmulatorNumber, activeProfile, target);
     }
@@ -508,13 +532,13 @@ public class TaskBuilderService {
         try {
             target = EventMenu.valueOf(configuredTarget);
         } catch (IllegalArgumentException | NullPointerException exception) {
-            logger.warn("Event Navigation node #{} has invalid eventMenu: '{}'", node.getId(), configuredTarget);
+            runWarn("Event Navigation node #{} has invalid eventMenu: '{}'", node.getId(), configuredTarget);
             return false;
         }
         if (!hasNavigationProfile("event menu " + target)) {
             return false;
         }
-        logger.info("Task Builder navigating profile '{}' on emulator {} to event menu {}",
+        runInfo("Task Builder navigating profile '{}' on emulator {} to event menu {}",
                 activeProfile.getName(), activeEmulatorNumber, target);
         return eventNavigationAction.navigate(activeEmulatorNumber, activeProfile, target);
     }
@@ -538,7 +562,7 @@ public class TaskBuilderService {
             if (!hasNavigationProfile("sidebar section " + section)) {
                 return false;
             }
-            logger.info("Task Builder opening sidebar section {} for profile '{}' on emulator {}",
+            runInfo("Task Builder opening sidebar section {} for profile '{}' on emulator {}",
                     section, activeProfile.getName(), activeEmulatorNumber);
             return sidebarNavigationAction.openSection(activeEmulatorNumber, activeProfile, section);
         }
@@ -551,23 +575,23 @@ public class TaskBuilderService {
         if (!hasNavigationProfile("sidebar destination " + destination)) {
             return false;
         }
-        logger.info("Task Builder navigating sidebar destination {} for profile '{}' on emulator {}",
+        runInfo("Task Builder navigating sidebar destination {} for profile '{}' on emulator {}",
                 destination, activeProfile.getName(), activeEmulatorNumber);
         return sidebarNavigationAction.navigateTo(activeEmulatorNumber, activeProfile, destination);
     }
 
     private boolean rejectInvalidSidebarSelection(AutomationStep node, String mode, String target) {
-        logger.warn("Sidebar Navigation node #{} has invalid mode={} target={}", node.getId(), mode, target);
+        runWarn("Sidebar Navigation node #{} has invalid mode={} target={}", node.getId(), mode, target);
         return false;
     }
 
     private boolean hasNavigationProfile(String target) {
         if (activeProfile == null) {
-            logger.warn("Cannot navigate to {}: no Task Builder profile is selected", target);
+            runWarn("Cannot navigate to {}: no Task Builder profile is selected", target);
             return false;
         }
         if (!Objects.equals(activeProfile.getEmulatorNumber(), activeEmulatorNumber)) {
-            logger.warn("Cannot navigate to {}: selected profile emulator {} does not match active emulator {}",
+            runWarn("Cannot navigate to {}: selected profile emulator {} does not match active emulator {}",
                     target, activeProfile.getEmulatorNumber(), activeEmulatorNumber);
             return false;
         }
@@ -583,7 +607,7 @@ public class TaskBuilderService {
         int brY = node.getParamAsInt("brY", -1);
 
         if (tlX < 0 || tlY < 0) {
-            logger.warn("Invalid tap coordinates: TL({}, {})", tlX, tlY);
+            runWarn("Invalid tap coordinates: TL({}, {})", tlX, tlY);
             return false;
         }
 
@@ -621,7 +645,7 @@ public class TaskBuilderService {
         int endY   = node.getParamAsInt("endY", -1);
 
         if (startX < 0 || startY < 0 || endX < 0 || endY < 0) {
-            logger.warn("Invalid swipe coordinates");
+            runWarn("Invalid swipe coordinates");
             return false;
         }
 
@@ -646,7 +670,7 @@ public class TaskBuilderService {
         int brY = node.getParamAsInt("brY", -1);
 
         if (tlX < 0 || tlY < 0 || brX < 0 || brY < 0) {
-            logger.warn("OCR node missing region coordinates");
+            runWarn("OCR node missing region coordinates");
             node.setLastOcrResult("[missing coords]");
             return false;
         }
@@ -660,10 +684,10 @@ public class TaskBuilderService {
             String ocrText = OcrEngine.recognizeText(rawImage,
                     new PointData(tlX, tlY), new PointData(brX, brY), "eng");
             node.setLastOcrResult(ocrText != null ? ocrText.trim() : "");
-            logger.info("OCR result: '{}'", node.getLastOcrResult());
+            runInfo("OCR result: '{}'", node.getLastOcrResult());
             return true;
         } catch (Exception ex) {
-            logger.error("OCR execution failed", ex);
+            runError("OCR execution failed", ex);
             node.setLastOcrResult("[error: " + ex.getMessage() + "]");
             return false;
         }
@@ -674,7 +698,7 @@ public class TaskBuilderService {
     private boolean executeTemplateSearch(AutomationStep node) {
         String templateName = node.getParam("templatePath");
         if (templateName == null || templateName.isEmpty()) {
-            logger.warn("Template Search node missing templatePath");
+            runWarn("Template Search node missing templatePath");
             setTemplateResult(node, false, 0);
             return false;
         }
@@ -712,16 +736,16 @@ public class TaskBuilderService {
             setTemplateResult(node, found, matchPct);
             handleTapIfFound(node, result, found);
 
-            logger.info("Template Search '{}': {} (match: {}%)", templateName,
+            runInfo("Template Search '{}': {} (match: {}%)", templateName,
                     found ? "FOUND" : "NOT FOUND", String.format("%.1f", matchPct));
             return true;
 
         } catch (IllegalArgumentException ex) {
-            logger.error("Invalid template name: {}", templateName, ex);
+            runError("Invalid template name: " + templateName, ex);
             setTemplateResult(node, false, 0);
             return false;
         } catch (Exception ex) {
-            logger.error("Template search execution failed", ex);
+            runError("Template search execution failed", ex);
             setTemplateResult(node, false, 0);
             return false;
         }
@@ -795,7 +819,7 @@ public class TaskBuilderService {
                 tapInputService().tapNear(new PointData(tapX, tapY), TapJitterPolicy.DEFAULT_POINT_JITTER_RADIUS);
             }
             node.setParam("__lastTappedAt", tapX + ", " + tapY);
-            logger.info("Tapped at {}, {}", tapX, tapY);
+            runInfo("Tapped at {}, {}", tapX, tapY);
         } else {
             node.getParams().remove("__lastTappedAt");
         }
@@ -819,12 +843,14 @@ public class TaskBuilderService {
         if (activeProfile != null
                 && !Objects.equals(activeProfile.getEmulatorNumber(), emulatorNumber)) {
             this.activeProfile = null;
+            this.executionLogger = null;
         }
     }
 
     /** Selects the profile used by live Task Builder actions and its emulator. */
     public void setActiveProfile(AccountDescriptor profile) {
         this.activeProfile = profile;
+        this.executionLogger = profile == null ? null : new ProfileContextLogger(TaskBuilderService.class, profile);
         if (profile != null) {
             this.activeEmulatorNumber = profile.getEmulatorNumber();
             this.tapService = null;

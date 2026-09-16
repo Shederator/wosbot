@@ -49,6 +49,15 @@
 
             <!-- Right: view toggles -->
             <HBox alignment="CENTER_RIGHT" spacing="6" GridPane.columnIndex="2">
+                <ToggleButton fx:id="btnToggleRunLog" accessibleText="Execution logs"
+                              onAction="#handleToggleRunLog"
+                              styleClass="tb-btn-toolbar-toggle" minWidth="-Infinity">
+                    <graphic>
+                        <javafx.scene.shape.SVGPath content="M 3 5 H 21 V 7 H 3 Z M 3 11 H 21 V 13 H 3 Z M 3 17 H 17 V 19 H 3 Z"
+                                                     scaleX="0.7" scaleY="0.7" />
+                    </graphic>
+                    <tooltip><Tooltip text="Show execution logs"/></tooltip>
+                </ToggleButton>
                 <ToggleButton fx:id="btnTogglePreview" text="Preview" selected="true"
                               onAction="#handleTogglePreview"
                               styleClass="tb-btn-toolbar-toggle" minWidth="-Infinity"/>
@@ -126,7 +135,7 @@
             <!-- Canvas and properties drawer -->
             <VBox HBox.hgrow="ALWAYS">
                 <StackPane fx:id="canvasContainer" styleClass="tb-canvas-container"
-                           VBox.vgrow="ALWAYS">
+                           VBox.vgrow="ALWAYS" minHeight="0">
                     <Pane fx:id="flowCanvas" styleClass="tb-flow-canvas"/>
                 </StackPane>
 
@@ -360,6 +369,15 @@
                                       styleClass="tb-combo"/>
                         </FlowPane>
                     </VBox>
+                </VBox>
+
+                <VBox fx:id="runLogPanel" styleClass="tb-run-log-panel"
+                      visible="false" managed="false">
+                    <TextArea fx:id="runLogTextArea" editable="false" wrapText="true"
+                              promptText="Run the graph or a node to see its logs"
+                              focusTraversable="false" prefRowCount="3"
+                              prefHeight="66" minHeight="66" maxHeight="66"
+                              styleClass="tb-run-log-text" />
                 </VBox>
             </VBox>
 
