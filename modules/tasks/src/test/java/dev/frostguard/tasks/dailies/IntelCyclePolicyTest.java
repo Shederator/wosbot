@@ -9,10 +9,26 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 class IntelCyclePolicyTest {
 
     private static final ZoneId BERLIN = ZoneId.of("Europe/Berlin");
+
+    @ParameterizedTest
+    @CsvSource({
+        "2026-09-15T23:37:14, 2026-09-16T00:00:01",
+        "2026-09-15T07:59:59, 2026-09-15T08:00:01",
+        "2026-09-15T08:00:00, 2026-09-15T08:00:01",
+        "2026-09-15T08:00:01, 2026-09-15T16:00:01",
+        "2026-09-15T15:59:59, 2026-09-15T16:00:01",
+        "2026-09-15T23:59:59, 2026-09-16T00:00:01"
+    })
+    void nextRefreshMayBeLessThanAnHourAway(String now, String expected) {
+        assertEquals(LocalDateTime.parse(expected),
+                IntelCyclePolicy.nextRefresh(LocalDateTime.parse(now), ZoneId.of("UTC")));
+    }
 
     @Test
     void beastFollowUpBypassesMissingDailyGainUntilCooldownCompletes() {

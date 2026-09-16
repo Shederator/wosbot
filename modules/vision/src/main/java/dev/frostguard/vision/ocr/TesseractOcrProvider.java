@@ -108,7 +108,7 @@ public final class TesseractOcrProvider implements OcrProvider {
         return t;
     }
 
-    private static int mapTextLayout(TextLayout layout) {
+    static int mapTextLayout(TextLayout layout) {
         return switch (layout) {
             case SINGLE_LINE -> 7; // PSM_SINGLE_LINE
             case SINGLE_WORD -> 8; // PSM_SINGLE_WORD
@@ -138,7 +138,7 @@ public final class TesseractOcrProvider implements OcrProvider {
      * {@code lib/tesseract} or {@code tools/tesseract} folder that
      * contains at least one {@code .traineddata} file.
      */
-    private static String locateTessdata() {
+    static String locateTessdata() {
         if (resolvedTessdataDir != null) return resolvedTessdataDir;
         synchronized (TesseractOcrProvider.class) {
             if (resolvedTessdataDir != null) return resolvedTessdataDir;

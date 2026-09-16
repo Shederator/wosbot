@@ -26,13 +26,42 @@
                                 <VBox styleClass="task-section-inner">
                                     <children>
                                         <Label styleClass="task-card-description"
-                                               text="Automates the fishing tournament minigame. Threads through gaps to reach the bottom while avoiding fish."
+                                               text="Uses available ordinary bait. Dodges on descent and seeks a full haul on return. Unknown screens stop the session without purchases."
                                                wrapText="true" />
 
                                         <Separator style="-fx-opacity: 0.25;" />
 
                                         <CheckBox fx:id="checkBoxEnableFishing" mnemonicParsing="false"
                                                   text="Enable Fishing Minigame Task" />
+                                        <HBox alignment="CENTER_LEFT" spacing="12">
+                                            <Label text="Maximum casts per session (1–10)" />
+                                            <TextField fx:id="textFieldMaxCasts" prefWidth="80"
+                                                       maxWidth="100" promptText="Maximum casts" />
+                                        </HBox>
+                                        <Label wrapText="true" styleClass="task-card-description"
+                                               text="Out-of-range cast limits allow only one cast. A full haul also counts as success even when descent ends early." />
+                                        <HBox alignment="CENTER_LEFT" spacing="12">
+                                            <Label text="Target catches (1–100; limited by hook capacity)" />
+                                            <TextField fx:id="textFieldTargetCatches" prefWidth="80" maxWidth="100" />
+                                        </HBox>
+                                        <CheckBox fx:id="checkBoxRestartShortHaul" text="Retry a short haul before reaching the surface" />
+                                        <HBox alignment="CENTER_LEFT" spacing="12">
+                                            <Label text="Maximum same-bait restarts (0–10)" />
+                                            <TextField fx:id="textFieldMaxRestarts" prefWidth="80" maxWidth="100" />
+                                        </HBox>
+                                        <CheckBox fx:id="checkBoxDarkCorner" text="Hold a random corner when vision is lost without a Lantern" />
+                                        <Separator style="-fx-opacity: 0.25;" />
+                                        <HBox alignment="CENTER_LEFT" spacing="12">
+                                            <Label text="Maximum casts with special items (0–10)" />
+                                            <TextField fx:id="textFieldMaxSpecialCasts" prefWidth="80" maxWidth="100" />
+                                        </HBox>
+                                        <CheckBox fx:id="checkBoxUseLantern" text="Use a Lantern for deep-water visibility" />
+                                        <CheckBox fx:id="checkBoxUseStabilizer" text="Use a Reel Stabilizer for two extra protections" />
+                                        <CheckBox fx:id="checkBoxRequireSpecialItems" text="Stop rather than cast without the selected special items" />
+                                        <Label wrapText="true" styleClass="task-card-description"
+                                               text="Items default off. After the boosted-cast limit, continue without items unless Stop is selected. Same-bait retries do not select another loadout. Horn targeting and Ocean Scanner guidance are not automated yet." />
+                                        <Label wrapText="true" styleClass="task-card-description"
+                                               text="Retries reuse the existing paid stage, never select new bait. Invalid restart limits disable retries. Gem purchases are not enabled in this version." />
                                     </children>
                                 </VBox>
                             </children>

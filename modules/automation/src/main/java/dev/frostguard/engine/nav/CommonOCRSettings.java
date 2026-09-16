@@ -9,6 +9,13 @@ import java.util.regex.Pattern;
 // Shared OCR presets and regex helpers for OCR-based game-state readers.
 public final class CommonOCRSettings {
 
+    public static final OcrSettingsData FISHING_DEPTH_SETTINGS = OcrSettingsData.builder()
+            .textLayout(TextLayout.SINGLE_WORD).allowedGlyphs("0123456789mM").build();
+    public static final OcrSettingsData FISHING_CURRENT_DEPTH_SETTINGS = FISHING_DEPTH_SETTINGS.toConfigurator()
+            .textLayout(TextLayout.SINGLE_LINE).isolateForeground(true).targetColor(java.awt.Color.WHITE).build();
+    public static final OcrSettingsData FISHING_RESULT_SETTINGS = OcrSettingsData.builder()
+            .textLayout(TextLayout.SINGLE_LINE).allowedGlyphs("HaulExit ").build();
+
     private CommonOCRSettings() {}
 
     private static final String LATIN_LETTERS =
