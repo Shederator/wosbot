@@ -11,6 +11,9 @@ Experimental rewards-first workflow; not ready for unattended operation.
 - Home shortcut detection covers the shifting event column down to 320px and
   tolerates its animated art at 85% matching. This only opens the event page;
   the title and bait-spending controls retain independent 90% verification.
+- The event remembers Club/leaderboard tabs under the same title. Verify the
+  overview's Ice Fishing control, selecting the first tournament tab once when
+  absent, before reading bait. Unverified navigation never authorizes a cast.
 - A real paid stage can be suspended through Pause -> Exit. Its locked
   overview offers Go Fish, which restarts the same stage without another bait.
   Practice Exit instead returns to an ordinary overview. Do not confuse these

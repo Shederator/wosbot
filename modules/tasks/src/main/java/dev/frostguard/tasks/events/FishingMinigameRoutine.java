@@ -91,6 +91,15 @@ public class FishingMinigameRoutine extends DelayedTask {
                         if (!waitFor(TemplatesEnum.FISHING_TITLE, AreaData.of(85, 0, 500, 80), 8000).isFound()) {
                             defer(5, "Fishing page unverified"); return;
                         }
+                        // The common event title also appears on the remembered Club/leaderboard tabs.
+                        if (!find(TemplatesEnum.FISHING_ICE_BUTTON, CommonGameAreas.FISHING_ICE_CAST_BUTTON).isFound()) {
+                            checkPreemption();
+                            requireRecentObservation();
+                            tapInside(CommonGameAreas.FISHING_TOURNAMENT_TAB);
+                            if (!waitFor(TemplatesEnum.FISHING_ICE_BUTTON, CommonGameAreas.FISHING_ICE_CAST_BUTTON, 5000).isFound()) {
+                                defer(5, "Fishing overview controls unverified; no bait selected"); return;
+                            }
+                        }
                         int bait = readFreeBait();
                         if (bait <= 0) { defer(bait == 0 ? 60 : 5, bait == 0 ? "No free bait remains" : "Free bait unverified"); return; }
                         long maximumDeadline = System.nanoTime() + 4_000_000_000L;

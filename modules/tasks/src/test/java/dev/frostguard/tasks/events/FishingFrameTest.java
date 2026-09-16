@@ -45,6 +45,16 @@ class FishingFrameTest {
     }
 
     @Test
+    void doesNotTreatTheRememberedClubTabAsTheFishingOverview() throws IOException {
+        assertHit("club-tab", TemplatesEnum.FISHING_TITLE, 85, 0, 500, 80);
+        var area = CommonGameAreas.FISHING_ICE_CAST_BUTTON;
+        assertFalse(match("club-tab", TemplatesEnum.FISHING_ICE_BUTTON,
+                area.topLeft().getX(), area.topLeft().getY(), area.bottomRight().getX(), area.bottomRight().getY()).isFound());
+        assertHit("event", TemplatesEnum.FISHING_ICE_BUTTON,
+                area.topLeft().getX(), area.topLeft().getY(), area.bottomRight().getX(), area.bottomRight().getY());
+    }
+
+    @Test
     void detectsTheHookAtItsActualPositionAndTheGameplayHud() throws IOException {
         var hook = match("active", TemplatesEnum.FISHING_HOOK, 170, 70, 640, 1280);
         assertTrue(hook.isFound(), hook.toString());

@@ -11,6 +11,8 @@ public final class CommonGameAreas {
 
     // Event shortcuts shift vertically as the active event list changes.
     public static final AreaData FISHING_HOME_ENTRY = AreaData.of(475, 120, 630, 320);
+    public static final AreaData FISHING_TOURNAMENT_TAB = AreaData.of(45, 105, 225, 175);
+    public static final AreaData FISHING_ICE_CAST_BUTTON = AreaData.of(370, 1140, 670, 1240);
     public static final AreaData FISHING_FREE_BAIT = AreaData.of(497, 1095, 579, 1129);
     public static final AreaData FISHING_DEPTH = AreaData.of(20, 20, 140, 93);
     public static final AreaData FISHING_DEPTH_HUD = AreaData.of(0, 0, 175, 100);
