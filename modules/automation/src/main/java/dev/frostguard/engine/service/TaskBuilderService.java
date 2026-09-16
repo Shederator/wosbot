@@ -850,7 +850,7 @@ public class TaskBuilderService {
     /** Selects the profile used by live Task Builder actions and its emulator. */
     public void setActiveProfile(AccountDescriptor profile) {
         this.activeProfile = profile;
-        this.executionLogger = profile == null ? null : new ProfileContextLogger(TaskBuilderService.class, profile);
+        this.executionLogger = profile == null ? null : new ProfileContextLogger(TaskBuilderService.class, profile, false);
         if (profile != null) {
             this.activeEmulatorNumber = profile.getEmulatorNumber();
             this.tapService = null;

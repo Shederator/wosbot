@@ -56,6 +56,7 @@ public final class ProfileContextLogger {
     private final Logger targetLog;
     private final AccountDescriptor profile;
     private final String sourceName;
+    private final boolean persistToFile;
 
     /**
      * Constructs a new logger bound to a specific profile context.
@@ -64,9 +65,17 @@ public final class ProfileContextLogger {
      * @param profile The profile context, or null for general logging
      */
     public ProfileContextLogger(Class<?> origin, AccountDescriptor profile) {
+        this(origin, profile, true);
+    }
+
+    /** Creates a profile logger that can be captured without opening its account log file. */
+    public ProfileContextLogger(Class<?> origin, AccountDescriptor profile, boolean persistToFile) {
         this.targetLog = LoggerFactory.getLogger(origin);
         this.profile = profile;
         this.sourceName = origin.getSimpleName();
+        this.persistToFile = persistToFile;
+
+        if (!persistToFile) return;
         
         ensureLogDirectory();
 
@@ -183,7 +192,7 @@ public final class ProfileContextLogger {
     public void error(String msg, Throwable cause) {
         targetLog.error(msg, cause);
         dispatch("ERROR", msg);
-        if (profile != null && cause != null) {
+        if (profile != null && cause != null && persistToFile) {
             PrintWriter pw = writerRegistry.get(profile.getId());
             if (pw != null) cause.printStackTrace(pw);
             notifyCapture(cause.toString());
@@ -193,10 +202,12 @@ public final class ProfileContextLogger {
     private void dispatch(String level, String msg) {
         if (profile != null) {
             String line = decorate(level, msg);
-            enforceSizeLimit();
-            PrintWriter pw = writerRegistry.get(profile.getId());
-            if (pw != null) {
-                pw.println(line);
+            if (persistToFile) {
+                enforceSizeLimit();
+                PrintWriter pw = writerRegistry.get(profile.getId());
+                if (pw != null) {
+                    pw.println(line);
+                }
             }
             notifyCapture(line);
         }
