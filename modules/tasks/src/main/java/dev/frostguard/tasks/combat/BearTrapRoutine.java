@@ -11,6 +11,7 @@ import dev.frostguard.api.domain.MarchActivityType;
 import dev.frostguard.api.domain.MarchMovementPhase;
 import dev.frostguard.api.domain.MarchSlotAvailability;
 import dev.frostguard.api.domain.MarchSlotState;
+import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.error.StopExecutionException;
 import dev.frostguard.engine.helper.BearTrapHelper;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
@@ -24,6 +25,7 @@ import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -97,6 +99,10 @@ private static final int DEFAULT_PREPARATION_TIME_MINUTES_MS = 10;
 private static final int DEFAULT_OWN_RALLY_FLAG_VALUE = 1;
 
 private static final int DEFAULT_JOIN_RALLY_FLAG_VALUE = 1;
+
+private static final int BEAR_RALLY_ROW_TOLERANCE_PX = 90;
+
+private static final long FRESH_TRANSITION_TIMEOUT_MS = 1500;
 
 private static final boolean DEFAULT_CALL_OWN_RALLY_VALUE = false;
 
@@ -384,6 +390,7 @@ private BearSessionCoordinator.ExitReason performTrapActivePhase(LocalDateTime t
                 new LiveBearSessionDriver(trapEndTime.atZone(ZoneId.of("UTC")).toInstant()),
                 trapEndTime.atZone(ZoneId.of("UTC")).toInstant(),
                 callOwnRally,
+                ownRallyFlag,
                 joinRally && !sharedEmulator,
                 joinFlags);
         BearSessionCoordinator.ExitReason exit = coordinator.run();
@@ -473,6 +480,16 @@ private void hydrateConfiguration() {
 
 
         this.joinFlags = decodeJoinFlags();
+        if (callOwnRally && joinFlags.removeIf(flag -> flag == ownRallyFlag)) {
+            logWarning(routineLogBearTrapLine(
+                    "Formation #" + ownRallyFlag
+                            + " is reserved for the configured own rally and will not be used to join."));
+        }
+        if (joinRally && joinFlags.isEmpty()) {
+            logWarning(routineLogBearTrapLine(
+                    "Rally joining disabled for this run because no configured join formation remains available."));
+            joinRally = false;
+        }
         // Changed by pernerch | Date: 2026-07-02 | Why: resolve shared-emulator state at hydration for deterministic active-phase behavior.
         this.sharedEmulator = isSharedEmulatorProfile();
 
@@ -659,7 +676,11 @@ private boolean hasInsideWindow() {
 
 private List<Integer> decodeJoinFlags() {
         String flagConfig = profile.getConfig(BEAR_TRAP_JOIN_FLAG_INT, String.class);
-        List<Integer> flags = new ArrayList<>();
+        return decodeJoinFlags(flagConfig);
+    }
+
+static List<Integer> decodeJoinFlags(String flagConfig) {
+        LinkedHashSet<Integer> flags = new LinkedHashSet<>();
 
         if (flagConfig != null && !flagConfig.trim().isEmpty()) {
             String[] parts = flagConfig.split(",");
@@ -670,7 +691,7 @@ private List<Integer> decodeJoinFlags() {
                         flags.add(flag);
                     }
                 } catch (NumberFormatException e) {
-                    logWarning(routineLogBearTrapLine("Invalid join flag value: " + part));
+                    // Ignore corrupt persisted values; the effective configuration is logged by the caller.
                 }
             }
         }
@@ -681,9 +702,7 @@ private List<Integer> decodeJoinFlags() {
         }
 
 
-        flags.sort(Integer::compareTo);
-
-        return flags;
+        return new ArrayList<>(flags);
     }
 
 private void enablePetsFlow() {
@@ -760,9 +779,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
 
         private final Instant eventEnd;
         private List<MarchSlotState> lastMarches = List.of();
-        private final List<Integer> rejectedJoinRows = new ArrayList<>();
         private BearSessionCoordinator.State lastState;
-        private Integer currentJoinRow;
 
         private LiveBearSessionDriver(Instant eventEnd) {
             this.eventEnd = eventEnd;
@@ -830,7 +847,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         }
 
         @Override
-        public BearSessionCoordinator.OwnRallyStartResult startOwnRally() {
+        public BearSessionCoordinator.OwnRallyStartResult startOwnRally(int formation) {
             List<MarchSlotState> before = lastMarches;
             if (!recover(BearSessionCoordinator.State.OWN_RALLY_STARTING) || !reachBearTrap(trapNumber)) {
                 return BearSessionCoordinator.OwnRallyStartResult.recoverable(
@@ -839,7 +856,8 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
 
             tapInside(BEAR_CENTER_POINT_VALUE, BEAR_CENTER_POINT_VALUE, 1, 200);
             sleepTask(500);
-            ImageSearchResultData rallyButton = find(BEAR_RALLY_BUTTON, 80, TEMPLATE_SEARCH_RETRIES_MAX_VALUE);
+            ImageSearchResultData rallyButton = findFresh(
+                    BEAR_RALLY_BUTTON, 80, FRESH_TRANSITION_TIMEOUT_MS);
             if (!rallyButton.isFound()) {
                 return BearSessionCoordinator.OwnRallyStartResult.recoverable(
                         BearSessionCoordinator.OwnRallyStartOutcome.STALE_SCREEN);
@@ -853,9 +871,11 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                         BearSessionCoordinator.OwnRallyStartOutcome.STALE_SCREEN);
             }
 
+            int rallySeconds = deploymentHelper.readRallySetTimeSeconds(
+                    RALLY_DURATION_BASE_MINUTES_VALUE * 60);
             tapInside(hold);
             sleepTask(300);
-            if (!marchHelper.selectFlag(ownRallyFlag)) {
+            if (!marchHelper.selectFlag(formation)) {
                 pressBack();
                 return BearSessionCoordinator.OwnRallyStartResult.recoverable(
                         BearSessionCoordinator.OwnRallyStartOutcome.FORMATION_UNAVAILABLE);
@@ -866,8 +886,6 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                         BearSessionCoordinator.OwnRallyStartOutcome.FORMATION_UNAVAILABLE);
             }
 
-            int rallySeconds = deploymentHelper.readRallySetTimeSeconds(
-                    RALLY_DURATION_BASE_MINUTES_VALUE * 60);
             long travelSeconds = deploymentHelper.readTravelTimeSeconds();
             if (travelSeconds <= 0) {
                 pressBack();
@@ -925,36 +943,22 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
             int freeBefore = (int) lastMarches.stream().filter(MarchSlotState::isIdle).count();
             try {
                 navigationHelper.ensureCorrectScreenLocation(LaunchPoint.WORLD);
-                ImageSearchResultData war = find(GAME_HOME_WAR, 90, TEMPLATE_SEARCH_RETRIES_VALUE);
+                ImageSearchResultData war = findFresh(
+                        GAME_HOME_WAR, 90, FRESH_TRANSITION_TIMEOUT_MS);
                 if (!war.isFound()) {
                     return BearSessionCoordinator.JoinOutcome.NAVIGATION_FAILURE;
                 }
                 tapInside(war);
-                sleepTask(300);
-                List<ImageSearchResultData> plusIcons = templateSearchHelper.locateAllPatterns(
-                        BEAR_JOIN_PLUS_ICON,
-                        SearchConfig.builder()
-                                .withThreshold(90)
-                                .withMaxAttempts(2)
-                                .withMaxResults(6)
-                                .build());
-                if (plusIcons == null || plusIcons.isEmpty()) {
-                    rejectedJoinRows.clear();
+                ImageSearchResultData plus = findFreshBearJoinButton(FRESH_TRANSITION_TIMEOUT_MS);
+                if (!plus.isFound()) {
                     return BearSessionCoordinator.JoinOutcome.NO_JOINABLE_RALLY;
                 }
-                OptionalInt candidateRow = BearSessionCoordinator.selectJoinCandidateRow(
-                        plusIcons.stream().map(icon -> icon.getPoint().getY()).toList(), rejectedJoinRows);
-                if (candidateRow.isEmpty()) {
-                    rejectedJoinRows.clear();
-                    return BearSessionCoordinator.JoinOutcome.NO_JOINABLE_RALLY;
-                }
-                ImageSearchResultData plus = plusIcons.stream()
-                        .filter(icon -> icon.getPoint().getY() == candidateRow.getAsInt())
-                        .findFirst()
-                        .orElseThrow();
-                currentJoinRow = plus.getPoint().getY();
                 tapInside(plus);
-                sleepTask(300);
+                ImageSearchResultData deployReady = findFresh(
+                        BEAR_DEPLOY_BUTTON, 90, FRESH_TRANSITION_TIMEOUT_MS);
+                if (!deployReady.isFound()) {
+                    return BearSessionCoordinator.JoinOutcome.RALLY_DEPARTED;
+                }
                 if (!marchHelper.selectFlag(formation)) {
                     pressBack();
                     return BearSessionCoordinator.JoinOutcome.FORMATION_UNAVAILABLE;
@@ -963,9 +967,9 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                     pressBack();
                     return BearSessionCoordinator.JoinOutcome.FORMATION_UNAVAILABLE;
                 }
-                ImageSearchResultData deploy = find(BEAR_DEPLOY_BUTTON, 90, TEMPLATE_SEARCH_RETRIES_MAX_VALUE);
+                ImageSearchResultData deploy = findFresh(
+                        BEAR_DEPLOY_BUTTON, 90, FRESH_TRANSITION_TIMEOUT_MS);
                 if (!deploy.isFound()) {
-                    rejectCurrentJoinRow();
                     return BearSessionCoordinator.JoinOutcome.RALLY_DEPARTED;
                 }
                 tapInside(deploy);
@@ -976,11 +980,9 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                 if (deploymentHelper.isSameTargetDialog()) {
                     pressBack();
                     pressBack();
-                    rejectCurrentJoinRow();
                     return BearSessionCoordinator.JoinOutcome.ALREADY_JOINED_OR_MARCHING;
                 }
                 if (find(BEAR_DEPLOY_BUTTON, 90, 2).isFound()) {
-                    rejectCurrentJoinRow();
                     return BearSessionCoordinator.JoinOutcome.RALLY_FULL;
                 }
 
@@ -988,10 +990,8 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                 int freeAfter = (int) after.stream().filter(MarchSlotState::isIdle).count();
                 if (freeAfter < freeBefore) {
                     lastMarches = after;
-                    rejectedJoinRows.clear();
                     return BearSessionCoordinator.JoinOutcome.JOINED;
                 }
-                rejectCurrentJoinRow();
                 return BearSessionCoordinator.JoinOutcome.RALLY_GONE;
             } catch (StopExecutionException e) {
                 throw e;
@@ -1077,8 +1077,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                         .findFirst();
                 if (existing.isPresent()) {
                     MarchSlotState slot = existing.get();
-                    return BearSessionCoordinator.OwnRallyObservation.active(
-                            slot.slot(), BearSessionCoordinator.OwnRallyPhase.PREPARING, slot.countdown());
+                    return BearSessionCoordinator.OwnRallyObservation.unclassifiedActive(slot.slot());
                 }
             }
             return BearSessionCoordinator.OwnRallyObservation.absent();
@@ -1102,10 +1101,46 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                     .findFirst();
         }
 
-        private void rejectCurrentJoinRow() {
-            if (currentJoinRow != null && !rejectedJoinRows.contains(currentJoinRow)) {
-                rejectedJoinRows.add(currentJoinRow);
+        private ImageSearchResultData findFreshBearJoinButton(long timeoutMs) {
+            long deadline = System.nanoTime() + Duration.ofMillis(timeoutMs).toNanos();
+            while (System.nanoTime() < deadline) {
+                checkPreemption();
+                RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+                PointData bottomRight = new PointData(frame.getWidth(), frame.getHeight());
+                List<ImageSearchResultData> plusIcons = emuManager.locateAllPatterns(
+                        EMULATOR_NUMBER, frame, BEAR_JOIN_PLUS_ICON,
+                        new PointData(0, 0), bottomRight, 90, 6);
+                List<ImageSearchResultData> bearIcons = emuManager.locateAllPatterns(
+                        EMULATOR_NUMBER, frame, BEAR_HUNT_IS_RUNNING,
+                        new PointData(0, 0), bottomRight, 80, 6);
+                OptionalInt candidateRow = BearSessionCoordinator.selectJoinCandidateRow(
+                        plusIcons.stream().map(icon -> icon.getPoint().getY()).toList(),
+                        bearIcons.stream().map(icon -> icon.getPoint().getY()).toList(),
+                        BEAR_RALLY_ROW_TOLERANCE_PX);
+                if (candidateRow.isPresent()) {
+                    return plusIcons.stream()
+                            .filter(icon -> icon.getPoint().getY() == candidateRow.getAsInt())
+                            .findFirst()
+                            .orElse(ImageSearchResultData.miss());
+                }
+                sleepTask(50);
             }
+            return ImageSearchResultData.miss();
+        }
+
+        private ImageSearchResultData findFresh(TemplatesEnum template, int threshold, long timeoutMs) {
+            long deadline = System.nanoTime() + Duration.ofMillis(timeoutMs).toNanos();
+            while (System.nanoTime() < deadline) {
+                checkPreemption();
+                RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+                ImageSearchResultData result = emuManager.locatePattern(
+                        EMULATOR_NUMBER, frame, template, threshold);
+                if (result.isFound()) {
+                    return result;
+                }
+                sleepTask(50);
+            }
+            return ImageSearchResultData.miss();
         }
 
         private ImageSearchResultData find(TemplatesEnum template, int threshold, int attempts) {

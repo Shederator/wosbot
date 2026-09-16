@@ -30,7 +30,7 @@ class BearSessionCoordinatorTest {
     }
 
     @Test
-    void adoptsAnExistingOwnRallyInsteadOfDuplicatingIt() {
+    void doesNotDuplicateAnUnclassifiedExistingRally() {
         ScriptedDriver driver = new ScriptedDriver();
         driver.existingOwnRallyUntil = Instant.EPOCH.plusSeconds(100);
 
@@ -38,7 +38,7 @@ class BearSessionCoordinatorTest {
 
         assertEquals(BearSessionCoordinator.ExitReason.EVENT_ENDED, coordinator.run());
         assertEquals(0, driver.startCalls);
-        assertTrue(driver.states.contains(BearSessionCoordinator.State.OWN_RALLY_ACTIVE));
+        assertTrue(driver.states.contains(BearSessionCoordinator.State.WAIT_FOR_NEXT_USEFUL_DEADLINE));
     }
 
     @Test
@@ -73,7 +73,7 @@ class BearSessionCoordinatorTest {
                 BearSessionCoordinator.JoinOutcome.NO_JOINABLE_RALLY));
 
         BearSessionCoordinator coordinator = new BearSessionCoordinator(
-                driver, Instant.EPOCH.plusSeconds(1), false, true, List.of(1, 2, 3));
+                driver, Instant.EPOCH.plusSeconds(1), false, 7, true, List.of(1, 2, 3));
 
         coordinator.run();
 
@@ -96,7 +96,7 @@ class BearSessionCoordinatorTest {
                 BearSessionCoordinator.JoinOutcome.NO_JOINABLE_RALLY));
 
         BearSessionCoordinator coordinator = new BearSessionCoordinator(
-                driver, Instant.EPOCH.plusSeconds(5), false, true, List.of(1));
+                driver, Instant.EPOCH.plusSeconds(5), false, 7, true, List.of(1));
 
         assertEquals(BearSessionCoordinator.ExitReason.EVENT_ENDED, coordinator.run());
         assertEquals(1, driver.joined);
@@ -123,7 +123,7 @@ class BearSessionCoordinatorTest {
         driver.cancelAfterPauses = 2;
         driver.joinResults.add(BearSessionCoordinator.JoinOutcome.JOINED);
         BearSessionCoordinator coordinator = new BearSessionCoordinator(
-                driver, Instant.EPOCH.plus(Duration.ofMinutes(6)), true, true, List.of(1));
+                driver, Instant.EPOCH.plus(Duration.ofMinutes(6)), true, 7, true, List.of(1));
 
         coordinator.run();
 
@@ -141,28 +141,66 @@ class BearSessionCoordinatorTest {
                 BearSessionCoordinator.JoinOutcome.JOINED));
         driver.cancelAfterPauses = 1;
         BearSessionCoordinator coordinator = new BearSessionCoordinator(
-                driver, Instant.EPOCH.plus(Duration.ofMinutes(6)), true, true, List.of(1));
+                driver, Instant.EPOCH.plus(Duration.ofMinutes(6)), true, 7, true, List.of(1));
 
         coordinator.run();
 
         assertEquals(1, driver.ownRallyStarts.size());
         assertEquals(1, driver.joined);
+        assertEquals(List.of(7), driver.ownRallyFlags);
     }
 
     @Test
-    void rejectedRallyRowsAreSkippedFromNewestToOldest() {
-        assertEquals(300, BearSessionCoordinator.selectJoinCandidateRow(
-                List.of(100, 300, 200), List.of()).orElseThrow());
+    void recoverableOwnRallyFailureDoesNotBlockJoining() {
+        ScriptedDriver driver = new ScriptedDriver();
+        driver.freeSlots = 1;
+        driver.startResults.add(BearSessionCoordinator.OwnRallyStartResult.recoverable(
+                BearSessionCoordinator.OwnRallyStartOutcome.NAVIGATION_FAILURE));
+        driver.joinResults.add(BearSessionCoordinator.JoinOutcome.JOINED);
+        driver.cancelAfterPauses = 2;
+
+        BearSessionCoordinator coordinator = new BearSessionCoordinator(
+                driver, Instant.EPOCH.plus(Duration.ofMinutes(6)), true, 4, true, List.of(2, 3));
+
+        coordinator.run();
+
+        assertEquals(1, driver.joined);
+        assertEquals(List.of(4), driver.ownRallyFlags);
+    }
+
+    @Test
+    void freeJoinSlotKeepsReturningOwnRallyOnFastPoll() {
+        ScriptedDriver driver = new ScriptedDriver();
+        driver.freeSlots = 2;
+        driver.joinResults.add(BearSessionCoordinator.JoinOutcome.JOINED);
+
+        BearSessionCoordinator coordinator = new BearSessionCoordinator(
+                driver, Instant.EPOCH.plusSeconds(3), true, 4, true, List.of(2));
+
+        coordinator.run();
+
+        assertTrue(driver.pauseDurations.stream().allMatch(duration -> duration.compareTo(Duration.ofSeconds(1)) <= 0));
+    }
+
+    @Test
+    void configuredJoinFormationOrderIsPreservedAndDeduplicated() {
+        assertEquals(List.of(4, 2, 11), BearTrapRoutine.decodeJoinFlags("4,2,4,11,bad,13"));
+    }
+
+    @Test
+    void selectsTopmostVerifiedBearRallyOnly() {
         assertEquals(100, BearSessionCoordinator.selectJoinCandidateRow(
-                List.of(100, 300, 200), List.of(302, 198)).orElseThrow());
+                List.of(300, 100, 200), List.of(105, 305), 20).orElseThrow());
+        assertEquals(300, BearSessionCoordinator.selectJoinCandidateRow(
+                List.of(100, 300, 200), List.of(302), 20).orElseThrow());
         assertTrue(BearSessionCoordinator.selectJoinCandidateRow(
-                List.of(100, 300), List.of(102, 298)).isEmpty());
+                List.of(100, 300), List.of(200), 20).isEmpty());
     }
 
     private static BearSessionCoordinator coordinator(
             ScriptedDriver driver, Duration duration, boolean ownRallies, boolean joins) {
         return new BearSessionCoordinator(
-                driver, Instant.EPOCH.plus(duration), ownRallies, joins, List.of(1, 2, 3));
+                driver, Instant.EPOCH.plus(duration), ownRallies, 7, joins, List.of(1, 2, 3));
     }
 
     private static final class ScriptedDriver implements BearSessionCoordinator.Driver {
@@ -183,7 +221,9 @@ class BearSessionCoordinatorTest {
         private final Deque<BearSessionCoordinator.OwnRallyStartResult> startResults = new ArrayDeque<>();
         private final Deque<BearSessionCoordinator.JoinOutcome> joinResults = new ArrayDeque<>();
         private final List<Instant> ownRallyStarts = new ArrayList<>();
+        private final List<Integer> ownRallyFlags = new ArrayList<>();
         private final List<Integer> joinFlags = new ArrayList<>();
+        private final List<Duration> pauseDurations = new ArrayList<>();
         private final List<BearSessionCoordinator.State> states = new ArrayList<>();
 
         @Override
@@ -209,6 +249,10 @@ class BearSessionCoordinatorTest {
             }
             Instant activeUntil = busyUntil != null ? busyUntil : existingOwnRallyUntil;
             if (activeUntil != null && now.isBefore(activeUntil)) {
+                if (busyUntil == null && mayAdoptExisting) {
+                    return new BearSessionCoordinator.MarchSnapshot(true, freeSlots,
+                            BearSessionCoordinator.OwnRallyObservation.unclassifiedActive(trackedSlot));
+                }
                 return new BearSessionCoordinator.MarchSnapshot(true, freeSlots,
                         BearSessionCoordinator.OwnRallyObservation.active(
                                 trackedSlot, BearSessionCoordinator.OwnRallyPhase.RETURNING,
@@ -226,8 +270,9 @@ class BearSessionCoordinatorTest {
         }
 
         @Override
-        public BearSessionCoordinator.OwnRallyStartResult startOwnRally() {
+        public BearSessionCoordinator.OwnRallyStartResult startOwnRally(int formation) {
             startCalls++;
+            ownRallyFlags.add(formation);
             BearSessionCoordinator.OwnRallyStartResult result = startResults.isEmpty()
                     ? BearSessionCoordinator.OwnRallyStartResult.confirmed(
                             trackedSlot, Duration.ofMinutes(5), Duration.ofSeconds(12))
@@ -265,6 +310,7 @@ class BearSessionCoordinatorTest {
         @Override
         public void pause(Duration duration) {
             pauses++;
+            pauseDurations.add(duration);
             now = now.plus(duration.isZero() || duration.isNegative() ? Duration.ofSeconds(1) : duration);
         }
 

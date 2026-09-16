@@ -45,6 +45,7 @@ final class BearSessionCoordinator {
 
     enum OwnRallyPhase {
         ABSENT,
+        UNCLASSIFIED_ACTIVE,
         PREPARING,
         OUTBOUND,
         RETURNING,
@@ -90,6 +91,10 @@ final class BearSessionCoordinator {
 
         static OwnRallyObservation idle(int slot) {
             return new OwnRallyObservation(slot, OwnRallyPhase.IDLE, Duration.ZERO);
+        }
+
+        static OwnRallyObservation unclassifiedActive(int slot) {
+            return new OwnRallyObservation(slot, OwnRallyPhase.UNCLASSIFIED_ACTIVE, null);
         }
 
         static OwnRallyObservation active(int slot, OwnRallyPhase phase, Duration releaseCountdown) {
@@ -161,7 +166,7 @@ final class BearSessionCoordinator {
 
         MarchSnapshot readMarches(OptionalInt trackedOwnSlot, boolean mayAdoptExisting);
 
-        OwnRallyStartResult startOwnRally();
+        OwnRallyStartResult startOwnRally(int formation);
 
         JoinOutcome joinNext(int formation);
 
@@ -175,6 +180,7 @@ final class BearSessionCoordinator {
     private final Driver driver;
     private final Instant eventEnd;
     private final boolean callOwnRallies;
+    private final int ownFormation;
     private final boolean joinRallies;
     private final List<Integer> joinFormations;
 
@@ -189,11 +195,13 @@ final class BearSessionCoordinator {
             Driver driver,
             Instant eventEnd,
             boolean callOwnRallies,
+            int ownFormation,
             boolean joinRallies,
             List<Integer> joinFormations) {
         this.driver = Objects.requireNonNull(driver, "driver");
         this.eventEnd = Objects.requireNonNull(eventEnd, "eventEnd");
         this.callOwnRallies = callOwnRallies;
+        this.ownFormation = ownFormation;
         this.joinRallies = joinRallies;
         this.joinFormations = List.copyOf(joinFormations);
         if (joinRallies && this.joinFormations.isEmpty()) {
@@ -205,11 +213,12 @@ final class BearSessionCoordinator {
         return exitReason != ExitReason.CANCELLED;
     }
 
-    static OptionalInt selectJoinCandidateRow(List<Integer> candidateRows, List<Integer> rejectedRows) {
+    static OptionalInt selectJoinCandidateRow(
+            List<Integer> candidateRows, List<Integer> bearRows, int rowTolerance) {
         return candidateRows.stream()
-                .sorted((left, right) -> Integer.compare(right, left))
-                .filter(candidate -> rejectedRows.stream()
-                        .noneMatch(rejected -> Math.abs(rejected - candidate) < 20))
+                .sorted()
+                .filter(candidate -> bearRows.stream()
+                        .anyMatch(bear -> Math.abs(bear - candidate) <= rowTolerance))
                 .mapToInt(Integer::intValue)
                 .findFirst();
     }
@@ -240,10 +249,13 @@ final class BearSessionCoordinator {
             updateOwnRallyTracking(snapshot.ownRally());
             int freeSlotsForJoining = snapshot.freeSlots();
 
-            if (callOwnRallies && trackedOwnSlot.isEmpty() && hasTimeForOwnRally()) {
+            if (callOwnRallies
+                    && trackedOwnSlot.isEmpty()
+                    && snapshot.ownRally().phase() != OwnRallyPhase.UNCLASSIFIED_ACTIVE
+                    && hasTimeForOwnRally()) {
                 transition(State.OWN_RALLY_READY);
                 transition(State.OWN_RALLY_STARTING);
-                OwnRallyStartResult start = driver.startOwnRally();
+                OwnRallyStartResult start = driver.startOwnRally(ownFormation);
                 if (start.outcome() == OwnRallyStartOutcome.FATAL) {
                     return ExitReason.UNRECOVERABLE_FAILURE;
                 }
@@ -259,7 +271,16 @@ final class BearSessionCoordinator {
                     ownLaunchClosed = true;
                 } else {
                     recover(State.OWN_RALLY_READY);
-                    continue;
+                    MarchSnapshot refreshed = driver.readMarches(trackedOwnSlot, true);
+                    if (!refreshed.reliable()) {
+                        continue;
+                    }
+                    if (refreshed.ownRally().phase() == OwnRallyPhase.UNCLASSIFIED_ACTIVE) {
+                        mayAdoptExisting = true;
+                    }
+                    updateOwnRallyTracking(refreshed.ownRally());
+                    freeSlotsForJoining = refreshed.freeSlots();
+                    snapshot = refreshed;
                 }
             }
 
@@ -291,11 +312,8 @@ final class BearSessionCoordinator {
             return;
         }
 
-        if (mayAdoptExisting && observation.active()) {
-            trackedOwnSlot = OptionalInt.of(observation.slot());
-            transition(State.OWN_RALLY_ACTIVE);
-        }
-        if (observation.phase() != OwnRallyPhase.UNKNOWN) {
+        if (observation.phase() != OwnRallyPhase.UNKNOWN
+                && observation.phase() != OwnRallyPhase.UNCLASSIFIED_ACTIVE) {
             mayAdoptExisting = false;
         }
     }
@@ -340,6 +358,7 @@ final class BearSessionCoordinator {
         Duration requested = NORMAL_POLL;
         if (trackedOwnSlot.isPresent()
                 && snapshot.ownRally().phase() == OwnRallyPhase.RETURNING
+                && (!joinRallies || snapshot.freeSlots() == 0)
                 && snapshot.ownRally().releaseCountdown() != null
                 && snapshot.ownRally().releaseCountdown().compareTo(RETURN_GUARD) > 0) {
             requested = snapshot.ownRally().releaseCountdown().minus(RETURN_GUARD);
