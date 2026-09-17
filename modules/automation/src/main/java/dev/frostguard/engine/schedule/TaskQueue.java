@@ -905,7 +905,7 @@ public class TaskQueue {
                 }
             }
 
-            suspendDevice(statusModel.getDelayUntil(), false);
+            suspendDevice(statusModel.getDelayUntil(), hasEnabledSiblingOnSameEmulator());
                     // Changed by pernerch | Date: 2026-07-02 | Why: force immediate activation of the
                     // selected peer queue after slot handover to eliminate idle dead time.
             statusModel.setIdleTimeExceeded(true);
