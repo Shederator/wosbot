@@ -151,6 +151,9 @@ To add a built-in task, add the routine in `modules/tasks`, add or reuse a `TpDa
 - Panel controllers under `dev.frostguard.app.panel.*` edit configuration and call engine services.
 - Scheduler UI controllers call `ScheduleService`, `TaskManagementService`, and `TaskQueue` APIs.
 - Task Builder UI creates `AutomationStep` graphs and delegates generation/import/save to `TaskBuilderService`.
+- Task Workbench UI loads standalone controlled runs through
+  `ControlledTaskExecutionService` and renders their registered read-only flow,
+  live step state, and session-scoped task logs.
 
 FXML and CSS resources live in `modules/desktop/src/main/resources/layout` and `modules/desktop/src/main/resources/styles`.
 The launcher status bar owns the notification bell and hosts the in-window
@@ -220,6 +223,20 @@ Built-in tasks are created through `DelayedTaskRegistry` and
 `TaskRegistrations`. Runtime custom tasks are compiled and loaded by
 `CustomTaskService`; optional settings use `CustomTaskConfigurable`. Live and
 startup scheduling should go through `ScheduleService.scheduleCustomTask(...)`.
+
+The registry also publishes the operational built-in catalog used by Task
+Workbench. Unmodified tasks run as one coarse step. Tasks that opt into named
+`step(...)` boundaries can pause before each boundary, execute one step, resume,
+and report a step history. Step-aware registrations also declare stable step IDs,
+display labels, and branch edges so the complete flow can be inspected before
+execution. A waiting boundary is exposed as the next step; only a started action
+is exposed as current. Without an attached controlled session, step boundaries
+execute directly and do not change scheduler behavior.
+
+Task Workbench and the scheduler are mutually exclusive owners of emulator
+execution. A workbench run requires the scheduler to be stopped and assumes the
+selected emulator, game, and account are already active. It does not create a
+queue, persist scheduler state, or re-enqueue recurring work.
 
 ## Cross-Cutting Runtime Features
 

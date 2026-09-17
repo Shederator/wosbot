@@ -4,6 +4,7 @@ import dev.frostguard.app.panel.misc.GiftCodeAutomationService;
 import dev.frostguard.data.access.DataStore;
 import dev.frostguard.engine.service.AnalyticsService;
 import dev.frostguard.engine.service.CustomTaskService;
+import dev.frostguard.engine.service.ControlledTaskExecutionService;
 import dev.frostguard.engine.service.ScheduleService;
 import dev.frostguard.engine.service.TelegramBotService;
 import dev.frostguard.vision.logging.ProfileContextLogger;
@@ -20,6 +21,7 @@ public final class ApplicationLifecycle {
     private static final AtomicBoolean SHUTDOWN_ACTIVE = new AtomicBoolean();
     private static final AtomicBoolean RUNTIME_STARTED = new AtomicBoolean();
     private static final RuntimeShutdownCoordinator COORDINATOR = new RuntimeShutdownCoordinator(List.of(
+            runtimeStep("task workbench", () -> ControlledTaskExecutionService.obtain().shutdown()),
             runtimeStep("scheduler", () -> ScheduleService.obtain().haltEngine()),
             runtimeStep("gift code automation",
                     () -> GiftCodeAutomationService.getInstance().shutdown()),

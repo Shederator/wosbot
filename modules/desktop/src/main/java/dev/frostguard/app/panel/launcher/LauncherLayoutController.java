@@ -64,6 +64,7 @@ import dev.frostguard.app.panel.training.ResearchLayoutController;
 import dev.frostguard.app.panel.misc.CharacterLayoutController;
 import dev.frostguard.app.panel.misc.StatisticsLayoutController;
 import dev.frostguard.app.panel.taskbuilder.TaskBuilderLayoutController;
+import dev.frostguard.app.panel.taskworkbench.TaskWorkbenchLayoutController;
 import dev.frostguard.app.panel.custom.CustomTasksLayoutController;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
@@ -733,6 +734,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
                 new ModuleDefinition("GiftcodeLayout",           "Get Giftcodes",        MaterialDesignG.GIFT_OUTLINE,               GiftcodeLayoutController::new),
                 new ModuleDefinition("DebuggingLayout",          "Debugging",            MaterialDesignB.BUG_OUTLINE,                DebuggingLayoutController::new),
                 new ModuleDefinition("TaskBuilderLayout",        "Task Builder",         MaterialDesignW.WRENCH_OUTLINE,             TaskBuilderLayoutController::new),
+                new ModuleDefinition("TaskWorkbenchLayout",      "Task Workbench",       MaterialDesignT.TIMELINE_CLOCK_OUTLINE,     TaskWorkbenchLayoutController::new),
 
                 new ModuleDefinition("SkipTutorialLayout",       "Skip Tutorial",        MaterialDesignS.SKIP_NEXT_OUTLINE,          SkipTutorialLayoutController::new),
                 new ModuleDefinition("CharacterLayout",          "Character",            MaterialDesignA.ACCOUNT_OUTLINE,            CharacterLayoutController::new),
