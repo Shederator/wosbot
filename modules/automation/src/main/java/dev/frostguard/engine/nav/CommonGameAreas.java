@@ -38,7 +38,9 @@ public final class CommonGameAreas {
 
     // The collapsed panel exposes only a thin handle at the left edge. A trigger tap is allowed only
     // after the caller has proved that no selected tab is visible, and the result is then verified.
-    public static final AreaData LEFT_MENU_TRIGGER        = region(0, 520, 22, 580);
+    // Keep the trigger inside the thin arrow that remains exposed beside an expanded World march
+    // panel, but away from the absolute display edge where MuMu can discard an otherwise valid tap.
+    public static final AreaData LEFT_MENU_TRIGGER        = region(6, 546, 16, 554);
     public static final AreaData LEFT_MENU_CITY_TAB       = region(9, 246, 146, 293);
     public static final AreaData LEFT_MENU_WILDERNESS_TAB = region(155, 246, 293, 293);
     public static final AreaData LEFT_MENU_DAILY_TAB      = region(302, 246, 438, 293);
