@@ -168,8 +168,22 @@ public final class CommonGameAreas {
     // button beside it, so it is matched inside the bar rather than tapped at a fixed point.
     public static final AreaData RALLY_BOTTOM_BUTTON_BAR      = region(0, 1130, 460, 1279);
     public static final AreaData RALLY_TROOP_TRAINING_AREA    = region(190, 900, 530, 1060);
+    public static final AreaData RALLY_SELECTED_TROOPS_OCR_AREA = region(38, 168, 235, 216);
     public static final AreaData RALLY_MARCH_QUEUE_FULL_AREA  = region(220, 300, 500, 380);
     public static final PointData RALLY_MARCH_QUEUE_FULL_CLOSE = point(640, 338);
+    // Rally-card OCR regions are anchored to the top edge of a matched green join button.
+    public static final int BEAR_RALLY_MEMBERS_X1 = 626;
+    public static final int BEAR_RALLY_MEMBERS_X2 = 688;
+    public static final int BEAR_RALLY_MEMBERS_DY1 = -57;
+    public static final int BEAR_RALLY_MEMBERS_DY2 = -24;
+    public static final int BEAR_RALLY_TROOPS_X1 = 284;
+    public static final int BEAR_RALLY_TROOPS_X2 = 521;
+    public static final int BEAR_RALLY_TROOPS_DY1 = -57;
+    public static final int BEAR_RALLY_TROOPS_DY2 = -25;
+    public static final int BEAR_RALLY_COUNTDOWN_X1 = 571;
+    public static final int BEAR_RALLY_COUNTDOWN_X2 = 691;
+    public static final int BEAR_RALLY_COUNTDOWN_DY1 = -163;
+    public static final int BEAR_RALLY_COUNTDOWN_DY2 = -124;
     // Body of the "Other Troops are marching toward the same target" confirmation.
     public static final AreaData SAME_TARGET_DIALOG_AREA      = region(60, 555, 680, 650);
 

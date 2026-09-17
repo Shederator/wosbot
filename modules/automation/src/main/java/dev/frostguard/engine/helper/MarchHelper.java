@@ -44,7 +44,8 @@ public class MarchHelper {
     private static final PointData FORMATION_SCROLL_INITIAL_FROM = new PointData(582, 120);
     private static final PointData FORMATION_SCROLL_INITIAL_TO = new PointData(182, 120);
     private static final int FORMATION_SCROLL_DURATION_MS = 600;
-    private static final long FORMATION_SCROLL_SETTLE_MS = 800;
+    private static final Duration FORMATION_SCROLL_TIMEOUT = Duration.ofMillis(1_500);
+    private static final Duration FORMATION_SELECTION_TIMEOUT = Duration.ofMillis(1_500);
     // "Idle" measures ~145 white pixels, a countdown ~255-285, so the gap is wide. Orange "Unlock"
     // (~260) and red "Unavailable" (~565) never overlap white; stationed rows have no status line.
     private static final int COLOUR_PRESENT_MIN = 60;
@@ -238,8 +239,9 @@ public class MarchHelper {
         return text == null ? null : GameTimeUtils.parseDuration(text);
     }
 
-    // A slot is inspected before it is tapped: padlock evidence rejects locked slots, while the
-    // measured white-flag signal distinguishes a saved formation from an empty visible tile.
+    // Padlock evidence fails closed. White-pixel evidence is diagnostic only: live frames can dim a
+    // populated tile enough to resemble an empty one. The authoritative signal is the yellow outline
+    // the game draws after the tile is tapped.
     public boolean selectFlag(Integer flagNumber) {
         if (flagNumber == null) {
             log.debug("No formation configured - skipping selection");
@@ -255,16 +257,39 @@ public class MarchHelper {
             return false;
         }
         FormationSlotStateClassifier.State state = inspectFormationSlot(flagNumber, frame);
-        if (state != FormationSlotStateClassifier.State.SAVED) {
+        if (state == FormationSlotStateClassifier.State.LOCKED) {
             log.warn("Formation #" + flagNumber + " is " + state.name().toLowerCase().replace('_', ' ')
                     + " - not selecting it");
             return false;
         }
+        if (FormationSelectionVerifier.isSelected(
+                frame.image(), RallyFlagCoordinates.selectionAreaForFlag(flagNumber))) {
+            log.debug("Formation #" + flagNumber + " is already selected");
+            return true;
+        }
+        if (state == FormationSlotStateClassifier.State.EMPTY_OR_MISSING) {
+            log.warn("Formation #" + flagNumber
+                    + " has weak saved-slot evidence; tapping once and requiring yellow confirmation");
+        }
         log.debug("Selecting formation #" + flagNumber);
         // Flag slots are narrow fixed positions — keep the jitter tightly bounded.
         taps.tapNear(RallyFlagCoordinates.pointForFlag(flagNumber), TapJitterPolicy.DEFAULT_POINT_JITTER_RADIUS);
-        interruptibleWait(300);
-        return true;
+        return awaitFormationSelection(flagNumber);
+    }
+
+    private boolean awaitFormationSelection(int flagNumber) {
+        long deadline = System.nanoTime() + FORMATION_SELECTION_TIMEOUT.toNanos();
+        AreaData slot = RallyFlagCoordinates.selectionAreaForFlag(flagNumber);
+        do {
+            FormationFrame fresh = captureFormationFrame(flagNumber);
+            if (fresh != null && FormationSelectionVerifier.isSelected(fresh.image(), slot)) {
+                log.debug("Formation #" + flagNumber + " selection confirmed by yellow outline");
+                return true;
+            }
+        } while (!Thread.currentThread().isInterrupted() && System.nanoTime() < deadline);
+
+        log.warn("Formation #" + flagNumber + " did not show the yellow selected outline");
+        return false;
     }
 
     // Locating every padlock across the strip and mapping each to its nearest slot is immune to the
@@ -286,15 +311,16 @@ public class MarchHelper {
         }
         emu.swipeScreen(device, FORMATION_SCROLL_INITIAL_FROM, FORMATION_SCROLL_INITIAL_TO,
                 FORMATION_SCROLL_DURATION_MS);
-        interruptibleWait(FORMATION_SCROLL_SETTLE_MS);
-        FormationFrame right = captureFormationFrame(10);
-        if (right == null || !FormationBarFrameComparator.moved(
-                initial.image(), right.image(), CommonGameAreas.RALLY_FLAG_BAR)) {
-            log.warn("Formation bar did not move to the right-end view - not selecting a high slot");
-            return null;
-        }
-
-        return right;
+        long deadline = System.nanoTime() + FORMATION_SCROLL_TIMEOUT.toNanos();
+        do {
+            FormationFrame right = captureFormationFrame(10);
+            if (right != null && FormationBarFrameComparator.moved(
+                    initial.image(), right.image(), CommonGameAreas.RALLY_FLAG_BAR)) {
+                return right;
+            }
+        } while (!Thread.currentThread().isInterrupted() && System.nanoTime() < deadline);
+        log.warn("Formation bar did not move to the right-end view - not selecting a high slot");
+        return null;
     }
 
     private FormationSlotStateClassifier.State inspectFormationSlot(int flagNumber, FormationFrame frame) {
@@ -354,8 +380,4 @@ public class MarchHelper {
         sidebar.close();
     }
 
-    private void interruptibleWait(long ms) {
-        try { Thread.sleep(ms); }
-        catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-    }
 }

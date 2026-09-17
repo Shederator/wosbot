@@ -4,12 +4,20 @@ import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpMessageSeverityEnum;
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
+import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.api.domain.PointData;
+import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.service.LoggingService;
+import dev.frostguard.vision.convert.ImageConverter;
 import dev.frostguard.vision.logging.ProfileContextLogger;
+import dev.frostguard.vision.ocr.OcrEngine;
+import dev.frostguard.vision.ocr.OcrException;
+import dev.frostguard.vision.ocr.ResilientOcrExecutor;
 
+import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
 
@@ -28,18 +36,85 @@ public class TemplateSearchHelper {
     private final String accountName;
     private final AccountDescriptor profile;
     private final LoggingService logs;
+    private final ScreenCapture screenCapture;
     private int missCount;
 
     private Runnable preemptionHook = () -> {};
 
     public TemplateSearchHelper(EmulatorController emuManager, String emulatorNumber,
                                 AccountDescriptor profile) {
+        this(emuManager, emulatorNumber, profile, () -> emuManager.captureScreen(emulatorNumber));
+    }
+
+    /**
+     * Wires an alternate frame source while retaining the normal matcher and profile context.
+     * This is also the seam used by future streaming capture implementations.
+     */
+    public TemplateSearchHelper(EmulatorController emuManager, String emulatorNumber,
+                                AccountDescriptor profile, ScreenCapture screenCapture) {
         this.emu         = emuManager;
         this.device      = emulatorNumber;
         this.log         = new ProfileContextLogger(TemplateSearchHelper.class, profile);
         this.accountName = profile.getName();
         this.profile     = profile;
         this.logs        = LoggingService.obtain();
+        this.screenCapture = Objects.requireNonNull(screenCapture, "screenCapture");
+    }
+
+    @FunctionalInterface
+    public interface ScreenCapture {
+        RawImageData capture();
+    }
+
+    /** Captures one immutable screen observation for any number of CPU-only checks. */
+    public Frame captureFrame() {
+        preemptionHook.run();
+        RawImageData image = screenCapture.capture();
+        if (image == null) {
+            throw new IllegalStateException("Screen capture returned no frame for device " + device);
+        }
+        return new Frame(image);
+    }
+
+    /**
+     * A profile-bound screen observation. Searches and OCR on this object never capture again;
+     * callers obtain a new frame after every UI input or expected state transition.
+     */
+    public final class Frame implements ResilientOcrExecutor.TextExtractor {
+        private final RawImageData image;
+
+        private Frame(RawImageData image) {
+            this.image = image;
+        }
+
+        public ImageSearchResultData locatePattern(TemplatesEnum tpl, SearchConfig cfg) {
+            preemptionHook.run();
+            return recordFrameResult(tpl, doSearch(tpl, cfg, image), false);
+        }
+
+        public ImageSearchResultData locatePatternMono(TemplatesEnum tpl, SearchConfig cfg) {
+            preemptionHook.run();
+            return recordFrameResult(tpl, doSearchGrey(tpl, cfg, image), true);
+        }
+
+        public List<ImageSearchResultData> locateAllPatterns(TemplatesEnum tpl, SearchConfig cfg) {
+            preemptionHook.run();
+            List<ImageSearchResultData> results = doMulti(tpl, cfg, image);
+            return results == null ? List.of() : results;
+        }
+
+        @Override
+        public String extractText(OcrSettingsData config, PointData topLeft, PointData bottomRight)
+                throws IOException, OcrException {
+            preemptionHook.run();
+            return config == null
+                    ? OcrEngine.recognizeText(image, topLeft, bottomRight, "eng")
+                    : OcrEngine.recognizeText(image, topLeft, bottomRight, config);
+        }
+
+        BufferedImage bufferedImage() {
+            return ImageConverter.toBufferedImage(image);
+        }
     }
 
     public int getFailedSearches() { return missCount; }
@@ -118,10 +193,34 @@ public class TemplateSearchHelper {
         return emu.locatePattern(device, tpl, c.getThreshold());
     }
 
+    private ImageSearchResultData doSearch(TemplatesEnum tpl, SearchConfig c, RawImageData frame) {
+        if (c.hasArea())        return emu.locatePattern(device, frame, tpl, c.getArea().topLeft(), c.getArea().bottomRight(), c.getThreshold());
+        if (c.hasCoordinates()) return emu.locatePattern(device, frame, tpl, c.getStartPoint(), c.getEndPoint(), c.getThreshold());
+        return emu.locatePattern(device, frame, tpl, c.getThreshold());
+    }
+
     private ImageSearchResultData doSearchGrey(TemplatesEnum tpl, SearchConfig c) {
         if (c.hasArea())        return emu.locatePatternMono(device, tpl, c.getArea().topLeft(), c.getArea().bottomRight(), c.getThreshold());
         if (c.hasCoordinates()) return emu.locatePatternMono(device, tpl, c.getStartPoint(), c.getEndPoint(), c.getThreshold());
         return emu.locatePatternMono(device, tpl, c.getThreshold());
+    }
+
+    private ImageSearchResultData doSearchGrey(TemplatesEnum tpl, SearchConfig c, RawImageData frame) {
+        if (c.hasArea())        return emu.locatePatternMono(device, frame, tpl, c.getArea().topLeft(), c.getArea().bottomRight(), c.getThreshold());
+        if (c.hasCoordinates()) return emu.locatePatternMono(device, frame, tpl, c.getStartPoint(), c.getEndPoint(), c.getThreshold());
+        return emu.locatePatternMono(device, frame, tpl, c.getThreshold());
+    }
+
+    private ImageSearchResultData recordFrameResult(
+            TemplatesEnum tpl, ImageSearchResultData result, boolean mono) {
+        String mode = mono ? "mono" : "colour";
+        if (result != null && result.isFound()) {
+            dbg(tpl.name() + " found in captured frame (" + mode + ")");
+        } else {
+            dbg(tpl.name() + " not found in captured frame (" + mode + ")");
+            missCount++;
+        }
+        return result;
     }
 
     private ImageSearchResultData doSearchMultiScale(TemplatesEnum tpl, SearchConfig c) {
@@ -134,6 +233,16 @@ public class TemplateSearchHelper {
         if (c.hasArea())        return emu.locateAllPatterns(device, tpl, c.getArea().topLeft(), c.getArea().bottomRight(), c.getThreshold(), c.getMaxResults());
         if (c.hasCoordinates()) return emu.locateAllPatterns(device, tpl, c.getStartPoint(), c.getEndPoint(), c.getThreshold(), c.getMaxResults());
         return emu.locateAllPatterns(device, tpl, c.getThreshold(), c.getMaxResults());
+    }
+
+    private List<ImageSearchResultData> doMulti(TemplatesEnum tpl, SearchConfig c, RawImageData frame) {
+        if (c.hasArea()) return emu.locateAllPatterns(device, frame, tpl,
+                c.getArea().topLeft(), c.getArea().bottomRight(), c.getThreshold(), c.getMaxResults());
+        if (c.hasCoordinates()) return emu.locateAllPatterns(device, frame, tpl,
+                c.getStartPoint(), c.getEndPoint(), c.getThreshold(), c.getMaxResults());
+        return emu.locateAllPatterns(device, frame, tpl,
+                new PointData(0, 0), new PointData(frame.getWidth(), frame.getHeight()),
+                c.getThreshold(), c.getMaxResults());
     }
 
     private List<ImageSearchResultData> doMultiGrey(TemplatesEnum tpl, SearchConfig c) {

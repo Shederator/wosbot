@@ -87,6 +87,15 @@ public final class GameColors {
                 && green(rgb) > blue(rgb) + 45;
     }
 
+    /** Gold/yellow outline shown around the currently selected formation tile. */
+    public static boolean isFormationSelectionYellow(int rgb) {
+        return red(rgb) > 190
+                && green(rgb) > 135
+                && blue(rgb) < 120
+                && red(rgb) > blue(rgb) + 90
+                && green(rgb) > blue(rgb) + 55;
+    }
+
     private static int red(int rgb)   { return (rgb >> 16) & 0xFF; }
     private static int green(int rgb) { return (rgb >> 8) & 0xFF; }
     private static int blue(int rgb)  { return rgb & 0xFF; }

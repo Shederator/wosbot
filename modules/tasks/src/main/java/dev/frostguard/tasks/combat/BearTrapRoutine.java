@@ -7,70 +7,51 @@ import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.FormationSlots;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
-import dev.frostguard.api.domain.OcrSettingsData;
+import dev.frostguard.api.domain.MarchActivityType;
+import dev.frostguard.api.domain.MarchMovementPhase;
+import dev.frostguard.api.domain.MarchSlotAvailability;
+import dev.frostguard.api.domain.MarchSlotState;
+import dev.frostguard.api.domain.RawImageData;
+import dev.frostguard.engine.error.StopExecutionException;
 import dev.frostguard.engine.helper.BearTrapHelper;
+import dev.frostguard.engine.helper.DeploymentPostTapRead;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.BearTrapParticipationSchedule;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.schedule.TaskQueue;
-import dev.frostguard.engine.service.BotOcrEngine;
 import dev.frostguard.engine.service.ConfigService;
 import dev.frostguard.engine.service.ProfileService;
-import dev.frostguard.vision.convert.GameTimeUtils;
-import dev.frostguard.vision.convert.RegexNumberParser;
-import dev.frostguard.vision.ocr.ResilientOcrExecutor;
-import java.awt.*;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.Set;
 import static dev.frostguard.api.configs.ConfigurationKeyEnum.*;
 import static dev.frostguard.api.configs.TemplatesEnum.*;
 
 public class BearTrapRoutine extends DelayedTask {
 
-private final AtomicBoolean ownRallyActive = new AtomicBoolean(false);
-
-private ScheduledExecutorService rallyScheduler;
-
-private ScheduledFuture<?> rallyResetTask;
-
 private List<Integer> joinFlags = new ArrayList<>();
-
-private int currentJoinFlagIndex = 0;
-
-private ResilientOcrExecutor<Duration> durationHelper;
 
 private static final int TRAP_DURATION_MINUTES_VALUE = 30;
 
 private static final int TRAP_ACTIVATION_OFFSET_MINUTES_VALUE = 30;
 
-private static final int STATUS_LOG_INTERVAL_VALUE = 10;
-
-private static final int OWN_RALLY_MIN_REMAINING_SECONDS_VALUE = 360;
-
 private static final int RALLY_DURATION_BASE_MINUTES_VALUE = 5;
 
-private static final int RALLY_DURATION_BUFFER_SECONDS_VALUE = 3;
-
-private static final int RALLY_RETURN_BUFFER_MINUTES_VALUE = 5;
-
 private static final int MAX_GATHER_RECALL_ATTEMPTS_LIMIT = 120;
-
-private static final int MARCH_TIME_OCR_MAX_RETRIES_MS = 5;
 
 private static final int TEMPLATE_SEARCH_RETRIES_VALUE = 3;
 
 private static final int TEMPLATE_SEARCH_RETRIES_EXTENDED_VALUE = 5;
-
-private static final int TEMPLATE_SEARCH_RETRIES_MAX_VALUE = 10;
 
 private static final PointData ALLIANCE_BUTTON_TL_VALUE = new PointData(493, 1187);
 
@@ -114,14 +95,6 @@ private static final PointData RECALL_CONFIRM_BUTTON_TL_VALUE = new PointData(44
 
 private static final PointData RECALL_CONFIRM_BUTTON_BR_VALUE = new PointData(578, 800);
 
-private static final PointData MARCH_TIME_OCR_TL_MS = new PointData(504, 1134);
-
-private static final PointData MARCH_TIME_OCR_BR_MS = new PointData(622, 1162);
-
-private static final PointData FREE_MARCHES_OCR_TL_VALUE = new PointData(203, 200);
-
-private static final PointData FREE_MARCHES_OCR_BR_VALUE = new PointData(246, 226);
-
 private static final int DEFAULT_TRAP_NUMBER_VALUE = 1;
 
 private static final int DEFAULT_PREPARATION_TIME_MINUTES_MS = 10;
@@ -130,6 +103,8 @@ private static final int DEFAULT_OWN_RALLY_FLAG_VALUE = 1;
 
 private static final int DEFAULT_JOIN_RALLY_FLAG_VALUE = 1;
 
+private static final long FRESH_TRANSITION_TIMEOUT_MS = 1500;
+
 private static final boolean DEFAULT_CALL_OWN_RALLY_VALUE = false;
 
 private static final boolean DEFAULT_JOIN_RALLY_VALUE = false;
@@ -137,8 +112,6 @@ private static final boolean DEFAULT_JOIN_RALLY_VALUE = false;
 private static final boolean DEFAULT_USE_PETS_VALUE = false;
 
 private static final boolean DEFAULT_RECALL_TROOPS_VALUE = false;
-
-private static final int DEFAULT_FREE_MARCHES_FALLBACK_VALUE = 1;
 
 private boolean callOwnRally;
 
@@ -161,11 +134,9 @@ private LocalDateTime referenceTrapTime;
 
 private boolean isVisuallyTriggered = false;
 
-private static final OcrSettingsData FREE_MARCHES_OCR_SETTINGS_VALUE = OcrSettingsData.assembler()
-            .charWhitelist("0123456789/")
-            .stripBackground(true)
-            .setTextColor(new Color(253, 253, 253))
-            .build();
+private BearSessionCoordinator.ExitReason activeSessionExit;
+
+private boolean bearAnchorKnown;
 
 public BearTrapRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
         super(profile, tpTask);
@@ -178,6 +149,7 @@ public BearTrapRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 
 @Override
     protected void execute() {
+        activeSessionExit = null;
         hydrateConfiguration();
 
 
@@ -188,13 +160,19 @@ public BearTrapRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 
 
         try {
-            initializeOCRHelpersFlow();
-
             TrapTimingShape timing;
             if (isVisuallyTriggered) {
-                logInfo(routineLogBearTrapLine("Task was Visually Triggered! Bypassing scheduled configuration and forcing 30-minute Active execution."));
                 LocalDateTime now = LocalDateTime.now(ZoneId.of("UTC"));
-                timing = new TrapTimingShape(now, now, now.plusMinutes(TRAP_DURATION_MINUTES_VALUE));
+                TrapTimingShape configuredTiming = computeTrapTiming();
+                if (!now.isBefore(configuredTiming.activationTime) && now.isBefore(configuredTiming.endTime)) {
+                    timing = configuredTiming;
+                    logInfo(routineLogBearTrapLine(
+                            "Task was visually triggered; using the configured event end instead of granting a new 30-minute window."));
+                } else {
+                    timing = new TrapTimingShape(now, now, now.plusMinutes(TRAP_DURATION_MINUTES_VALUE));
+                    logWarning(routineLogBearTrapLine(
+                            "Visual Bear marker does not align with the configured window; using a bounded 30-minute fallback."));
+                }
             } else {
                 timing = computeTrapTiming();
                 logTrapTimingFlow(timing);
@@ -222,17 +200,30 @@ public BearTrapRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
             now = LocalDateTime.now(ZoneId.of("UTC"));
 
             if (now.isBefore(timing.endTime)) {
-                performTrapActivePhase(timing.endTime);
+                activeSessionExit = performTrapActivePhase(timing.endTime);
             } else {
                 logInfo(routineLogBearTrapLine("Trap already ended for this window"));
             }
+        } catch (StopExecutionException e) {
+            if (e.isCancellation() || Thread.currentThread().isInterrupted()) {
+                activeSessionExit = BearSessionCoordinator.ExitReason.CANCELLED;
+                logInfo(routineLogBearTrapLine("Bear session cancelled by the operator"));
+            } else {
+                logError(routineLogBearTrapLine("Bear session stopped: " + e.getMessage()), e);
+            }
         } catch (Exception e) {
-            logError(routineLogBearTrapLine("Issue while Bear Trap execution: " + e.getMessage()), e);
+            if (Thread.currentThread().isInterrupted() || e.getCause() instanceof InterruptedException) {
+                activeSessionExit = BearSessionCoordinator.ExitReason.CANCELLED;
+                logInfo(routineLogBearTrapLine("Bear session interrupted by the operator"));
+            } else {
+                logError(routineLogBearTrapLine("Issue while Bear Trap execution: " + e.getMessage()), e);
+            }
         } finally {
-
-
-            cleanupFlow();
-            deferToNextWindow();
+            boolean resumeNormalTasks = BearSessionCoordinator.shouldResumeNormalTasks(activeSessionExit);
+            cleanupFlow(resumeNormalTasks);
+            if (resumeNormalTasks) {
+                deferToNextWindow();
+            }
         }
     }
 
@@ -316,11 +307,6 @@ private void requeueDisabledTasksFlow() {
 
     }
 
-private void initializeOCRHelpersFlow() {
-        BotOcrEngine provider = new BotOcrEngine(emuManager, EMULATOR_NUMBER);
-        this.durationHelper = new ResilientOcrExecutor<>(provider);
-    }
-
 private void requeueAutojoinTaskFlow(TaskQueue queue) {
         logInfo(routineLogBearTrapLine("Inspecting autojoin task..."));
 
@@ -401,29 +387,18 @@ private void recallGatherTroopsFlow() {
                 "), exiting to avoid deadlock"));
     }
 
-private void performTrapActivePhase(LocalDateTime trapEndTime) {
+private BearSessionCoordinator.ExitReason performTrapActivePhase(LocalDateTime trapEndTime) {
         logInfo(routineLogBearTrapLine("=== TRAP IS NOW ACTIVE - Starting strategy execution ==="));
-
-        LocalDateTime now = LocalDateTime.now(ZoneId.of("UTC"));
-        long iterationCount = 0;
-
-        while (now.isBefore(trapEndTime)) {
-            checkPreemption();
-
-            iterationCount++;
-            long secondsRemaining = ChronoUnit.SECONDS.between(now, trapEndTime);
-
-            tryStartOwnRallyFlow(secondsRemaining);
-            handleJoinRallies2();
-
-            logPeriodicStatusFlow(iterationCount, secondsRemaining);
-
-            now = LocalDateTime.now(ZoneId.of("UTC"));
-            sleepTask(1000);
-
-        }
-
-        logInfo(routineLogBearTrapLine("=== TRAP ENDED - Strategy execution completed ==="));
+        BearSessionCoordinator coordinator = new BearSessionCoordinator(
+                new LiveBearSessionDriver(trapEndTime.atZone(ZoneId.of("UTC")).toInstant()),
+                trapEndTime.atZone(ZoneId.of("UTC")).toInstant(),
+                callOwnRally,
+                ownRallyFlag,
+                joinRally && !sharedEmulator,
+                joinFlags);
+        BearSessionCoordinator.ExitReason exit = coordinator.run();
+        logInfo(routineLogBearTrapLine("=== TRAP SESSION FINISHED: " + exit + " ==="));
+        return exit;
     }
 
 private boolean confirmExecutionWindow() {
@@ -458,10 +433,10 @@ private boolean confirmExecutionWindow() {
 private boolean touchBearTrapGoButton(int trapNumber) {
         switch (trapNumber) {
             case 1:
-                tapInside(BEAR_TRAP_1_GO_BUTTON_TL_VALUE, BEAR_TRAP_1_GO_BUTTON_BR_VALUE, 1, 300);
+                tapInside(BEAR_TRAP_1_GO_BUTTON_TL_VALUE, BEAR_TRAP_1_GO_BUTTON_BR_VALUE);
                 return true;
             case 2:
-                tapInside(BEAR_TRAP_2_GO_BUTTON_TL_VALUE, BEAR_TRAP_2_GO_BUTTON_BR_VALUE, 1, 300);
+                tapInside(BEAR_TRAP_2_GO_BUTTON_TL_VALUE, BEAR_TRAP_2_GO_BUTTON_BR_VALUE);
                 return true;
             default:
                 logError(routineLogBearTrapLine("Invalid trap number: " + trapNumber));
@@ -491,49 +466,6 @@ private void requeueGatherTaskFlow(TaskQueue queue) {
         }
     }
 
-private void logPeriodicStatusFlow(long iterationCount, long secondsRemaining) {
-        if (iterationCount % STATUS_LOG_INTERVAL_VALUE == 0) {
-            long minutesRemaining = secondsRemaining / 60;
-            logInfo(routineLogBearTrapLine("Trap active - " + minutesRemaining + " minutes " +
-                    (secondsRemaining % 60) + " seconds remaining"));
-        }
-    }
-
-private void tryStartOwnRallyFlow(long secondsRemaining) {
-        if (!callOwnRally || ownRallyActive.get() || secondsRemaining <= OWN_RALLY_MIN_REMAINING_SECONDS_VALUE) {
-            return;
-        }
-
-        try {
-            long marchDurationSeconds = beginOwnRally();
-
-            if (marchDurationSeconds > 0) {
-                LocalDateTime now = LocalDateTime.now(ZoneId.of("UTC"));
-                LocalDateTime returnTime = now.plusSeconds(marchDurationSeconds * 2 + 3)
-                        .plusMinutes(RALLY_RETURN_BUFFER_MINUTES_VALUE);
-
-                logInfo(routineLogBearTrapLine("Own rally started finished cleanly, returning in: " + returnTime.format(TIME_FORMATTER)));
-                ownRallyActive.set(true);
-                queueRallyFlagReset(marchDurationSeconds);
-                sleepTask(500);
-
-            } else {
-                logWarning(routineLogBearTrapLine("Could not start rally (may already be active)"));
-            }
-        } catch (dev.frostguard.engine.error.ADBConnectionException e) {
-            logWarning(routineLogBearTrapLine("ADB connection error during rally startup (emulator may be lagging): " + e.getMessage()));
-            logDebug(routineLogBearTrapLine("Skipping this rally startup attempt, will retry on next cycle"));
-            ownRallyActive.set(false);
-
-
-        } catch (Exception e) {
-            logError(routineLogBearTrapLine("Unexpected error during rally startup: " + e.getMessage()), e);
-            ownRallyActive.set(false);
-
-
-        }
-    }
-
 private boolean resolveConfigBoolean(ConfigurationKeyEnum key, boolean defaultValue) {
         Boolean value = profile.getConfig(key, Boolean.class);
         return (value != null) ? value : defaultValue;
@@ -551,7 +483,16 @@ private void hydrateConfiguration() {
 
 
         this.joinFlags = decodeJoinFlags();
-        this.currentJoinFlagIndex = 0;
+        if (callOwnRally && joinFlags.removeIf(flag -> flag == ownRallyFlag)) {
+            logWarning(routineLogBearTrapLine(
+                    "Formation #" + ownRallyFlag
+                            + " is reserved for the configured own rally and will not be used to join."));
+        }
+        if (joinRally && joinFlags.isEmpty()) {
+            logWarning(routineLogBearTrapLine(
+                    "Rally joining disabled for this run because no configured join formation remains available."));
+            joinRally = false;
+        }
         // Changed by pernerch | Date: 2026-07-02 | Why: resolve shared-emulator state at hydration for deterministic active-phase behavior.
         this.sharedEmulator = isSharedEmulatorProfile();
 
@@ -564,36 +505,6 @@ private void hydrateConfiguration() {
 
 private ConfigurationKeyEnum selectedTrapScheduleKey() {
         return BearTrapParticipationSchedule.scheduleKey(trapNumber);
-    }
-
-private int resolveNextJoinFlag() {
-        if (joinFlags.isEmpty()) {
-            return DEFAULT_JOIN_RALLY_FLAG_VALUE;
-        }
-
-        int flag = joinFlags.get(currentJoinFlagIndex);
-        currentJoinFlagIndex = (currentJoinFlagIndex + 1) % joinFlags.size();
-
-        return flag;
-    }
-
-private void queueRallyFlagReset(long marchSeconds) {
-        long durationSeconds = RALLY_DURATION_BASE_MINUTES_VALUE * 60 +
-                marchSeconds * 2 -
-                RALLY_DURATION_BUFFER_SECONDS_VALUE;
-
-        if (rallyScheduler == null || rallyScheduler.isShutdown() || rallyScheduler.isTerminated()) {
-            rallyScheduler = Executors.newSingleThreadScheduledExecutor();
-        }
-        rallyResetTask = rallyScheduler.schedule(
-                () -> {
-                    ownRallyActive.set(false);
-                    logInfo(routineLogBearTrapLine("Rally active flag automatically reset after duration"));
-                },
-                durationSeconds,
-                TimeUnit.SECONDS);
-
-        logDebug(routineLogBearTrapLine("Scheduled rally flag reset in " + durationSeconds + " seconds"));
     }
 
 private void disableAutojoinFlow() {
@@ -650,8 +561,7 @@ private void prepareForTrapFlow() {
         }
 
         logInfo(routineLogBearTrapLine("Moving camera to Bear Trap " + trapNumber));
-        reachBearTrap(trapNumber);
-        sleepTask(1000);
+        bearAnchorKnown = reachBearTrap(trapNumber);
 
     }
 
@@ -681,136 +591,6 @@ private MarchStatusShape inspectMarchStatus() {
                 returningArrow != null && returningArrow.isFound(),
                 marchView != null && marchView.isFound(),
                 marchSpeedup != null && marchSpeedup.isFound());
-    }
-
-private int inspectFreeMarches() {
-        checkPreemption();
-
-        emuManager.captureScreen(EMULATOR_NUMBER);
-        ResilientOcrExecutor<Integer> frameReader =
-                new ResilientOcrExecutor<>(provider.reusingLastFrame());
-
-        Integer used = frameReader.attemptRecognition(
-                FREE_MARCHES_OCR_TL_VALUE,
-                FREE_MARCHES_OCR_BR_VALUE,
-                5,
-                10L,
-                FREE_MARCHES_OCR_SETTINGS_VALUE,
-                RegexNumberParser::hasFractionSyntax,
-                RegexNumberParser::numerator);
-
-        checkPreemption();
-
-
-        Integer total = frameReader.attemptRecognition(
-                FREE_MARCHES_OCR_TL_VALUE,
-                FREE_MARCHES_OCR_BR_VALUE,
-                5,
-                10L,
-                FREE_MARCHES_OCR_SETTINGS_VALUE,
-                RegexNumberParser::hasFractionSyntax,
-                RegexNumberParser::denominator);
-
-        int freeMarches;
-
-        if (used != null && total != null) {
-            freeMarches = total - used;
-            logInfo(routineLogBearTrapLine("Free marches: " + freeMarches));
-        } else {
-
-
-            freeMarches = DEFAULT_FREE_MARCHES_FALLBACK_VALUE;
-            logInfo(routineLogBearTrapLine("Could not read marches (counter may not be visible yet), using default value: " + freeMarches));
-        }
-
-        return freeMarches;
-    }
-
-private void handleJoinRallies2() {
-		// Changed by pernerch | Date: 2026-07-02 | Why: skip rally joining on shared emulators while keeping other Bear Trap actions active.
-        if (!joinRally || sharedEmulator) {
-            if (sharedEmulator) {
-                logInfo(routineLogBearTrapLine("Skipping rally joining because this profile shares an emulator with another account."));
-            } else {
-                logDebug(routineLogBearTrapLine("Skipping rally joining because joining is disabled."));
-            }
-            return;
-        }
-
-        try {
-            int freeMarches = inspectFreeMarches();
-
-            if (freeMarches > 0) {
-                ImageSearchResultData warButton = templateSearchHelper.locatePattern(
-                        GAME_HOME_WAR,
-                        SearchConfig.builder()
-                                .withThreshold(90)
-                                .withMaxAttempts(TEMPLATE_SEARCH_RETRIES_VALUE)
-                                .build());
-
-                if (warButton.isFound()) {
-                    logInfo(routineLogBearTrapLine("Entering war section to check for rallies"));
-                    tapInside(warButton);
-                    manageJoinRallies(freeMarches);
-                }
-            }
-        } catch (dev.frostguard.engine.error.ADBConnectionException e) {
-            logWarning(routineLogBearTrapLine("ADB connection error during rally joining (emulator may be lagging): " + e.getMessage()));
-            logDebug(routineLogBearTrapLine("Skipping this rally join iteration, will retry on next cycle"));
-
-
-        } catch (Exception e) {
-            logError(routineLogBearTrapLine("Unexpected error during rally joining: " + e.getMessage()), e);
-
-
-        }
-    }
-
-private void manageJoinRallies(int freeMarches) {
-        ImageSearchResultData plusIcon = templateSearchHelper.locatePattern(
-                BEAR_JOIN_PLUS_ICON,
-                SearchConfig.builder()
-                        .withThreshold(90)
-                        .withMaxAttempts(2)
-                        .build());
-
-        if (!plusIcon.isFound()) {
-            logWarning(routineLogBearTrapLine("Zero joinable rallies detected (plus icon not present)"));
-            navigationHelper.ensureCorrectScreenLocation(LaunchPoint.ANY);
-            return;
-        }
-
-        int selectedFlag = resolveNextJoinFlag();
-        logInfo(routineLogBearTrapLine("Joining rally with flag #" + selectedFlag + " (rotation: " + joinFlags + ")"));
-
-        tapInside(plusIcon.getPoint(), plusIcon.getPoint(), 1, 100);
-        sleepTask(300);
-
-
-        if (!marchHelper.selectFlag(selectedFlag)) {
-            logWarning(routineLogBearTrapLine(
-                    "Configured join formation #" + selectedFlag + " is unavailable; cancelling this join"));
-            pressBack();
-            return;
-        }
-
-
-        ImageSearchResultData deploy = templateSearchHelper.locatePattern(
-                BEAR_DEPLOY_BUTTON,
-                SearchConfig.builder()
-                        .withThreshold(90)
-                        .withMaxAttempts(TEMPLATE_SEARCH_RETRIES_MAX_VALUE)
-                        .build());
-
-        if (!deploy.isFound()) {
-            logWarning(routineLogBearTrapLine("Deploy button not detected after selecting flag."));
-        } else {
-            tapInside(deploy);
-            sleepTask(500);
-
-        }
-
-        navigationHelper.ensureCorrectScreenLocation(LaunchPoint.ANY);
     }
 
 private void logTrapTimingFlow(TrapTimingShape timing) {
@@ -898,7 +678,11 @@ private boolean hasInsideWindow() {
 
 private List<Integer> decodeJoinFlags() {
         String flagConfig = profile.getConfig(BEAR_TRAP_JOIN_FLAG_INT, String.class);
-        List<Integer> flags = new ArrayList<>();
+        return decodeJoinFlags(flagConfig);
+    }
+
+static List<Integer> decodeJoinFlags(String flagConfig) {
+        LinkedHashSet<Integer> flags = new LinkedHashSet<>();
 
         if (flagConfig != null && !flagConfig.trim().isEmpty()) {
             String[] parts = flagConfig.split(",");
@@ -909,7 +693,7 @@ private List<Integer> decodeJoinFlags() {
                         flags.add(flag);
                     }
                 } catch (NumberFormatException e) {
-                    logWarning(routineLogBearTrapLine("Invalid join flag value: " + part));
+                    // Ignore corrupt persisted values; the effective configuration is logged by the caller.
                 }
             }
         }
@@ -920,9 +704,7 @@ private List<Integer> decodeJoinFlags() {
         }
 
 
-        flags.sort(Integer::compareTo);
-
-        return flags;
+        return new ArrayList<>(flags);
     }
 
 private void enablePetsFlow() {
@@ -961,165 +743,492 @@ private void enablePetsFlow() {
         navigationHelper.ensureCorrectScreenLocation(LaunchPoint.ANY);
     }
 
-private long scanMarchTime() {
-        Duration marchingTime = durationHelper.attemptRecognition(
-                MARCH_TIME_OCR_TL_MS,
-                MARCH_TIME_OCR_BR_MS,
-                MARCH_TIME_OCR_MAX_RETRIES_MS,
-                200L,
-                null,
-                GameTimeUtils::isAcceptedFormat,
-                GameTimeUtils::parseDuration);
-
-        if (marchingTime != null) {
-            return marchingTime.getSeconds();
-        }
-
-        return 0;
-    }
-
 private boolean reachBearTrap(int trapNumber) {
         tapInside(ALLIANCE_BUTTON_TL_VALUE, ALLIANCE_BUTTON_BR_VALUE);
-        sleepTask(3000);
-
-
-        ImageSearchResultData territoryButton = templateSearchHelper.locatePattern(
-                ALLIANCE_TERRITORY_BUTTON,
-                SearchConfig.builder()
-                        .withMaxAttempts(1)
-                        .build());
+        ImageSearchResultData territoryButton = findFreshTransition(
+                ALLIANCE_TERRITORY_BUTTON, 80, 3_000);
 
         if (!territoryButton.isFound()) {
             logError(routineLogBearTrapLine("Territory button not detected to go to bear trap"));
             return false;
         }
 
-        tapInside(territoryButton.getPoint(), territoryButton.getPoint(), 1, 2000);
-        sleepTask(1000);
-
-
-        tapInside(SPECIAL_BUILDINGS_BUTTON_TL_VALUE, SPECIAL_BUILDINGS_BUTTON_BR_VALUE, 1, 300);
-        sleepTask(500);
-
-
+        tapInside(territoryButton);
+        if (!awaitTemplateGone(ALLIANCE_TERRITORY_BUTTON, 80, 2_000)) {
+            logError(routineLogBearTrapLine("Territory screen did not open"));
+            return false;
+        }
+        tapInside(SPECIAL_BUILDINGS_BUTTON_TL_VALUE, SPECIAL_BUILDINGS_BUTTON_BR_VALUE);
+        // The fresh capture is the pacing boundary; it replaces a blind fixed settle.
+        emuManager.captureScreen(EMULATOR_NUMBER);
         boolean success = touchBearTrapGoButton(trapNumber);
-
-        if (success) {
-            sleepTask(2000);
-
+        if (!success) {
+            return false;
         }
-
-        return success;
+        boolean worldReady = findFreshTransition(GAME_HOME_WAR, 90, 3_000).isFound();
+        bearAnchorKnown = worldReady;
+        return worldReady;
     }
 
-private long beginOwnRally() {
-        if (!ownRallyActive.compareAndSet(false, true)) {
-            return 0;
-
-        }
-
-        logInfo(routineLogBearTrapLine("Calling own rally..."));
-
-        tapInside(BEAR_CENTER_POINT_VALUE, BEAR_CENTER_POINT_VALUE, 1, 200);
-        sleepTask(500);
-
-
-        ImageSearchResultData rallyButton = templateSearchHelper.locatePattern(
-                BEAR_RALLY_BUTTON,
-                SearchConfig.builder()
-                        .withThreshold(80)
-                        .withMaxAttempts(TEMPLATE_SEARCH_RETRIES_MAX_VALUE)
-                        .build());
-
-        if (!rallyButton.isFound()) {
-            logError(routineLogBearTrapLine("Rally button not detected!"));
-            ownRallyActive.set(false);
-            return 0;
-        }
-
-        logInfo(routineLogBearTrapLine("Entering rally menu..."));
-        tapInside(rallyButton.getPoint(), rallyButton.getPoint(), 1, 200);
-        sleepTask(500);
-
-
-        ImageSearchResultData holdRallyButton = templateSearchHelper.locatePattern(
-                RALLY_HOLD_BUTTON,
-                SearchConfig.builder()
-                        .withThreshold(90)
-                        .withMaxAttempts(TEMPLATE_SEARCH_RETRIES_MAX_VALUE)
-                        .build());
-
-        if (!holdRallyButton.isFound()) {
-            logError(routineLogBearTrapLine("Hold Rally button not detected!"));
-            ownRallyActive.set(false);
-            return 0;
-        }
-
-        tapInside(holdRallyButton.getPoint(), holdRallyButton.getPoint(), 1, 200);
-        sleepTask(300);
-
-
-        if (!marchHelper.selectFlag(ownRallyFlag)) {
-            logWarning(routineLogBearTrapLine(
-                    "Configured rally formation #" + ownRallyFlag + " is unavailable; cancelling own rally"));
-            pressBack();
-            ownRallyActive.set(false);
-            return 0;
-        }
-
-
-        long marchSeconds = scanMarchTime();
-
-        if (marchSeconds == 0) {
-            logError(routineLogBearTrapLine("Could not read march time from screen, defaulting to 30 seconds"));
-            marchSeconds = 30;
-
-        }
-
-        ImageSearchResultData deploy = templateSearchHelper.locatePattern(
-                BEAR_DEPLOY_BUTTON,
-                SearchConfig.builder()
-                        .withThreshold(90)
-                        .withMaxAttempts(TEMPLATE_SEARCH_RETRIES_MAX_VALUE)
-                        .build());
-
-        if (!deploy.isFound()) {
-            logWarning(routineLogBearTrapLine("Deploy button not detected after selecting flag."));
-            ownRallyActive.set(false);
-            return 0;
-        }
-
-        tapInside(deploy);
-        sleepTask(500);
-
-
-        logInfo(routineLogBearTrapLine("Rally deployed finished cleanly. March time: " + marchSeconds + " seconds"));
-        return marchSeconds;
+private ImageSearchResultData findFreshTransition(TemplatesEnum template, int threshold, long timeoutMs) {
+        long deadline = System.nanoTime() + Duration.ofMillis(timeoutMs).toNanos();
+        do {
+            checkPreemption();
+            RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+            ImageSearchResultData result = emuManager.locatePattern(
+                    EMULATOR_NUMBER, frame, template, threshold);
+            if (result.isFound()) {
+                return result;
+            }
+        } while (System.nanoTime() < deadline);
+        return ImageSearchResultData.miss();
     }
 
-private void cleanupFlow() {
-        logInfo(routineLogBearTrapLine("Cleaning up Bear Trap state"));
+private boolean awaitTemplateGone(TemplatesEnum template, int threshold, long timeoutMs) {
+        long deadline = System.nanoTime() + Duration.ofMillis(timeoutMs).toNanos();
+        int consecutiveMisses = 0;
+        do {
+            checkPreemption();
+            RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+            boolean present = emuManager.locatePattern(
+                    EMULATOR_NUMBER, frame, template, threshold).isFound();
+            consecutiveMisses = present ? 0 : consecutiveMisses + 1;
+            if (consecutiveMisses >= 2) {
+                return true;
+            }
+        } while (System.nanoTime() < deadline);
+        return false;
+    }
 
-        ownRallyActive.set(false);
+private final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
 
-        if (rallyResetTask != null && !rallyResetTask.isDone()) {
-            rallyResetTask.cancel(false);
-            logDebug(routineLogBearTrapLine("Cancelled pending rally reset task"));
+        private final Instant eventEnd;
+        private List<MarchSlotState> lastMarches = List.of();
+        private BearSessionCoordinator.State lastState;
+        private final Map<Integer, Long> formationTroopCounts = new HashMap<>();
+        private final Map<Integer, Set<String>> rejectedCandidatesByFormation = new HashMap<>();
+
+        private LiveBearSessionDriver(Instant eventEnd) {
+            this.eventEnd = eventEnd;
         }
 
-        if (rallyScheduler != null && !rallyScheduler.isShutdown()) {
-            rallyScheduler.shutdown();
+        @Override
+        public Instant now() {
+            return Instant.now();
+        }
+
+        @Override
+        public boolean cancellationRequested() {
+            if (Thread.currentThread().isInterrupted()) {
+                return true;
+            }
             try {
-                if (!rallyScheduler.awaitTermination(5, TimeUnit.SECONDS)) {
-                    rallyScheduler.shutdownNow();
+                checkPreemption();
+                return false;
+            } catch (StopExecutionException e) {
+                if (e.isCancellation()) {
+                    return true;
                 }
-                logDebug(routineLogBearTrapLine("Rally scheduler shutdown finished cleanly"));
-            } catch (InterruptedException e) {
-                rallyScheduler.shutdownNow();
-                Thread.currentThread().interrupt();
+                throw e;
             }
         }
 
-        requeueDisabledTasksFlow();
+        @Override
+        public BearSessionCoordinator.EventStatus eventStatus() {
+            return now().isBefore(eventEnd)
+                    ? BearSessionCoordinator.EventStatus.ACTIVE
+                    : BearSessionCoordinator.EventStatus.ENDED;
+        }
+
+        @Override
+        public BearSessionCoordinator.MarchSnapshot readMarches(
+                OptionalInt trackedOwnSlot, boolean mayAdoptExisting) {
+            try {
+                List<MarchSlotState> slots = marchHelper.readMarchQueueSinglePass();
+                boolean reliable = !slots.isEmpty() && slots.stream()
+                        .anyMatch(slot -> slot.availability() != MarchSlotAvailability.UNKNOWN);
+                if (!reliable) {
+                    return new BearSessionCoordinator.MarchSnapshot(
+                            false, 0, BearSessionCoordinator.OwnRallyObservation.active(
+                                    trackedOwnSlot.orElse(0), BearSessionCoordinator.OwnRallyPhase.UNKNOWN, null));
+                }
+
+                lastMarches = slots;
+                int freeSlots = (int) slots.stream().filter(MarchSlotState::isIdle).count();
+                Duration earliestRelease = slots.stream()
+                        .filter(MarchSlotState::hasExactReleaseCountdown)
+                        .map(MarchSlotState::countdown)
+                        .min(Duration::compareTo)
+                        .orElse(null);
+                BearSessionCoordinator.OwnRallyObservation own = observeOwnRally(
+                        slots, trackedOwnSlot, mayAdoptExisting);
+                return new BearSessionCoordinator.MarchSnapshot(true, freeSlots, own, earliestRelease);
+            } catch (StopExecutionException e) {
+                throw e;
+            } catch (Exception e) {
+                logWarning(routineLogBearTrapLine("March queue could not be read: " + e.getMessage()));
+                return new BearSessionCoordinator.MarchSnapshot(
+                        false, 0, BearSessionCoordinator.OwnRallyObservation.active(
+                                trackedOwnSlot.orElse(0), BearSessionCoordinator.OwnRallyPhase.UNKNOWN, null));
+            }
+        }
+
+        @Override
+        public BearSessionCoordinator.OwnRallyStartResult startOwnRally(int formation) {
+            List<MarchSlotState> before = lastMarches;
+            if (!openBearRallyFromAnchor()) {
+                return BearSessionCoordinator.OwnRallyStartResult.recoverable(
+                        BearSessionCoordinator.OwnRallyStartOutcome.NAVIGATION_FAILURE);
+            }
+            ImageSearchResultData rallyButton = findFresh(
+                    BEAR_RALLY_BUTTON, 80, FRESH_TRANSITION_TIMEOUT_MS);
+            if (!rallyButton.isFound()) {
+                return BearSessionCoordinator.OwnRallyStartResult.recoverable(
+                        BearSessionCoordinator.OwnRallyStartOutcome.STALE_SCREEN);
+            }
+
+            tapInside(rallyButton);
+            ImageSearchResultData hold = findFresh(
+                    RALLY_HOLD_BUTTON, 90, FRESH_TRANSITION_TIMEOUT_MS);
+            if (!hold.isFound()) {
+                return BearSessionCoordinator.OwnRallyStartResult.recoverable(
+                        BearSessionCoordinator.OwnRallyStartOutcome.STALE_SCREEN);
+            }
+
+            int rallySeconds = deploymentHelper.readRallySetTimeSeconds(
+                    RALLY_DURATION_BASE_MINUTES_VALUE * 60);
+            tapInside(hold);
+            if (!marchHelper.selectFlag(formation)) {
+                pressBack();
+                return BearSessionCoordinator.OwnRallyStartResult.recoverable(
+                        BearSessionCoordinator.OwnRallyStartOutcome.FORMATION_UNAVAILABLE);
+            }
+            if (deploymentHelper.hasNoDeployableTroops()) {
+                pressBack();
+                return BearSessionCoordinator.OwnRallyStartResult.recoverable(
+                        BearSessionCoordinator.OwnRallyStartOutcome.FORMATION_UNAVAILABLE);
+            }
+
+            long travelSeconds = deploymentHelper.readTravelTimeSeconds();
+            if (travelSeconds <= 0) {
+                pressBack();
+                return BearSessionCoordinator.OwnRallyStartResult.recoverable(
+                        BearSessionCoordinator.OwnRallyStartOutcome.OCR_MISS);
+            }
+            if (now().plusSeconds(rallySeconds + travelSeconds).isAfter(eventEnd)) {
+                pressBack();
+                return BearSessionCoordinator.OwnRallyStartResult.recoverable(
+                        BearSessionCoordinator.OwnRallyStartOutcome.TOO_LATE);
+            }
+
+            ImageSearchResultData deploy = findFresh(
+                    BEAR_DEPLOY_BUTTON, 90, FRESH_TRANSITION_TIMEOUT_MS);
+            if (!deploy.isFound()) {
+                return BearSessionCoordinator.OwnRallyStartResult.recoverable(
+                        BearSessionCoordinator.OwnRallyStartOutcome.STALE_SCREEN);
+            }
+            tapInside(deploy);
+            DeploymentPostTapRead postTap = awaitPostDeployState(FRESH_TRANSITION_TIMEOUT_MS);
+            if (postTap.marchQueueFull()) {
+                deploymentHelper.dismissMarchQueueFullPopup();
+                return BearSessionCoordinator.OwnRallyStartResult.recoverable(
+                        BearSessionCoordinator.OwnRallyStartOutcome.MARCH_QUEUE_FULL);
+            }
+            if (postTap.sameTargetDialog()) {
+                leaveVerifiedFormationScreen();
+                recover(BearSessionCoordinator.State.OWN_RALLY_STARTING);
+                OptionalInt existing = existingRallySlot(readMarchRows());
+                return existing.isPresent()
+                        ? BearSessionCoordinator.OwnRallyStartResult.alreadyActive(existing.getAsInt())
+                        : BearSessionCoordinator.OwnRallyStartResult.recoverable(
+                                 BearSessionCoordinator.OwnRallyStartOutcome.DEPLOY_NOT_CONFIRMED);
+            }
+            if (postTap.deployButton().isFound() || postTap.confirmationDialog().isFound()) {
+                return BearSessionCoordinator.OwnRallyStartResult.recoverable(
+                        BearSessionCoordinator.OwnRallyStartOutcome.DEPLOY_NOT_CONFIRMED);
+            }
+
+            for (int attempt = 0; attempt < 3; attempt++) {
+                List<MarchSlotState> after = readMarchRows();
+                OptionalInt newRally = newlyOccupiedRallySlot(before, after);
+                if (newRally.isPresent()) {
+                    logInfo(routineLogBearTrapLine("Own rally confirmed in march slot #" + newRally.getAsInt()));
+                    return BearSessionCoordinator.OwnRallyStartResult.confirmed(
+                            newRally.getAsInt(), Duration.ofSeconds(rallySeconds), Duration.ofSeconds(travelSeconds));
+                }
+            }
+            return BearSessionCoordinator.OwnRallyStartResult.recoverable(
+                    BearSessionCoordinator.OwnRallyStartOutcome.DEPLOY_NOT_CONFIRMED);
+        }
+
+        @Override
+        public BearSessionCoordinator.JoinOutcome joinNext(int formation) {
+            int freeBefore = (int) lastMarches.stream().filter(MarchSlotState::isIdle).count();
+            try {
+                navigationHelper.ensureCorrectScreenLocation(LaunchPoint.WORLD);
+                ImageSearchResultData war = findFresh(
+                        GAME_HOME_WAR, 90, FRESH_TRANSITION_TIMEOUT_MS);
+                if (!war.isFound()) {
+                    return BearSessionCoordinator.JoinOutcome.NAVIGATION_FAILURE;
+                }
+                tapInside(war);
+                if (!awaitAnyFresh(BEAR_JOIN_PLUS_ICON, 80, FRESH_TRANSITION_TIMEOUT_MS)) {
+                    return BearSessionCoordinator.JoinOutcome.NO_JOINABLE_RALLY;
+                }
+
+                long knownTroops = formationTroopCounts.getOrDefault(formation, 0L);
+                Set<String> rejected = rejectedCandidatesByFormation.computeIfAbsent(
+                        formation, ignored -> new HashSet<>());
+                BearRallyScanner.ScanResult scan = new BearRallyScanner(templateSearchHelper)
+                        .scan(now());
+                Optional<BearRallyCandidate> selected = BearRallyCandidateSelector.selectBest(
+                        scan.candidates(), knownTroops, rejected);
+                if (selected.isEmpty()) {
+                    return scan.ocrFailure()
+                            ? BearSessionCoordinator.JoinOutcome.OCR_MISS
+                            : BearSessionCoordinator.JoinOutcome.NO_JOINABLE_RALLY;
+                }
+                BearRallyCandidate candidate = selected.get();
+                tapInside(candidate.joinButtonArea());
+                ImageSearchResultData deployReady = findFresh(
+                        BEAR_DEPLOY_BUTTON, 90, FRESH_TRANSITION_TIMEOUT_MS);
+                if (!deployReady.isFound()) {
+                    rejected.add(candidate.stableKey());
+                    return BearSessionCoordinator.JoinOutcome.RALLY_DEPARTED;
+                }
+                if (!marchHelper.selectFlag(formation)) {
+                    pressBack();
+                    return BearSessionCoordinator.JoinOutcome.FORMATION_UNAVAILABLE;
+                }
+                if (deploymentHelper.hasNoDeployableTroops()) {
+                    pressBack();
+                    return BearSessionCoordinator.JoinOutcome.FORMATION_UNAVAILABLE;
+                }
+                long selectedTroops = deploymentHelper.readSelectedTroopCount();
+                if (selectedTroops < 0) {
+                    pressBack();
+                    return BearSessionCoordinator.JoinOutcome.OCR_MISS;
+                }
+                formationTroopCounts.put(formation, selectedTroops);
+                if (!candidate.accepts(selectedTroops)) {
+                    logInfo(routineLogBearTrapLine(
+                            "Skipping rally at row " + candidate.rowY()
+                                    + ": formation #" + formation + " has " + selectedTroops
+                                    + " troops but only " + candidate.remainingCapacity() + " fit"));
+                    rejected.add(candidate.stableKey());
+                    pressBack();
+                    return BearSessionCoordinator.JoinOutcome.RALLY_FULL;
+                }
+                ImageSearchResultData deploy = findFresh(
+                        BEAR_DEPLOY_BUTTON, 90, FRESH_TRANSITION_TIMEOUT_MS);
+                if (!deploy.isFound()) {
+                    rejected.add(candidate.stableKey());
+                    return BearSessionCoordinator.JoinOutcome.RALLY_DEPARTED;
+                }
+                tapInside(deploy);
+                DeploymentPostTapRead postTap = awaitPostDeployState(FRESH_TRANSITION_TIMEOUT_MS);
+                if (postTap.marchQueueFull()) {
+                    deploymentHelper.dismissMarchQueueFullPopup();
+                    return BearSessionCoordinator.JoinOutcome.MARCH_QUEUE_FULL;
+                }
+                if (postTap.sameTargetDialog()) {
+                    leaveVerifiedFormationScreen();
+                    rejected.add(candidate.stableKey());
+                    return BearSessionCoordinator.JoinOutcome.ALREADY_JOINED_OR_MARCHING;
+                }
+                if (postTap.deployButton().isFound() || postTap.confirmationDialog().isFound()) {
+                    rejected.add(candidate.stableKey());
+                    return BearSessionCoordinator.JoinOutcome.RALLY_FULL;
+                }
+
+                List<MarchSlotState> after = readMarchRows();
+                int freeAfter = (int) after.stream().filter(MarchSlotState::isIdle).count();
+                if (freeAfter < freeBefore) {
+                    lastMarches = after;
+                    return BearSessionCoordinator.JoinOutcome.JOINED;
+                }
+                rejected.add(candidate.stableKey());
+                return BearSessionCoordinator.JoinOutcome.RALLY_GONE;
+            } catch (StopExecutionException e) {
+                throw e;
+            } catch (Exception e) {
+                logWarning(routineLogBearTrapLine("Join attempt lost its screen: " + e.getMessage()));
+                return BearSessionCoordinator.JoinOutcome.STALE_SCREEN;
+            }
+        }
+
+        @Override
+        public boolean recover(BearSessionCoordinator.State resumeState) {
+            try {
+                navigationHelper.ensureCorrectScreenLocation(LaunchPoint.WORLD);
+                return true;
+            } catch (StopExecutionException e) {
+                throw e;
+            } catch (Exception e) {
+                logWarning(routineLogBearTrapLine(
+                        "Could not recover World for " + resumeState + ": " + e.getMessage()));
+                return false;
+            }
+        }
+
+        @Override
+        public void pause(Duration duration) {
+            if (!duration.isZero() && !duration.isNegative()) {
+                sleepTask(duration.toMillis());
+            }
+        }
+
+        @Override
+        public void stateChanged(BearSessionCoordinator.State state) {
+            if (lastState != state) {
+                if (state != BearSessionCoordinator.State.FILL_JOIN_SLOTS
+                        && state != BearSessionCoordinator.State.WAIT_FOR_NEXT_USEFUL_DEADLINE
+                        && state != BearSessionCoordinator.State.LOCATE_BEAR) {
+                    logInfo(routineLogBearTrapLine("Session state: " + state));
+                }
+                lastState = state;
+            }
+        }
+
+        private List<MarchSlotState> readMarchRows() {
+            List<MarchSlotState> rows = marchHelper.readMarchQueueSinglePass();
+            if (!rows.isEmpty()) {
+                lastMarches = rows;
+            }
+            return rows;
+        }
+
+        private BearSessionCoordinator.OwnRallyObservation observeOwnRally(
+                List<MarchSlotState> slots, OptionalInt trackedOwnSlot, boolean mayAdoptExisting) {
+            if (trackedOwnSlot.isPresent()) {
+                Optional<MarchSlotState> tracked = slots.stream()
+                        .filter(slot -> slot.slot() == trackedOwnSlot.getAsInt())
+                        .findFirst();
+                if (tracked.isEmpty()) {
+                    return BearSessionCoordinator.OwnRallyObservation.active(
+                            trackedOwnSlot.getAsInt(), BearSessionCoordinator.OwnRallyPhase.UNKNOWN, null);
+                }
+                MarchSlotState slot = tracked.get();
+                if (slot.isIdle()) {
+                    return BearSessionCoordinator.OwnRallyObservation.idle(slot.slot());
+                }
+                if (slot.activityType() == MarchActivityType.RALLY) {
+                    return BearSessionCoordinator.OwnRallyObservation.active(
+                            slot.slot(), BearSessionCoordinator.OwnRallyPhase.PREPARING, slot.countdown());
+                }
+                if (slot.movementPhase() == MarchMovementPhase.RETURNING) {
+                    return BearSessionCoordinator.OwnRallyObservation.active(
+                            slot.slot(), BearSessionCoordinator.OwnRallyPhase.RETURNING,
+                            slot.hasExactReleaseCountdown() ? slot.countdown() : null);
+                }
+                if (slot.availability() == MarchSlotAvailability.OCCUPIED) {
+                    return BearSessionCoordinator.OwnRallyObservation.active(
+                            slot.slot(), BearSessionCoordinator.OwnRallyPhase.OUTBOUND, null);
+                }
+                return BearSessionCoordinator.OwnRallyObservation.active(
+                        slot.slot(), BearSessionCoordinator.OwnRallyPhase.UNKNOWN, null);
+            }
+
+            if (mayAdoptExisting) {
+                Optional<MarchSlotState> existing = slots.stream()
+                        .filter(slot -> slot.activityType() == MarchActivityType.RALLY)
+                        .findFirst();
+                if (existing.isPresent()) {
+                    MarchSlotState slot = existing.get();
+                    return BearSessionCoordinator.OwnRallyObservation.unclassifiedActive(slot.slot());
+                }
+            }
+            return BearSessionCoordinator.OwnRallyObservation.absent();
+        }
+
+        private OptionalInt existingRallySlot(List<MarchSlotState> slots) {
+            return slots.stream()
+                    .filter(slot -> slot.activityType() == MarchActivityType.RALLY)
+                    .mapToInt(MarchSlotState::slot)
+                    .findFirst();
+        }
+
+        private OptionalInt newlyOccupiedRallySlot(
+                List<MarchSlotState> before, List<MarchSlotState> after) {
+            return after.stream()
+                    .filter(slot -> slot.activityType() == MarchActivityType.RALLY)
+                    .filter(slot -> before.stream()
+                            .filter(previous -> previous.slot() == slot.slot())
+                            .noneMatch(previous -> previous.activityType() == MarchActivityType.RALLY))
+                    .mapToInt(MarchSlotState::slot)
+                    .findFirst();
+        }
+
+        private boolean openBearRallyFromAnchor() {
+            if (!recover(BearSessionCoordinator.State.OWN_RALLY_STARTING)) {
+                return false;
+            }
+            if (bearAnchorKnown) {
+                tapInside(BEAR_CENTER_POINT_VALUE, BEAR_CENTER_POINT_VALUE);
+                if (findFresh(BEAR_RALLY_BUTTON, 80, FRESH_TRANSITION_TIMEOUT_MS).isFound()) {
+                    return true;
+                }
+                bearAnchorKnown = false;
+            }
+
+            if (!reachBearTrap(trapNumber)) {
+                return false;
+            }
+            bearAnchorKnown = true;
+            tapInside(BEAR_CENTER_POINT_VALUE, BEAR_CENTER_POINT_VALUE);
+            return findFresh(BEAR_RALLY_BUTTON, 80, FRESH_TRANSITION_TIMEOUT_MS).isFound();
+        }
+
+        private boolean awaitAnyFresh(TemplatesEnum template, int threshold, long timeoutMs) {
+            return findFresh(template, threshold, timeoutMs).isFound();
+        }
+
+        private DeploymentPostTapRead awaitPostDeployState(long timeoutMs) {
+            long deadline = System.nanoTime() + Duration.ofMillis(timeoutMs).toNanos();
+            DeploymentPostTapRead last = new DeploymentPostTapRead(
+                    false, ImageSearchResultData.miss(), false, ImageSearchResultData.miss());
+            do {
+                checkPreemption();
+                last = deploymentHelper.readPostTapScreen();
+                if (last.marchQueueFull()
+                        || last.confirmationDialog().isFound()
+                        || last.sameTargetDialog()
+                        || !last.deployButton().isFound()) {
+                    return last;
+                }
+            } while (System.nanoTime() < deadline);
+            return last;
+        }
+
+        private void leaveVerifiedFormationScreen() {
+            pressBack();
+            if (findFresh(BEAR_DEPLOY_BUTTON, 90, FRESH_TRANSITION_TIMEOUT_MS).isFound()) {
+                pressBack();
+            }
+        }
+
+        private ImageSearchResultData findFresh(TemplatesEnum template, int threshold, long timeoutMs) {
+            long deadline = System.nanoTime() + Duration.ofMillis(timeoutMs).toNanos();
+            while (System.nanoTime() < deadline) {
+                checkPreemption();
+                RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+                ImageSearchResultData result = emuManager.locatePattern(
+                        EMULATOR_NUMBER, frame, template, threshold);
+                if (result.isFound()) {
+                    return result;
+                }
+            }
+            return ImageSearchResultData.miss();
+        }
+    }
+
+private void cleanupFlow(boolean requeueNormalTasks) {
+        logInfo(routineLogBearTrapLine("Cleaning up Bear Trap state"));
+
+        if (requeueNormalTasks) {
+            requeueDisabledTasksFlow();
+        } else {
+            logInfo(routineLogBearTrapLine("Shutdown in progress; Gather and Autojoin remain stopped"));
+        }
     }
 }
