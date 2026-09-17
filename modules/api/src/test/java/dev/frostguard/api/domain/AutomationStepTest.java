@@ -54,6 +54,19 @@ class AutomationStepTest {
         assertEquals("Sidebar destination: Lighthouse Intel", step.describeBriefly());
     }
 
+    @Test
+    void summarizesAllianceAndEventSelectionsForTheEditor() {
+        AutomationStep alliance = new AutomationStep(1, FlowStepKind.ALLIANCE_NAVIGATION);
+        alliance.setParam(AutomationStep.PARAM_ALLIANCE_MENU, "TERRITORY");
+        AutomationStep event = new AutomationStep(2, FlowStepKind.EVENT_NAVIGATION);
+        event.setParam(AutomationStep.PARAM_EVENT_MENU, "ALLIANCE_CHAMPIONSHIP");
+
+        assertEquals("Alliance: Territory", alliance.describeBriefly());
+        assertEquals("Event: Alliance Championship", event.describeBriefly());
+        assertEquals("Alliance: invalid selection",
+                new AutomationStep(3, FlowStepKind.ALLIANCE_NAVIGATION).describeBriefly());
+    }
+
     /** Every kind must produce a summary; none may throw. */
     @Test
     void summarizesEveryStepKind() {

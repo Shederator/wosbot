@@ -5,6 +5,8 @@ import dev.frostguard.api.configs.FlowStepKind;
 import dev.frostguard.api.configs.SidebarNavigationMode;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.engine.helper.NavigationHelper.AllianceMenu;
+import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.domain.AutomationBlueprint;
@@ -16,6 +18,7 @@ import dev.frostguard.engine.service.TaskCodeGenerator;
 import dev.frostguard.engine.service.TemplatePathResolver;
 import dev.frostguard.engine.nav.ShopTab;
 import dev.frostguard.engine.nav.SidebarSection;
+import dev.frostguard.vision.logging.ProfileContextLogger;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.event.ActionEvent;
@@ -72,6 +75,7 @@ public class TaskBuilderLayoutController {
     @FXML private Button btnCapture;
     @FXML private TextField taskNameField;
     @FXML private ToggleButton btnTogglePreview;
+    @FXML private ToggleButton btnToggleRunLog;
     @FXML private Button btnFullscreen;
 
     // ===== Canvas =====
@@ -81,6 +85,8 @@ public class TaskBuilderLayoutController {
 
     // ===== Properties Drawer (bottom of canvas) =====
     @FXML private VBox propsDrawer;
+    @FXML private VBox runLogPanel;
+    @FXML private TextArea runLogTextArea;
     @FXML private Label propNodeIcon;
     @FXML private Label propNodeTitle;
     @FXML private Label propStatusLabel;
@@ -97,6 +103,12 @@ public class TaskBuilderLayoutController {
     @FXML private VBox sidebarNavigationPropsBox;
     @FXML private ComboBox<SidebarNavigationMode> sidebarModeCombo;
     @FXML private ComboBox<String> sidebarTargetCombo;
+    @FXML private VBox allianceNavigationPropsBox;
+    @FXML private ComboBox<AllianceMenu> allianceMenuCombo;
+    @FXML private Label allianceMenuInvalidLabel;
+    @FXML private VBox eventNavigationPropsBox;
+    @FXML private ComboBox<EventMenu> eventMenuCombo;
+    @FXML private Label eventMenuInvalidLabel;
     @FXML private VBox ocrPropsBox;
     @FXML private TextField ocrTlXField, ocrTlYField, ocrBrXField, ocrBrYField;
     @FXML private ComboBox<String> ocrConditionCombo;
@@ -144,6 +156,11 @@ public class TaskBuilderLayoutController {
 
     private AutomationStep selectedNode = null;
     private int runningNodeId = -1;
+    private static final int MAX_PENDING_RUN_LOGS = 500;
+    private final TaskBuilderRunLog runLog = new TaskBuilderRunLog();
+    private record PendingRunLog(long generation, String entry) {}
+    private final Deque<PendingRunLog> pendingRunLogs = new ArrayDeque<>();
+    private boolean runLogDrainScheduled;
     private double ocrDragStartX = 0, ocrDragStartY = 0;
     private boolean hasPreviewImage = false;
     private boolean previewRegionDismissed = false;
@@ -283,8 +300,50 @@ public class TaskBuilderLayoutController {
             sidebarModeCombo.setValue(SidebarNavigationMode.SECTION);
             setSidebarTargets(SidebarNavigationMode.SECTION, SidebarSection.CITY.name());
         }
+        if (allianceMenuCombo != null) {
+            allianceMenuCombo.setItems(FXCollections.observableArrayList(AllianceMenu.values()));
+            allianceMenuCombo.setConverter(menuConverter(AllianceMenu.class));
+            allianceMenuCombo.setValue(AllianceMenu.WAR);
+        }
+        if (eventMenuCombo != null) {
+            eventMenuCombo.setItems(FXCollections.observableArrayList(EventMenu.values()));
+            eventMenuCombo.setConverter(menuConverter(EventMenu.class));
+            eventMenuCombo.setValue(EventMenu.HERO_MISSION);
+        }
         addAutoApplyListeners();
         setStatus("Ready — add nodes from the toolbox");
+    }
+
+    private static <T extends Enum<T>> javafx.util.StringConverter<T> menuConverter(Class<T> type) {
+        return new javafx.util.StringConverter<>() {
+            @Override
+            public String toString(T value) {
+                return value == null ? "" : SidebarNavigationOptions.displayTarget(value.name());
+            }
+
+            @Override
+            public T fromString(String displayName) {
+                return Arrays.stream(type.getEnumConstants())
+                        .filter(value -> toString(value).equals(displayName))
+                        .findFirst().orElse(null);
+            }
+        };
+    }
+
+    private static <T extends Enum<T>> T menuSelection(String storedValue, Class<T> type) {
+        try {
+            return Enum.valueOf(type, storedValue);
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            return null;
+        }
+    }
+
+    private static void showInvalidMenuSelection(Label label, String storedValue, Enum<?> selection) {
+        boolean invalid = selection == null;
+        label.setText(invalid ? "Invalid saved target: "
+                + (storedValue == null || storedValue.isBlank() ? "(missing)" : storedValue) : "");
+        label.setVisible(invalid);
+        label.setManaged(invalid);
     }
 
     private void setupNodeNameField() {
@@ -334,6 +393,16 @@ public class TaskBuilderLayoutController {
         if (shopTabCombo != null) {
             shopTabCombo.valueProperty().addListener((obs, oldV, newV) -> {
                 if (!isBinding) handleApplyShopNavigationProps(null);
+            });
+        }
+        if (allianceMenuCombo != null) {
+            allianceMenuCombo.valueProperty().addListener((obs, oldV, newV) -> {
+                if (!isBinding) handleApplyAllianceNavigationProps(null);
+            });
+        }
+        if (eventMenuCombo != null) {
+            eventMenuCombo.valueProperty().addListener((obs, oldV, newV) -> {
+                if (!isBinding) handleApplyEventNavigationProps(null);
             });
         }
         if (sidebarModeCombo != null && sidebarTargetCombo != null) {
@@ -993,6 +1062,8 @@ public class TaskBuilderLayoutController {
     @FXML private void handleAddTemplateNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.TEMPLATE_SEARCH); }
     @FXML private void handleAddShopNavigationNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.SHOP_NAVIGATION); }
     @FXML private void handleAddSidebarNavigationNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.SIDEBAR_NAVIGATION); }
+    @FXML private void handleAddAllianceNavigationNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.ALLIANCE_NAVIGATION); }
+    @FXML private void handleAddEventNavigationNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.EVENT_NAVIGATION); }
 
     private void addNodeToCanvas(FlowStepKind type) {
         ensureSession();
@@ -1009,6 +1080,10 @@ public class TaskBuilderLayoutController {
                 node.setParam(AutomationStep.PARAM_SIDEBAR_MODE, SidebarNavigationMode.SECTION.name());
                 node.setParam(AutomationStep.PARAM_SIDEBAR_TARGET, SidebarSection.CITY.name());
             }
+            case ALLIANCE_NAVIGATION -> node.setParam(
+                    AutomationStep.PARAM_ALLIANCE_MENU, AllianceMenu.WAR.name());
+            case EVENT_NAVIGATION -> node.setParam(
+                    AutomationStep.PARAM_EVENT_MENU, EventMenu.HERO_MISSION.name());
             default -> {}
         }
 
@@ -1665,6 +1740,14 @@ public class TaskBuilderLayoutController {
             sidebarNavigationPropsBox.setVisible(false);
             sidebarNavigationPropsBox.setManaged(false);
         }
+        if (allianceNavigationPropsBox != null) {
+            allianceNavigationPropsBox.setVisible(false);
+            allianceNavigationPropsBox.setManaged(false);
+        }
+        if (eventNavigationPropsBox != null) {
+            eventNavigationPropsBox.setVisible(false);
+            eventNavigationPropsBox.setManaged(false);
+        }
         ocrPropsBox.setVisible(false); ocrPropsBox.setManaged(false);
         if (templatePropsBox != null) { templatePropsBox.setVisible(false); templatePropsBox.setManaged(false); }
         
@@ -1722,6 +1805,22 @@ public class TaskBuilderLayoutController {
                 sidebarModeCombo.setValue(mode);
                 setSidebarTargets(mode, node.getParam(AutomationStep.PARAM_SIDEBAR_TARGET) == null
                         ? "" : node.getParam(AutomationStep.PARAM_SIDEBAR_TARGET));
+            }
+            case ALLIANCE_NAVIGATION -> {
+                allianceNavigationPropsBox.setVisible(true);
+                allianceNavigationPropsBox.setManaged(true);
+                String storedTarget = node.getParam(AutomationStep.PARAM_ALLIANCE_MENU);
+                AllianceMenu selection = menuSelection(storedTarget, AllianceMenu.class);
+                allianceMenuCombo.setValue(selection);
+                showInvalidMenuSelection(allianceMenuInvalidLabel, storedTarget, selection);
+            }
+            case EVENT_NAVIGATION -> {
+                eventNavigationPropsBox.setVisible(true);
+                eventNavigationPropsBox.setManaged(true);
+                String storedTarget = node.getParam(AutomationStep.PARAM_EVENT_MENU);
+                EventMenu selection = menuSelection(storedTarget, EventMenu.class);
+                eventMenuCombo.setValue(selection);
+                showInvalidMenuSelection(eventMenuInvalidLabel, storedTarget, selection);
             }
             case OCR_READ -> {
                 ocrPropsBox.setVisible(true); ocrPropsBox.setManaged(true);
@@ -1841,6 +1940,22 @@ public class TaskBuilderLayoutController {
     @FXML private void handleApplyShopNavigationProps(ActionEvent e) {
         if (selectedNode == null || shopTabCombo == null || shopTabCombo.getValue() == null) return;
         selectedNode.setParam(AutomationStep.PARAM_SHOP_TAB, shopTabCombo.getValue().name());
+        refreshCard(selectedNode);
+    }
+
+    @FXML private void handleApplyAllianceNavigationProps(ActionEvent e) {
+        if (selectedNode == null || allianceMenuCombo.getValue() == null) return;
+        selectedNode.setParam(AutomationStep.PARAM_ALLIANCE_MENU, allianceMenuCombo.getValue().name());
+        showInvalidMenuSelection(allianceMenuInvalidLabel, allianceMenuCombo.getValue().name(),
+                allianceMenuCombo.getValue());
+        refreshCard(selectedNode);
+    }
+
+    @FXML private void handleApplyEventNavigationProps(ActionEvent e) {
+        if (selectedNode == null || eventMenuCombo.getValue() == null) return;
+        selectedNode.setParam(AutomationStep.PARAM_EVENT_MENU, eventMenuCombo.getValue().name());
+        showInvalidMenuSelection(eventMenuInvalidLabel, eventMenuCombo.getValue().name(),
+                eventMenuCombo.getValue());
         refreshCard(selectedNode);
     }
 
@@ -2164,6 +2279,59 @@ public class TaskBuilderLayoutController {
 
     // ==================== EXECUTION ====================
 
+    @FXML private void handleToggleRunLog(ActionEvent e) {
+        boolean visible = btnToggleRunLog.isSelected();
+        runLogPanel.setVisible(visible);
+        runLogPanel.setManaged(visible);
+        btnToggleRunLog.getTooltip().setText(visible ? "Hide execution logs" : "Show execution logs");
+        if (visible) runLogTextArea.setScrollTop(Double.MAX_VALUE);
+    }
+
+    private long beginExecution(AccountDescriptor profile) {
+        long generation = runLog.begin(profile.getId());
+        if (generation < 0) {
+            setStatus("⚠ Task Builder execution already running");
+            return -1;
+        }
+        runLogTextArea.clear();
+        return generation;
+    }
+
+    private void appendExecutionLog(long generation, String entry) {
+        synchronized (pendingRunLogs) {
+            pendingRunLogs.addLast(new PendingRunLog(generation, entry));
+            while (pendingRunLogs.size() > MAX_PENDING_RUN_LOGS) pendingRunLogs.removeFirst();
+            if (runLogDrainScheduled) return;
+            runLogDrainScheduled = true;
+        }
+        Platform.runLater(this::drainExecutionLogs);
+    }
+
+    private void drainExecutionLogs() {
+        List<PendingRunLog> batch;
+        synchronized (pendingRunLogs) {
+            batch = new ArrayList<>(pendingRunLogs);
+            pendingRunLogs.clear();
+            runLogDrainScheduled = false;
+        }
+        ScrollBar vertical = (ScrollBar) runLogTextArea.lookup(".scroll-bar:vertical");
+        boolean follow = vertical == null
+                || vertical.getValue() >= vertical.getMax() - Math.max(0.01, vertical.getMax() * 0.02);
+        double previousScrollTop = runLogTextArea.getScrollTop();
+        boolean changed = false;
+        for (PendingRunLog pending : batch) {
+            changed |= runLog.append(pending.generation(), pending.entry());
+        }
+        if (changed) {
+            runLogTextArea.setText(runLog.text());
+            runLogTextArea.setScrollTop(follow ? Double.MAX_VALUE : previousScrollTop);
+        }
+    }
+
+    private void finishExecution() {
+        Platform.runLater(runLog::finish);
+    }
+
     @FXML private void handleExecuteSelected(ActionEvent e) {
         if (selectedNode == null) return;
         execNode(selectedNode);
@@ -2182,89 +2350,117 @@ public class TaskBuilderLayoutController {
         // Determine the first node (connected from Start, or first in list)
         int firstId = def.getNodes().get(0).getId();
 
-        setStatus("▶ Executing DAG...");
+        long generation = beginExecution(profile);
+        if (generation < 0) return;
         builderService.setActiveProfile(profile);
+        setStatus("▶ Executing DAG...");
         Thread t = new Thread(() -> {
-            try {
-                String startLocStr = def.getStartLocation();
-                if (profile != null && startLocStr != null && !startLocStr.equalsIgnoreCase("ANY")) {
-                    Platform.runLater(() -> setStatus("▶ Navigating to " + startLocStr + "..."));
-                    dev.frostguard.engine.schedule.LaunchPoint loc = 
-                        dev.frostguard.engine.schedule.LaunchPoint.valueOf(startLocStr.toUpperCase());
-                    dev.frostguard.engine.helper.NavigationHelper navHelper = 
-                        new dev.frostguard.engine.helper.NavigationHelper(
-                                dev.frostguard.engine.emulator.EmulatorController.getInstance(), 
-                                profile.getEmulatorNumber(), 
-                                profile
-                        );
-                    navHelper.ensureCorrectScreenLocation(loc);
-                }
+            try (ProfileContextLogger.CaptureScope capture = ProfileContextLogger.captureCurrentThread(
+                    profile.getId(), line -> appendExecutionLog(generation, line))) {
+                executeGraph(def, profile, nodeMap, firstId);
             } catch (Exception ex) {
-                Platform.runLater(() -> setStatus("❌ Start Navigation failed: " + ex.getMessage()));
-                return;
+                new ProfileContextLogger(TaskBuilderLayoutController.class, profile)
+                        .error("Task Builder execution stopped unexpectedly", ex);
+                Platform.runLater(() -> setStatus("❌ Execution stopped: " + ex.getMessage()));
+            } finally {
+                finishExecution();
             }
-
-            int currentId = firstId;
-            int failedNodeId = -1;
-            while (currentId > 0) {
-                AutomationStep current = nodeMap.get(currentId);
-                if (current == null) break;
-
-                int executingId = current.getId();
-                Platform.runLater(() -> showRunningNode(executingId));
-                boolean ok;
-                try {
-                    ok = builderService.executeNode(current);
-                } finally {
-                    Platform.runLater(() -> clearRunningNode(executingId));
-                }
-                final AutomationStep nodeRef = current;
-                Platform.runLater(() -> {
-                    refreshCard(nodeRef);
-                    if (selectedNode != null && selectedNode.getId() == nodeRef.getId())
-                        propStatusLabel.setText(nodeRef.isExecuted() ? "✅" : "❌");
-                });
-
-                if (!ok) {
-                    failedNodeId = nodeRef.getId();
-                    Platform.runLater(() -> setStatus("❌ Failed at node #" + nodeRef.getId()));
-                    break;
-                }
-
-                // Determine next node based on branching (unified via BranchEvaluator)
-                currentId = BranchEvaluator.resolveNextNode(current);
-
-                try { Thread.sleep(400); } catch (InterruptedException ignored) { return; }
-            }
-            final int failure = failedNodeId;
-            capturePreview();
-            Platform.runLater(() -> setStatus(failure < 0
-                    ? "✅ DAG execution complete"
-                    : "❌ Failed at node #" + failure));
         });
         t.setDaemon(true); t.start();
+    }
+
+    private void executeGraph(AutomationBlueprint def, AccountDescriptor profile,
+                              Map<Integer, AutomationStep> nodeMap, int firstId) {
+        try {
+            String startLocStr = def.getStartLocation();
+            if (startLocStr != null && !startLocStr.equalsIgnoreCase("ANY")) {
+                Platform.runLater(() -> setStatus("▶ Navigating to " + startLocStr + "..."));
+                dev.frostguard.engine.schedule.LaunchPoint loc =
+                        dev.frostguard.engine.schedule.LaunchPoint.valueOf(startLocStr.toUpperCase());
+                dev.frostguard.engine.helper.NavigationHelper navHelper =
+                        new dev.frostguard.engine.helper.NavigationHelper(
+                                dev.frostguard.engine.emulator.EmulatorController.getInstance(),
+                                profile.getEmulatorNumber(), profile);
+                navHelper.ensureCorrectScreenLocation(loc);
+            }
+        } catch (Exception ex) {
+            new ProfileContextLogger(TaskBuilderLayoutController.class, profile)
+                    .error("Task Builder start navigation failed", ex);
+            Platform.runLater(() -> setStatus("❌ Start Navigation failed: " + ex.getMessage()));
+            return;
+        }
+
+        int currentId = firstId;
+        int failedNodeId = -1;
+        while (currentId > 0) {
+            AutomationStep current = nodeMap.get(currentId);
+            if (current == null) break;
+
+            int executingId = current.getId();
+            Platform.runLater(() -> showRunningNode(executingId));
+            boolean ok;
+            try {
+                ok = builderService.executeNode(current);
+            } finally {
+                Platform.runLater(() -> clearRunningNode(executingId));
+            }
+            Platform.runLater(() -> {
+                refreshCard(current);
+                if (selectedNode != null && selectedNode.getId() == current.getId())
+                    propStatusLabel.setText(current.isExecuted() ? "✅" : "❌");
+            });
+
+            if (!ok) {
+                failedNodeId = current.getId();
+                Platform.runLater(() -> setStatus("❌ Failed at node #" + current.getId()));
+                break;
+            }
+
+            currentId = BranchEvaluator.resolveNextNode(current);
+            try { Thread.sleep(400); } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+        final int failure = failedNodeId;
+        capturePreview();
+        Platform.runLater(() -> setStatus(failure < 0
+                ? "✅ DAG execution complete"
+                : "❌ Failed at node #" + failure));
     }
 
 
     private void execNode(AutomationStep node) {
         AccountDescriptor profile = profileComboBox.getValue();
         if (profile == null) { setStatus("⚠ Select a profile"); return; }
+        long generation = beginExecution(profile);
+        if (generation < 0) return;
         builderService.setActiveProfile(profile);
         setStatus("▶ " + node.getSummary() + "...");
         showRunningNode(node.getId());
         Thread t = new Thread(() -> {
-            boolean ok;
-            try {
-                ok = builderService.executeNode(node);
+            try (ProfileContextLogger.CaptureScope capture = ProfileContextLogger.captureCurrentThread(
+                    profile.getId(), line -> appendExecutionLog(generation, line))) {
+                boolean ok = builderService.executeNode(node);
+                Platform.runLater(() -> {
+                    refreshCard(node);
+                    propStatusLabel.setText(node.isExecuted() ? "✅ Executed" : "❌ Failed");
+                    setStatus(ok ? "✅ Done" : "❌ Failed");
+                });
+                if (ok) {
+                    try { Thread.sleep(800); } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                    }
+                    capturePreview();
+                }
+            } catch (Exception ex) {
+                new ProfileContextLogger(TaskBuilderLayoutController.class, profile)
+                        .error("Task Builder node execution stopped unexpectedly", ex);
+                Platform.runLater(() -> setStatus("❌ Execution stopped: " + ex.getMessage()));
             } finally {
+                finishExecution();
                 Platform.runLater(() -> clearRunningNode(node.getId()));
             }
-            Platform.runLater(() -> {
-                refreshCard(node);
-                propStatusLabel.setText(node.isExecuted() ? "✅ Executed" : "❌ Failed");
-                setStatus(ok ? "✅ Done" : "❌ Failed");
-            });
-            if (ok) { try { Thread.sleep(800); } catch (InterruptedException ignored) {} capturePreview(); }
         });
         t.setDaemon(true); t.start();
     }
@@ -2323,6 +2519,14 @@ public class TaskBuilderLayoutController {
 
     private void setupProfiles() {
         if (profileComboBox == null) return;
+        profileComboBox.valueProperty().addListener((obs, oldProfile, newProfile) -> {
+            Long oldId = oldProfile == null ? null : oldProfile.getId();
+            Long newId = newProfile == null ? null : newProfile.getId();
+            if (!Objects.equals(oldId, newId)) {
+                runLog.selectProfile(newId);
+                runLogTextArea.clear();
+            }
+        });
         profileComboBox.setOnShowing(e -> {
             try {
                 List<AccountDescriptor> profiles = ProfileService.obtain().fetchAllAccounts();

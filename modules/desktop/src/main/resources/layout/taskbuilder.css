@@ -166,6 +166,8 @@
     -fx-border-radius: 4;
 }
 .tb-btn-toolbar-toggle:selected:hover { -fx-background-color: rgba(252,209,118,0.18); }
+.tb-btn-toolbar-toggle SVGPath { -fx-fill: -vfx-fg-muted; }
+.tb-btn-toolbar-toggle:selected SVGPath { -fx-fill: -vfx-accent; }
 
 
 /* ── NODE PALETTE (LEFT SIDEBAR) ───────────────────────── */
@@ -245,6 +247,21 @@
     -fx-background-color: -vfx-surface-card;
     -fx-border-width: 1 0 0 0;
     -fx-border-color: -vfx-rule-faint;
+}
+
+.tb-run-log-panel {
+    -fx-background-color: -vfx-surface-card;
+    -fx-border-width: 1 0 0 0;
+    -fx-border-color: -vfx-rule-faint;
+    -fx-padding: 4 8 6 8;
+}
+.tb-run-log-text {
+    -fx-control-inner-background: -vfx-surface-base;
+    -fx-text-fill: -vfx-fg-secondary;
+    -fx-font-family: monospace;
+    -fx-font-size: 11px;
+    -fx-border-color: -vfx-rule-faint;
+    -fx-border-radius: 3;
 }
 
 .tb-props-icon { -fx-font-size: 18px; }
@@ -511,6 +528,8 @@
 .flow-node-header-template { -fx-background-color: #dc2626; }
 .flow-node-header-shop     { -fx-background-color: #a16207; }
 .flow-node-header-sidebar  { -fx-background-color: #13779a; }
+.flow-node-header-alliance { -fx-background-color: #a33d3d; }
+.flow-node-header-event    { -fx-background-color: #7a3fa0; }
 
 .flow-node-type-label { -fx-text-fill: #fff; -fx-font-weight: 700; -fx-font-size: 12px; }
 .flow-node-id-label   { -fx-text-fill: rgba(255,255,255,0.5); -fx-font-weight: 500; -fx-font-size: 10px; }

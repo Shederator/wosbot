@@ -47,12 +47,14 @@ class IntelCycleSchedulingOrchestrationTest {
         runSchedulerTick(queue);
         assertEquals(2, task.executionCount);
         assertEquals(IntelCyclePolicy.Action.RESUME_ACTIVE_CYCLE, task.lastAction);
-        assertTrue(task.getScheduled().isAfter(LocalDateTime.now().plusHours(1)));
+        // The next UTC refresh may be less than an hour away near a boundary;
+        // the contract is that the completed cycle is parked in the future.
+        assertTrue(task.getScheduled().isAfter(LocalDateTime.now()));
 
         TaskStateData persisted = TaskManagementService.shared().lookupTaskState(
                 profile.getId(), TpDailyTaskEnum.INTEL.getId());
         assertNotNull(persisted);
-        assertTrue(persisted.getNextExecutionTime().isAfter(LocalDateTime.now().plusHours(1)));
+        assertTrue(persisted.getNextExecutionTime().isAfter(LocalDateTime.now()));
         assertEquals(0, queue.gameStopCount);
         assertEquals(0, queue.slotReleaseCount);
 
