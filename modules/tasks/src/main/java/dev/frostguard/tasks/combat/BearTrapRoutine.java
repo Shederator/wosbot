@@ -979,12 +979,14 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                 long knownTroops = formationTroopCounts.getOrDefault(formation, 0L);
                 Set<String> rejected = rejectedCandidatesByFormation.computeIfAbsent(
                         formation, ignored -> new HashSet<>());
-                List<BearRallyCandidate> candidates = new BearRallyScanner(templateSearchHelper)
-                        .scanCandidates(now());
+                BearRallyScanner.ScanResult scan = new BearRallyScanner(templateSearchHelper)
+                        .scan(now());
                 Optional<BearRallyCandidate> selected = BearRallyCandidateSelector.selectBest(
-                        candidates, knownTroops, rejected);
+                        scan.candidates(), knownTroops, rejected);
                 if (selected.isEmpty()) {
-                    return BearSessionCoordinator.JoinOutcome.NO_JOINABLE_RALLY;
+                    return scan.ocrFailure()
+                            ? BearSessionCoordinator.JoinOutcome.OCR_MISS
+                            : BearSessionCoordinator.JoinOutcome.NO_JOINABLE_RALLY;
                 }
                 BearRallyCandidate candidate = selected.get();
                 tapInside(candidate.joinButtonArea());

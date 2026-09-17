@@ -47,6 +47,21 @@ class BearRallyScannerTest {
         assertTrue(scanner.scanCandidates(Instant.now()).isEmpty());
     }
 
+    @Test
+    void reportsOcrFailureInsteadOfCallingAVisibleBearRowDrained() {
+        ImageSearchResultData button = ImageSearchResultData.hit(620, 500, 96, 40, 40);
+        ImageSearchResultData bearIcon = ImageSearchResultData.hit(100, 460, 90, 40, 40);
+        BearRallyScanner scanner = new BearRallyScanner(
+                () -> List.of(button),
+                () -> List.of(bearIcon),
+                (topLeft, bottomRight) -> "unreadable");
+
+        BearRallyScanner.ScanResult result = scanner.scan(Instant.now());
+
+        assertTrue(result.candidates().isEmpty());
+        assertTrue(result.ocrFailure());
+    }
+
     private static String textFor(PointData topLeft, int anchorY) {
         if (topLeft.getX() == 626) {
             return "4/15";

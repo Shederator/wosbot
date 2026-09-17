@@ -28,6 +28,15 @@ final class BearRallyScanner {
         String extract(PointData topLeft, PointData bottomRight);
     }
 
+    record ScanResult(List<BearRallyCandidate> candidates, boolean ocrFailure) {
+        ScanResult {
+            candidates = List.copyOf(candidates);
+        }
+    }
+
+    private record ParseResult(Optional<BearRallyCandidate> candidate, boolean ocrFailure) {
+    }
+
     private final Supplier<List<ImageSearchResultData>> greenButtons;
     private final Supplier<List<ImageSearchResultData>> bearIcons;
     private final TextExtractor text;
@@ -62,16 +71,26 @@ final class BearRallyScanner {
     }
 
     List<BearRallyCandidate> scanCandidates(Instant observedAt) {
-        List<ImageSearchResultData> bears = safe(bearIcons.get());
-        List<BearRallyCandidate> candidates = new ArrayList<>();
-        safe(greenButtons.get()).stream()
-                .filter(BearRallyScanner::usable)
-                .sorted(Comparator.comparingInt(hit -> hit.getPoint().getY()))
-                .forEach(button -> parse(button, bears, observedAt).ifPresent(candidates::add));
-        return candidates;
+        return scan(observedAt).candidates();
     }
 
-    private Optional<BearRallyCandidate> parse(
+    ScanResult scan(Instant observedAt) {
+        List<ImageSearchResultData> bears = safe(bearIcons.get());
+        List<BearRallyCandidate> candidates = new ArrayList<>();
+        boolean ocrFailure = false;
+        List<ImageSearchResultData> buttons = safe(greenButtons.get()).stream()
+                .filter(BearRallyScanner::usable)
+                .sorted(Comparator.comparingInt(hit -> hit.getPoint().getY()))
+                .toList();
+        for (ImageSearchResultData button : buttons) {
+            ParseResult parsed = parse(button, bears, observedAt);
+            parsed.candidate().ifPresent(candidates::add);
+            ocrFailure |= parsed.ocrFailure();
+        }
+        return new ScanResult(candidates, ocrFailure);
+    }
+
+    private ParseResult parse(
             ImageSearchResultData button,
             List<ImageSearchResultData> bears,
             Instant observedAt) {
@@ -79,7 +98,7 @@ final class BearRallyScanner {
         boolean bear = bears.stream().filter(BearRallyScanner::usable)
                 .anyMatch(icon -> Math.abs(icon.getPoint().getY() - rowY) <= ROW_TOLERANCE);
         if (!bear) {
-            return Optional.empty();
+            return new ParseResult(Optional.empty(), false);
         }
         int anchorY = button.hasMatchedArea()
                 ? button.getMatchedArea().topLeft().getY()
@@ -99,7 +118,7 @@ final class BearRallyScanner {
         Duration countdown = GameTimeUtils.parseMinutesSeconds(countdownText);
         if (members == null || troops == null || countdown == null
                 || members[0] > Integer.MAX_VALUE || members[1] > Integer.MAX_VALUE) {
-            return Optional.empty();
+            return new ParseResult(Optional.empty(), true);
         }
         AreaData buttonArea = button.hasMatchedArea()
                 ? button.getMatchedArea()
@@ -108,7 +127,9 @@ final class BearRallyScanner {
                 buttonArea, rowY, true, BearRallyCandidate.JoinButton.GREEN,
                 (int) members[0], (int) members[1], troops[0], troops[1],
                 countdown, observedAt);
-        return candidate.accepts(0) ? Optional.of(candidate) : Optional.empty();
+        return new ParseResult(
+                candidate.accepts(0) ? Optional.of(candidate) : Optional.empty(),
+                false);
     }
 
     private String read(int anchorY, int x1, int x2, int dy1, int dy2) {
