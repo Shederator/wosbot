@@ -14,7 +14,7 @@ import java.util.OptionalInt;
  */
 final class BearSessionCoordinator {
 
-    private static final Duration DEFAULT_LAUNCH_WINDOW = Duration.ofMinutes(5).plusSeconds(12);
+    private static final Duration MINIMUM_OWN_RALLY_CUTOFF = Duration.ofMinutes(5).plusSeconds(30);
     private static final Duration NORMAL_POLL = Duration.ofSeconds(1);
     private static final Duration RETURN_GUARD = Duration.ofSeconds(2);
     private static final int EXTRA_JOIN_ATTEMPTS = 6;
@@ -187,7 +187,7 @@ final class BearSessionCoordinator {
     private OptionalInt trackedOwnSlot = OptionalInt.empty();
     private boolean mayAdoptExisting = true;
     private int formationIndex;
-    private Duration launchWindow = DEFAULT_LAUNCH_WINDOW;
+    private Duration ownRallyCutoff = MINIMUM_OWN_RALLY_CUTOFF;
     private boolean ownLaunchClosed;
     private State state = State.LOCATE_BEAR;
 
@@ -261,7 +261,12 @@ final class BearSessionCoordinator {
                 }
                 if (start.outcome() == OwnRallyStartOutcome.CONFIRMED) {
                     trackedOwnSlot = OptionalInt.of(start.slot());
-                    launchWindow = start.rallyCountdown().plus(start.oneWayTravel());
+                    Duration observedCycle = start.rallyCountdown()
+                            .plus(start.oneWayTravel().multipliedBy(2))
+                            .plus(RETURN_GUARD);
+                    ownRallyCutoff = observedCycle.compareTo(MINIMUM_OWN_RALLY_CUTOFF) > 0
+                            ? observedCycle
+                            : MINIMUM_OWN_RALLY_CUTOFF;
                     freeSlotsForJoining = Math.max(0, freeSlotsForJoining - 1);
                     transition(State.OWN_RALLY_ACTIVE);
                 } else if (start.outcome() == OwnRallyStartOutcome.ALREADY_ACTIVE) {
@@ -350,7 +355,7 @@ final class BearSessionCoordinator {
     }
 
     private boolean hasTimeForOwnRally() {
-        return !ownLaunchClosed && !driver.now().plus(launchWindow).isAfter(eventEnd);
+        return !ownLaunchClosed && driver.now().plus(ownRallyCutoff).isBefore(eventEnd);
     }
 
     private Duration nextPause(MarchSnapshot snapshot) {
