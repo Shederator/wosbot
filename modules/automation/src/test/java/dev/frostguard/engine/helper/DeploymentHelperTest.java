@@ -16,6 +16,13 @@ import dev.frostguard.vision.ocr.ResilientOcrExecutor;
 class DeploymentHelperTest {
 
     @Test
+    void parsesTheSelectedFormationTroopCountFromTheDeploymentFraction() {
+        assertEquals(57_785, DeploymentHelper.parseSelectedTroopCount("57,785/57,785"));
+        assertEquals(120_000, DeploymentHelper.parseSelectedTroopCount("120K / 120K"));
+        assertEquals(-1, DeploymentHelper.parseSelectedTroopCount("unreadable"));
+    }
+
+    @Test
     void readsFinalSingleDigitCostWithoutHeroKnowledge() {
         DeploymentHelper helper = helperReturning("00:00:36", "9");
 

@@ -37,6 +37,16 @@ public final class CommonOCRSettings {
     public static final OcrSettingsData MARCH_QUEUE_TIMER_SETTINGS =
             buildConfig("0123456789:", true, 255, 255, 255, TextLayout.SINGLE_LINE);
 
+    public static final OcrSettingsData RALLY_TROOP_COUNT_SETTINGS =
+            buildConfig("0123456789,./KMkm ", true, 255, 255, 255, TextLayout.SINGLE_LINE);
+
+    public static final OcrSettingsData BEAR_RALLY_MEMBERS_SETTINGS =
+            buildConfig("0123456789/ ", true, 255, 255, 255, TextLayout.SINGLE_LINE);
+    public static final OcrSettingsData BEAR_RALLY_CAPACITY_SETTINGS =
+            buildConfig("0123456789,./KMkm ", true, 255, 255, 255, TextLayout.SINGLE_LINE);
+    public static final OcrSettingsData BEAR_RALLY_COUNTDOWN_SETTINGS =
+            buildConfig("0123456789: ", true, 255, 255, 255, TextLayout.SINGLE_LINE);
+
     public static final OcrSettingsData INTEL_COOLDOWN_SETTINGS =
             buildConfig("0123456789:", true, 255, 255, 255, TextLayout.SINGLE_LINE);
 

@@ -97,6 +97,12 @@ public class TemplateSearchHelper {
             return recordFrameResult(tpl, doSearchGrey(tpl, cfg, image), true);
         }
 
+        public List<ImageSearchResultData> locateAllPatterns(TemplatesEnum tpl, SearchConfig cfg) {
+            preemptionHook.run();
+            List<ImageSearchResultData> results = doMulti(tpl, cfg, image);
+            return results == null ? List.of() : results;
+        }
+
         @Override
         public String extractText(OcrSettingsData config, PointData topLeft, PointData bottomRight)
                 throws IOException, OcrException {
@@ -227,6 +233,16 @@ public class TemplateSearchHelper {
         if (c.hasArea())        return emu.locateAllPatterns(device, tpl, c.getArea().topLeft(), c.getArea().bottomRight(), c.getThreshold(), c.getMaxResults());
         if (c.hasCoordinates()) return emu.locateAllPatterns(device, tpl, c.getStartPoint(), c.getEndPoint(), c.getThreshold(), c.getMaxResults());
         return emu.locateAllPatterns(device, tpl, c.getThreshold(), c.getMaxResults());
+    }
+
+    private List<ImageSearchResultData> doMulti(TemplatesEnum tpl, SearchConfig c, RawImageData frame) {
+        if (c.hasArea()) return emu.locateAllPatterns(device, frame, tpl,
+                c.getArea().topLeft(), c.getArea().bottomRight(), c.getThreshold(), c.getMaxResults());
+        if (c.hasCoordinates()) return emu.locateAllPatterns(device, frame, tpl,
+                c.getStartPoint(), c.getEndPoint(), c.getThreshold(), c.getMaxResults());
+        return emu.locateAllPatterns(device, frame, tpl,
+                new PointData(0, 0), new PointData(frame.getWidth(), frame.getHeight()),
+                c.getThreshold(), c.getMaxResults());
     }
 
     private List<ImageSearchResultData> doMultiGrey(TemplatesEnum tpl, SearchConfig c) {

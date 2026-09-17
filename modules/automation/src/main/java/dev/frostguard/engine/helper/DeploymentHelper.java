@@ -12,6 +12,7 @@ import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.vision.color.GameColors;
 import dev.frostguard.vision.color.PixelStats;
 import dev.frostguard.vision.convert.GameTimeUtils;
+import dev.frostguard.vision.convert.CompactGameNumberParser;
 import dev.frostguard.vision.logging.ProfileContextLogger;
 import dev.frostguard.vision.convert.RegexNumberParser;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
@@ -156,6 +157,33 @@ public class DeploymentHelper {
 
     public long readTravelTimeSeconds() {
         return readTravelTimeSeconds(durationReader);
+    }
+
+    /** Reads the selected saved formation's troop count from the deployment-screen fraction. */
+    public long readSelectedTroopCount() {
+        try {
+            TemplateSearchHelper.Frame frame = templates.captureFrame();
+            String text = frame.extractText(
+                    CommonOCRSettings.RALLY_TROOP_COUNT_SETTINGS,
+                    CommonGameAreas.RALLY_SELECTED_TROOPS_OCR_AREA.topLeft(),
+                    CommonGameAreas.RALLY_SELECTED_TROOPS_OCR_AREA.bottomRight());
+            long count = parseSelectedTroopCount(text);
+            if (count < 0) {
+                log.warn("Selected formation troop count unreadable: " + text);
+            }
+            return count;
+        } catch (Exception ex) {
+            log.warn("Selected formation troop-count OCR failed: " + ex.getMessage());
+            return -1;
+        }
+    }
+
+    static long parseSelectedTroopCount(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return -1;
+        }
+        String numerator = raw.split("/", 2)[0].replace(" ", "");
+        return CompactGameNumberParser.parse(numerator);
     }
 
     private long readTravelTimeSeconds(ResilientOcrExecutor<Duration> durations) {

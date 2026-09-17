@@ -61,6 +61,26 @@ class BearSessionCoordinatorTest {
     }
 
     @Test
+    void emptyFinalFiveMinuteListStopsScanningForNewRallies() {
+        ScriptedDriver driver = new ScriptedDriver();
+        driver.freeSlots = 1;
+        driver.joinResults.add(BearSessionCoordinator.JoinOutcome.NO_JOINABLE_RALLY);
+        BearSessionCoordinator coordinator = new BearSessionCoordinator(
+                driver,
+                Instant.EPOCH.plus(Duration.ofMinutes(5)),
+                true,
+                1,
+                true,
+                List.of(2, 3, 4, 5, 6));
+
+        assertEquals(BearSessionCoordinator.ExitReason.EVENT_ENDED, coordinator.run());
+        assertEquals(List.of(2), driver.joinFlags,
+                "the final-five-minute list is scanned once after it drains");
+        assertEquals(List.of(Duration.ofMinutes(5)), driver.pauseDurations,
+                "after the final list drains the session waits for the event end");
+    }
+
+    @Test
     void doesNotDuplicateAnUnclassifiedExistingRally() {
         ScriptedDriver driver = new ScriptedDriver();
         driver.existingOwnRallyUntil = Instant.EPOCH.plusSeconds(100);
@@ -204,9 +224,10 @@ class BearSessionCoordinatorTest {
         ScriptedDriver driver = new ScriptedDriver();
         driver.freeSlots = 2;
         driver.joinResults.add(BearSessionCoordinator.JoinOutcome.JOINED);
+        driver.cancelAfterPauses = 3;
 
         BearSessionCoordinator coordinator = new BearSessionCoordinator(
-                driver, Instant.EPOCH.plusSeconds(3), true, 4, true, List.of(2));
+                driver, Instant.EPOCH.plus(Duration.ofMinutes(6)), true, 4, true, List.of(2));
 
         coordinator.run();
 
