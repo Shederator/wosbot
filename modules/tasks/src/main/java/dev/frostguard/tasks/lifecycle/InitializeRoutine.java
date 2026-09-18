@@ -19,6 +19,7 @@ import dev.frostguard.vision.convert.ImageConverter;
 import dev.frostguard.vision.match.OpenCvPatternLocator;
 
 import java.time.LocalDateTime;
+import java.util.function.BooleanSupplier;
 
 /**
  * Initialize task that starts the bot and prepares the game for automation.
@@ -182,17 +183,36 @@ public class InitializeRoutine extends DelayedTask {
 	private void ensureEmulatorRunning() {
 		logInfo("Checking emulator status...");
 
-		while (!isStarted) {
-			if (emuManager.isRunning(EMULATOR_NUMBER)) {
-				isStarted = true;
-				lastVerifiedStartupState = "emulator running";
-				logInfo("Emulator is running.");
-			} else {
-				logInfo("Emulator not found. Attempting to start it...");
-				emuManager.launchEmulator(EMULATOR_NUMBER);
-				logInfo("Waiting 10 seconds before checking again.");
-				sleepTask(10000); // Wait for emulator to start
+		if (!isStarted) {
+			awaitEmulatorRunning(
+					() -> emuManager.isRunning(EMULATOR_NUMBER),
+					() -> {
+						logInfo("Emulator not found. Attempting to start it...");
+						emuManager.launchEmulator(EMULATOR_NUMBER);
+					},
+					() -> {
+						logInfo("Waiting 10 seconds before checking again.");
+						sleepTask(10000); // Wait for emulator to start
+					},
+					this::checkPreemption);
+			isStarted = true;
+			lastVerifiedStartupState = "emulator running";
+			logInfo("Emulator is running.");
+		}
+	}
+
+	static void awaitEmulatorRunning(BooleanSupplier isRunning, Runnable launch,
+			Runnable retryDelay, Runnable checkPreemption) {
+		while (true) {
+			checkPreemption.run();
+			boolean running = isRunning.getAsBoolean();
+			checkPreemption.run();
+			if (running) {
+				return;
 			}
+			launch.run();
+			checkPreemption.run();
+			retryDelay.run();
 		}
 	}
 
