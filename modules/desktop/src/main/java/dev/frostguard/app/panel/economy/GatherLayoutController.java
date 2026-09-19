@@ -12,7 +12,7 @@ import java.util.stream.IntStream;
 
 public class GatherLayoutController extends AbstractProfileController {
 
-	private static final List<Integer> RESOURCE_LEVELS = IntStream.rangeClosed(1, 8).boxed().toList();
+	private static final List<Integer> RESOURCE_LEVELS = IntStream.rangeClosed(1, 9).boxed().toList();
 	private static final List<Integer> MARCH_QUEUE_SIZES = IntStream.rangeClosed(1, 6).boxed().toList();
 	private static final List<String> SPEED_BOOST_OPTIONS = List.of("8h (250 gems)", "24h (600 gems)");
 	private static final String DEFAULT_SPEED_BOOST = "24h (600 gems)";
