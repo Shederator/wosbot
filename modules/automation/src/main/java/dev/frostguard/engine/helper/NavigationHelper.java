@@ -14,6 +14,7 @@ import dev.frostguard.engine.nav.ButtonConstants;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.nav.SidebarDestination;
+import dev.frostguard.engine.nav.SidebarRowLookup;
 import dev.frostguard.engine.nav.SidebarSection;
 import dev.frostguard.engine.nav.ShopTab;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -108,6 +109,11 @@ public class NavigationHelper {
     public ImageSearchResultData findSidebarDestinationRow(SidebarDestination destination) {
         ensureCorrectScreenLocation(LaunchPoint.ANY);
         return sidebar.findRow(destination);
+    }
+
+    public SidebarRowLookup findSidebarDestinationRowWithStatus(SidebarDestination destination) {
+        ensureCorrectScreenLocation(LaunchPoint.ANY);
+        return sidebar.findRowWithStatus(destination);
     }
 
     public boolean closeSidebar() {
