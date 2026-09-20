@@ -82,6 +82,8 @@ public class TaskQueue {
     private volatile String             profileCooldownStatus;
     // Changed by pernerch | Date: 2026-07-04 | Why: ensure first startup cycle runs Initialize regardless of idle heuristics.
     private volatile boolean    forceInitialInitialize = true;
+    private volatile boolean    idleWakeInitializationPending = false;
+    private volatile boolean    idleWakeInitializationForceNow = false;
     private volatile boolean    shuttingDown = false;
     private volatile boolean    stoppedCleanly = false;
 
@@ -323,6 +325,8 @@ public class TaskQueue {
         shuttingDown = false;
         stoppedCleanly = false;
         profileCooldownStatus = null;
+        idleWakeInitializationPending = false;
+        idleWakeInitializationForceNow = false;
         statusModel.setRunning(true);
         executor.start(this::mainLoop, "TaskQueue-" + profile.getName());
     }
@@ -386,6 +390,10 @@ public class TaskQueue {
         profileCooldownStatus = null;
         statusModel.setPaused(false);
         statusModel.setUserPaused(false);
+        if (statusModel.isIdleTimeExceeded()) {
+            idleWakeInitializationPending = true;
+            idleWakeInitializationForceNow = true;
+        }
         statusModel.setDelayUntil(LocalDateTime.now());
         broadcastStatus("RESUMING");
         emitInfo("Queue resumed");
@@ -441,9 +449,21 @@ public class TaskQueue {
             onPausedTick();
             return;
         }
+
+        if (!prepareIdleQueueForExecution()) {
+            if (!statusModel.getLoopState().isExecutedTask() && !statusModel.isPaused()) {
+                finishIdleSchedulerTick();
+            }
+            return;
+        }
+
         if (requiresSlotAcquisition(sessionOrigin)) {
             emitInfo("No active device lease - re-acquiring slot");
             acquireSlot();
+            if (requiresSlotAcquisition(sessionOrigin)) {
+                finishIdleSchedulerTick();
+                return;
+            }
         } else if (statusModel.isReadyToReconnect()
                 && !deviceBridge.isRunning(profile.getEmulatorNumber())) {
             emitInfo("Device offline - re-acquiring slot");
@@ -463,12 +483,137 @@ public class TaskQueue {
         if (shouldHandleIdleTransitions(statusModel)) handleIdleTransitions();
 
         if (!statusModel.getLoopState().isExecutedTask() && !statusModel.isPaused()) {
-            String nextLabel = taskBacklog.isEmpty() ? "None" : taskBacklog.peek().getTaskName();
-            broadcastStatus("Idle " + formatCountdown(statusModel.getDelayUntil()) + "\nNext: " + nextLabel);
-            statusModel.getLoopState().endLoop();
-            long nap = Math.max(0, TICK_INTERVAL_MS - statusModel.getLoopState().getDuration());
-            sleepSchedulerTick(nap);
+            finishIdleSchedulerTick();
         }
+    }
+
+    private boolean prepareIdleQueueForExecution() {
+        if (idleWakeInitializationPending) {
+            return runIdleWakeInitialization();
+        }
+        if (!statusModel.isIdleTimeExceeded()) {
+            return true;
+        }
+
+        LocalDateTime nextRun = Optional.ofNullable(taskBacklog.peek())
+                .map(DelayedTask::getScheduled)
+                .orElse(statusModel.getDelayUntil());
+        boolean taskApproaching = nextRun != null
+                && !LocalDateTime.now().plusMinutes(1).isBefore(nextRun);
+        if (!taskApproaching) {
+            return !requiresSlotAcquisition(sessionOrigin);
+        }
+
+        idleWakeInitializationPending = true;
+        idleWakeInitializationForceNow = true;
+        return runIdleWakeInitialization();
+    }
+
+    private boolean runIdleWakeInitialization() {
+        if (!idleWakeInitializationForceNow && hasDeferredIdleWakeInitialize()) {
+            return false;
+        }
+
+        if (requiresSlotAcquisition(sessionOrigin)) {
+            emitInfo("Next task approaching - re-acquiring slot");
+            acquireSlot();
+            if (requiresSlotAcquisition(sessionOrigin)) {
+                return false;
+            }
+        } else {
+            emitInfo("Next task approaching - resuming active slot");
+        }
+
+        DelayedTask initialize = takeIdleWakeInitialize(idleWakeInitializationForceNow);
+        if (initialize == null) {
+            return false;
+        }
+        idleWakeInitializationForceNow = false;
+        if (initialize.getDelay(TimeUnit.MILLISECONDS) > 0) {
+            return false;
+        }
+
+        boolean initialized = executeTask(initialize);
+        statusModel.getLoopState().setExecutedTask(initialized);
+        if (initialized) {
+            idleWakeInitializationPending = false;
+            idleWakeInitializationForceNow = false;
+            statusModel.setIdleTimeExceeded(false);
+        } else if (!statusModel.isPaused()) {
+            deferFailedIdleWakeInitialize(initialize);
+            if (!requiresSlotAcquisition(sessionOrigin)) {
+                try {
+                    releaseActiveSlotLease();
+                } catch (RuntimeException ex) {
+                    emitWarn("Could not release slot after failed idle wake Initialize: " + ex.getMessage());
+                }
+            }
+        }
+        return false;
+    }
+
+    private synchronized boolean hasDeferredIdleWakeInitialize() {
+        return taskBacklog.stream()
+                .filter(task -> task.getTpTask() == TpDailyTaskEnum.INITIALIZE)
+                .anyMatch(task -> task.getDelay(TimeUnit.MILLISECONDS) > 0);
+    }
+
+    private synchronized void deferFailedIdleWakeInitialize(DelayedTask attemptedInitialize) {
+        boolean retryAlreadyQueued = taskBacklog.stream()
+                .anyMatch(task -> task.getTpTask() == TpDailyTaskEnum.INITIALIZE);
+        if (retryAlreadyQueued) {
+            return;
+        }
+
+        attemptedInitialize.setRecurring(true);
+        attemptedInitialize.reschedule(LocalDateTime.now()
+                .plus(TaskFailureIncidentService.DEFAULT_UNHANDLED_RETRY_DELAY));
+        taskBacklog.offer(attemptedInitialize);
+        recordScheduleAdjustment(attemptedInitialize);
+        emitWarnTask(attemptedInitialize,
+                "Idle wake Initialize failed; retrying before normal work at "
+                        + attemptedInitialize.getScheduled().format(TS_FMT));
+    }
+
+    private synchronized DelayedTask takeIdleWakeInitialize(boolean forceNow) {
+        if (isExecutingTask(TpDailyTaskEnum.INITIALIZE)) {
+            return null;
+        }
+
+        DelayedTask queuedInitialize = taskBacklog.stream()
+                .filter(task -> task.getTpTask() == TpDailyTaskEnum.INITIALIZE)
+                .findFirst()
+                .orElse(null);
+        if (queuedInitialize != null) {
+            if (!forceNow && queuedInitialize.getDelay(TimeUnit.MILLISECONDS) > 0) {
+                return null;
+            }
+            taskBacklog.remove(queuedInitialize);
+            if (forceNow) {
+                queuedInitialize.reschedule(LocalDateTime.now());
+            }
+            return queuedInitialize;
+        }
+
+        DelayedTask initialize = createIdleWakeInitializeTask();
+        if (initialize == null) {
+            emitError("Cannot resume idle queue because Initialize could not be created");
+            return null;
+        }
+        initialize.reschedule(LocalDateTime.now());
+        return initialize;
+    }
+
+    private void finishIdleSchedulerTick() {
+        String nextLabel = taskBacklog.isEmpty() ? "None" : taskBacklog.peek().getTaskName();
+        broadcastStatus("Idle " + formatCountdown(statusModel.getDelayUntil()) + "\nNext: " + nextLabel);
+        statusModel.getLoopState().endLoop();
+        long nap = Math.max(0, TICK_INTERVAL_MS - statusModel.getLoopState().getDuration());
+        sleepSchedulerTick(nap);
+    }
+
+    DelayedTask createIdleWakeInitializeTask() {
+        return DelayedTaskRegistry.create(TpDailyTaskEnum.INITIALIZE, profile);
     }
 
     protected void sleepSchedulerTick(long millis) {
@@ -515,7 +660,7 @@ public class TaskQueue {
 
     // ---- task dispatch -----------------------------------------------------
 
-    private boolean executeTask(DelayedTask task) {
+    boolean executeTask(DelayedTask task) {
         if (shuttingDown) {
             emitInfo("Skipping task execution during shutdown: " + task.getTaskName());
             return false;
@@ -523,7 +668,9 @@ public class TaskQueue {
         if (deferForBearTrapProtection(task)) {
             return false;
         }
-        if (task.getTpTask() == TpDailyTaskEnum.INITIALIZE && !shouldRunInitialize()) {
+        if (task.getTpTask() == TpDailyTaskEnum.INITIALIZE
+                && !idleWakeInitializationPending
+                && !shouldRunInitialize()) {
             emitInfoTask(task, "Skipping Initialize - no imminent tasks"); return false;
         }
         LocalDateTime priorSchedule = task.getScheduled();
@@ -831,8 +978,7 @@ public class TaskQueue {
 
     protected boolean releaseBlockedProfileSlot(DelayedTask task) {
         try {
-            releaseEmulatorSlotLease();
-            sessionOrigin = null;
+            releaseActiveSlotLease();
             return true;
         } catch (RuntimeException ex) {
             emitWarnTask(task, "Could not release emulator slot for cooldown: " + ex.getMessage());
@@ -842,6 +988,11 @@ public class TaskQueue {
 
     protected void releaseEmulatorSlotLease() {
         deviceBridge.releaseEmulatorSlot(profile);
+    }
+
+    final void releaseActiveSlotLease() {
+        releaseEmulatorSlotLease();
+        sessionOrigin = null;
     }
 
     static void applyProfileCooldown(DelayedTask task, TaskQueueStatusData status, LocalDateTime retryAt) {
@@ -909,10 +1060,6 @@ public class TaskQueue {
                     // Changed by pernerch | Date: 2026-07-02 | Why: force immediate activation of the
                     // selected peer queue after slot handover to eliminate idle dead time.
             statusModel.setIdleTimeExceeded(true);
-        } else if (statusModel.isIdleTimeExceeded() && LocalDateTime.now().plusMinutes(1).isAfter(statusModel.getDelayUntil())) {
-            emitInfo("Next task approaching - re-acquiring slot"); acquireSlot();
-            enqueue(DelayedTaskRegistry.create(TpDailyTaskEnum.INITIALIZE, profile));
-            statusModel.setIdleTimeExceeded(false);
         }
     }
 
@@ -969,8 +1116,7 @@ public class TaskQueue {
                 overdue.overdueSeconds()));
 
         try {
-            deviceBridge.releaseEmulatorSlot(profile);
-            sessionOrigin = null;
+            releaseActiveSlotLease();
         } catch (Exception ex) {
             emitWarn("Slot handover warning: " + ex.getMessage());
         }
@@ -996,13 +1142,13 @@ public class TaskQueue {
         if (policy == IdleBehaviorEnum.SEND_TO_BACKGROUND) {
             deviceBridge.sendGameToBackground(profile.getEmulatorNumber());
             emitInfo("Device sent to background until " + until);
-            if (freeSlot) { deviceBridge.releaseEmulatorSlot(profile); sessionOrigin = null; emitInfo("Slot released"); }
+            if (freeSlot) { releaseActiveSlotLease(); emitInfo("Slot released"); }
         } else if (policy == IdleBehaviorEnum.PC_SLEEP) {
-            sessionOrigin = null; triggerPcSleep(until);
+            triggerPcSleep(until);
         } else {
             deviceBridge.closeEmulator(profile.getEmulatorNumber());
             emitInfo("Device closed until " + until);
-            deviceBridge.releaseEmulatorSlot(profile); sessionOrigin = null;
+            releaseActiveSlotLease();
         }
         broadcastStatus("Idle till " + DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(until));
     }
@@ -1106,7 +1252,7 @@ public class TaskQueue {
     private void triggerPcSleep(LocalDateTime wakeAt) {
         try {
             deviceBridge.closeEmulator(profile.getEmulatorNumber());
-            deviceBridge.releaseEmulatorSlot(profile);
+            releaseActiveSlotLease();
             LocalDateTime wake = wakeAt.minusMinutes(1);
             if (wake.isBefore(LocalDateTime.now())) wake = LocalDateTime.now().plusMinutes(1);
             String tm = DateTimeFormatter.ofPattern("HH:mm").format(wake);
