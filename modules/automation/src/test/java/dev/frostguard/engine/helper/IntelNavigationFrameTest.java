@@ -91,6 +91,12 @@ class IntelNavigationFrameTest {
     }
 
     @Test
+    void detectsDirectIntelShortcutInBothPrivacyReviewedLayouts() throws IOException {
+        assertIntelShortcut("/intel/privacy-redactor/wilderness-with-pets-redacted.png", 862);
+        assertIntelShortcut("/intel/privacy-redactor/wilderness-without-pets-redacted.png", 955);
+    }
+
+    @Test
     void detectsIntelBubbleAfterOpeningLighthouse() throws IOException {
         byte[] frame = resource("lighthouse-selected-no-hand.png");
         ImageSearchResultData bubble = OpenCvPatternLocator.locatePattern(frame,
@@ -134,6 +140,18 @@ class IntelNavigationFrameTest {
         try (InputStream stream = IntelNavigationFrameTest.class.getResourceAsStream(path)) {
             return Objects.requireNonNull(stream, "Missing test resource: " + path).readAllBytes();
         }
+    }
+
+    private static void assertIntelShortcut(String path, int expectedY) throws IOException {
+        ImageSearchResultData shortcut = OpenCvPatternLocator.locatePattern(
+                absoluteResource(path), TemplatesEnum.GAME_HOME_INTEL,
+                new PointData(615, 800), new PointData(715, 1000), 88);
+
+        assertTrue(shortcut.isFound(), "Expected the Intel shortcut in " + path);
+        assertTrue(Math.abs(shortcut.getPoint().getX() - 663) <= 3,
+                () -> "Unexpected Intel x-coordinate in " + path + ": " + shortcut.getPoint());
+        assertTrue(Math.abs(shortcut.getPoint().getY() - expectedY) <= 3,
+                () -> "Unexpected Intel y-coordinate in " + path + ": " + shortcut.getPoint());
     }
 
     private static BufferedImage bufferedFrame(String name) throws IOException {

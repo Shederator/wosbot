@@ -55,6 +55,7 @@ for OCR, pattern, or behavioral evidence; privacy redaction must not erase the
 condition under test. Keep the evidence region intact and verify the redacted
 fixture still proves the intended behavior. Run at least the affected module
 tests; use a full reactor build for cross-module or packaging changes.
+For supported world-map screenshots, use the standalone redactor documented in tools/privacy-redactor/README.md, then manually review the output before committing or sharing it.
 
 ## Shared Engineering Rules
 
