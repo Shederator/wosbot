@@ -14,7 +14,7 @@ class TaskBuilderRunLogTest {
         long firstRun = log.begin(42L);
         assertTrue(log.append(firstRun, "first\nsecond"));
         log.finish();
-        assertEquals("first\nsecond", log.text());
+        assertEquals("second\nfirst", log.text());
 
         long secondRun = log.begin(42L);
         assertEquals("", log.text());
@@ -38,5 +38,19 @@ class TaskBuilderRunLogTest {
         long secondRun = log.begin(43L);
         assertTrue(log.append(secondRun, "new profile"));
         assertEquals("new profile", log.text());
+    }
+
+    @Test
+    void displaysNewestLineFirstAndDropsOldestWhenHistoryIsFull() {
+        TaskBuilderRunLog log = new TaskBuilderRunLog();
+        long run = log.begin(42L);
+        for (int index = 0; index <= 500; index++) {
+            assertTrue(log.append(run, "line " + index));
+        }
+
+        String[] visible = log.text().split("\n");
+        assertEquals(500, visible.length);
+        assertEquals("line 500", visible[0]);
+        assertEquals("line 1", visible[499]);
     }
 }

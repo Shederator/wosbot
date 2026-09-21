@@ -255,6 +255,15 @@
     -fx-border-color: -vfx-rule-faint;
     -fx-padding: 4 8 6 8;
 }
+.tb-run-log-resize-handle {
+    -fx-background-color: -vfx-rule-medium;
+    -fx-background-radius: 3;
+    -fx-background-insets: 3 0 3 0;
+    -fx-cursor: n-resize;
+}
+.tb-run-log-resize-handle:hover {
+    -fx-background-color: -vfx-accent;
+}
 .tb-run-log-text {
     -fx-control-inner-background: -vfx-surface-base;
     -fx-text-fill: -vfx-fg-secondary;
