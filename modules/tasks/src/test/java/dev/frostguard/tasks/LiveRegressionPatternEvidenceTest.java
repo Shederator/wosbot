@@ -1,9 +1,12 @@
 package dev.frostguard.tasks;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
 import java.util.Objects;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -11,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
+import dev.frostguard.tasks.pets.LifeEssenceMarkerDetector;
 import dev.frostguard.vision.match.OpenCvPatternLocator;
 
 class LiveRegressionPatternEvidenceTest {
@@ -45,9 +49,26 @@ class LiveRegressionPatternEvidenceTest {
     }
 
     @Test
-    void detectsCurrentLifeEssenceClaim() throws IOException {
-        assertMatch("/live-regressions-20260818/life-essence-claim.png",
-                TemplatesEnum.LIFE_ESSENCE_CLAIM_CURRENT);
+    void detectsBothLifeEssenceMarkersByOrangeRegionInBothFrames() throws IOException {
+        assertLifeEssenceMarkers("/live-regressions-20260818/life-essence-claim.png",
+                List.of(new PointData(357, 408), new PointData(662, 356)));
+        assertLifeEssenceMarkers("/live-regressions-20260922/life-essence-available-marker.png",
+                List.of(new PointData(116, 146), new PointData(364, 363)));
+    }
+
+    private void assertLifeEssenceMarkers(String framePath, List<PointData> expectedMarkers) throws IOException {
+        BufferedImage frame;
+        try (InputStream stream = getClass().getResourceAsStream(framePath)) {
+            frame = javax.imageio.ImageIO.read(Objects.requireNonNull(stream));
+        }
+        List<PointData> markers = LifeEssenceMarkerDetector.locate(frame);
+
+        assertEquals(expectedMarkers.size(), markers.size(),
+                () -> "Expected Life Essence markers in " + framePath + ": " + markers);
+        for (PointData expected : expectedMarkers) {
+            assertTrue(hasMarkerNear(markers, expected),
+                    () -> "Missing Life Essence marker near " + expected + " in " + framePath + ": " + markers);
+        }
     }
 
     @Test
@@ -89,5 +110,10 @@ class LiveRegressionPatternEvidenceTest {
         try (InputStream stream = getClass().getResourceAsStream(path)) {
             return Objects.requireNonNull(stream, "Missing test resource: " + path).readAllBytes();
         }
+    }
+
+    private static boolean hasMarkerNear(List<PointData> markers, PointData expected) {
+        return markers.stream().anyMatch(marker -> Math.abs(marker.getX() - expected.getX()) <= 20
+                && Math.abs(marker.getY() - expected.getY()) <= 20);
     }
 }

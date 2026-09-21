@@ -1,5 +1,6 @@
 package dev.frostguard.tasks.pets;
 
+import java.awt.image.BufferedImage;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -10,6 +11,7 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 
 import dev.frostguard.vision.convert.GameTimeUtils;
+import dev.frostguard.vision.convert.ImageConverter;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
@@ -17,6 +19,7 @@ import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.nav.SidebarDestination;
@@ -29,14 +32,8 @@ public class LifeEssenceRoutine extends DelayedTask {
 	private static final PointData SHOP_TAB_BUTTON = new PointData(670, 195);
 	private static final PointData EXIT_BUTTON = new PointData(40, 30);
 
-	// Search areas
-	private static final AreaData LIFE_ESSENCE_SEARCH_AREA = new AreaData(
-			new PointData(0, 65),
-			new PointData(720, 1280));
-
 	// Retry limits
 	private static final int MAX_CLAIM_SEARCH_ATTEMPTS = 5;
-	private static final int MAX_CLAIM_RESULTS = 5;
 
 	// Default configuration values
 	private static final int DEFAULT_OFFSET_MINUTES = Integer.parseInt(
@@ -156,12 +153,7 @@ public class LifeEssenceRoutine extends DelayedTask {
 			logDebug("Claim search attempt " + searchAttempt + "/" + MAX_CLAIM_SEARCH_ATTEMPTS);
 
 			// Search for claimable essence in the defined area
-			List<ImageSearchResultData> essenceList = locateClaimableEssence(
-					TemplatesEnum.LIFE_ESSENCE_CLAIM_CURRENT);
-			if (essenceList.isEmpty()) {
-				essenceList = locateClaimableEssence(TemplatesEnum.LIFE_ESSENCE_CLAIM);
-			}
-
+			List<PointData> essenceList = locateClaimableEssence();
 			if (essenceList.isEmpty()) {
 				emptySearches++;
 				logDebug("No claimable essence found on attempt " + searchAttempt);
@@ -180,32 +172,26 @@ public class LifeEssenceRoutine extends DelayedTask {
 			// Reset empty counter if we found something
 			emptySearches = 0;
 
-			// Claim each found essence
-			logDebug("Found " + essenceList.size() + " claimable essence items");
-			for (ImageSearchResultData essence : essenceList) {
-				tapInside(essence);
-				sleepTask(500); // Wait for claim animation
-				totalClaimed++;
-			}
-
-			// Wait for UI to update after claiming
+			PointData essence = essenceList.getFirst();
+			logDebug("Found " + essenceList.size() + " claimable essence items; tapping " + essence);
+			tapNear(essence);
 			sleepTask(500);
+			totalClaimed++;
 		}
 
 		logInfo("Claimed " + totalClaimed + " Life Essence items");
 		return totalClaimed;
 	}
 
-	private List<ImageSearchResultData> locateClaimableEssence(TemplatesEnum template) {
-		return templateSearchHelper.locateAllPatterns(
-				template,
-				SearchConfig.builder()
-						.withArea(new AreaData(LIFE_ESSENCE_SEARCH_AREA.topLeft(),
-								LIFE_ESSENCE_SEARCH_AREA.bottomRight()))
-						.withThreshold(90)
-						.withMaxAttempts(1)
-						.withMaxResults(MAX_CLAIM_RESULTS)
-						.build());
+	private List<PointData> locateClaimableEssence() {
+		try {
+			RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+			BufferedImage image = ImageConverter.toBufferedImage(frame);
+			return LifeEssenceMarkerDetector.locate(image);
+		} catch (Exception ex) {
+			logWarning("Life Essence marker detection failed: " + ex.getMessage());
+			return List.of();
+		}
 	}
 
 	/**
