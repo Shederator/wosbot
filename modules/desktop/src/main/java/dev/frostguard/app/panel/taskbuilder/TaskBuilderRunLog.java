@@ -35,8 +35,8 @@ final class TaskBuilderRunLog {
         boolean changed = false;
         for (String line : entry.split("\\R")) {
             if (line.isEmpty()) continue;
-            lines.addLast(line);
-            while (lines.size() > MAX_LINES) lines.removeFirst();
+            lines.addFirst(line);
+            while (lines.size() > MAX_LINES) lines.removeLast();
             changed = true;
         }
         return changed;
