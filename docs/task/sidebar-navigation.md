@@ -42,6 +42,10 @@ destination scan therefore checks that initial viewport and then moves only towa
 short overlapping 120-pixel gestures. It waits two seconds for the list to settle and scans the
 icon column after every gesture. An unchanged settled icon column establishes the bottom boundary.
 The scan is bounded, and a destination action must close the sidebar to confirm the transition.
+Lighthouse Intel is the exception: after its Daily row is validated, navigation closes the sidebar
+and uses the shared Wilderness Intel shortcut opener, which confirms the Intel screen rather than
+treating a closed sidebar as transition evidence. Other destinations retain their direct row-action
+behavior.
 Code that deliberately reuses an already-open section preserves its current position; March Queue
 recovery closes and reopens Wilderness once when no visible row contains reliable queue evidence.
 

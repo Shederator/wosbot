@@ -43,10 +43,40 @@ class IntelScreenHelperTest {
         assertFalse(navigation.closeCalled);
     }
 
+    @Test
+    void activeCycleReentryUsesWildernessWithoutConsultingDaily() {
+        RecordingNavigationHelper navigation =
+                new RecordingNavigationHelper(SidebarRowLookup.sidebarUnavailable());
+        IntelScreenHelper helper = new IntelScreenHelper(
+                null, "review", null, navigation, PROFILE);
+
+        helper.resumeIntelCycleFromWilderness();
+
+        assertTrue(navigation.intelOpened);
+        assertFalse(navigation.locationChecked);
+        assertFalse(navigation.sidebarLookupCalled);
+        assertFalse(navigation.closeCalled);
+    }
+
+    @Test
+    void activeCycleReentryRejectsAnUnverifiedIntelTransition() {
+        RecordingNavigationHelper navigation =
+                new RecordingNavigationHelper(SidebarRowLookup.sidebarUnavailable());
+        navigation.intelOpenResult = false;
+        IntelScreenHelper helper = new IntelScreenHelper(
+                null, "review", null, navigation, PROFILE);
+
+        assertThrows(HomeNotFoundException.class, helper::resumeIntelCycleFromWilderness);
+        assertTrue(navigation.intelOpened);
+    }
+
     private static final class RecordingNavigationHelper extends NavigationHelper {
         private final SidebarRowLookup lookup;
         private boolean locationChecked;
+        private boolean sidebarLookupCalled;
         private boolean closeCalled;
+        private boolean intelOpened;
+        private boolean intelOpenResult = true;
 
         private RecordingNavigationHelper(SidebarRowLookup lookup) {
             super((EmulatorController) null, "review", PROFILE);
@@ -61,6 +91,7 @@ class IntelScreenHelperTest {
         @Override
         public SidebarRowLookup findSidebarDestinationRowWithStatus(
                 SidebarDestination destination) {
+            sidebarLookupCalled = true;
             return lookup;
         }
 
@@ -68,6 +99,12 @@ class IntelScreenHelperTest {
         public boolean closeSidebar() {
             closeCalled = true;
             return true;
+        }
+
+        @Override
+        public boolean openIntelFromWilderness() {
+            intelOpened = true;
+            return intelOpenResult;
         }
     }
 }

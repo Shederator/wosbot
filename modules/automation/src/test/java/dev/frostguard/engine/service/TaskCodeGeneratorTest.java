@@ -101,15 +101,17 @@ class TaskCodeGeneratorTest {
         blueprint.addNode(section);
         AutomationStep destination = new AutomationStep(2, FlowStepKind.SIDEBAR_NAVIGATION);
         destination.setParam(AutomationStep.PARAM_SIDEBAR_MODE, "DESTINATION");
-        destination.setParam(AutomationStep.PARAM_SIDEBAR_TARGET, "ARENA");
+        destination.setParam(AutomationStep.PARAM_SIDEBAR_TARGET, "LIGHTHOUSE_INTEL");
         blueprint.addNode(destination);
 
         String source = new TaskCodeGenerator().generate(blueprint, "sidebar_probe", "Sidebar probe");
 
         assertTrue(source.contains("navigationHelper.openSidebarSection(SidebarSection.DAILY)"));
-        assertTrue(source.contains("navigationHelper.navigateToSidebarDestination(SidebarDestination.ARENA)"));
+        assertTrue(source.contains(
+                "navigationHelper.navigateToSidebarDestination(SidebarDestination.LIGHTHOUSE_INTEL)"));
         assertTrue(source.contains("logWarning(\"Sidebar navigation failed: SECTION DAILY\")"));
-        assertTrue(source.contains("logWarning(\"Sidebar navigation failed: DESTINATION ARENA\")"));
+        assertTrue(source.contains(
+                "logWarning(\"Sidebar navigation failed: DESTINATION LIGHTHOUSE_INTEL\")"));
         assertTrue(source.contains("__state = -1;"));
     }
 

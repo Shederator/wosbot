@@ -85,8 +85,8 @@ class IntelNavigationFrameTest {
         byte[] frame = resource("daily-sidebar-gain.png");
         ImageSearchResultData shortcut = OpenCvPatternLocator.locatePattern(frame,
                 TemplatesEnum.GAME_HOME_INTEL,
-                IntelScreenHelper.WORLD_INTEL_BUTTON_AREA.topLeft(),
-                IntelScreenHelper.WORLD_INTEL_BUTTON_AREA.bottomRight(), 88);
+                NavigationHelper.WORLD_INTEL_BUTTON_AREA.topLeft(),
+                NavigationHelper.WORLD_INTEL_BUTTON_AREA.bottomRight(), 88);
 
         assertTrue(shortcut.isFound(), "Expected the direct Intel shortcut at the right side of Wilderness");
     }
@@ -146,8 +146,8 @@ class IntelNavigationFrameTest {
     private static void assertIntelShortcut(String path, int expectedY) throws IOException {
         ImageSearchResultData shortcut = OpenCvPatternLocator.locatePattern(
                 absoluteResource(path), TemplatesEnum.GAME_HOME_INTEL,
-                IntelScreenHelper.WORLD_INTEL_BUTTON_AREA.topLeft(),
-                IntelScreenHelper.WORLD_INTEL_BUTTON_AREA.bottomRight(), 88);
+                NavigationHelper.WORLD_INTEL_BUTTON_AREA.topLeft(),
+                NavigationHelper.WORLD_INTEL_BUTTON_AREA.bottomRight(), 88);
 
         assertTrue(shortcut.isFound(), "Expected the Intel shortcut in " + path);
         assertTrue(Math.abs(shortcut.getPoint().getX() - 663) <= 3,
