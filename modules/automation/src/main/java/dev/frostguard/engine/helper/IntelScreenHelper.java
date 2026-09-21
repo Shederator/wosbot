@@ -25,7 +25,7 @@ public class IntelScreenHelper {
     private static final int MAX_NAV_PASSES = 3;
     private static final int INTEL_AVAILABLE_GREEN_MIN = 150;
     private static final long MISSION_RETURN_SETTLE_MILLIS = 1_000L;
-    private static final AreaData WORLD_INTEL_BUTTON_AREA = AreaData.of(615, 800, 715, 930);
+    static final AreaData WORLD_INTEL_BUTTON_AREA = AreaData.of(615, 800, 715, 1000);
     private static final TemplateSearchHelper.SearchConfig WORLD_INTEL_BUTTON_SEARCH =
             TemplateSearchHelper.SearchConfig.builder()
                     .withMaxAttempts(2)
