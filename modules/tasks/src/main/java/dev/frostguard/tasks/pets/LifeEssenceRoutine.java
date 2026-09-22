@@ -8,7 +8,6 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
-import java.util.List;
 
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.convert.ImageConverter;
@@ -31,9 +30,6 @@ public class LifeEssenceRoutine extends DelayedTask {
 	// Navigation coordinates
 	private static final PointData SHOP_TAB_BUTTON = new PointData(670, 195);
 	private static final PointData EXIT_BUTTON = new PointData(40, 30);
-
-	// Retry limits
-	private static final int MAX_CLAIM_SEARCH_ATTEMPTS = 5;
 
 	// Default configuration values
 	private static final int DEFAULT_OFFSET_MINUTES = Integer.parseInt(
@@ -64,7 +60,11 @@ public class LifeEssenceRoutine extends DelayedTask {
 		}
 
 		// Claim available Life Essence
-		int claimedCount = claimLifeEssence();
+		ClaimRun claim = claimLifeEssence();
+		if (!claim.cleanFinish()) {
+			handleClaimFailure(claim.confirmedClaims());
+			return;
+		}
 
 		// Buy weekly free scroll if enabled and available
 		if (buyWeeklyScroll && shouldBuyWeeklyScroll()) {
@@ -74,7 +74,7 @@ public class LifeEssenceRoutine extends DelayedTask {
 		likeIsland();
 
 		// Exit and reschedule
-		exitAndReschedule(claimedCount);
+		exitAndReschedule(claim.confirmedClaims());
 	}
 
 	private void likeIsland() {
@@ -136,61 +136,51 @@ public class LifeEssenceRoutine extends DelayedTask {
 	}
 
 	/**
-	 * Claim all available Life Essence items
-	 * 
-	 * Strategy:
-	 * - Search multiple times in case new essence appears after claiming
-	 * - Stop early if no essence found on consecutive attempts
-	 * 
-	 * @return number of essence items claimed
+	 * Claim visible Life Essence markers.
+	 *
+	 * A confirmed claim is a marker that disappears on the next capture.
+	 * Two valid empty captures finish the run, including an island that was
+	 * already collected. A capture failure stops the run so it can be retried.
 	 */
-	private int claimLifeEssence() {
+	private ClaimRun claimLifeEssence() {
 		logInfo("Searching for claimable Life Essence");
-		int totalClaimed = 0;
-		int emptySearches = 0;
-
-		for (int searchAttempt = 1; searchAttempt <= MAX_CLAIM_SEARCH_ATTEMPTS; searchAttempt++) {
-			logDebug("Claim search attempt " + searchAttempt + "/" + MAX_CLAIM_SEARCH_ATTEMPTS);
-
-			// Search for claimable essence in the defined area
-			List<PointData> essenceList = locateClaimableEssence();
-			if (essenceList.isEmpty()) {
-				emptySearches++;
-				logDebug("No claimable essence found on attempt " + searchAttempt);
-
-				// If we've had 2 consecutive empty searches, likely done
-				if (emptySearches >= 2) {
-					logDebug("Two consecutive empty searches. Stopping claim attempts.");
-					break;
+		LifeEssenceClaimPolicy.State state = LifeEssenceClaimPolicy.State.initial();
+		while (true) {
+			LifeEssenceClaimPolicy.Step step = LifeEssenceClaimPolicy.advance(state, observeClaimMarkers());
+			state = step.next();
+			logDebug("Claim capture " + state.captures() + "/" + LifeEssenceClaimPolicy.MAX_CAPTURES
+					+ " outcome=" + step.outcome()
+					+ " confirmed=" + step.confirmedClaims()
+					+ " reason=" + step.reason());
+			switch (step.outcome()) {
+				case TAP -> {
+					logInfo("Tapping Life Essence marker at " + step.tap());
+					tapNear(step.tap());
+					sleepTask(500);
 				}
-
-				// Wait a bit in case essence is still loading
-				sleepTask(500);
-				continue;
+				case WAIT -> sleepTask(500);
+				case FINISH -> {
+					logInfo("Claimed " + step.confirmedClaims() + " Life Essence items");
+					return new ClaimRun(true, step.confirmedClaims());
+				}
+				case RETRY -> {
+					logWarning("Life Essence claim stopped: " + step.reason()
+							+ ". Confirmed claims: " + step.confirmedClaims());
+					return new ClaimRun(false, step.confirmedClaims());
+				}
 			}
-
-			// Reset empty counter if we found something
-			emptySearches = 0;
-
-			PointData essence = essenceList.getFirst();
-			logDebug("Found " + essenceList.size() + " claimable essence items; tapping " + essence);
-			tapNear(essence);
-			sleepTask(500);
-			totalClaimed++;
 		}
-
-		logInfo("Claimed " + totalClaimed + " Life Essence items");
-		return totalClaimed;
 	}
 
-	private List<PointData> locateClaimableEssence() {
+	private LifeEssenceClaimPolicy.Observation observeClaimMarkers() {
 		try {
 			RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
 			BufferedImage image = ImageConverter.toBufferedImage(frame);
-			return LifeEssenceMarkerDetector.locate(image);
+			return LifeEssenceClaimPolicy.Observation.markers(LifeEssenceMarkerDetector.locate(image));
 		} catch (Exception ex) {
-			logWarning("Life Essence marker detection failed: " + ex.getMessage());
-			return List.of();
+			logWarning("Life Essence capture failed: " + ex.getClass().getSimpleName()
+					+ ": " + ex.getMessage());
+			return LifeEssenceClaimPolicy.Observation.failed();
 		}
 	}
 
@@ -304,6 +294,17 @@ public class LifeEssenceRoutine extends DelayedTask {
 	 * Handle navigation failure by incrementing failure count and rescheduling
 	 */
 	private void handleNavigationFailure() {
+		scheduleRetry("Navigation failed");
+	}
+
+	private void handleClaimFailure(int confirmedClaims) {
+		logDebug("Exiting Life Essence interface after an unfinished claim");
+		tapNear(EXIT_BUTTON);
+		sleepTask(1000);
+		scheduleRetry("Life Essence claim unfinished after " + confirmedClaims + " confirmed claims");
+	}
+
+	private void scheduleRetry(String reason) {
 		LifeEssenceRetryPolicy.Decision decision =
 				LifeEssenceRetryPolicy.afterFailure(consecutiveFailures);
 		consecutiveFailures = decision.persistedFailures();
@@ -315,7 +316,7 @@ public class LifeEssenceRoutine extends DelayedTask {
 
 		reschedule(nextAttempt);
 
-		logWarning("Navigation failed. Consecutive failures: " + consecutiveFailures
+		logWarning(reason + ". Consecutive failures: " + consecutiveFailures
 				+ ". Task remains enabled and will retry in " + retryDelay.toMinutes()
 				+ " minutes at " + GameTimeUtils.formatCountdown(nextAttempt));
 	}
@@ -370,6 +371,9 @@ public class LifeEssenceRoutine extends DelayedTask {
 	@Override
 	protected LaunchPoint getRequiredStartLocation() {
 		return LaunchPoint.ANY;
+	}
+
+	private record ClaimRun(boolean cleanFinish, int confirmedClaims) {
 	}
 
 }

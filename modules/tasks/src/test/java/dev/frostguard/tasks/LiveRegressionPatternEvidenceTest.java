@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 import org.junit.jupiter.api.BeforeAll;
@@ -56,11 +58,19 @@ class LiveRegressionPatternEvidenceTest {
                 List.of(new PointData(116, 146), new PointData(364, 363)));
     }
 
+    @Test
+    void rejectsAllianceScreensAsLifeEssenceMarkers() throws IOException {
+        assertNoLifeEssenceMarkers(readResource("/alliance/tech-battle-recommendation-20260810.png"),
+                "/alliance/tech-battle-recommendation-20260810.png");
+        Path championship = Path.of("..", "automation", "src", "test", "resources",
+                "alliance", "championship-tab-visible-20260728.png");
+        assertTrue(Files.isRegularFile(championship),
+                () -> "Missing alliance fixture: " + championship.toAbsolutePath());
+        assertNoLifeEssenceMarkers(javax.imageio.ImageIO.read(championship.toFile()), championship.toString());
+    }
+
     private void assertLifeEssenceMarkers(String framePath, List<PointData> expectedMarkers) throws IOException {
-        BufferedImage frame;
-        try (InputStream stream = getClass().getResourceAsStream(framePath)) {
-            frame = javax.imageio.ImageIO.read(Objects.requireNonNull(stream));
-        }
+        BufferedImage frame = readResource(framePath);
         List<PointData> markers = LifeEssenceMarkerDetector.locate(frame);
 
         assertEquals(expectedMarkers.size(), markers.size(),
@@ -69,6 +79,11 @@ class LiveRegressionPatternEvidenceTest {
             assertTrue(hasMarkerNear(markers, expected),
                     () -> "Missing Life Essence marker near " + expected + " in " + framePath + ": " + markers);
         }
+    }
+
+    private static void assertNoLifeEssenceMarkers(BufferedImage frame, String label) {
+        List<PointData> markers = LifeEssenceMarkerDetector.locate(frame);
+        assertEquals(List.of(), markers, () -> "Unexpected Life Essence markers in " + label + ": " + markers);
     }
 
     @Test
@@ -104,6 +119,12 @@ class LiveRegressionPatternEvidenceTest {
         ImageSearchResultData result = OpenCvPatternLocator.locatePattern(
                 resource(framePath), template, FULL_TOP_LEFT, FULL_BOTTOM_RIGHT, 90);
         assertTrue(result.isFound(), () -> "Expected " + template + " in " + framePath + ": " + result);
+    }
+
+    private BufferedImage readResource(String path) throws IOException {
+        try (InputStream stream = getClass().getResourceAsStream(path)) {
+            return javax.imageio.ImageIO.read(Objects.requireNonNull(stream, "Missing test resource: " + path));
+        }
     }
 
     private byte[] resource(String path) throws IOException {
