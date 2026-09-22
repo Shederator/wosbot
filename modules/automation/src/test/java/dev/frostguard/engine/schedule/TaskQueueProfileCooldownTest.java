@@ -121,6 +121,142 @@ class TaskQueueProfileCooldownTest {
         assertFalse(TaskQueue.requiresSlotAcquisition(LocalDateTime.now()));
     }
 
+    @Test
+    void idleQueueWithoutLeaseRemainsDormantWhileNextTaskIsDistant() {
+        AccountDescriptor profile = persistedProfile();
+        IdleRecordingTaskQueue queue = new IdleRecordingTaskQueue(profile);
+        queue.retainLease();
+        queue.releaseActiveSlotLease();
+        queue.enqueue(new RecordingTask(profile, TpDailyTaskEnum.DUMMY_TASK,
+                LocalDateTime.now().plusHours(2)));
+        queue.statusModel.setIdleTimeExceeded(true);
+
+        queue.runSchedulerTick();
+
+        assertEquals(List.of("release"), queue.events);
+        assertTrue(queue.statusModel.isIdleTimeExceeded());
+    }
+
+    @Test
+    void idleQueueReacquiresBeforeInitializeAndDueTaskExecution() {
+        AccountDescriptor profile = persistedProfile();
+        IdleRecordingTaskQueue queue = new IdleRecordingTaskQueue(profile);
+        queue.retainLease();
+        queue.releaseActiveSlotLease();
+        RecordingTask dueTask = new RecordingTask(
+                profile, TpDailyTaskEnum.CUSTOM_TASK, LocalDateTime.now());
+        dueTask.setCustomPriority(2_000);
+        queue.enqueue(dueTask);
+        queue.statusModel.setIdleTimeExceeded(true);
+
+        queue.runSchedulerTick();
+        queue.runSchedulerTick();
+
+        assertEquals(List.of(
+                "release",
+                "acquire",
+                "execute:INITIALIZE",
+                "execute:CUSTOM_TASK"), queue.events);
+        assertFalse(queue.statusModel.isIdleTimeExceeded());
+    }
+
+    @Test
+    void failedIdleWakeAcquisitionDoesNotExecuteQueuedWork() {
+        AccountDescriptor profile = persistedProfile();
+        IdleRecordingTaskQueue queue = new IdleRecordingTaskQueue(profile);
+        queue.acquireSucceeds = false;
+        queue.enqueue(new RecordingTask(profile, TpDailyTaskEnum.DUMMY_TASK, LocalDateTime.now()));
+        queue.statusModel.setIdleTimeExceeded(true);
+
+        queue.runSchedulerTick();
+
+        assertEquals(List.of("acquire"), queue.events);
+        assertTrue(queue.statusModel.isIdleTimeExceeded());
+    }
+
+    @Test
+    void idleQueueWithRetainedLeaseResumesWithoutSecondAcquisition() {
+        AccountDescriptor profile = persistedProfile();
+        IdleRecordingTaskQueue queue = new IdleRecordingTaskQueue(profile);
+        queue.retainLease();
+        queue.enqueue(new RecordingTask(profile, TpDailyTaskEnum.DUMMY_TASK, LocalDateTime.now()));
+        queue.statusModel.setIdleTimeExceeded(true);
+
+        queue.runSchedulerTick();
+        queue.runSchedulerTick();
+
+        assertEquals(List.of(
+                "execute:INITIALIZE",
+                "execute:DUMMY_TASK"), queue.events);
+        assertFalse(queue.statusModel.isIdleTimeExceeded());
+    }
+
+    @Test
+    void idleWakeAdvancesExistingInitializeBeforeDueWork() {
+        AccountDescriptor profile = persistedProfile();
+        IdleRecordingTaskQueue queue = new IdleRecordingTaskQueue(profile);
+        queue.retainLease();
+        queue.releaseActiveSlotLease();
+        queue.enqueue(new RecordingTask(profile, TpDailyTaskEnum.INITIALIZE,
+                LocalDateTime.now().plusHours(2)));
+        queue.enqueue(new RecordingTask(profile, TpDailyTaskEnum.DUMMY_TASK, LocalDateTime.now()));
+        queue.statusModel.setIdleTimeExceeded(true);
+
+        queue.runSchedulerTick();
+        queue.runSchedulerTick();
+
+        assertEquals(List.of(
+                "release",
+                "acquire",
+                "execute:INITIALIZE",
+                "execute:DUMMY_TASK"), queue.events);
+        assertEquals(0, queue.initializeCreationCount);
+    }
+
+    @Test
+    void manualResumeLeavesDormantStateAndReacquiresImmediately() {
+        AccountDescriptor profile = persistedProfile();
+        IdleRecordingTaskQueue queue = new IdleRecordingTaskQueue(profile);
+        queue.enqueue(new RecordingTask(profile, TpDailyTaskEnum.INITIALIZE,
+                LocalDateTime.now().plusHours(3)));
+        queue.enqueue(new RecordingTask(profile, TpDailyTaskEnum.DUMMY_TASK,
+                LocalDateTime.now().plusHours(2)));
+        queue.statusModel.setIdleTimeExceeded(true);
+
+        queue.resume();
+        queue.runSchedulerTick();
+
+        assertFalse(queue.statusModel.isIdleTimeExceeded());
+        assertEquals(List.of(
+                "acquire",
+                "execute:INITIALIZE"), queue.events);
+        assertEquals(0, queue.initializeCreationCount);
+    }
+
+    @Test
+    void failedIdleWakeInitializeBacksOffAndReleasesLease() {
+        AccountDescriptor profile = persistedProfile();
+        IdleRecordingTaskQueue queue = new IdleRecordingTaskQueue(profile);
+        queue.initializeSucceeds = false;
+        queue.retainLease();
+        queue.releaseActiveSlotLease();
+        queue.enqueue(new RecordingTask(profile, TpDailyTaskEnum.DUMMY_TASK, LocalDateTime.now()));
+        queue.statusModel.setIdleTimeExceeded(true);
+
+        queue.runSchedulerTick();
+        queue.runSchedulerTick();
+
+        assertEquals(List.of(
+                "release",
+                "acquire",
+                "execute:INITIALIZE",
+                "release"), queue.events);
+        assertEquals(List.of(
+                TpDailyTaskEnum.DUMMY_TASK,
+                TpDailyTaskEnum.INITIALIZE), queue.getNextQueuedTaskTypes(2));
+        assertTrue(queue.statusModel.isIdleTimeExceeded());
+    }
+
     private static AccountDescriptor persistedProfile() {
         AccountDescriptor profile = new AccountDescriptor(
                 null, "Profile cooldown " + UUID.randomUUID(), "0", false, 100L, 30L);
@@ -154,6 +290,70 @@ class TaskQueueProfileCooldownTest {
                             "Operator-owned blocker",
                             "Bounded recovery exhausted",
                             "Pause and retry"));
+        }
+    }
+
+    private static final class RecordingTask extends DelayedTask {
+
+        private RecordingTask(AccountDescriptor profile, TpDailyTaskEnum type, LocalDateTime scheduledAt) {
+            super(profile, type);
+            reschedule(scheduledAt);
+        }
+
+        @Override
+        protected void execute() {
+        }
+    }
+
+    private static final class IdleRecordingTaskQueue extends TaskQueue {
+
+        private final List<String> events = new ArrayList<>();
+        private boolean acquireSucceeds = true;
+        private boolean initializeSucceeds = true;
+        private int initializeCreationCount;
+
+        private IdleRecordingTaskQueue(AccountDescriptor profile) {
+            super(profile);
+        }
+
+        private void retainLease() {
+            markSlotAcquired();
+        }
+
+        @Override
+        protected void acquireSlot() {
+            events.add("acquire");
+            if (acquireSucceeds) {
+                markSlotAcquired();
+            }
+        }
+
+        @Override
+        protected void releaseEmulatorSlotLease() {
+            events.add("release");
+        }
+
+        @Override
+        DelayedTask createIdleWakeInitializeTask() {
+            initializeCreationCount++;
+            return new RecordingTask(getProfile(), TpDailyTaskEnum.INITIALIZE, LocalDateTime.now());
+        }
+
+        @Override
+        boolean executeTask(DelayedTask task) {
+            events.add("execute:" + task.getTpTask().name());
+            if (task.getTpTask() == TpDailyTaskEnum.INITIALIZE) {
+                return initializeSucceeds;
+            }
+            return true;
+        }
+
+        @Override
+        protected void handleIdleTransitions() {
+        }
+
+        @Override
+        protected void sleepSchedulerTick(long millis) {
         }
     }
 
