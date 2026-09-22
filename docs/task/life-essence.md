@@ -28,6 +28,10 @@ downward. The tap point is that centroid. The same upper-leaf rule rejects the
 alliance Tech node at (360, 406) and the alliance event icon at (573, 953).
 No other saved task or automation frame produced an accepted marker.
 
+`tools/life-essence-detection` draws this same detector onto PNG copies. A
+green box is accepted, a red box is rejected, the cyan cross is the tap, and
+the orange cross is the box center. The pictures are local inspection output.
+
 `threeMenu.png` scores about 50 to 57 percent on the island frames and about
 48 to 53 percent on those alliance frames, with hits away from the menu button,
 so it is not an island-screen proof. The Like button is also absent from a real
