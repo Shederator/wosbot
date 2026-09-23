@@ -106,6 +106,8 @@ private static final int DEFAULT_JOIN_RALLY_FLAG_VALUE = 1;
 
 private static final long FRESH_TRANSITION_TIMEOUT_MS = 1500;
 
+private static final long NAVIGATION_TRANSITION_TIMEOUT_MS = 4_000;
+
 private static final int TERRITORY_TRANSITION_ATTEMPTS = 2;
 
 private static final boolean DEFAULT_CALL_OWN_RALLY_VALUE = false;
@@ -194,8 +196,10 @@ public BearTrapRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
                     logInfo(routineLogBearTrapLine("Activating pets..."));
                     enablePetsFlow();
                 }
-                logInfo(routineLogBearTrapLine("Moving camera to Bear Trap " + trapNumber));
-                reachBearTrap(trapNumber);
+                navigationHelper.ensureCorrectScreenLocation(LaunchPoint.WORLD);
+                bearAnchorVerifiedAt = null;
+                logInfo(routineLogBearTrapLine(
+                        "Active Bear navigation will use the verified World Bear icon fast path"));
 
             }
 
@@ -776,7 +780,7 @@ private boolean reachBearTrap(int trapNumber) {
 }
 
 private boolean awaitConfiguredTrapGoButton(int trapNumber) {
-        long deadline = System.nanoTime() + Duration.ofMillis(2_500).toNanos();
+        long deadline = System.nanoTime() + Duration.ofMillis(NAVIGATION_TRANSITION_TIMEOUT_MS).toNanos();
         do {
             checkPreemption();
             RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
@@ -791,12 +795,12 @@ private boolean awaitConfiguredTrapGoButton(int trapNumber) {
 private boolean openTerritoryFromAllianceMenu() {
         for (int attempt = 1; attempt <= TERRITORY_TRANSITION_ATTEMPTS; attempt++) {
             ImageSearchResultData territoryButton = findFreshTransition(
-                    ALLIANCE_TERRITORY_BUTTON, 80, FRESH_TRANSITION_TIMEOUT_MS);
+                    ALLIANCE_TERRITORY_BUTTON, 80, NAVIGATION_TRANSITION_TIMEOUT_MS);
             if (!territoryButton.isFound()) {
                 return false;
             }
             tapInside(territoryButton);
-            if (awaitTemplateGone(ALLIANCE_TERRITORY_BUTTON, 80, FRESH_TRANSITION_TIMEOUT_MS)) {
+            if (awaitTemplateGone(ALLIANCE_TERRITORY_BUTTON, 80, NAVIGATION_TRANSITION_TIMEOUT_MS)) {
                 return true;
             }
             logWarning(routineLogBearTrapLine(
@@ -844,9 +848,17 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         private final Map<Integer, Long> formationTroopCounts = new HashMap<>();
         private final Map<Integer, Set<String>> rejectedCandidatesByFormation = new HashMap<>();
         private boolean warListKnown;
+        private final BearFrameStream<RawImageData> frames;
+        private final BearVerifiedActionExecutor<RawImageData> actions;
+        private BearFrameStream.Snapshot<RawImageData> lastObservedFrame;
 
         private LiveBearSessionDriver(Instant eventEnd) {
             this.eventEnd = eventEnd;
+            this.frames = new BearFrameStream<>(
+                    () -> emuManager.captureScreen(EMULATOR_NUMBER),
+                    this::classifyBearScreen,
+                    () -> Thread.currentThread().isInterrupted());
+            this.actions = new BearVerifiedActionExecutor<>(frames, 2);
         }
 
         @Override
@@ -1106,8 +1118,9 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                     return true;
                 }
                 navigationHelper.ensureCorrectScreenLocation(LaunchPoint.WORLD);
+                bearAnchorVerifiedAt = null;
                 warListKnown = false;
-                return findFresh(GAME_HOME_WAR, 90, FRESH_TRANSITION_TIMEOUT_MS).isFound();
+                return findFresh(GAME_HOME_WORLD, 90, NAVIGATION_TRANSITION_TIMEOUT_MS).isFound();
             } catch (StopExecutionException e) {
                 throw e;
             } catch (Exception e) {
@@ -1205,18 +1218,39 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
             for (int transition = 0; transition < 4; transition++) {
                 BearNavigationPolicy.Screen screen = observeBearScreen();
                 BearNavigationPolicy.Action action = BearNavigationPolicy.next(
-                        screen, BearNavigationPolicy.Goal.OWN_RALLY);
+                        screen, BearNavigationPolicy.Goal.OWN_RALLY,
+                        BearNavigationPolicy.Phase.ACTIVE);
                 switch (action) {
                     case READY -> {
                         return true;
                     }
                     case TAP_BEAR_ANCHOR -> {
-                        tapInside(BEAR_CENTER_POINT_VALUE, BEAR_CENTER_POINT_VALUE);
-                        if (findFresh(BEAR_RALLY_BUTTON, 80, FRESH_TRANSITION_TIMEOUT_MS).isFound()) {
+                        BearVerifiedActionExecutor.Outcome outcome = actions.tapWithOneVerifiedRetry(
+                                lastObservedFrame,
+                                () -> tapInside(BEAR_CENTER_POINT_VALUE, BEAR_CENTER_POINT_VALUE),
+                                frame -> frame.screen() == BearNavigationPolicy.Screen.BEAR_RALLY_PANEL,
+                                frame -> frame.screen() == BearNavigationPolicy.Screen.WORLD_AT_BEAR);
+                        if (outcome == BearVerifiedActionExecutor.Outcome.CONFIRMED) {
                             warListKnown = false;
                             return true;
                         }
                         bearAnchorVerifiedAt = null;
+                    }
+                    case TAP_ACTIVE_BEAR_ICON -> {
+                        ImageSearchResultData activeBear = emuManager.locatePattern(
+                                EMULATOR_NUMBER,
+                                lastObservedFrame.frame(),
+                                BEAR_HUNT_IS_RUNNING,
+                                90);
+                        if (!activeBear.isFound()) {
+                            return false;
+                        }
+                        tapInside(activeBear);
+                        if (!findFresh(
+                                GAME_HOME_WORLD, 90, NAVIGATION_TRANSITION_TIMEOUT_MS).isFound()) {
+                            return false;
+                        }
+                        bearAnchorVerifiedAt = now();
                     }
                     case ROUTE_TO_BEAR -> {
                         if (!reachBearTrap(trapNumber)) {
@@ -1232,7 +1266,12 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                     case FAIL_CLOSED -> {
                         return false;
                     }
-                    case TAP_WAR -> throw new IllegalStateException("Unexpected Bear navigation action");
+                    case WAIT_FOR_FRAME -> {
+                        continue;
+                    }
+                    case TAP_WAR, OPEN_ALLIANCE, OPEN_TERRITORY, OPEN_SPECIAL_BUILDINGS,
+                            TAP_CONFIGURED_GO ->
+                            throw new IllegalStateException("Unexpected Bear navigation action");
                 }
             }
             return false;
@@ -1265,7 +1304,9 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                             return false;
                         }
                     }
-                    case FAIL_CLOSED, ROUTE_TO_BEAR -> {
+                    case FAIL_CLOSED, ROUTE_TO_BEAR, OPEN_ALLIANCE, OPEN_TERRITORY,
+                            OPEN_SPECIAL_BUILDINGS, TAP_CONFIGURED_GO, TAP_ACTIVE_BEAR_ICON,
+                            WAIT_FOR_FRAME -> {
                         return false;
                     }
                     case TAP_BEAR_ANCHOR -> throw new IllegalStateException("Unexpected War navigation action");
@@ -1320,7 +1361,11 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
 
         private BearNavigationPolicy.Screen observeBearScreen() {
             checkPreemption();
-            RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+            lastObservedFrame = frames.next();
+            return lastObservedFrame.screen();
+        }
+
+        private BearNavigationPolicy.Screen classifyBearScreen(RawImageData frame) {
             if (emuManager.locatePattern(EMULATOR_NUMBER, frame, BEAR_DEPLOY_BUTTON, 90).isFound()) {
                 return BearNavigationPolicy.Screen.FORMATION;
             }
@@ -1332,8 +1377,14 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
             }
             if (emuManager.locatePattern(EMULATOR_NUMBER, frame, GAME_HOME_WORLD, 90).isFound()) {
                 warListKnown = false;
-                return BearNavigationPolicy.classify(new BearNavigationPolicy.Evidence(
-                        false, false, false, true, bearAnchorIsFresh(), false, false, false));
+                if (bearAnchorIsFresh()) {
+                    return BearNavigationPolicy.Screen.WORLD_AT_BEAR;
+                }
+                if (emuManager.locatePattern(
+                        EMULATOR_NUMBER, frame, BEAR_HUNT_IS_RUNNING, 90).isFound()) {
+                    return BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY;
+                }
+                return BearNavigationPolicy.Screen.WORLD;
             }
             if (warListKnown
                     || emuManager.locatePattern(EMULATOR_NUMBER, frame, BEAR_JOIN_PLUS_ICON, 80).isFound()) {
@@ -1355,7 +1406,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
             long deadline = System.nanoTime() + Duration.ofMillis(timeoutMs).toNanos();
             while (System.nanoTime() < deadline) {
                 checkPreemption();
-                RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+                RawImageData frame = frames.nextUnclassified().frame();
                 ImageSearchResultData result = emuManager.locatePattern(
                         EMULATOR_NUMBER, frame, template, threshold);
                 if (result.isFound()) {

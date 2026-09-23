@@ -7,6 +7,62 @@ import org.junit.jupiter.api.Test;
 class BearNavigationPolicyTest {
 
     @Test
+    void preparationUsesAllianceTerritoryAndSpecialBuildingsInOrder() {
+        assertEquals(BearNavigationPolicy.Action.OPEN_ALLIANCE,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.WORLD,
+                        BearNavigationPolicy.Goal.PREPARED_AT_BEAR,
+                        BearNavigationPolicy.Phase.PREPARING));
+        assertEquals(BearNavigationPolicy.Action.OPEN_TERRITORY,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.ALLIANCE_MENU,
+                        BearNavigationPolicy.Goal.PREPARED_AT_BEAR,
+                        BearNavigationPolicy.Phase.PREPARING));
+        assertEquals(BearNavigationPolicy.Action.OPEN_SPECIAL_BUILDINGS,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.ALLIANCE_TERRITORY,
+                        BearNavigationPolicy.Goal.PREPARED_AT_BEAR,
+                        BearNavigationPolicy.Phase.PREPARING));
+        assertEquals(BearNavigationPolicy.Action.TAP_CONFIGURED_GO,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.SPECIAL_BUILDINGS,
+                        BearNavigationPolicy.Goal.PREPARED_AT_BEAR,
+                        BearNavigationPolicy.Phase.PREPARING));
+    }
+
+    @Test
+    void activeEventUsesVisibleBearIconInsteadOfReopeningAlliance() {
+        assertEquals(BearNavigationPolicy.Action.TAP_ACTIVE_BEAR_ICON,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
+                        BearNavigationPolicy.Goal.OWN_RALLY,
+                        BearNavigationPolicy.Phase.ACTIVE));
+        assertEquals(BearNavigationPolicy.Action.FAIL_CLOSED,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.WORLD,
+                        BearNavigationPolicy.Goal.OWN_RALLY,
+                        BearNavigationPolicy.Phase.ACTIVE));
+    }
+
+    @Test
+    void partialAllianceRenderWaitsForAnotherFrameInsteadOfRestartingTheRoute() {
+        assertEquals(BearNavigationPolicy.Action.WAIT_FOR_FRAME,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.TRANSITIONING,
+                        BearNavigationPolicy.Goal.PREPARED_AT_BEAR,
+                        BearNavigationPolicy.Phase.PREPARING));
+    }
+
+    @Test
+    void alreadyAtBearContinuesWithoutEitherNavigationRoute() {
+        assertEquals(BearNavigationPolicy.Action.TAP_BEAR_ANCHOR,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.WORLD_AT_BEAR,
+                        BearNavigationPolicy.Goal.OWN_RALLY,
+                        BearNavigationPolicy.Phase.ACTIVE));
+    }
+
+    @Test
     void classifiesWorldFromTheRootAnchorWithoutRequiringTheWarIndicator() {
         assertEquals(BearNavigationPolicy.Screen.WORLD,
                 BearNavigationPolicy.classify(new BearNavigationPolicy.Evidence(

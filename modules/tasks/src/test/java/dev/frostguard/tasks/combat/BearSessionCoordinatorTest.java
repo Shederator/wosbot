@@ -249,6 +249,26 @@ class BearSessionCoordinatorTest {
     }
 
     @Test
+    void recoverableOwnNavigationFailureDoesNotReopenTheMarchSidebar() {
+        ScriptedDriver driver = new ScriptedDriver();
+        driver.freeSlots = 2;
+        driver.startResults.add(BearSessionCoordinator.OwnRallyStartResult.recoverable(
+                BearSessionCoordinator.OwnRallyStartOutcome.NAVIGATION_FAILURE));
+        driver.startResults.add(BearSessionCoordinator.OwnRallyStartResult.confirmed(
+                1, Duration.ofMinutes(5), Duration.ofSeconds(12)));
+        driver.joinResults.add(BearSessionCoordinator.JoinOutcome.JOINED);
+        driver.cancelAfterPauses = 1;
+
+        BearSessionCoordinator coordinator = new BearSessionCoordinator(
+                driver, Instant.EPOCH.plus(Duration.ofMinutes(6)), true, 4, true, List.of(2));
+
+        coordinator.run();
+
+        assertEquals(1, driver.marchReads,
+                "navigation recovery must reuse the reliable session snapshot instead of reopening marches");
+    }
+
+    @Test
     void freeJoinSlotKeepsReturningOwnRallyOnFastPoll() {
         ScriptedDriver driver = new ScriptedDriver();
         driver.freeSlots = 2;
@@ -297,6 +317,7 @@ class BearSessionCoordinatorTest {
         private int cancelAfterPauses = Integer.MAX_VALUE;
         private int normalTaskCleanupCalls;
         private int unreliableReads;
+        private int marchReads;
         private long maxRelaunchDelaySeconds;
         private Instant lastIdleAt;
         private final Deque<BearSessionCoordinator.OwnRallyStartResult> startResults = new ArrayDeque<>();
@@ -325,6 +346,7 @@ class BearSessionCoordinatorTest {
 
         @Override
         public BearSessionCoordinator.MarchSnapshot readMarches(OptionalInt trackedOwnSlot, boolean mayAdoptExisting) {
+            marchReads++;
             if (unreliableReads-- > 0) {
                 return new BearSessionCoordinator.MarchSnapshot(
                         false, 0, BearSessionCoordinator.OwnRallyObservation.absent());

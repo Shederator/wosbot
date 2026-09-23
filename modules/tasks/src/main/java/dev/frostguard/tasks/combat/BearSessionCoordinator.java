@@ -20,6 +20,7 @@ final class BearSessionCoordinator {
     private static final Duration RETURN_GUARD = Duration.ofSeconds(2);
     private static final int EXTRA_JOIN_ATTEMPTS = 6;
     private static final int FINAL_EMPTY_LIST_CONFIRMATIONS = 3;
+    private static final int OWN_START_ATTEMPTS_PER_SNAPSHOT = 2;
 
     enum State {
         LOCATE_BEAR,
@@ -261,7 +262,7 @@ final class BearSessionCoordinator {
                     && hasTimeForOwnRally()) {
                 transition(State.OWN_RALLY_READY);
                 transition(State.OWN_RALLY_STARTING);
-                OwnRallyStartResult start = driver.startOwnRally(ownFormation);
+                OwnRallyStartResult start = startOwnRallyFromCurrentSnapshot();
                 if (start.outcome() == OwnRallyStartOutcome.FATAL) {
                     return ExitReason.UNRECOVERABLE_FAILURE;
                 }
@@ -281,18 +282,8 @@ final class BearSessionCoordinator {
                 } else if (start.outcome() == OwnRallyStartOutcome.TOO_LATE) {
                     ownLaunchClosed = true;
                 } else {
-                    recover(State.OWN_RALLY_READY);
-                    MarchSnapshot refreshed = driver.readMarches(trackedOwnSlot, true);
-                    if (!refreshed.reliable()) {
-                        continue;
-                    }
-                    if (refreshed.ownRally().phase() == OwnRallyPhase.UNCLASSIFIED_ACTIVE) {
-                        mayAdoptExisting = true;
-                    }
-                    updateOwnRallyTracking(refreshed.ownRally());
-                    freeSlotsForJoining = refreshed.freeSlots();
-                    snapshot = refreshed;
-                    continue;
+                    // Keep the reliable session snapshot. Navigation recovery must not reopen
+                    // the march sidebar and destroy a usable Bear/World screen.
                 }
             }
 
@@ -317,6 +308,21 @@ final class BearSessionCoordinator {
 
         transition(State.FINISHED);
         return ExitReason.EVENT_ENDED;
+    }
+
+    private OwnRallyStartResult startOwnRallyFromCurrentSnapshot() {
+        OwnRallyStartResult result = null;
+        for (int attempt = 1; attempt <= OWN_START_ATTEMPTS_PER_SNAPSHOT; attempt++) {
+            result = driver.startOwnRally(ownFormation);
+            if (result.outcome() == OwnRallyStartOutcome.CONFIRMED
+                    || result.outcome() == OwnRallyStartOutcome.ALREADY_ACTIVE
+                    || result.outcome() == OwnRallyStartOutcome.TOO_LATE
+                    || result.outcome() == OwnRallyStartOutcome.FATAL) {
+                return result;
+            }
+            recover(State.OWN_RALLY_READY);
+        }
+        return result;
     }
 
     private void updateOwnRallyTracking(OwnRallyObservation observation) {
