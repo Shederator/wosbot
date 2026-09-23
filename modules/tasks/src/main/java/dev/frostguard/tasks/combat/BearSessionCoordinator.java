@@ -292,6 +292,7 @@ final class BearSessionCoordinator {
                     updateOwnRallyTracking(refreshed.ownRally());
                     freeSlotsForJoining = refreshed.freeSlots();
                     snapshot = refreshed;
+                    continue;
                 }
             }
 

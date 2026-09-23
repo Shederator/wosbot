@@ -17,10 +17,11 @@ Status: implemented on PR #346; deterministic tests pass. Live acceptance remain
 
 ## Runtime states
 
-1. Prepare once: disable conflicting auto-join, perform configured recall/pet work, locate Bear, and retain the World anchor.
+1. Prepare once: disable conflicting auto-join, perform configured recall/pet work, locate Bear from the real `GAME_HOME_WORLD` root anchor, and retain the World-at-Bear anchor.
 2. Read all march rows from one frame and reserve the tracked own-rally row.
 3. Before T-5:30, launch an own rally only when its tracked row is visibly idle.
    Explicitly select five minutes and require the green tick before continuing.
+   Until that own rally is confirmed, replay Alliance → Territory → Special Buildings → configured Go → Rally; a recoverable failure must not skip ahead to joins.
 4. Fill every genuinely free join march in configured formation order.
 5. Rank visible candidates by capacity margin, remaining countdown, occupancy, then stable row position.
 6. Use fresh-frame predicates for every transition. Fixed navigation/deploy sleeps are not allowed in the active loop.

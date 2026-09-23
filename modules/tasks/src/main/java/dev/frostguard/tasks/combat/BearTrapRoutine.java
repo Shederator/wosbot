@@ -22,6 +22,7 @@ import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.schedule.TaskQueue;
 import dev.frostguard.engine.service.ConfigService;
 import dev.frostguard.engine.service.ProfileService;
+import dev.frostguard.vision.convert.ImageConverter;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
@@ -104,6 +105,8 @@ private static final int DEFAULT_OWN_RALLY_FLAG_VALUE = 1;
 private static final int DEFAULT_JOIN_RALLY_FLAG_VALUE = 1;
 
 private static final long FRESH_TRANSITION_TIMEOUT_MS = 1500;
+
+private static final int TERRITORY_TRANSITION_ATTEMPTS = 2;
 
 private static final boolean DEFAULT_CALL_OWN_RALLY_VALUE = false;
 
@@ -743,10 +746,10 @@ private void enablePetsFlow() {
     }
 
 private boolean reachBearTrap(int trapNumber) {
-        ImageSearchResultData world = findFreshTransition(GAME_HOME_WAR, 90, 350);
+        ImageSearchResultData world = findFreshTransition(GAME_HOME_WORLD, 90, 350);
         if (!world.isFound()) {
             navigationHelper.ensureCorrectScreenLocation(LaunchPoint.WORLD);
-            world = findFreshTransition(GAME_HOME_WAR, 90, FRESH_TRANSITION_TIMEOUT_MS);
+            world = findFreshTransition(GAME_HOME_WORLD, 90, FRESH_TRANSITION_TIMEOUT_MS);
         }
         if (!world.isFound()) {
             logError(routineLogBearTrapLine("World screen not verified before opening Alliance"));
@@ -754,29 +757,53 @@ private boolean reachBearTrap(int trapNumber) {
         }
 
         tapInside(ALLIANCE_BUTTON_TL_VALUE, ALLIANCE_BUTTON_BR_VALUE);
-        ImageSearchResultData territoryButton = findFreshTransition(
-                ALLIANCE_TERRITORY_BUTTON, 80, 3_000);
-
-        if (!territoryButton.isFound()) {
-            logError(routineLogBearTrapLine("Territory button not detected to go to bear trap"));
-            return false;
-        }
-
-        tapInside(territoryButton);
-        if (!awaitTemplateGone(ALLIANCE_TERRITORY_BUTTON, 80, 2_000)) {
+        if (!openTerritoryFromAllianceMenu()) {
             logError(routineLogBearTrapLine("Territory screen did not open"));
             return false;
         }
         tapInside(SPECIAL_BUILDINGS_BUTTON_TL_VALUE, SPECIAL_BUILDINGS_BUTTON_BR_VALUE);
-        // The fresh capture is the pacing boundary; it replaces a blind fixed settle.
-        emuManager.captureScreen(EMULATOR_NUMBER);
+        if (!awaitConfiguredTrapGoButton(trapNumber)) {
+            logError(routineLogBearTrapLine("Special Buildings did not expose configured Trap " + trapNumber));
+            return false;
+        }
         boolean success = touchBearTrapGoButton(trapNumber);
         if (!success) {
             return false;
         }
-        boolean worldReady = findFreshTransition(GAME_HOME_WAR, 90, 3_000).isFound();
+        boolean worldReady = findFreshTransition(GAME_HOME_WORLD, 90, 3_000).isFound();
         bearAnchorVerifiedAt = worldReady ? Instant.now() : null;
         return worldReady;
+}
+
+private boolean awaitConfiguredTrapGoButton(int trapNumber) {
+        long deadline = System.nanoTime() + Duration.ofMillis(2_500).toNanos();
+        do {
+            checkPreemption();
+            RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+            if (BearSpecialBuildingsScreenClassifier.isGoButtonReady(
+                    ImageConverter.toBufferedImage(frame), trapNumber)) {
+                return true;
+            }
+        } while (System.nanoTime() < deadline);
+        return false;
+    }
+
+private boolean openTerritoryFromAllianceMenu() {
+        for (int attempt = 1; attempt <= TERRITORY_TRANSITION_ATTEMPTS; attempt++) {
+            ImageSearchResultData territoryButton = findFreshTransition(
+                    ALLIANCE_TERRITORY_BUTTON, 80, FRESH_TRANSITION_TIMEOUT_MS);
+            if (!territoryButton.isFound()) {
+                return false;
+            }
+            tapInside(territoryButton);
+            if (awaitTemplateGone(ALLIANCE_TERRITORY_BUTTON, 80, FRESH_TRANSITION_TIMEOUT_MS)) {
+                return true;
+            }
+            logWarning(routineLogBearTrapLine(
+                    "Territory transition not confirmed; retrying from a fresh Alliance frame (attempt "
+                            + attempt + "/" + TERRITORY_TRANSITION_ATTEMPTS + ")"));
+        }
+        return false;
     }
 
 private ImageSearchResultData findFreshTransition(TemplatesEnum template, int threshold, long timeoutMs) {
@@ -1303,11 +1330,10 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
             if (emuManager.locatePattern(EMULATOR_NUMBER, frame, RALLY_HOLD_BUTTON, 90).isFound()) {
                 return BearNavigationPolicy.Screen.RALLY_TIMER_PANEL;
             }
-            if (emuManager.locatePattern(EMULATOR_NUMBER, frame, GAME_HOME_WAR, 90).isFound()) {
+            if (emuManager.locatePattern(EMULATOR_NUMBER, frame, GAME_HOME_WORLD, 90).isFound()) {
                 warListKnown = false;
-                return bearAnchorIsFresh()
-                        ? BearNavigationPolicy.Screen.WORLD_AT_VERIFIED_BEAR
-                        : BearNavigationPolicy.Screen.WORLD;
+                return BearNavigationPolicy.classify(new BearNavigationPolicy.Evidence(
+                        false, false, false, true, bearAnchorIsFresh(), false, false, false));
             }
             if (warListKnown
                     || emuManager.locatePattern(EMULATOR_NUMBER, frame, BEAR_JOIN_PLUS_ICON, 80).isFound()) {

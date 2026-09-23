@@ -227,11 +227,13 @@ class BearSessionCoordinatorTest {
     }
 
     @Test
-    void recoverableOwnRallyFailureDoesNotBlockJoining() {
+    void recoverableOwnRallyFailureRetriesOwnFlowBeforeJoining() {
         ScriptedDriver driver = new ScriptedDriver();
-        driver.freeSlots = 1;
+        driver.freeSlots = 2;
         driver.startResults.add(BearSessionCoordinator.OwnRallyStartResult.recoverable(
                 BearSessionCoordinator.OwnRallyStartOutcome.NAVIGATION_FAILURE));
+        driver.startResults.add(BearSessionCoordinator.OwnRallyStartResult.confirmed(
+                1, Duration.ofMinutes(5), Duration.ofSeconds(12)));
         driver.joinResults.add(BearSessionCoordinator.JoinOutcome.JOINED);
         driver.cancelAfterPauses = 2;
 
@@ -241,7 +243,9 @@ class BearSessionCoordinatorTest {
         coordinator.run();
 
         assertEquals(1, driver.joined);
-        assertEquals(List.of(4), driver.ownRallyFlags);
+        assertEquals(List.of(4, 4), driver.ownRallyFlags);
+        assertEquals(List.of("own:4", "own:4", "join:2"), driver.actions,
+                "joining must not bypass the configured own-rally flow after a recoverable failure");
     }
 
     @Test
@@ -300,6 +304,7 @@ class BearSessionCoordinatorTest {
         private final List<Instant> ownRallyStarts = new ArrayList<>();
         private final List<Integer> ownRallyFlags = new ArrayList<>();
         private final List<Integer> joinFlags = new ArrayList<>();
+        private final List<String> actions = new ArrayList<>();
         private final List<Duration> pauseDurations = new ArrayList<>();
         private final List<BearSessionCoordinator.State> states = new ArrayList<>();
 
@@ -350,6 +355,7 @@ class BearSessionCoordinatorTest {
         public BearSessionCoordinator.OwnRallyStartResult startOwnRally(int formation) {
             startCalls++;
             ownRallyFlags.add(formation);
+            actions.add("own:" + formation);
             BearSessionCoordinator.OwnRallyStartResult result = startResults.isEmpty()
                     ? BearSessionCoordinator.OwnRallyStartResult.confirmed(
                             trackedSlot, Duration.ofMinutes(5), Duration.ofSeconds(12))
@@ -368,6 +374,7 @@ class BearSessionCoordinatorTest {
         @Override
         public BearSessionCoordinator.JoinOutcome joinNext(int formation) {
             joinFlags.add(formation);
+            actions.add("join:" + formation);
             BearSessionCoordinator.JoinOutcome outcome = joinResults.isEmpty()
                     ? BearSessionCoordinator.JoinOutcome.NO_JOINABLE_RALLY
                     : joinResults.removeFirst();
