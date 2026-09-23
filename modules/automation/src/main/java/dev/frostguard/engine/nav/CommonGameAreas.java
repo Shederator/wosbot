@@ -191,8 +191,8 @@ public final class CommonGameAreas {
 
     // ── Hold-a-rally preparation time ────────────────────────────────
     //
-    // The dialog keeps whatever preparation time was last picked in game and the bot never sets it,
-    // so the ticked option is read per rally. Only a green tick marks the active option.
+    // The dialog remembers the last preparation time. Automation that requires an exact duration
+    // taps the matching checkbox and accepts it only after a fresh frame shows its green tick.
 
     public static final int[] RALLY_SET_TIME_MINUTES = { 3, 5, 10, 15 };
     public static final AreaData[] RALLY_SET_TIME_CHECKBOXES = {

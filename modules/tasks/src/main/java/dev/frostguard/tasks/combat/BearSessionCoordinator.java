@@ -19,6 +19,7 @@ final class BearSessionCoordinator {
     private static final Duration NORMAL_POLL = Duration.ZERO;
     private static final Duration RETURN_GUARD = Duration.ofSeconds(2);
     private static final int EXTRA_JOIN_ATTEMPTS = 6;
+    private static final int FINAL_EMPTY_LIST_CONFIRMATIONS = 3;
 
     enum State {
         LOCATE_BEAR,
@@ -59,6 +60,7 @@ final class BearSessionCoordinator {
         ALREADY_ACTIVE,
         TOO_LATE,
         FORMATION_UNAVAILABLE,
+        RALLY_TIMER_NOT_CONFIRMED,
         MARCH_QUEUE_FULL,
         OCR_MISS,
         STALE_SCREEN,
@@ -78,6 +80,7 @@ final class BearSessionCoordinator {
         OCR_MISS,
         STALE_SCREEN,
         NAVIGATION_FAILURE,
+        PAGE_NOT_READY,
         NO_JOINABLE_RALLY
     }
 
@@ -191,6 +194,7 @@ final class BearSessionCoordinator {
     private Duration ownRallyCutoff = MINIMUM_OWN_RALLY_CUTOFF;
     private boolean ownLaunchClosed;
     private boolean finalJoinListDrained;
+    private int finalEmptyListConfirmations;
     private State state = State.LOCATE_BEAR;
 
     BearSessionCoordinator(
@@ -293,9 +297,16 @@ final class BearSessionCoordinator {
 
             if (joinRallies && !finalJoinListDrained && freeSlotsForJoining > 0) {
                 transition(State.FILL_JOIN_SLOTS);
-                boolean listDrained = fillJoinSlots(freeSlotsForJoining);
-                if (listDrained && inFinalExistingRallyWindow()) {
-                    finalJoinListDrained = true;
+                JoinPassResult joinPass = fillJoinSlots(freeSlotsForJoining);
+                if (inFinalExistingRallyWindow()) {
+                    if (joinPass.confirmedEmpty()) {
+                        finalEmptyListConfirmations = joinPass.progressMade()
+                                ? 1
+                                : finalEmptyListConfirmations + 1;
+                        finalJoinListDrained = finalEmptyListConfirmations >= FINAL_EMPTY_LIST_CONFIRMATIONS;
+                    } else {
+                        finalEmptyListConfirmations = 0;
+                    }
                 }
             }
 
@@ -328,36 +339,40 @@ final class BearSessionCoordinator {
         }
     }
 
-    private boolean fillJoinSlots(int initiallyFreeSlots) {
+    private JoinPassResult fillJoinSlots(int initiallyFreeSlots) {
         int remaining = initiallyFreeSlots;
         int attemptsRemaining = initiallyFreeSlots * Math.max(1, joinFormations.size()) + EXTRA_JOIN_ATTEMPTS;
+        boolean progressMade = false;
 
         while (remaining > 0 && attemptsRemaining-- > 0 && driver.now().isBefore(eventEnd)) {
             if (driver.cancellationRequested()) {
-                return false;
+                return new JoinPassResult(false, progressMade);
             }
             int formation = joinFormations.get(formationIndex);
             JoinOutcome outcome = driver.joinNext(formation);
             switch (outcome) {
                 case JOINED -> {
                     remaining--;
+                    progressMade = true;
                     advanceFormation();
                 }
                 case FORMATION_UNAVAILABLE -> advanceFormation();
-                case OCR_MISS, STALE_SCREEN, NAVIGATION_FAILURE -> recover(State.FILL_JOIN_SLOTS);
+                case OCR_MISS, STALE_SCREEN, NAVIGATION_FAILURE, PAGE_NOT_READY -> recover(State.FILL_JOIN_SLOTS);
                 case NO_JOINABLE_RALLY -> {
-                    return true;
+                    return new JoinPassResult(true, progressMade);
                 }
                 case MARCH_QUEUE_FULL -> {
-                    return false;
+                    return new JoinPassResult(false, progressMade);
                 }
                 case RALLY_FULL, RALLY_DEPARTED, RALLY_GONE, ALREADY_JOINED_OR_MARCHING -> {
                     // Keep the same verified formation and move to the next rally candidate.
                 }
             }
         }
-        return false;
+        return new JoinPassResult(false, progressMade);
     }
+
+    private record JoinPassResult(boolean confirmedEmpty, boolean progressMade) {}
 
     private void advanceFormation() {
         formationIndex = (formationIndex + 1) % joinFormations.size();

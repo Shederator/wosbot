@@ -61,10 +61,13 @@ class BearSessionCoordinatorTest {
     }
 
     @Test
-    void emptyFinalFiveMinuteListStopsScanningForNewRallies() {
+    void finalFiveMinuteListMustBeEmptyThreeTimesBeforeJoiningStops() {
         ScriptedDriver driver = new ScriptedDriver();
         driver.freeSlots = 1;
-        driver.joinResults.add(BearSessionCoordinator.JoinOutcome.NO_JOINABLE_RALLY);
+        driver.joinResults.addAll(List.of(
+                BearSessionCoordinator.JoinOutcome.NO_JOINABLE_RALLY,
+                BearSessionCoordinator.JoinOutcome.NO_JOINABLE_RALLY,
+                BearSessionCoordinator.JoinOutcome.NO_JOINABLE_RALLY));
         BearSessionCoordinator coordinator = new BearSessionCoordinator(
                 driver,
                 Instant.EPOCH.plus(Duration.ofMinutes(5)),
@@ -74,10 +77,32 @@ class BearSessionCoordinatorTest {
                 List.of(2, 3, 4, 5, 6));
 
         assertEquals(BearSessionCoordinator.ExitReason.EVENT_ENDED, coordinator.run());
-        assertEquals(List.of(2), driver.joinFlags,
-                "the final-five-minute list is scanned once after it drains");
-        assertEquals(List.of(Duration.ofMinutes(5)), driver.pauseDurations,
-                "after the final list drains the session waits for the event end");
+        assertEquals(List.of(2, 2, 2), driver.joinFlags,
+                "one transient empty frame must not end the final join window");
+        assertTrue(driver.pauseDurations.getLast().compareTo(Duration.ofMinutes(4)) > 0,
+                "only three complete empty scans may drain the final join window");
+    }
+
+    @Test
+    void pageNotReadyNeverCountsAsAnEmptyRallyList() {
+        ScriptedDriver driver = new ScriptedDriver();
+        driver.freeSlots = 1;
+        driver.joinResults.addAll(List.of(
+                BearSessionCoordinator.JoinOutcome.PAGE_NOT_READY,
+                BearSessionCoordinator.JoinOutcome.NO_JOINABLE_RALLY,
+                BearSessionCoordinator.JoinOutcome.NO_JOINABLE_RALLY,
+                BearSessionCoordinator.JoinOutcome.NO_JOINABLE_RALLY));
+        BearSessionCoordinator coordinator = new BearSessionCoordinator(
+                driver,
+                Instant.EPOCH.plus(Duration.ofMinutes(5)),
+                false,
+                1,
+                true,
+                List.of(2));
+
+        assertEquals(BearSessionCoordinator.ExitReason.EVENT_ENDED, coordinator.run());
+        assertEquals(List.of(2, 2, 2, 2), driver.joinFlags);
+        assertTrue(driver.recoveries >= 1);
     }
 
     @Test

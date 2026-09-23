@@ -136,7 +136,7 @@ private boolean isVisuallyTriggered = false;
 
 private BearSessionCoordinator.ExitReason activeSessionExit;
 
-private boolean bearAnchorKnown;
+private Instant bearAnchorVerifiedAt;
 
 public BearTrapRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
         super(profile, tpTask);
@@ -193,7 +193,6 @@ public BearTrapRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
                 }
                 logInfo(routineLogBearTrapLine("Moving camera to Bear Trap " + trapNumber));
                 reachBearTrap(trapNumber);
-                sleepTask(1000);
 
             }
 
@@ -333,7 +332,7 @@ private void performPreparationPhase(LocalDateTime activationTime) {
 
         if (secondsUntilActivation > 0) {
             logInfo(routineLogBearTrapLine("Waiting for trap auto-activation in " + secondsUntilActivation + " seconds..."));
-            sleepTask((secondsUntilActivation * 1000) + 2000);
+            sleepTask(secondsUntilActivation * 1000);
 
         }
 
@@ -561,7 +560,7 @@ private void prepareForTrapFlow() {
         }
 
         logInfo(routineLogBearTrapLine("Moving camera to Bear Trap " + trapNumber));
-        bearAnchorKnown = reachBearTrap(trapNumber);
+        reachBearTrap(trapNumber);
 
     }
 
@@ -744,6 +743,16 @@ private void enablePetsFlow() {
     }
 
 private boolean reachBearTrap(int trapNumber) {
+        ImageSearchResultData world = findFreshTransition(GAME_HOME_WAR, 90, 350);
+        if (!world.isFound()) {
+            navigationHelper.ensureCorrectScreenLocation(LaunchPoint.WORLD);
+            world = findFreshTransition(GAME_HOME_WAR, 90, FRESH_TRANSITION_TIMEOUT_MS);
+        }
+        if (!world.isFound()) {
+            logError(routineLogBearTrapLine("World screen not verified before opening Alliance"));
+            return false;
+        }
+
         tapInside(ALLIANCE_BUTTON_TL_VALUE, ALLIANCE_BUTTON_BR_VALUE);
         ImageSearchResultData territoryButton = findFreshTransition(
                 ALLIANCE_TERRITORY_BUTTON, 80, 3_000);
@@ -766,7 +775,7 @@ private boolean reachBearTrap(int trapNumber) {
             return false;
         }
         boolean worldReady = findFreshTransition(GAME_HOME_WAR, 90, 3_000).isFound();
-        bearAnchorKnown = worldReady;
+        bearAnchorVerifiedAt = worldReady ? Instant.now() : null;
         return worldReady;
     }
 
@@ -807,6 +816,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         private BearSessionCoordinator.State lastState;
         private final Map<Integer, Long> formationTroopCounts = new HashMap<>();
         private final Map<Integer, Set<String>> rejectedCandidatesByFormation = new HashMap<>();
+        private boolean warListKnown;
 
         private LiveBearSessionDriver(Instant eventEnd) {
             this.eventEnd = eventEnd;
@@ -895,8 +905,11 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                         BearSessionCoordinator.OwnRallyStartOutcome.STALE_SCREEN);
             }
 
-            int rallySeconds = deploymentHelper.readRallySetTimeSeconds(
-                    RALLY_DURATION_BASE_MINUTES_VALUE * 60);
+            if (!deploymentHelper.selectRallySetTimeMinutes(RALLY_DURATION_BASE_MINUTES_VALUE)) {
+                return BearSessionCoordinator.OwnRallyStartResult.recoverable(
+                        BearSessionCoordinator.OwnRallyStartOutcome.RALLY_TIMER_NOT_CONFIRMED);
+            }
+            int rallySeconds = RALLY_DURATION_BASE_MINUTES_VALUE * 60;
             tapInside(hold);
             if (!marchHelper.selectFlag(formation)) {
                 pressBack();
@@ -965,15 +978,8 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         public BearSessionCoordinator.JoinOutcome joinNext(int formation) {
             int freeBefore = (int) lastMarches.stream().filter(MarchSlotState::isIdle).count();
             try {
-                navigationHelper.ensureCorrectScreenLocation(LaunchPoint.WORLD);
-                ImageSearchResultData war = findFresh(
-                        GAME_HOME_WAR, 90, FRESH_TRANSITION_TIMEOUT_MS);
-                if (!war.isFound()) {
-                    return BearSessionCoordinator.JoinOutcome.NAVIGATION_FAILURE;
-                }
-                tapInside(war);
-                if (!awaitAnyFresh(BEAR_JOIN_PLUS_ICON, 80, FRESH_TRANSITION_TIMEOUT_MS)) {
-                    return BearSessionCoordinator.JoinOutcome.NO_JOINABLE_RALLY;
+                if (!openWarList()) {
+                    return BearSessionCoordinator.JoinOutcome.PAGE_NOT_READY;
                 }
 
                 long knownTroops = formationTroopCounts.getOrDefault(formation, 0L);
@@ -990,6 +996,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                 }
                 BearRallyCandidate candidate = selected.get();
                 tapInside(candidate.joinButtonArea());
+                warListKnown = false;
                 ImageSearchResultData deployReady = findFresh(
                         BEAR_DEPLOY_BUTTON, 90, FRESH_TRANSITION_TIMEOUT_MS);
                 if (!deployReady.isFound()) {
@@ -997,16 +1004,16 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                     return BearSessionCoordinator.JoinOutcome.RALLY_DEPARTED;
                 }
                 if (!marchHelper.selectFlag(formation)) {
-                    pressBack();
+                    returnToWarListFromFormation();
                     return BearSessionCoordinator.JoinOutcome.FORMATION_UNAVAILABLE;
                 }
                 if (deploymentHelper.hasNoDeployableTroops()) {
-                    pressBack();
+                    returnToWarListFromFormation();
                     return BearSessionCoordinator.JoinOutcome.FORMATION_UNAVAILABLE;
                 }
                 long selectedTroops = deploymentHelper.readSelectedTroopCount();
                 if (selectedTroops < 0) {
-                    pressBack();
+                    returnToWarListFromFormation();
                     return BearSessionCoordinator.JoinOutcome.OCR_MISS;
                 }
                 formationTroopCounts.put(formation, selectedTroops);
@@ -1016,7 +1023,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                                     + ": formation #" + formation + " has " + selectedTroops
                                     + " troops but only " + candidate.remainingCapacity() + " fit"));
                     rejected.add(candidate.stableKey());
-                    pressBack();
+                    returnToWarListFromFormation();
                     return BearSessionCoordinator.JoinOutcome.RALLY_FULL;
                 }
                 ImageSearchResultData deploy = findFresh(
@@ -1060,8 +1067,20 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         @Override
         public boolean recover(BearSessionCoordinator.State resumeState) {
             try {
+                BearNavigationPolicy.Screen screen = observeBearScreen();
+                if (screen == BearNavigationPolicy.Screen.FORMATION
+                        || screen == BearNavigationPolicy.Screen.RALLY_TIMER_PANEL
+                        || screen == BearNavigationPolicy.Screen.BEAR_RALLY_PANEL
+                        || screen == BearNavigationPolicy.Screen.ALLIANCE_MENU) {
+                    pressBack();
+                    return awaitKnownScreenChange(screen);
+                }
+                if (screen != BearNavigationPolicy.Screen.UNKNOWN) {
+                    return true;
+                }
                 navigationHelper.ensureCorrectScreenLocation(LaunchPoint.WORLD);
-                return true;
+                warListKnown = false;
+                return findFresh(GAME_HOME_WAR, 90, FRESH_TRANSITION_TIMEOUT_MS).isFound();
             } catch (StopExecutionException e) {
                 throw e;
             } catch (Exception e) {
@@ -1081,11 +1100,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         @Override
         public void stateChanged(BearSessionCoordinator.State state) {
             if (lastState != state) {
-                if (state != BearSessionCoordinator.State.FILL_JOIN_SLOTS
-                        && state != BearSessionCoordinator.State.WAIT_FOR_NEXT_USEFUL_DEADLINE
-                        && state != BearSessionCoordinator.State.LOCATE_BEAR) {
-                    logInfo(routineLogBearTrapLine("Session state: " + state));
-                }
+                logInfo(routineLogBearTrapLine("Session state: " + state));
                 lastState = state;
             }
         }
@@ -1160,27 +1175,76 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         }
 
         private boolean openBearRallyFromAnchor() {
-            if (!recover(BearSessionCoordinator.State.OWN_RALLY_STARTING)) {
-                return false;
-            }
-            if (bearAnchorKnown) {
-                tapInside(BEAR_CENTER_POINT_VALUE, BEAR_CENTER_POINT_VALUE);
-                if (findFresh(BEAR_RALLY_BUTTON, 80, FRESH_TRANSITION_TIMEOUT_MS).isFound()) {
-                    return true;
+            for (int transition = 0; transition < 4; transition++) {
+                BearNavigationPolicy.Screen screen = observeBearScreen();
+                BearNavigationPolicy.Action action = BearNavigationPolicy.next(
+                        screen, BearNavigationPolicy.Goal.OWN_RALLY);
+                switch (action) {
+                    case READY -> {
+                        return true;
+                    }
+                    case TAP_BEAR_ANCHOR -> {
+                        tapInside(BEAR_CENTER_POINT_VALUE, BEAR_CENTER_POINT_VALUE);
+                        if (findFresh(BEAR_RALLY_BUTTON, 80, FRESH_TRANSITION_TIMEOUT_MS).isFound()) {
+                            warListKnown = false;
+                            return true;
+                        }
+                        bearAnchorVerifiedAt = null;
+                    }
+                    case ROUTE_TO_BEAR -> {
+                        if (!reachBearTrap(trapNumber)) {
+                            return false;
+                        }
+                    }
+                    case BACK_ONCE -> {
+                        pressBack();
+                        if (!awaitKnownScreenChange(screen)) {
+                            return false;
+                        }
+                    }
+                    case FAIL_CLOSED -> {
+                        return false;
+                    }
+                    case TAP_WAR -> throw new IllegalStateException("Unexpected Bear navigation action");
                 }
-                bearAnchorKnown = false;
             }
-
-            if (!reachBearTrap(trapNumber)) {
-                return false;
-            }
-            bearAnchorKnown = true;
-            tapInside(BEAR_CENTER_POINT_VALUE, BEAR_CENTER_POINT_VALUE);
-            return findFresh(BEAR_RALLY_BUTTON, 80, FRESH_TRANSITION_TIMEOUT_MS).isFound();
+            return false;
         }
 
-        private boolean awaitAnyFresh(TemplatesEnum template, int threshold, long timeoutMs) {
-            return findFresh(template, threshold, timeoutMs).isFound();
+        private boolean openWarList() {
+            for (int transition = 0; transition < 3; transition++) {
+                BearNavigationPolicy.Screen screen = observeBearScreen();
+                BearNavigationPolicy.Action action = BearNavigationPolicy.next(
+                        screen, BearNavigationPolicy.Goal.WAR_LIST);
+                switch (action) {
+                    case READY -> {
+                        return true;
+                    }
+                    case TAP_WAR -> {
+                        ImageSearchResultData war = findFresh(GAME_HOME_WAR, 90, 350);
+                        if (!war.isFound()) {
+                            return false;
+                        }
+                        tapInside(war);
+                        if (!awaitTemplateGone(GAME_HOME_WAR, 90, FRESH_TRANSITION_TIMEOUT_MS)) {
+                            return false;
+                        }
+                        warListKnown = true;
+                        return true;
+                    }
+                    case BACK_ONCE -> {
+                        pressBack();
+                        if (!awaitKnownScreenChange(screen)) {
+                            return false;
+                        }
+                    }
+                    case FAIL_CLOSED, ROUTE_TO_BEAR -> {
+                        return false;
+                    }
+                    case TAP_BEAR_ANCHOR -> throw new IllegalStateException("Unexpected War navigation action");
+                }
+            }
+            return false;
         }
 
         private DeploymentPostTapRead awaitPostDeployState(long timeoutMs) {
@@ -1205,6 +1269,60 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
             if (findFresh(BEAR_DEPLOY_BUTTON, 90, FRESH_TRANSITION_TIMEOUT_MS).isFound()) {
                 pressBack();
             }
+        }
+
+        private void returnToWarListFromFormation() {
+            pressBack();
+            warListKnown = awaitTemplateGone(
+                    BEAR_DEPLOY_BUTTON, 90, FRESH_TRANSITION_TIMEOUT_MS);
+        }
+
+        private boolean awaitKnownScreenChange(BearNavigationPolicy.Screen previous) {
+            if (previous == BearNavigationPolicy.Screen.WAR_LIST) {
+                warListKnown = false;
+                return findFresh(GAME_HOME_WAR, 90, FRESH_TRANSITION_TIMEOUT_MS).isFound();
+            }
+            TemplatesEnum marker = switch (previous) {
+                case FORMATION -> BEAR_DEPLOY_BUTTON;
+                case RALLY_TIMER_PANEL -> RALLY_HOLD_BUTTON;
+                case ALLIANCE_MENU -> ALLIANCE_TERRITORY_BUTTON;
+                default -> BEAR_RALLY_BUTTON;
+            };
+            return awaitTemplateGone(marker, 80, FRESH_TRANSITION_TIMEOUT_MS);
+        }
+
+        private BearNavigationPolicy.Screen observeBearScreen() {
+            checkPreemption();
+            RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+            if (emuManager.locatePattern(EMULATOR_NUMBER, frame, BEAR_DEPLOY_BUTTON, 90).isFound()) {
+                return BearNavigationPolicy.Screen.FORMATION;
+            }
+            if (emuManager.locatePattern(EMULATOR_NUMBER, frame, BEAR_RALLY_BUTTON, 80).isFound()) {
+                return BearNavigationPolicy.Screen.BEAR_RALLY_PANEL;
+            }
+            if (emuManager.locatePattern(EMULATOR_NUMBER, frame, RALLY_HOLD_BUTTON, 90).isFound()) {
+                return BearNavigationPolicy.Screen.RALLY_TIMER_PANEL;
+            }
+            if (emuManager.locatePattern(EMULATOR_NUMBER, frame, GAME_HOME_WAR, 90).isFound()) {
+                warListKnown = false;
+                return bearAnchorIsFresh()
+                        ? BearNavigationPolicy.Screen.WORLD_AT_VERIFIED_BEAR
+                        : BearNavigationPolicy.Screen.WORLD;
+            }
+            if (warListKnown
+                    || emuManager.locatePattern(EMULATOR_NUMBER, frame, BEAR_JOIN_PLUS_ICON, 80).isFound()) {
+                warListKnown = true;
+                return BearNavigationPolicy.Screen.WAR_LIST;
+            }
+            if (emuManager.locatePattern(EMULATOR_NUMBER, frame, ALLIANCE_TERRITORY_BUTTON, 80).isFound()) {
+                return BearNavigationPolicy.Screen.ALLIANCE_MENU;
+            }
+            return BearNavigationPolicy.Screen.UNKNOWN;
+        }
+
+        private boolean bearAnchorIsFresh() {
+            return bearAnchorVerifiedAt != null
+                    && Duration.between(bearAnchorVerifiedAt, now()).compareTo(Duration.ofMinutes(35)) < 0;
         }
 
         private ImageSearchResultData findFresh(TemplatesEnum template, int threshold, long timeoutMs) {

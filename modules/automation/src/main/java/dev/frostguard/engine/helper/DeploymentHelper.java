@@ -38,6 +38,7 @@ public class DeploymentHelper {
     private static final int COST_RED_PIXEL_MIN = 10;
     // The ticked preparation option shows ~390 green pixels; the three others show none.
     private static final int SET_TIME_TICK_PIXEL_MIN = 50;
+    private static final Duration SET_TIME_SELECTION_TIMEOUT = Duration.ofMillis(900);
 
     private final EmulatorController emu;
     private final String device;
@@ -209,20 +210,73 @@ public class DeploymentHelper {
     public int readRallySetTimeSeconds(int defaultSeconds) {
         try {
             BufferedImage image = captureImage();
-            for (int i = 0; i < CommonGameAreas.RALLY_SET_TIME_MINUTES.length; i++) {
-                int tickPixels = PixelStats.count(image, CommonGameAreas.RALLY_SET_TIME_CHECKBOXES[i],
-                        GameColors::isVividGreen);
-                if (tickPixels >= SET_TIME_TICK_PIXEL_MIN) {
-                    int minutes = CommonGameAreas.RALLY_SET_TIME_MINUTES[i];
-                    log.info("Rally set time: " + minutes + " min ticked (tickPixels=" + tickPixels + ")");
-                    return minutes * 60;
-                }
+            int minutes = selectedRallySetTimeMinutes(image);
+            if (minutes > 0) {
+                log.info("Rally set time: " + minutes + " min ticked");
+                return minutes * 60;
             }
             log.warn("Rally set time: no ticked option found; assuming " + defaultSeconds + "s");
         } catch (Exception ex) {
             log.warn("Rally set time: checkbox scan failed: " + ex.getMessage());
         }
         return defaultSeconds;
+    }
+
+    /**
+     * Selects an exact rally preparation time and accepts it only after a fresh frame shows the
+     * green tick on that option. There is deliberately no blind second tap: a delayed first tap
+     * cannot toggle the option again after an interruption.
+     */
+    public boolean selectRallySetTimeMinutes(int minutes) {
+        int index = rallySetTimeIndex(minutes);
+        if (index < 0) {
+            log.warn("Unsupported rally set time: " + minutes + " min");
+            return false;
+        }
+        if (selectedRallySetTimeMinutes(captureImage()) == minutes) {
+            return true;
+        }
+        if (Thread.currentThread().isInterrupted()) {
+            return false;
+        }
+
+        taps.tapInside(CommonGameAreas.RALLY_SET_TIME_CHECKBOXES[index]);
+        long deadline = System.nanoTime() + SET_TIME_SELECTION_TIMEOUT.toNanos();
+        do {
+            if (Thread.currentThread().isInterrupted()) {
+                return false;
+            }
+            if (selectedRallySetTimeMinutes(captureImage()) == minutes) {
+                log.info("Rally set time confirmed at " + minutes + " min");
+                return true;
+            }
+        } while (System.nanoTime() < deadline);
+
+        log.warn("Rally set time did not confirm at " + minutes + " min");
+        return false;
+    }
+
+    static int selectedRallySetTimeMinutes(BufferedImage image) {
+        if (image == null) {
+            return -1;
+        }
+        for (int i = 0; i < CommonGameAreas.RALLY_SET_TIME_MINUTES.length; i++) {
+            int tickPixels = PixelStats.count(image, CommonGameAreas.RALLY_SET_TIME_CHECKBOXES[i],
+                    GameColors::isVividGreen);
+            if (tickPixels >= SET_TIME_TICK_PIXEL_MIN) {
+                return CommonGameAreas.RALLY_SET_TIME_MINUTES[i];
+            }
+        }
+        return -1;
+    }
+
+    private static int rallySetTimeIndex(int minutes) {
+        for (int i = 0; i < CommonGameAreas.RALLY_SET_TIME_MINUTES.length; i++) {
+            if (CommonGameAreas.RALLY_SET_TIME_MINUTES[i] == minutes) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /** True when the deploy cost is drawn in red, which is the game saying the stamina is not there. */
