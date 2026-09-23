@@ -46,7 +46,7 @@ class BearRallyCandidateSelectorTest {
     }
 
     @Test
-    void ranksCapacityMarginThenNewerCountdownThenLowerOccupancy() {
+    void takesTheTopmostGreenRallyThatFitsTheFormation() {
         BearRallyCandidate cramped = candidate(200, true, BearRallyCandidate.JoinButton.GREEN,
                 3, 15, 350_000, 500_000, 290);
         BearRallyCandidate ampleOld = candidate(300, true, BearRallyCandidate.JoinButton.GREEN,
@@ -54,7 +54,7 @@ class BearRallyCandidateSelectorTest {
         BearRallyCandidate ampleNew = candidate(500, true, BearRallyCandidate.JoinButton.GREEN,
                 4, 15, 100_000, 500_000, 260);
 
-        assertEquals(ampleNew, BearRallyCandidateSelector.selectBest(
+        assertEquals(cramped, BearRallyCandidateSelector.selectBest(
                 List.of(cramped, ampleOld, ampleNew), 100_000, Set.of()).orElseThrow());
     }
 

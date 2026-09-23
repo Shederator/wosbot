@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-/** Chooses a safe rally while favouring roomy, newer, less occupied cards. */
+/** Chooses the topmost safe rally so a fast-changing list is acted on before it shifts. */
 final class BearRallyCandidateSelector {
 
     private BearRallyCandidateSelector() {
@@ -18,10 +18,6 @@ final class BearRallyCandidateSelector {
         return candidates.stream()
                 .filter(candidate -> !excludedKeys.contains(candidate.stableKey()))
                 .filter(candidate -> candidate.accepts(formationTroops))
-                .max(Comparator
-                        .comparingLong(BearRallyCandidate::remainingCapacity)
-                        .thenComparing(BearRallyCandidate::countdown)
-                        .thenComparingInt(candidate -> -candidate.currentMembers())
-                        .thenComparingInt(BearRallyCandidate::rowY));
+                .min(Comparator.comparingInt(BearRallyCandidate::rowY));
     }
 }

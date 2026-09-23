@@ -199,6 +199,12 @@ public final class CommonGameAreas {
             region(110, 592, 152, 634), region(375, 592, 417, 634),
             region(110, 670, 152, 712), region(375, 670, 417, 712)
     };
+    // Bear Hunt exposes only 5 and 10 minutes on the first row. Treating this as the generic
+    // four-option grid maps the right-hand 10-minute tick to 5 minutes and launches the wrong rally.
+    public static final int[] BEAR_RALLY_SET_TIME_MINUTES = { 5, 10 };
+    public static final AreaData[] BEAR_RALLY_SET_TIME_CHECKBOXES = {
+            region(110, 592, 152, 634), region(375, 592, 417, 634)
+    };
 
     // Polar Terror search panel: the level number sits in the pill right of the slider, not on the
     // slider bar itself.

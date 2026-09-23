@@ -66,6 +66,17 @@ class DeploymentHelperTest {
     }
 
     @Test
+    void mapsTheBearLeftOptionToFiveMinutesAndRightOptionToTenMinutes() {
+        BufferedImage fiveMinuteFrame = new BufferedImage(720, 1280, BufferedImage.TYPE_INT_RGB);
+        paintGreen(fiveMinuteFrame, CommonGameAreas.BEAR_RALLY_SET_TIME_CHECKBOXES[0]);
+        BufferedImage tenMinuteFrame = new BufferedImage(720, 1280, BufferedImage.TYPE_INT_RGB);
+        paintGreen(tenMinuteFrame, CommonGameAreas.BEAR_RALLY_SET_TIME_CHECKBOXES[1]);
+
+        assertEquals(5, DeploymentHelper.selectedBearRallySetTimeMinutes(fiveMinuteFrame));
+        assertEquals(10, DeploymentHelper.selectedBearRallySetTimeMinutes(tenMinuteFrame));
+    }
+
+    @Test
     void rallyTimerSelectionFailsClosedWhenNoTickIsVisible() {
         BufferedImage frame = new BufferedImage(720, 1280, BufferedImage.TYPE_INT_RGB);
 
@@ -80,5 +91,16 @@ class DeploymentHelperTest {
         AccountDescriptor profile = new AccountDescriptor(1L);
         profile.setDisplayName("test");
         return new DeploymentHelper(null, "test", null, integers, durations, profile);
+    }
+
+    private void paintGreen(BufferedImage frame, dev.frostguard.api.domain.AreaData area) {
+        Graphics2D graphics = frame.createGraphics();
+        graphics.setColor(Color.GREEN);
+        graphics.fillRect(
+                area.origin().getX(),
+                area.origin().getY(),
+                area.extent().getX() - area.origin().getX(),
+                area.extent().getY() - area.origin().getY());
+        graphics.dispose();
     }
 }

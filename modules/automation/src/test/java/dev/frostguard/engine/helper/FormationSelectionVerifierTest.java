@@ -19,8 +19,9 @@ class FormationSelectionVerifierTest {
         BufferedImage frame = solidFrame(new Color(21, 116, 183));
         Graphics2D graphics = frame.createGraphics();
         graphics.setColor(new Color(246, 191, 45));
-        graphics.drawRect(10, 10, 53, 57);
-        graphics.drawRect(11, 11, 51, 55);
+        for (int inset = 8; inset < 14; inset++) {
+            graphics.drawRect(10 + inset, 10 + inset, 53 - inset * 2, 57 - inset * 2);
+        }
         graphics.dispose();
 
         assertTrue(FormationSelectionVerifier.isSelected(frame, SLOT));

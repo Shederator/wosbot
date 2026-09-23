@@ -8,7 +8,9 @@ import java.awt.image.BufferedImage;
 /** Verifies the yellow outline the game draws around the active formation tile. */
 final class FormationSelectionVerifier {
 
-    static final int SELECTED_YELLOW_PIXELS_MIN = 40;
+    // Live 720x1280 frames contain roughly 875-1,025 yellow pixels in a selected tile. The largest
+    // incidental yellow/orange badge in the same strip measured 312 pixels.
+    static final int SELECTED_YELLOW_PIXELS_MIN = 650;
 
     private FormationSelectionVerifier() {
     }
@@ -21,8 +23,9 @@ final class FormationSelectionVerifier {
         int yellow = 0;
         for (int y = top; y <= bottom; y++) {
             for (int x = left; x <= right; x++) {
-                boolean border = x - left < 6 || right - x < 6 || y - top < 6 || bottom - y < 6;
-                if (border && GameColors.isFormationSelectionYellow(frame.getRGB(x, y))) {
+                // The game's selected outline is inset by 7-10 px from this deliberately generous
+                // slot window, so scanning only the window's outer edge misses the real outline.
+                if (GameColors.isFormationSelectionYellow(frame.getRGB(x, y))) {
                     yellow++;
                 }
             }

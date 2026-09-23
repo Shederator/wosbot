@@ -4,6 +4,7 @@ import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.FormationSlots;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
@@ -800,13 +801,35 @@ private boolean openTerritoryFromAllianceMenu() {
                 return false;
             }
             tapInside(territoryButton);
-            if (awaitTemplateGone(ALLIANCE_TERRITORY_BUTTON, 80, NAVIGATION_TRANSITION_TIMEOUT_MS)) {
+            if (awaitTerritoryTriggerGone(territoryButton, NAVIGATION_TRANSITION_TIMEOUT_MS)) {
                 return true;
             }
             logWarning(routineLogBearTrapLine(
                     "Territory transition not confirmed; retrying from a fresh Alliance frame (attempt "
                             + attempt + "/" + TERRITORY_TRANSITION_ATTEMPTS + ")"));
         }
+        return false;
+    }
+
+private boolean awaitTerritoryTriggerGone(ImageSearchResultData trigger, long timeoutMs) {
+        long deadline = System.nanoTime() + Duration.ofMillis(timeoutMs).toNanos();
+        int consecutiveMisses = 0;
+        do {
+            checkPreemption();
+            RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+            boolean gone = BearTerritoryTransition.hasLeftTriggerRegion(trigger, area ->
+                    emuManager.locatePattern(
+                            EMULATOR_NUMBER,
+                            frame,
+                            ALLIANCE_TERRITORY_BUTTON,
+                            area.topLeft(),
+                            area.bottomRight(),
+                            80).isFound());
+            consecutiveMisses = gone ? consecutiveMisses + 1 : 0;
+            if (consecutiveMisses >= 2) {
+                return true;
+            }
+        } while (System.nanoTime() < deadline);
         return false;
     }
 
@@ -944,12 +967,16 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                         BearSessionCoordinator.OwnRallyStartOutcome.STALE_SCREEN);
             }
 
-            if (!deploymentHelper.selectRallySetTimeMinutes(RALLY_DURATION_BASE_MINUTES_VALUE)) {
+            if (!deploymentHelper.selectBearRallySetTimeMinutes(RALLY_DURATION_BASE_MINUTES_VALUE)) {
                 return BearSessionCoordinator.OwnRallyStartResult.recoverable(
                         BearSessionCoordinator.OwnRallyStartOutcome.RALLY_TIMER_NOT_CONFIRMED);
             }
             int rallySeconds = RALLY_DURATION_BASE_MINUTES_VALUE * 60;
             tapInside(hold);
+            if (!findFresh(BEAR_DEPLOY_BUTTON, 90, FRESH_TRANSITION_TIMEOUT_MS).isFound()) {
+                return BearSessionCoordinator.OwnRallyStartResult.recoverable(
+                        BearSessionCoordinator.OwnRallyStartOutcome.STALE_SCREEN);
+            }
             if (!marchHelper.selectFlag(formation)) {
                 pressBack();
                 return BearSessionCoordinator.OwnRallyStartResult.recoverable(
@@ -1287,12 +1314,12 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                         return true;
                     }
                     case TAP_WAR -> {
-                        ImageSearchResultData war = findFresh(GAME_HOME_WAR, 90, 350);
-                        if (!war.isFound()) {
+                        ImageSearchResultData rallyIndicator = findFresh(RALLY_INDICATOR, 80, 500);
+                        if (!rallyIndicator.isFound()) {
                             return false;
                         }
-                        tapInside(war);
-                        if (!awaitTemplateGone(GAME_HOME_WAR, 90, FRESH_TRANSITION_TIMEOUT_MS)) {
+                        tapInside(rallyIndicator);
+                        if (!awaitTemplateGone(RALLY_INDICATOR, 80, FRESH_TRANSITION_TIMEOUT_MS)) {
                             return false;
                         }
                         warListKnown = true;
@@ -1348,7 +1375,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         private boolean awaitKnownScreenChange(BearNavigationPolicy.Screen previous) {
             if (previous == BearNavigationPolicy.Screen.WAR_LIST) {
                 warListKnown = false;
-                return findFresh(GAME_HOME_WAR, 90, FRESH_TRANSITION_TIMEOUT_MS).isFound();
+                return findFresh(GAME_HOME_WORLD, 90, FRESH_TRANSITION_TIMEOUT_MS).isFound();
             }
             TemplatesEnum marker = switch (previous) {
                 case FORMATION -> BEAR_DEPLOY_BUTTON;

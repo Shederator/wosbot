@@ -249,6 +249,33 @@ class BearSessionCoordinatorTest {
     }
 
     @Test
+    void joiningNeverBypassesAnUnverifiedOwnRallyAfterRepeatedFailures() {
+        ScriptedDriver driver = new ScriptedDriver();
+        driver.freeSlots = 2;
+        driver.startResults.addAll(List.of(
+                BearSessionCoordinator.OwnRallyStartResult.recoverable(
+                        BearSessionCoordinator.OwnRallyStartOutcome.RALLY_TIMER_NOT_CONFIRMED),
+                BearSessionCoordinator.OwnRallyStartResult.recoverable(
+                        BearSessionCoordinator.OwnRallyStartOutcome.FORMATION_UNAVAILABLE),
+                BearSessionCoordinator.OwnRallyStartResult.recoverable(
+                        BearSessionCoordinator.OwnRallyStartOutcome.DEPLOY_NOT_CONFIRMED),
+                BearSessionCoordinator.OwnRallyStartResult.confirmed(
+                        1, Duration.ofMinutes(5), Duration.ofSeconds(12))));
+        driver.joinResults.add(BearSessionCoordinator.JoinOutcome.JOINED);
+        driver.cancelAfterPauses = 4;
+
+        BearSessionCoordinator coordinator = new BearSessionCoordinator(
+                driver, Instant.EPOCH.plus(Duration.ofMinutes(6)), true, 4, true, List.of(2));
+
+        coordinator.run();
+
+        assertEquals(List.of("own:4", "own:4", "own:4", "own:4", "join:2"), driver.actions,
+                "joining must remain locked until the own rally is proven active");
+        assertEquals(1, driver.marchReads,
+                "the verified march snapshot must be retained while the own-rally transaction retries");
+    }
+
+    @Test
     void recoverableOwnNavigationFailureDoesNotReopenTheMarchSidebar() {
         ScriptedDriver driver = new ScriptedDriver();
         driver.freeSlots = 2;

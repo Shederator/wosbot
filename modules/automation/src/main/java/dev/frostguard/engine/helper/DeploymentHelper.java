@@ -2,6 +2,7 @@ package dev.frostguard.engine.helper;
 
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.emulator.EmulatorController;
@@ -228,25 +229,38 @@ public class DeploymentHelper {
      * cannot toggle the option again after an interruption.
      */
     public boolean selectRallySetTimeMinutes(int minutes) {
-        int index = rallySetTimeIndex(minutes);
+        return selectRallySetTimeMinutes(
+                minutes, CommonGameAreas.RALLY_SET_TIME_MINUTES, CommonGameAreas.RALLY_SET_TIME_CHECKBOXES);
+    }
+
+    /** Selects the two-option 5/10 minute timer shown by Bear Hunt. */
+    public boolean selectBearRallySetTimeMinutes(int minutes) {
+        return selectRallySetTimeMinutes(
+                minutes,
+                CommonGameAreas.BEAR_RALLY_SET_TIME_MINUTES,
+                CommonGameAreas.BEAR_RALLY_SET_TIME_CHECKBOXES);
+    }
+
+    private boolean selectRallySetTimeMinutes(int minutes, int[] options, AreaData[] checkboxes) {
+        int index = rallySetTimeIndex(minutes, options);
         if (index < 0) {
             log.warn("Unsupported rally set time: " + minutes + " min");
             return false;
         }
-        if (selectedRallySetTimeMinutes(captureImage()) == minutes) {
+        if (selectedRallySetTimeMinutes(captureImage(), options, checkboxes) == minutes) {
             return true;
         }
         if (Thread.currentThread().isInterrupted()) {
             return false;
         }
 
-        taps.tapInside(CommonGameAreas.RALLY_SET_TIME_CHECKBOXES[index]);
+        taps.tapInside(checkboxes[index]);
         long deadline = System.nanoTime() + SET_TIME_SELECTION_TIMEOUT.toNanos();
         do {
             if (Thread.currentThread().isInterrupted()) {
                 return false;
             }
-            if (selectedRallySetTimeMinutes(captureImage()) == minutes) {
+            if (selectedRallySetTimeMinutes(captureImage(), options, checkboxes) == minutes) {
                 log.info("Rally set time confirmed at " + minutes + " min");
                 return true;
             }
@@ -257,22 +271,35 @@ public class DeploymentHelper {
     }
 
     static int selectedRallySetTimeMinutes(BufferedImage image) {
+        return selectedRallySetTimeMinutes(
+                image, CommonGameAreas.RALLY_SET_TIME_MINUTES, CommonGameAreas.RALLY_SET_TIME_CHECKBOXES);
+    }
+
+    static int selectedBearRallySetTimeMinutes(BufferedImage image) {
+        return selectedRallySetTimeMinutes(
+                image,
+                CommonGameAreas.BEAR_RALLY_SET_TIME_MINUTES,
+                CommonGameAreas.BEAR_RALLY_SET_TIME_CHECKBOXES);
+    }
+
+    private static int selectedRallySetTimeMinutes(
+            BufferedImage image, int[] options, AreaData[] checkboxes) {
         if (image == null) {
             return -1;
         }
-        for (int i = 0; i < CommonGameAreas.RALLY_SET_TIME_MINUTES.length; i++) {
-            int tickPixels = PixelStats.count(image, CommonGameAreas.RALLY_SET_TIME_CHECKBOXES[i],
+        for (int i = 0; i < options.length; i++) {
+            int tickPixels = PixelStats.count(image, checkboxes[i],
                     GameColors::isVividGreen);
             if (tickPixels >= SET_TIME_TICK_PIXEL_MIN) {
-                return CommonGameAreas.RALLY_SET_TIME_MINUTES[i];
+                return options[i];
             }
         }
         return -1;
     }
 
-    private static int rallySetTimeIndex(int minutes) {
-        for (int i = 0; i < CommonGameAreas.RALLY_SET_TIME_MINUTES.length; i++) {
-            if (CommonGameAreas.RALLY_SET_TIME_MINUTES[i] == minutes) {
+    private static int rallySetTimeIndex(int minutes, int[] options) {
+        for (int i = 0; i < options.length; i++) {
+            if (options[i] == minutes) {
                 return i;
             }
         }
