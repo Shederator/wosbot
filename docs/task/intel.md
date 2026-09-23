@@ -6,7 +6,10 @@ The routine then locates the stable Lighthouse Intel icon in the left row-icon
 column and searches only that detected row for the fixed green `Intel Gain`
 label and its green pixels, without OCR. Dynamic row heights therefore do not
 change the identity or availability check. The routine closes the sidebar,
-switches to Wilderness, and opens Intel through the right-side Intel shortcut.
+switches to Wilderness, and opens Intel through the shared
+`NavigationHelper.openIntelFromWilderness()` operation. That operation detects
+the shortcut in the supported Pets and non-Pets positions and requires an
+`INTEL_SCREEN_1` or `INTEL_SCREEN_2` match before reporting success.
 Mission completion returns through that same Wilderness shortcut; it must not
 route through City or the Lighthouse.
 

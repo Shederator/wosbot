@@ -373,10 +373,13 @@
 
                 <VBox fx:id="runLogPanel" styleClass="tb-run-log-panel"
                       visible="false" managed="false">
+                    <Region styleClass="tb-run-log-resize-handle" prefHeight="8" minHeight="8"
+                            maxHeight="8" onMousePressed="#handleRunLogResizePressed"
+                            onMouseDragged="#handleRunLogResizeDragged" />
                     <TextArea fx:id="runLogTextArea" editable="false" wrapText="true"
                               promptText="Run the graph or a node to see its logs"
-                              focusTraversable="false" prefRowCount="3"
-                              prefHeight="66" minHeight="66" maxHeight="66"
+                              focusTraversable="false" prefRowCount="6"
+                              prefHeight="132" minHeight="66"
                               styleClass="tb-run-log-text" />
                 </VBox>
             </VBox>

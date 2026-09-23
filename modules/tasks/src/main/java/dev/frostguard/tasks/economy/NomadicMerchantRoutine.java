@@ -19,6 +19,7 @@ import java.time.LocalDateTime;
 public class NomadicMerchantRoutine extends DelayedTask {
 
     private static final long MAX_TASK_EXECUTION_MS = 2 * 60 * 1000L;
+    private static final long RESET_SETTLE_DELAY_MINUTES = 1L;
 
     private final TemplatesEnum[] TEMPLATES = { TemplatesEnum.NOMADIC_MERCHANT_COAL,
             TemplatesEnum.NOMADIC_MERCHANT_MEAT, TemplatesEnum.NOMADIC_MERCHANT_STONE,
@@ -151,8 +152,8 @@ public class NomadicMerchantRoutine extends DelayedTask {
             logWarning("Nomadic Merchant task reached execution limit. Ending current cycle to avoid infinite loop.");
         }
 
-        // Final step: schedule task till game reset
-        reschedule(GameTimeUtils.dailyResetTime());
+        // Wait briefly after reset so the shop has time to publish the new daily state.
+        reschedule(GameTimeUtils.dailyResetTime().plusMinutes(RESET_SETTLE_DELAY_MINUTES));
     }
 
     boolean navigateToNomadicMerchantShop() {

@@ -157,10 +157,14 @@ public class TaskBuilderLayoutController {
     private AutomationStep selectedNode = null;
     private int runningNodeId = -1;
     private static final int MAX_PENDING_RUN_LOGS = 500;
+    private static final double MIN_RUN_LOG_HEIGHT = 66;
+    private static final double MIN_CANVAS_HEIGHT = 120;
     private final TaskBuilderRunLog runLog = new TaskBuilderRunLog();
     private record PendingRunLog(long generation, String entry) {}
     private final Deque<PendingRunLog> pendingRunLogs = new ArrayDeque<>();
     private boolean runLogDrainScheduled;
+    private double runLogResizeStartY;
+    private double runLogResizeStartHeight;
     private double ocrDragStartX = 0, ocrDragStartY = 0;
     private boolean hasPreviewImage = false;
     private boolean previewRegionDismissed = false;
@@ -2284,7 +2288,25 @@ public class TaskBuilderLayoutController {
         runLogPanel.setVisible(visible);
         runLogPanel.setManaged(visible);
         btnToggleRunLog.getTooltip().setText(visible ? "Hide execution logs" : "Show execution logs");
-        if (visible) runLogTextArea.setScrollTop(Double.MAX_VALUE);
+        if (visible) runLogTextArea.setScrollTop(0);
+    }
+
+    @FXML private void handleRunLogResizePressed(MouseEvent event) {
+        runLogResizeStartY = event.getScreenY();
+        runLogResizeStartHeight = runLogTextArea.getHeight();
+        event.consume();
+    }
+
+    @FXML private void handleRunLogResizeDragged(MouseEvent event) {
+        double availableHeight = rootPane.getHeight() - MIN_CANVAS_HEIGHT
+                - (propsDrawer.isManaged() ? propsDrawer.getHeight() : 0)
+                - rootPane.getTop().getLayoutBounds().getHeight()
+                - rootPane.getBottom().getLayoutBounds().getHeight();
+        double maximumHeight = Math.max(MIN_RUN_LOG_HEIGHT, availableHeight);
+        double requestedHeight = runLogResizeStartHeight + runLogResizeStartY - event.getScreenY();
+        runLogTextArea.setPrefHeight(Math.max(MIN_RUN_LOG_HEIGHT,
+                Math.min(requestedHeight, maximumHeight)));
+        event.consume();
     }
 
     private long beginExecution(AccountDescriptor profile) {
@@ -2314,17 +2336,13 @@ public class TaskBuilderLayoutController {
             pendingRunLogs.clear();
             runLogDrainScheduled = false;
         }
-        ScrollBar vertical = (ScrollBar) runLogTextArea.lookup(".scroll-bar:vertical");
-        boolean follow = vertical == null
-                || vertical.getValue() >= vertical.getMax() - Math.max(0.01, vertical.getMax() * 0.02);
-        double previousScrollTop = runLogTextArea.getScrollTop();
         boolean changed = false;
         for (PendingRunLog pending : batch) {
             changed |= runLog.append(pending.generation(), pending.entry());
         }
         if (changed) {
             runLogTextArea.setText(runLog.text());
-            runLogTextArea.setScrollTop(follow ? Double.MAX_VALUE : previousScrollTop);
+            runLogTextArea.setScrollTop(0);
         }
     }
 

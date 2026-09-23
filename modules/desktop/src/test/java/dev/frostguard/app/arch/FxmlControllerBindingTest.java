@@ -175,6 +175,15 @@ class FxmlControllerBindingTest {
     }
 
     @Test
+    void taskBuilderRunLogStartsTallerAndExposesResizeHandle() throws IOException {
+        String document = Files.readString(layoutDirectory.resolve("TaskBuilderLayout.fxml"));
+
+        assertTrue(document.contains("prefHeight=\"132\" minHeight=\"66\""));
+        assertTrue(document.contains("onMousePressed=\"#handleRunLogResizePressed\""));
+        assertTrue(document.contains("onMouseDragged=\"#handleRunLogResizeDragged\""));
+    }
+
+    @Test
     void taskBuilderDocumentDeclaresAllianceAndEventNavigationControls() throws IOException {
         String document = Files.readString(layoutDirectory.resolve("TaskBuilderLayout.fxml"));
         Set<String> declaredIds = matches(FX_ID, document);

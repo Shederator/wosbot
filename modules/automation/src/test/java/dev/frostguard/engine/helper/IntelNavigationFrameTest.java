@@ -85,9 +85,16 @@ class IntelNavigationFrameTest {
         byte[] frame = resource("daily-sidebar-gain.png");
         ImageSearchResultData shortcut = OpenCvPatternLocator.locatePattern(frame,
                 TemplatesEnum.GAME_HOME_INTEL,
-                new PointData(615, 800), new PointData(715, 930), 88);
+                NavigationHelper.WORLD_INTEL_BUTTON_AREA.topLeft(),
+                NavigationHelper.WORLD_INTEL_BUTTON_AREA.bottomRight(), 88);
 
         assertTrue(shortcut.isFound(), "Expected the direct Intel shortcut at the right side of Wilderness");
+    }
+
+    @Test
+    void detectsDirectIntelShortcutInBothPrivacyReviewedLayouts() throws IOException {
+        assertIntelShortcut("/intel/privacy-redactor/wilderness-with-pets-redacted.png", 862);
+        assertIntelShortcut("/intel/privacy-redactor/wilderness-without-pets-redacted.png", 955);
     }
 
     @Test
@@ -134,6 +141,19 @@ class IntelNavigationFrameTest {
         try (InputStream stream = IntelNavigationFrameTest.class.getResourceAsStream(path)) {
             return Objects.requireNonNull(stream, "Missing test resource: " + path).readAllBytes();
         }
+    }
+
+    private static void assertIntelShortcut(String path, int expectedY) throws IOException {
+        ImageSearchResultData shortcut = OpenCvPatternLocator.locatePattern(
+                absoluteResource(path), TemplatesEnum.GAME_HOME_INTEL,
+                NavigationHelper.WORLD_INTEL_BUTTON_AREA.topLeft(),
+                NavigationHelper.WORLD_INTEL_BUTTON_AREA.bottomRight(), 88);
+
+        assertTrue(shortcut.isFound(), "Expected the Intel shortcut in " + path);
+        assertTrue(Math.abs(shortcut.getPoint().getX() - 663) <= 3,
+                () -> "Unexpected Intel x-coordinate in " + path + ": " + shortcut.getPoint());
+        assertTrue(Math.abs(shortcut.getPoint().getY() - expectedY) <= 3,
+                () -> "Unexpected Intel y-coordinate in " + path + ": " + shortcut.getPoint());
     }
 
     private static BufferedImage bufferedFrame(String name) throws IOException {

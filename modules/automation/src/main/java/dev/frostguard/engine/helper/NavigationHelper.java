@@ -14,6 +14,7 @@ import dev.frostguard.engine.nav.ButtonConstants;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.nav.SidebarDestination;
+import dev.frostguard.engine.nav.SidebarRowLookup;
 import dev.frostguard.engine.nav.SidebarSection;
 import dev.frostguard.engine.nav.ShopTab;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -23,6 +24,16 @@ import dev.frostguard.vision.logging.ProfileContextLogger;
 // Screen location verification and cross-screen navigation for
 // primary game views and auxiliary menus.
 public class NavigationHelper {
+
+    private static final int MAX_INTEL_NAV_PASSES = 3;
+    static final AreaData WORLD_INTEL_BUTTON_AREA = area(615, 800, 715, 1000);
+    private static final TemplateSearchHelper.SearchConfig WORLD_INTEL_BUTTON_SEARCH =
+            TemplateSearchHelper.SearchConfig.builder()
+                    .withMaxAttempts(2)
+                    .withDelay(250)
+                    .withThreshold(88)
+                    .withArea(WORLD_INTEL_BUTTON_AREA)
+                    .build();
 
     private static final PointData EVENT_TAB_SEARCH_TOP_LEFT = new PointData(0, 80);
     private static final PointData EVENT_TAB_SEARCH_BOTTOM_RIGHT = new PointData(720, 210);
@@ -98,16 +109,132 @@ public class NavigationHelper {
     public boolean navigateToSidebarDestination(SidebarDestination destination) {
         ensureCorrectScreenLocation(LaunchPoint.ANY);
         broadcastInfo("Navigating through sidebar to " + destination);
-        boolean reached = sidebar.navigateTo(destination);
+
+        if (destination.openingPolicy() == SidebarDestination.OpeningPolicy.WILDERNESS_INTEL) {
+            return navigateToWildernessIntel(destination);
+        }
+
+        boolean reached = navigateToDirectSidebarDestination(destination);
         if (!reached) {
             broadcastWarn("Sidebar navigation failed: " + destination);
         }
         return reached;
     }
 
+    boolean navigateToDirectSidebarDestination(SidebarDestination destination) {
+        return sidebar.navigateTo(destination);
+    }
+
+    /**
+     * Opens Intel through the detected Wilderness shortcut and verifies the destination screen.
+     * The caller gets a bounded false result when the shortcut or destination cannot be confirmed.
+     */
+    public boolean openIntelFromWilderness() {
+        ensureCorrectScreenLocation(LaunchPoint.WORLD);
+        for (int pass = 1; pass <= MAX_INTEL_NAV_PASSES; pass++) {
+            ImageSearchResultData button = locateIntelShortcut();
+            if (button == null || !button.isFound()) {
+                broadcastWarn("Wilderness Intel shortcut absent, pass " + pass + "/"
+                        + MAX_INTEL_NAV_PASSES);
+                if (!waitForIntelTransition(350)) {
+                    return false;
+                }
+                continue;
+            }
+
+            broadcastInfo("Wilderness Intel shortcut found and tapped, pass " + pass + "/"
+                    + MAX_INTEL_NAV_PASSES);
+            tapIntelShortcut(button);
+            if (!waitForIntelTransition(800)) {
+                return false;
+            }
+            if (isIntelScreenActive()) {
+                broadcastInfo("Intel destination verified after Wilderness shortcut");
+                return true;
+            }
+            broadcastWarn("Wilderness Intel shortcut did not open the Intel map, pass " + pass
+                    + "/" + MAX_INTEL_NAV_PASSES);
+            if (!waitForIntelTransition(400)) {
+                return false;
+            }
+        }
+        broadcastWarn("Failed to verify Intel destination after the bounded Wilderness attempts");
+        return false;
+    }
+
+    boolean navigateToWildernessIntel(SidebarDestination destination) {
+        SidebarRowLookup lookup = findSidebarDestinationRowWithStatus(destination);
+        if (lookup.status() == SidebarRowLookup.Status.SIDEBAR_UNAVAILABLE) {
+            broadcastWarn("Sidebar navigation failed before validating " + destination);
+            return false;
+        }
+        if (!lookup.isFound()) {
+            broadcastInfo("Sidebar destination unavailable after bounded scan: " + destination);
+            if (!closeSidebar()) {
+                broadcastWarn("Failed to close Daily sidebar after missing " + destination);
+            }
+            return false;
+        }
+        broadcastInfo("Sidebar row validated; closing Daily before opening " + destination);
+        if (!closeSidebar()) {
+            broadcastWarn("Failed to close Daily sidebar before opening " + destination);
+            return false;
+        }
+        boolean reached = openIntelFromWilderness();
+        if (!reached) {
+            broadcastWarn("Sidebar navigation failed: Intel destination was not verified");
+        }
+        return reached;
+    }
+
+    ImageSearchResultData locateIntelShortcut() {
+        return searcher.locatePattern(TemplatesEnum.GAME_HOME_INTEL, WORLD_INTEL_BUTTON_SEARCH);
+    }
+
+    void tapIntelShortcut(ImageSearchResultData button) {
+        taps.tapInside(button);
+    }
+
+    boolean isIntelScreenActive() {
+        for (int probe = 1; probe <= 2; probe++) {
+            ImageSearchResultData screenOne = searcher.locatePattern(TemplatesEnum.INTEL_SCREEN_1,
+                    SearchConfigConstants.DEFAULT_SINGLE);
+            if (screenOne != null && screenOne.isFound()) {
+                return true;
+            }
+            ImageSearchResultData screenTwo = searcher.locatePattern(TemplatesEnum.INTEL_SCREEN_2,
+                    SearchConfigConstants.DEFAULT_SINGLE);
+            if (screenTwo != null && screenTwo.isFound()) {
+                return true;
+            }
+            if (probe == 1) {
+                if (!waitForIntelTransition(300)) {
+                    return false;
+                }
+            }
+        }
+        return false;
+    }
+
+    boolean waitForIntelTransition(long milliseconds) {
+        try {
+            Thread.sleep(milliseconds);
+            return true;
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            broadcastWarn("Intel navigation interrupted while waiting for screen confirmation");
+            return false;
+        }
+    }
+
     public ImageSearchResultData findSidebarDestinationRow(SidebarDestination destination) {
         ensureCorrectScreenLocation(LaunchPoint.ANY);
         return sidebar.findRow(destination);
+    }
+
+    public SidebarRowLookup findSidebarDestinationRowWithStatus(SidebarDestination destination) {
+        ensureCorrectScreenLocation(LaunchPoint.ANY);
+        return sidebar.findRowWithStatus(destination);
     }
 
     public boolean closeSidebar() {

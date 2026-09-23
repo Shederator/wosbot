@@ -7,9 +7,9 @@ import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.error.HomeNotFoundException;
-import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.nav.SidebarDestination;
+import dev.frostguard.engine.nav.SidebarRowLookup;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.vision.color.GameColors;
 import dev.frostguard.vision.color.PixelStats;
@@ -21,21 +21,11 @@ import java.awt.image.BufferedImage;
 /** Verifies the Intel panel and reaches it through the Wilderness shortcut. */
 public class IntelScreenHelper {
 
-    private static final int MAX_NAV_PASSES = 3;
     private static final int INTEL_AVAILABLE_GREEN_MIN = 150;
     private static final long MISSION_RETURN_SETTLE_MILLIS = 1_000L;
-    private static final AreaData WORLD_INTEL_BUTTON_AREA = AreaData.of(615, 800, 715, 930);
-    private static final TemplateSearchHelper.SearchConfig WORLD_INTEL_BUTTON_SEARCH =
-            TemplateSearchHelper.SearchConfig.builder()
-                    .withMaxAttempts(2)
-                    .withDelay(250)
-                    .withThreshold(88)
-                    .withArea(WORLD_INTEL_BUTTON_AREA)
-                    .build();
 
     private final EmulatorController emu;
     private final String dev;
-    private final TapInteractionService taps;
     private final TemplateSearchHelper tpl;
     private final NavigationHelper nav;
     private final ProfileContextLogger log;
@@ -45,7 +35,6 @@ public class IntelScreenHelper {
                              NavigationHelper navigationHelper, AccountDescriptor profile) {
         this.emu = emuManager;
         this.dev = emulatorNumber;
-        this.taps = TapInteractionService.forController(emuManager, emulatorNumber);
         this.tpl = templateSearchHelper;
         this.nav = navigationHelper;
         this.log = new ProfileContextLogger(IntelScreenHelper.class, profile);
@@ -54,9 +43,10 @@ public class IntelScreenHelper {
     /** Uses Daily only as an OCR-free availability gate, then enters Intel from Wilderness. */
     public boolean enterIntelFromDailyIfAvailable() {
         nav.ensureCorrectScreenLocation(LaunchPoint.ANY);
-        ImageSearchResultData lighthouseRow = nav.findSidebarDestinationRow(
+        SidebarRowLookup lighthouseLookup = nav.findSidebarDestinationRowWithStatus(
                 SidebarDestination.LIGHTHOUSE_INTEL);
-        if (lighthouseRow == null || !lighthouseRow.isFound()) {
+        ImageSearchResultData lighthouseRow = requireSidebarReady(lighthouseLookup);
+        if (!lighthouseLookup.isFound()) {
             log.info("Lighthouse Intel row icon is absent after the bounded Daily scan; "
                     + "the completed row may be hidden, so Intel is unavailable.");
             if (!nav.closeSidebar()) {
@@ -90,6 +80,14 @@ public class IntelScreenHelper {
         return true;
     }
 
+    static ImageSearchResultData requireSidebarReady(SidebarRowLookup lookup) {
+        if (lookup.status() == SidebarRowLookup.Status.SIDEBAR_UNAVAILABLE) {
+            throw new HomeNotFoundException(
+                    "Failed to open Daily sidebar while checking Lighthouse Intel availability");
+        }
+        return lookup.rowIcon();
+    }
+
     /** Returns from a mission's Wilderness end state without routing through City or Daily. */
     public void ensureOnIntelScreen() {
         pause(300);
@@ -110,26 +108,9 @@ public class IntelScreenHelper {
     }
 
     private void enterIntelFromWilderness() {
-        nav.ensureCorrectScreenLocation(LaunchPoint.WORLD);
-        for (int pass = 1; pass <= MAX_NAV_PASSES; pass++) {
-            ImageSearchResultData button = tpl.locatePattern(TemplatesEnum.GAME_HOME_INTEL,
-                    WORLD_INTEL_BUTTON_SEARCH);
-            if (button == null || !button.isFound()) {
-                log.warn("Wilderness Intel shortcut absent, pass " + pass);
-                pause(350);
-                continue;
-            }
-
-            log.info("Opening Intel from the Wilderness shortcut");
-            taps.tapInside(button);
-            pause(800);
-            if (isIntelScreenActive()) {
-                return;
-            }
-            log.warn("Wilderness Intel shortcut did not open the Intel map, pass " + pass);
-            pause(400);
+        if (!nav.openIntelFromWilderness()) {
+            throw new HomeNotFoundException("Failed to open Intel from the Wilderness shortcut");
         }
-        throw new HomeNotFoundException("Failed to open Intel from the Wilderness shortcut");
     }
 
     static AreaData availabilityAreaFor(ImageSearchResultData gainPattern) {
