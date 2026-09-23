@@ -88,6 +88,22 @@ class LifeEssenceClaimPolicyTest {
     }
 
     @Test
+    void finishesWhenTheLastCaptureFindsTheIslandEmpty() {
+        State state = State.initial();
+        for (int capture = 0; capture < LifeEssenceClaimPolicy.MAX_CAPTURES - 1; capture++) {
+            Step tapped = LifeEssenceClaimPolicy.advance(state, Observation.markers(List.of(FIRST)));
+            assertEquals(Outcome.TAP, tapped.outcome());
+            assertEquals(0, tapped.confirmedClaims());
+            state = tapped.next();
+        }
+
+        Step finished = LifeEssenceClaimPolicy.advance(state, Observation.markers(List.of()));
+        assertEquals(Outcome.FINISH, finished.outcome());
+        assertEquals(1, finished.confirmedClaims());
+        assertEquals(LifeEssenceClaimPolicy.MAX_CAPTURES, finished.next().captures());
+    }
+
+    @Test
     void retriesImmediatelyWhenTheFirstCaptureFails() {
         Step failed = LifeEssenceClaimPolicy.advance(State.initial(), Observation.failed());
         assertEquals(Outcome.RETRY, failed.outcome());

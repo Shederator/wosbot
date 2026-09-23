@@ -72,7 +72,7 @@ final class LifeEssenceClaimPolicy {
                 return finish(captures, confirmed, "no markers on two consecutive captures");
             }
             if (captures >= MAX_CAPTURES) {
-                return retry(captures, confirmed, emptyCaptures, "capture bound exhausted");
+                return finish(captures, confirmed, "no markers on the last capture");
             }
             return new Step(Outcome.WAIT, null, confirmed,
                     new State(captures, confirmed, emptyCaptures, null),
