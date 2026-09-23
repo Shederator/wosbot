@@ -69,6 +69,19 @@ class LiveRegressionPatternEvidenceTest {
         assertNoLifeEssenceMarkers(javax.imageio.ImageIO.read(championship.toFile()), championship.toString());
     }
 
+    @Test
+    void reportsPartiallyFilledLifeEssenceMarkersWithoutFailing() throws IOException {
+        BufferedImage frame = readResource("/live-regressions-20260923/life-essence-partially-filled.png");
+        String summary = LifeEssenceMarkerDetector.assess(frame).stream()
+                .map(candidate -> (candidate.accepted() ? "accepted" : "rejected")
+                        + " center=(" + candidate.center().getX() + "," + candidate.center().getY() + ")"
+                        + " size=" + candidate.width() + "x" + candidate.height()
+                        + (candidate.rejection() == null ? "" : " reason=" + candidate.rejection()))
+                .reduce((left, right) -> left + "; " + right)
+                .orElse("no orange region above the assessment floor");
+        System.err.println("WARNING partially filled Life Essence frame: " + summary);
+    }
+
     private void assertLifeEssenceMarkers(String framePath, List<PointData> expectedMarkers) throws IOException {
         BufferedImage frame = readResource(framePath);
         List<PointData> markers = LifeEssenceMarkerDetector.locate(frame);
