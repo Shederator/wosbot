@@ -18,8 +18,10 @@ import java.util.Locale;
 import javax.imageio.ImageIO;
 
 import dev.frostguard.api.domain.PointData;
+import dev.frostguard.tasks.pets.LifeEssenceLeafSearch;
 import dev.frostguard.tasks.pets.LifeEssenceMarkerDetector;
 import dev.frostguard.tasks.pets.LifeEssenceMarkerDetector.Candidate;
+import dev.frostguard.tasks.pets.LifeEssenceSearchKind;
 
 /**
  * Writes one annotated PNG per input frame from {@link LifeEssenceMarkerDetector}.
@@ -56,9 +58,9 @@ public final class LifeEssenceDetectionTool {
         for (Path image : images) {
             try {
                 if (arguments.doBenchmark()) {
-                    System.out.println(benchmark(image, arguments.passes()));
+                    System.out.println(benchmark(image, arguments.passes(), arguments.search()));
                 } else {
-                    Path written = writeDetection(image, output, timestamp);
+                    Path written = writeDetection(image, output, timestamp, arguments.search());
                     System.out.println(written);
                 }
             } catch (IOException | RuntimeException ex) {
@@ -71,30 +73,38 @@ public final class LifeEssenceDetectionTool {
         }
     }
 
-    static String benchmark(Path image, int passes) throws IOException {
-        BufferedImage frame = readFrame(image);
-        long regions = 0;
+    static String benchmark(Path image, int passes, LifeEssenceSearchKind searchKind) throws IOException {
+        byte[] encodedPng = Files.readAllBytes(image);
+        BufferedImage frame = readFrame(encodedPng);
+        LifeEssenceLeafSearch search = searchKind.open(encodedPng);
+        long points = 0;
         long startedAt = System.nanoTime();
         for (int pass = 0; pass < passes; pass++) {
-            regions += LifeEssenceMarkerDetector.assess(frame).size();
+            points += search.find(frame).size();
         }
         double meanMillis = (System.nanoTime() - startedAt) / 1_000_000.0 / passes;
         return image.getFileName()
+                + "  search=" + searchKind.name().toLowerCase(Locale.ROOT)
                 + "  passes=" + passes
                 + "  mean=" + String.format(Locale.ROOT, "%.3f", meanMillis) + " ms"
-                + "  regions=" + (regions / passes);
+                + "  points=" + (points / passes);
     }
 
-    private static BufferedImage readFrame(Path image) throws IOException {
-        BufferedImage frame = ImageIO.read(image.toFile());
+    private static BufferedImage readFrame(byte[] encodedPng) throws IOException {
+        BufferedImage frame = ImageIO.read(new java.io.ByteArrayInputStream(encodedPng));
         if (frame == null) {
             throw new IOException("unreadable image");
         }
         return frame;
     }
 
-    static Path writeDetection(Path image, Path output, String timestamp) throws IOException {
-        BufferedImage frame = readFrame(image);
+    static Path writeDetection(Path image, Path output, String timestamp, LifeEssenceSearchKind searchKind)
+            throws IOException {
+        byte[] encodedPng = Files.readAllBytes(image);
+        BufferedImage frame = readFrame(encodedPng);
+        if (searchKind == LifeEssenceSearchKind.TEMPLATE) {
+            return writeTemplateDetection(image, output, timestamp, frame, searchKind.open(encodedPng).find(frame));
+        }
         List<Candidate> candidates = LifeEssenceMarkerDetector.assess(frame);
         for (Candidate candidate : candidates) {
             System.out.println(image.getFileName() + "  " + summary(candidate));
@@ -103,17 +113,43 @@ public final class LifeEssenceDetectionTool {
             System.out.println(image.getFileName() + "  no orange region above the assessment floor");
         }
         BufferedImage annotated = render(frame, candidates);
-        Path destination = output.resolve(outputName(timestamp, image));
+        Path destination = output.resolve(outputName(timestamp, image, LifeEssenceSearchKind.COLOR));
         ImageIO.write(annotated, "png", destination.toFile());
         return destination;
     }
 
-    static String outputName(String timestamp, Path image) {
+    private static Path writeTemplateDetection(Path image, Path output, String timestamp, BufferedImage frame,
+            List<PointData> points) throws IOException {
+        for (PointData point : points) {
+            System.out.println(image.getFileName() + "  template center=" + point.getX() + "," + point.getY());
+        }
+        if (points.isEmpty()) {
+            System.out.println(image.getFileName() + "  template found nothing at 90 percent");
+        }
+        BufferedImage annotated = new BufferedImage(frame.getWidth(), frame.getHeight() + 28, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = annotated.createGraphics();
+        graphics.drawImage(frame, 0, 0, null);
+        graphics.setStroke(new BasicStroke(3f));
+        for (PointData point : points) {
+            drawCross(graphics, point, ACCEPTED_GREEN);
+        }
+        graphics.setColor(new Color(16, 18, 24));
+        graphics.fillRect(0, frame.getHeight(), frame.getWidth(), 28);
+        graphics.setColor(Color.WHITE);
+        graphics.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
+        graphics.drawString("template search, green cross = match center, threshold 90", 8, frame.getHeight() + 18);
+        graphics.dispose();
+        Path destination = output.resolve(outputName(timestamp, image, LifeEssenceSearchKind.TEMPLATE));
+        ImageIO.write(annotated, "png", destination.toFile());
+        return destination;
+    }
+
+    static String outputName(String timestamp, Path image, LifeEssenceSearchKind searchKind) {
         String fileName = image.getFileName().toString();
         int extension = fileName.lastIndexOf('.');
         String stem = extension > 0 ? fileName.substring(0, extension) : fileName;
         String safeStem = stem.replaceAll("[^A-Za-z0-9._-]", "_");
-        return timestamp + "-" + safeStem + "-detection_result.png";
+        return timestamp + "-" + safeStem + "-" + searchKind.name().toLowerCase(Locale.ROOT) + "-detection_result.png";
     }
 
     private static String summary(Candidate candidate) {
@@ -215,14 +251,16 @@ public final class LifeEssenceDetectionTool {
         return images;
     }
 
-    private record Arguments(Path output, List<Path> inputs, boolean doBenchmark, int passes, boolean help) {
+    private record Arguments(Path output, List<Path> inputs, boolean doBenchmark, int passes,
+            LifeEssenceSearchKind search, boolean help) {
         static final String USAGE = """
-                Usage: detect.sh [--output dir] [--do-benchmark] [--passes N] <image-or-directory>...
+                Usage: detect.sh [--output dir] [--search color|template] [--do-benchmark] [--passes N] <image-or-directory>...
 
-                Writes timestamp-fixture_name-detection_result.png for each PNG.
+                Writes timestamp-fixture_name-search-detection_result.png for each PNG.
+                The default search is color, which is also the search the task uses.
                 The default directory is tools/life-essence-detection/target/detections.
                 A negative leaf dy means the green centroid is above the box center.
-                --do-benchmark reads each image once, runs detection --passes times
+                --do-benchmark reads each image once, runs the selected search --passes times
                 (default 1000), prints the mean time, and writes no PNG.
                 """;
 
@@ -232,10 +270,16 @@ public final class LifeEssenceDetectionTool {
             boolean help = args.length == 0;
             boolean doBenchmark = false;
             int passes = 1000;
+            LifeEssenceSearchKind search = LifeEssenceSearchKind.COLOR;
             for (int index = 0; index < args.length; index++) {
                 String arg = args[index];
                 if ("--help".equals(arg) || "-h".equals(arg)) {
                     help = true;
+                } else if ("--search".equals(arg)) {
+                    if (index + 1 >= args.length) {
+                        throw new IllegalArgumentException("--search must be color or template");
+                    }
+                    search = LifeEssenceSearchKind.parse(args[++index]);
                 } else if ("--do-benchmark".equals(arg)) {
                     doBenchmark = true;
                 } else if ("--passes".equals(arg)) {
@@ -261,7 +305,7 @@ public final class LifeEssenceDetectionTool {
                     inputs.add(Path.of(arg));
                 }
             }
-            return new Arguments(output, List.copyOf(inputs), doBenchmark, passes, help);
+            return new Arguments(output, List.copyOf(inputs), doBenchmark, passes, search, help);
         }
     }
 }

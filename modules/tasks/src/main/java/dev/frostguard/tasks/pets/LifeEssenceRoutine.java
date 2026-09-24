@@ -176,7 +176,8 @@ public class LifeEssenceRoutine extends DelayedTask {
 		try {
 			RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
 			BufferedImage image = ImageConverter.toBufferedImage(frame);
-			return LifeEssenceClaimPolicy.Observation.markers(LifeEssenceMarkerDetector.locate(image));
+			return LifeEssenceClaimPolicy.Observation.markers(
+					LifeEssenceSearchKind.COLOR.open(null).find(image));
 		} catch (Exception ex) {
 			logWarning("Life Essence capture failed: " + ex.getClass().getSimpleName()
 					+ ": " + ex.getMessage());

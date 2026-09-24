@@ -17,6 +17,7 @@ import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.tasks.pets.LifeEssenceMarkerDetector;
+import dev.frostguard.tasks.pets.TemplateLifeEssenceSearch;
 import dev.frostguard.vision.match.OpenCvPatternLocator;
 
 class LiveRegressionPatternEvidenceTest {
@@ -70,6 +71,14 @@ class LiveRegressionPatternEvidenceTest {
     }
 
     @Test
+    void templateSearchMatchesOneLeafOnEachSavedIsland() throws IOException {
+        assertTemplateCenters("/live-regressions-20260818/life-essence-claim.png",
+                List.of(new PointData(662, 356)));
+        assertTemplateCenters("/live-regressions-20260922/life-essence-available-marker.png",
+                List.of(new PointData(360, 348)));
+    }
+
+    @Test
     void reportsPartiallyFilledLifeEssenceMarkersWithoutFailing() throws IOException {
         BufferedImage frame = readResource("/live-regressions-20260923/life-essence-partially-filled.png");
         String summary = LifeEssenceMarkerDetector.assess(frame).stream()
@@ -80,6 +89,20 @@ class LiveRegressionPatternEvidenceTest {
                 .reduce((left, right) -> left + "; " + right)
                 .orElse("no orange region above the assessment floor");
         System.err.println("WARNING partially filled Life Essence frame: " + summary);
+    }
+
+    private void assertTemplateCenters(String framePath, List<PointData> expected) throws IOException {
+        List<PointData> found = new TemplateLifeEssenceSearch(resource(framePath)).find(readResource(framePath));
+        assertEquals(expected.size(), found.size(), () -> framePath + " template centers: " + found);
+        for (PointData point : expected) {
+            assertTrue(found.stream().anyMatch(actual -> near(actual, point)),
+                    () -> "Missing template center near " + point + " in " + framePath + ": " + found);
+        }
+    }
+
+    private static boolean near(PointData actual, PointData expected) {
+        return Math.abs(actual.getX() - expected.getX()) <= 20
+                && Math.abs(actual.getY() - expected.getY()) <= 20;
     }
 
     private void assertLifeEssenceMarkers(String framePath, List<PointData> expectedMarkers) throws IOException {

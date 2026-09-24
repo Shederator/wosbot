@@ -21,7 +21,9 @@ means the green centroid is above the box center.
 The first run compiles `modules/tasks` and the tool. Re-run it after a
 detector change to compare the new picture with the previous one.
 
-`--do-benchmark` measures detection only. Each image is read once, then
+`--search color` is the default and the search the task uses. `--search template`
+runs the original 90 percent `claimCurrent.png` search, then `claim.png`.
+`--do-benchmark` measures the selected search only. Each image is read once, then
 analyzed `--passes` times (default 1000). The console prints the mean time
 per file and no annotated PNG is written.
 
