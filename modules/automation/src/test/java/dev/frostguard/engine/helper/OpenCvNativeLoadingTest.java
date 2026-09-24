@@ -64,7 +64,7 @@ class OpenCvNativeLoadingTest {
     }
 
     /**
-     * A Git-LFS-less clone leaves a ~130 byte pointer stub where the 52 MB DLL
+     * A checkout can leave a ~130 byte Git LFS pointer stub where the 52 MB DLL
      * should be. The bundled resource must be the real binary, otherwise the
      * packaged Windows bundle would ship an unloadable native image.
      */
@@ -81,7 +81,7 @@ class OpenCvNativeLoadingTest {
         assertEquals(head.length, read, "The bundled DLL is far too small to be real");
         String prefix = new String(head, 0, read, java.nio.charset.StandardCharsets.ISO_8859_1);
         assertFalse(prefix.contains("git-lfs.github.com/spec"),
-                "The bundled DLL is still a Git LFS pointer stub; run 'git lfs pull'");
+                "The bundled DLL is still a Git LFS pointer stub");
         // Every Windows PE image starts with the "MZ" DOS header magic.
         assertEquals("MZ", prefix.substring(0, 2),
                 "The bundled Windows image is not a PE binary");

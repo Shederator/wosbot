@@ -8,7 +8,6 @@ install Stable, Nightly, or a PR build before building the repository.
 
 - Java JDK 21 or newer
 - Git
-- Git LFS
 - Basic command-line and Maven knowledge
 
 The checked-in Maven Wrapper downloads the pinned Maven version, so a separate
@@ -19,7 +18,6 @@ On Windows, the common tools can be installed from PowerShell:
 ```powershell
 winget install Microsoft.Git
 winget install EclipseAdoptium.Temurin.21.JDK
-winget install GitHub.GitLFS
 ```
 
 ## Check out the source
@@ -27,8 +25,6 @@ winget install GitHub.GitLFS
 ```sh
 git clone https://github.com/Shederator/wosbot.git
 cd wosbot
-git lfs install
-git lfs pull
 ```
 
 Verify the toolchain:
@@ -36,7 +32,6 @@ Verify the toolchain:
 ```sh
 java -version
 ./mvnw -version
-git lfs version
 ```
 
 In Windows PowerShell, replace `./mvnw` with `.\mvnw.cmd`. In Windows Command

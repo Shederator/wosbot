@@ -1880,9 +1880,9 @@ public class OpenCvPatternLocator {
      * instead, so headless Linux and macOS environments — most importantly CI —
      * get a working OpenCV without needing a Windows binary.</p>
      *
-     * <p>If the bundled Windows image cannot be loaded — the usual cause is a
-     * clone made without Git LFS, which leaves a ~130 byte pointer stub in place
-     * of the 52&nbsp;MB DLL — the openpnp Windows image is used as a fallback so
+     * <p>If the bundled Windows image cannot be loaded — for example when the
+     * checkout still has a ~130 byte Git LFS pointer stub in place of the
+     * 52&nbsp;MB DLL — the openpnp Windows image is used as a fallback so
      * the application still starts instead of dying during bootstrap.</p>
      *
      * <p>The call is idempotent and safe to invoke from several threads: the
@@ -1907,8 +1907,8 @@ public class OpenCvPatternLocator {
                 } catch (IOException | UnsatisfiedLinkError bundledImageFailure) {
                     log.warn(tagged("Bundled Windows OpenCV image could not be loaded ("
                             + bundledImageFailure.getMessage()
-                            + "). Falling back to the openpnp artifact. If this is a "
-                            + "source clone, run 'git lfs pull' to fetch the real DLL."));
+                            + "). Falling back to the openpnp artifact. The bundled "
+                            + "DLL is missing or is still a pointer stub."));
                 }
             }
 
