@@ -3,6 +3,7 @@ package dev.frostguard.app.panel.notification;
 import dev.frostguard.api.domain.ActionRequiredIncidentData;
 import dev.frostguard.api.domain.ActionRequiredIncidentState;
 import dev.frostguard.api.runtime.WorkspacePaths;
+import dev.frostguard.app.shared.LocalFileOpener;
 import dev.frostguard.engine.service.ActionRequiredIncidentService;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -21,7 +22,6 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 
-import java.awt.Desktop;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -193,10 +193,7 @@ public class NotificationCenterController {
         try {
             Path target = resolveLogTarget(WorkspacePaths.current(), incident);
             Files.createDirectories(WorkspacePaths.current().logs());
-            if (!Desktop.isDesktopSupported()) {
-                throw new IOException("Desktop integration is unavailable");
-            }
-            Desktop.getDesktop().open(target.toFile());
+            LocalFileOpener.open(target);
             showActionStatus("Opened " + target.getFileName() + ".");
         } catch (IOException exception) {
             showActionStatus("Could not open logs: " + exception.getMessage());
