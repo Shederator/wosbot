@@ -82,7 +82,10 @@ loops. Runtime evidence belongs to the selected workspace, not generated
 installed Stable and Nightly releases default to
 `~/.frostguard/workspaces/<channel>/<name>`. Each workspace keeps the global log
 at `logs/frostguard.log`, account logs as `logs/account_<name>_<id>.log`, and
-rotated archives under `logs/archive/`.
+rotated archives under `logs/archive/`. Diagnostic frames are local PNGs
+under `logs/snapshot/`, named by the calling activity and a situation type.
+Each activity keeps its 20 newest captures. The log references the
+workspace-relative path. Frostguard does not redact or upload those frames.
 
 State the evidence level whenever reporting a behavioral fix:
 

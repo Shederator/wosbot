@@ -38,6 +38,8 @@ public class ActionRequiredIncidentService {
     private static final Pattern LONG_NUMERIC_ID = Pattern.compile("\\b\\d{6,}\\b");
     private static final Pattern EMAIL_ADDRESS = Pattern.compile(
             "(?i)\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b");
+    private static final Pattern SNAPSHOT_EVIDENCE = Pattern.compile(
+            "logs/snapshot/\\d{8}T\\d{6}\\.\\d{3}Z-[a-z0-9]+(?:-[a-z0-9]+)+\\.png");
 
     private static volatile ActionRequiredIncidentService instance;
 
@@ -131,6 +133,9 @@ public class ActionRequiredIncidentService {
         append(output, "Last action", incident.lastAction());
         append(output, "Retry/fallback", incident.retryOrFallback());
         append(output, "Resources", incident.resourceOutcome());
+        if (incident.evidencePath() != null && !incident.evidencePath().isBlank()) {
+            append(output, "Evidence", incident.evidencePath());
+        }
         if (incident.logExcerpt() != null && !incident.logExcerpt().isBlank()) {
             output.append('\n').append("Correlated log excerpt (bounded)\n")
                     .append(incident.logExcerpt().strip()).append('\n');
@@ -166,7 +171,16 @@ public class ActionRequiredIncidentService {
                 redact(report.lastAction()),
                 redact(report.retryOrFallback()),
                 redact(report.resourceOutcome()),
-                report.retryAt());
+                report.retryAt(),
+                safeEvidencePath(report.evidencePath()));
+    }
+
+    static String safeEvidencePath(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        String normalized = value.trim().replace('\\', '/');
+        return SNAPSHOT_EVIDENCE.matcher(normalized).matches() ? normalized : "";
     }
 
     private String correlatedLogExcerpt(String profileName, String taskName) {

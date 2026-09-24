@@ -56,6 +56,9 @@ class ActionRequiredIncidentRepositoryTest {
         assertEquals(2, second.occurrenceCount());
         assertEquals("Store sign-in remains required", second.cause());
         assertEquals("second log", second.logExcerpt());
+        assertEquals(
+                "logs/snapshot/20260921T143012.483Z-initialize-initialize-blocked.png",
+                second.evidencePath());
         assertTrue(second.isUnread());
 
         assertTrue(repository.acknowledge(second.id(), secondSeen.plusMinutes(1)));
@@ -97,6 +100,7 @@ class ActionRequiredIncidentRepositoryTest {
                 "No store button tap sent",
                 "Pause for one hour and retry",
                 "gameStopped=true; slotReleased=true",
-                retryAt);
+                retryAt,
+                "logs/snapshot/20260921T143012.483Z-initialize-initialize-blocked.png");
     }
 }

@@ -22,7 +22,8 @@ public record TaskFailureReport(
         String retryOrFallback,
         String resourceOutcome,
         LocalDateTime retryAt,
-        int escalationThreshold) {
+        int escalationThreshold,
+        String evidencePath) {
 
     public TaskFailureReport {
         Objects.requireNonNull(profileId, "profileId");
@@ -41,6 +42,7 @@ public record TaskFailureReport(
         if (escalationThreshold < 1) {
             throw new IllegalArgumentException("escalationThreshold must be positive");
         }
+        evidencePath = normalize(evidencePath);
     }
 
     private static String requireText(String value, String name) {

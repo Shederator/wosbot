@@ -178,7 +178,8 @@ public class NotificationCenterController {
                 + "\nObserved: " + displayValue(incident.observedState())
                 + "\nLast action: " + displayValue(incident.lastAction())
                 + "\nRetry/fallback: " + displayValue(incident.retryOrFallback())
-                + "\nResources: " + displayValue(incident.resourceOutcome());
+                + "\nResources: " + displayValue(incident.resourceOutcome())
+                + "\nEvidence: " + displayValue(incident.evidencePath());
     }
 
     private void copyDiagnostics(ActionRequiredIncidentData incident) {

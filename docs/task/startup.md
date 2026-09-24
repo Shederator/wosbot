@@ -54,6 +54,20 @@ sign-in, app-detail, and Play Pass variants are retained only as external issue
 evidence for future Store automation. The existing resource-download fixture
 and flow remain separate.
 
+A terminal blocker saves one PNG under `logs/snapshot/` before the game
+process is stopped. The filename is a UTC timestamp, the activity
+`initialize`, and a type such as `initialize-blocked`,
+`play-store-redirect`, `resource-download-timeout`, or `update-follow-up`.
+The terminal log line and copied incident diagnostics both carry the
+workspace-relative path. The saved frame is the last decision frame, or one
+fresh capture marked best-effort when that frame is missing. Passive checks
+and startup states that recover do not save a frame. The shared store keeps
+the 20 newest captures of each activity, so an Initialize capture is not
+deleted when another task such as Bear saves one, and the reverse is also true.
+These PNGs stay on disk unredacted and are never uploaded. Before sharing
+one, review it and run the privacy redactor from `tools/privacy-redactor`
+when that tool covers the visible text.
+
 `ProfileCooldownException` is reusable by other tasks after their own bounded
 recovery is exhausted. A supplied action-required context escalates
 immediately; a context-free cooldown contributes to the generic persistent

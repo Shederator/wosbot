@@ -2,6 +2,7 @@ package dev.frostguard.tasks.lifecycle;
 
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
+import dev.frostguard.engine.diagnostics.DiagnosticSnapshotStore;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.error.ActionRequiredContext;
 import dev.frostguard.engine.error.ProfileCooldownException;
@@ -18,6 +19,7 @@ import dev.frostguard.engine.helper.CharacterSwitchHelper;
 import dev.frostguard.vision.convert.ImageConverter;
 import dev.frostguard.vision.match.OpenCvPatternLocator;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 
 /**
@@ -101,6 +103,8 @@ public class InitializeRoutine extends DelayedTask {
 	private int welcomeBackDismissals = 0;
 	private int closeableOverlayDismissals = 0;
 	private String lastVerifiedStartupState = "initialization started";
+	private RawImageData lastStartupFrame;
+	private final DiagnosticSnapshotStore startupSnapshots = DiagnosticSnapshotStore.forCurrentWorkspace();
 
 	/**
 	 * Helper for character switching operations.
@@ -146,6 +150,7 @@ public class InitializeRoutine extends DelayedTask {
 	 */
 	@Override
 	protected void execute() {
+		lastStartupFrame = null;
 		setRecurring(false);
 
 		ensureEmulatorRunning();
@@ -239,12 +244,14 @@ public class InitializeRoutine extends DelayedTask {
 		} catch (RuntimeException failure) {
 			serial = "unavailable (" + failure.getClass().getSimpleName() + ")";
 		}
-		return StartupCaptureRetry.capture(
+		RawImageData frame = StartupCaptureRetry.capture(
 				new StartupCaptureRetry.CaptureContext(
 						EMULATOR_NUMBER, serial, inspection, lastVerifiedStartupState),
 				() -> emuManager.captureScreen(EMULATOR_NUMBER),
 				this::logWarning,
 				this::sleepTask);
+		lastStartupFrame = frame;
+		return frame;
 	}
 
 	/**
@@ -326,6 +333,7 @@ public class InitializeRoutine extends DelayedTask {
 				continue;
 			}
 
+			// Passive checks and later recoveries do not retain a screenshot.
 			logWarning("Home screen not found on an unsupported startup screen. "
 					+ "Waiting 5 seconds for a passive state change before retrying...");
 			sleepTask(5000);
@@ -551,6 +559,8 @@ public class InitializeRoutine extends DelayedTask {
 			StoreRedirectEvidence storeRedirect) {
 		LocalDateTime retryAt = LocalDateTime.now().plus(StartupRecoveryPolicy.PLAY_STORE_REDIRECT_COOLDOWN);
 		ProfileCooldownException cooldown = playStoreRedirectCooldown(retryAt);
+		StartupBlockerSnapshots.Retention snapshot = retainTerminalSnapshot(
+				StartupBlockerSnapshots.TYPE_PLAY_STORE_REDIRECT);
 		logError("Initialization requires operator action for profile=" + profile.getName()
 				+ ", expected=update completed outside Frostguard or home/world"
 				+ ", observed=Google Play foreground package"
@@ -559,8 +569,10 @@ public class InitializeRoutine extends DelayedTask {
 				+ ". Technical evidence: " + updateEvidence.technicalSummary()
 				+ "; foreground package " + GOOGLE_PLAY_PACKAGE + ": "
 				+ storeRedirect.playStoreForeground()
-				+ "; fresh post-click frame captured: " + storeRedirect.freshFrameCaptured() + ".");
-		throw cooldown;
+				+ "; fresh post-click frame captured: " + storeRedirect.freshFrameCaptured()
+				+ "; snapshot=" + snapshot.logToken()
+				+ "; snapshotBasis=" + snapshot.basis() + ".");
+		throw cooldown.withEvidencePath(snapshot.saved() ? snapshot.relativePath() : "");
 	}
 
 	static ProfileCooldownException playStoreRedirectCooldown(LocalDateTime retryAt) {
@@ -576,12 +588,17 @@ public class InitializeRoutine extends DelayedTask {
 
 	private void deferUnverifiedUpdatePostcondition(String reason, String technicalEvidence) {
 		LocalDateTime retryAt = LocalDateTime.now().plus(StartupRecoveryPolicy.UPDATE_FOLLOW_UP_COOLDOWN);
+		StartupBlockerSnapshots.Retention snapshot = retainTerminalSnapshot(
+				StartupBlockerSnapshots.TYPE_UPDATE_FOLLOW_UP);
 		logError("Initialization paused for profile=" + profile.getName()
 				+ ", expected=automatic update, resource download, Play Store redirect, or home/world"
 				+ ", observed=unsupported update follow-up, lastAction=tapped verified Update button"
 				+ ", fallback=stop-game-and-release-slot, retryAt=" + retryAt
-				+ ", reason=" + reason + " Technical evidence: " + technicalEvidence + ".");
-		throw new ProfileCooldownException(reason, retryAt);
+				+ ", reason=" + reason + " Technical evidence: " + technicalEvidence
+				+ "; snapshot=" + snapshot.logToken()
+				+ "; snapshotBasis=" + snapshot.basis() + ".");
+		throw new ProfileCooldownException(reason, retryAt)
+				.withEvidencePath(snapshot.saved() ? snapshot.relativePath() : "");
 	}
 
 	private enum MandatoryUpdateResult {
@@ -658,18 +675,23 @@ public class InitializeRoutine extends DelayedTask {
 	private void deferResourceDownloadTimeout() {
 		LocalDateTime retryAt = LocalDateTime.now().plus(StartupRecoveryPolicy.UNKNOWN_BLOCKER_COOLDOWN);
 		String reason = "required resources did not finish before the startup timeout";
+		StartupBlockerSnapshots.Retention snapshot = retainTerminalSnapshot(
+				StartupBlockerSnapshots.TYPE_RESOURCE_DOWNLOAD_TIMEOUT);
 		logError("Initialization blocked for profile=" + profile.getName()
 				+ ", expected=resource download completed and home/world"
 				+ ", observed=resource-download-timeout, lastAction=tapped verified Download Now button"
 				+ ", fallback=stop-game-and-release-slot, retryAt=" + retryAt
-				+ ", reason=" + reason + ".");
+				+ ", reason=" + reason
+				+ ", snapshot=" + snapshot.logToken()
+				+ ", snapshotBasis=" + snapshot.basis() + ".");
 		throw new ProfileCooldownException(reason, retryAt, new ActionRequiredContext(
 				"startup.resource-download-timeout",
 				"Required game resources did not finish downloading",
 				"Resource download completed and home/world available",
 				"Resource download remained incomplete for ten minutes",
 				"Tapped the verified Download Now button, then waited without further input",
-				"Stop the game, release the slot, and retry initialization after fifteen minutes"));
+				"Stop the game, release the slot, and retry initialization after fifteen minutes"))
+				.withEvidencePath(snapshot.saved() ? snapshot.relativePath() : "");
 	}
 
 	/**
@@ -749,6 +771,8 @@ public class InitializeRoutine extends DelayedTask {
 	private void deferUnknownStartupBlocker(boolean gameForeground) {
 		LocalDateTime retryAt = LocalDateTime.now().plus(StartupRecoveryPolicy.UNKNOWN_BLOCKER_COOLDOWN);
 		String reason = "home/world remained unavailable after bounded in-game recovery";
+		StartupBlockerSnapshots.Retention snapshot = retainTerminalSnapshot(
+				StartupBlockerSnapshots.TYPE_INITIALIZE_BLOCKED);
 		logError("Initialization blocked for profile=" + profile.getName()
 				+ ", expected=home/world, observed=unknown-startup-blocker"
 				+ ", gameForeground=" + gameForeground
@@ -756,7 +780,9 @@ public class InitializeRoutine extends DelayedTask {
 				+ ", recoveryAttempts=" + unknownBlockerBackAttempts
 				+ "/" + StartupRecoveryPolicy.MAX_UNKNOWN_BLOCKER_BACK_ATTEMPTS
 				+ ", fallback=stop-game-and-release-slot, retryAt=" + retryAt
-				+ ", reason=" + reason + ".");
+				+ ", reason=" + reason
+				+ ", snapshot=" + snapshot.logToken()
+				+ ", snapshotBasis=" + snapshot.basis() + ".");
 		throw new ProfileCooldownException(reason, retryAt, new ActionRequiredContext(
 				"startup.home-unavailable-after-game-back",
 				"Startup remains blocked after automatic recovery",
@@ -765,7 +791,26 @@ public class InitializeRoutine extends DelayedTask {
 				gameForeground
 						? "One bounded Android Back sent only while Whiteout Survival owned the foreground window"
 						: "No input sent because Whiteout Survival did not own the foreground window",
-				"Stop the game, release the slot, and retry initialization after fifteen minutes"));
+				"Stop the game, release the slot, and retry initialization after fifteen minutes"))
+				.withEvidencePath(snapshot.saved() ? snapshot.relativePath() : "");
+	}
+
+	/**
+	 * Saves the last decision frame before the queue stops the game.
+	 * A missing frame gets one fresh capture, marked best-effort. Failure
+	 * does not replace the cooldown.
+	 */
+	private StartupBlockerSnapshots.Retention retainTerminalSnapshot(String type) {
+		StartupBlockerSnapshots.Retention retention = StartupBlockerSnapshots.retain(
+				startupSnapshots,
+				lastStartupFrame,
+				() -> captureStartupFrame("terminal startup snapshot"),
+				type,
+				Instant.now());
+		if (!retention.saved()) {
+			logWarning("Startup snapshot was not saved; cooldown continues without screen evidence.");
+		}
+		return retention;
 	}
 
 	/**

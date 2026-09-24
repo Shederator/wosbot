@@ -60,6 +60,9 @@ public class ActionRequiredIncident {
     @Column(name = "resource_outcome", length = 1000)
     private String resourceOutcome;
 
+    @Column(name = "evidence_path", length = 500)
+    private String evidencePath;
+
     @Column(name = "log_excerpt", length = 6000)
     private String logExcerpt;
 
@@ -108,6 +111,7 @@ public class ActionRequiredIncident {
         lastAction = report.lastAction();
         retryOrFallback = report.retryOrFallback();
         resourceOutcome = report.resourceOutcome();
+        evidencePath = report.evidencePath();
         logExcerpt = recentLogExcerpt;
         retryAt = report.retryAt();
         lastSeenAt = seenAt;
@@ -131,7 +135,7 @@ public class ActionRequiredIncident {
     public ActionRequiredIncidentData toData() {
         return new ActionRequiredIncidentData(id, profileId, profileName, taskKey, taskName,
                 signature, title, cause, expectedState, observedState, lastAction,
-                retryOrFallback, resourceOutcome, logExcerpt, retryAt, firstSeenAt,
+                retryOrFallback, resourceOutcome, evidencePath, logExcerpt, retryAt, firstSeenAt,
                 lastSeenAt, occurrenceCount, acknowledgedAt, recoveredAt);
     }
 }

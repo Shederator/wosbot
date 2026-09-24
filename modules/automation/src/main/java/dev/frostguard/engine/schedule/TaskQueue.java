@@ -917,7 +917,8 @@ public class TaskQueue {
                     context.lastAction(),
                     context.retryOrFallback(),
                     "gameStopped=" + gameStopped + "; slotReleased=" + slotReleased,
-                    cooldown.getRetryAt()));
+                    cooldown.getRetryAt(),
+                    cooldown.getEvidencePath()));
         } catch (RuntimeException exception) {
             emitErrorTask(task, "Could not persist action-required incident: " + exception.getMessage());
         }
@@ -940,7 +941,8 @@ public class TaskQueue {
                     "Retry at " + cooldown.getRetryAt(),
                     "gameStopped=" + gameStopped + "; slotReleased=" + slotReleased,
                     cooldown.getRetryAt(),
-                    TaskFailureIncidentService.DEFAULT_ESCALATION_THRESHOLD));
+                    TaskFailureIncidentService.DEFAULT_ESCALATION_THRESHOLD,
+                    cooldown.getEvidencePath()));
         } catch (RuntimeException exception) {
             emitErrorTask(task, "Could not persist the task-failure streak: " + exception.getMessage());
         }

@@ -76,7 +76,8 @@ public class TaskFailureIncidentService {
                         + streak.consecutiveFailures() + ".",
                 report.retryOrFallback(),
                 report.resourceOutcome(),
-                report.retryAt()));
+                report.retryAt(),
+                report.evidencePath()));
         return new FailureDecision(
                 streak.consecutiveFailures(), true, report.retryAt(), Optional.of(incident));
     }
@@ -102,7 +103,8 @@ public class TaskFailureIncidentService {
                 "Retry no earlier than " + retryAt + "; keep other queue work available",
                 "No profile-wide game or emulator cleanup was requested",
                 retryAt,
-                DEFAULT_ESCALATION_THRESHOLD));
+                DEFAULT_ESCALATION_THRESHOLD,
+                ""));
     }
 
     public synchronized int recordSuccess(long profileId, String taskKey) {
