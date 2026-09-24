@@ -11,7 +11,7 @@ explicitly saved values, including older 60-minute settings.
 | Accept New Survivors | 360 min | Survivor replacement is a slow recovery flow reported on the order of a day. Six-hour checks avoid hourly polling while limiting how long newly available workers remain unassigned. |
 | Daily Missions | 720 min | Two passes per day are sufficient for accumulating daily progress; the routine retains its final pre-reset check. Auto-schedule mode is unchanged. |
 | Mail Rewards | 720 min | Reward mail is not an hourly cooldown and mail exposes its own expiration. Two daily passes balance prompt collection with task cost. |
-| Personal Life Essence | 360 min | Six-hour collection avoids hourly island navigation while retaining four collection opportunities per day. No exact public storage cap was found, so this remains a conservative operational default. |
+| Personal Life Essence | 360 min | Six-hour collection avoids hourly island navigation while retaining four collection opportunities per day. The visible marker count is not a storage cap or a recharge time; no recharge duration is known. This remains a conservative operational default. |
 | Exploration Chest | 360 min | Community observations put idle-income storage at seven hours. Six hours stays below that cap with one hour of scheduling margin. |
 | Alliance Life Essence retry | 60 min | Retained. The routine searches for other members' currently available islands until its three daily assists are used, then schedules directly at reset. |
 
