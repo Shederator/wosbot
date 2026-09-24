@@ -16,6 +16,7 @@ import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -150,8 +151,87 @@ class DiagnosticSnapshotStoreTest {
         }
     }
 
+    @Test
+    void disabledDesktopSettingDoesNotCaptureTheDesktop() {
+        AtomicInteger captures = new AtomicInteger();
+        DiagnosticSnapshotStore store = new DiagnosticSnapshotStore(
+                workspace, () -> false, () -> {
+                    captures.incrementAndGet();
+                    return Optional.of(desktopImage());
+                });
+
+        Optional<String> relative = store.write(frame(2, 2), "initialize", "initialize-blocked", CAPTURED_AT);
+
+        assertTrue(relative.isPresent());
+        assertEquals(0, captures.get());
+        assertEquals(0, countFiles(store, "desktop"));
+    }
+
+    @Test
+    void enabledDesktopSettingSavesASeparateDesktopFrame() throws IOException {
+        DiagnosticSnapshotStore store = enabledStore(workspace, () -> Optional.of(desktopImage()));
+
+        Optional<String> relative = store.write(frame(2, 2), "initialize", "initialize-blocked", CAPTURED_AT);
+
+        assertEquals(
+                "logs/snapshot/20260921T143012.483Z-initialize-initialize-blocked.png",
+                relative.orElseThrow());
+        assertTrue(Files.exists(workspace.resolve(
+                "logs/snapshot/20260921T143012.483Z-desktop-initialize-blocked.png")));
+        assertEquals(3, ImageIO.read(store.directory().resolve(
+                "20260921T143012.483Z-desktop-initialize-blocked.png").toFile()).getWidth());
+    }
+
+    @Test
+    void desktopCaptureFailureKeepsTheEmulatorSnapshot() {
+        DiagnosticSnapshotStore store = enabledStore(workspace, () -> {
+            throw new IllegalStateException("portal unavailable");
+        });
+
+        Optional<String> relative = store.write(frame(2, 2), "bear", "rally-button-missing", CAPTURED_AT);
+
+        assertTrue(relative.isPresent());
+        assertTrue(Files.exists(workspace.resolve(relative.orElseThrow())));
+        assertEquals(0, countFiles(store, "desktop"));
+    }
+
+    @Test
+    void desktopRetentionDoesNotRemoveInitializeOrBearFrames() throws IOException {
+        DiagnosticSnapshotStore store = enabledStore(workspace, () -> Optional.of(desktopImage()));
+        Instant start = Instant.parse("2026-09-21T02:00:00.000Z");
+
+        for (int index = 0; index < 3; index++) {
+            store.write(frame(2, 2), "bear", "rally-button-missing", start.plusSeconds(index));
+        }
+        for (int index = 0; index < DiagnosticSnapshotStore.MAX_RETAINED_CAPTURES_PER_ACTIVITY + 1; index++) {
+            store.write(frame(2, 2), "initialize", "initialize-blocked", start.plusSeconds(60L + index));
+        }
+
+        assertEquals(3, capturesFor(store.directory(), "bear").size());
+        assertEquals(DiagnosticSnapshotStore.MAX_RETAINED_CAPTURES_PER_ACTIVITY,
+                capturesFor(store.directory(), "initialize").size());
+        assertEquals(DiagnosticSnapshotStore.MAX_RETAINED_CAPTURES_PER_ACTIVITY,
+                capturesFor(store.directory(), "desktop").size());
+    }
+
+    private static DiagnosticSnapshotStore enabledStore(Path workspace, DesktopFrameSource source) {
+        return new DiagnosticSnapshotStore(workspace, () -> true, source);
+    }
+
+    private static BufferedImage desktopImage() {
+        return new BufferedImage(3, 2, BufferedImage.TYPE_INT_RGB);
+    }
+
+    private static int countFiles(DiagnosticSnapshotStore store, String activity) {
+        try {
+            return capturesFor(store.directory(), activity).size();
+        } catch (IOException failure) {
+            throw new IllegalStateException(failure);
+        }
+    }
+
     private static List<Path> capturesFor(Path directory, String activity) throws IOException {
-        String marker = "-" + activity + "-";
+        String marker = "Z-" + activity + "-";
         try (Stream<Path> files = Files.list(directory)) {
             return files
                     .filter(path -> path.getFileName().toString().contains(marker))

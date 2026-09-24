@@ -3,6 +3,8 @@ package dev.frostguard.engine.diagnostics;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.runtime.WorkspacePaths;
 import dev.frostguard.vision.convert.ImageConverter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -18,6 +20,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.function.BooleanSupplier;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -30,19 +33,35 @@ import java.util.stream.Stream;
 public final class DiagnosticSnapshotStore {
 
     public static final int MAX_RETAINED_CAPTURES_PER_ACTIVITY = 20;
+    static final String DESKTOP_ACTIVITY = "desktop";
 
+    private static final Logger logger = LoggerFactory.getLogger(DiagnosticSnapshotStore.class);
     static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss.SSS'Z'")
             .withZone(ZoneOffset.UTC);
     private static final Object WRITE_LOCK = new Object();
 
     private final Path workspaceRoot;
+    private final BooleanSupplier desktopSnapshotsEnabled;
+    private final DesktopFrameSource desktopFrames;
 
     public DiagnosticSnapshotStore(Path workspaceRoot) {
+        this(workspaceRoot, () -> false, () -> Optional.empty());
+    }
+
+    DiagnosticSnapshotStore(
+            Path workspaceRoot,
+            BooleanSupplier desktopSnapshotsEnabled,
+            DesktopFrameSource desktopFrames) {
         this.workspaceRoot = workspaceRoot.toAbsolutePath().normalize();
+        this.desktopSnapshotsEnabled = desktopSnapshotsEnabled;
+        this.desktopFrames = desktopFrames;
     }
 
     public static DiagnosticSnapshotStore forCurrentWorkspace() {
-        return new DiagnosticSnapshotStore(WorkspacePaths.current().root());
+        return new DiagnosticSnapshotStore(
+                WorkspacePaths.current().root(),
+                DesktopSnapshotSettings::enabled,
+                DesktopFrames.platform());
     }
 
     public Path directory() {
@@ -60,15 +79,68 @@ public final class DiagnosticSnapshotStore {
         if (capturedAt == null) {
             return Optional.empty();
         }
+        BufferedImage image;
+        try {
+            image = ImageConverter.toBufferedImage(frame);
+        } catch (RuntimeException failure) {
+            return Optional.empty();
+        }
+        Optional<String> saved = persist(image, activity, type, capturedAt);
+        if (saved.isPresent() && !DESKTOP_ACTIVITY.equals(activityToken(activity))) {
+            accompanyDesktop(type, capturedAt);
+        }
+        return saved;
+    }
+
+    /**
+     * Saves one desktop frame when the global setting is on. The returned path
+     * uses the {@code desktop} activity so it does not consume another task's quota.
+     */
+    public Optional<String> captureDesktop(String type, Instant capturedAt) {
+        if (!desktopEnabled()) {
+            return Optional.empty();
+        }
+        try {
+            Optional<BufferedImage> image = desktopFrames.capture();
+            if (image.isEmpty()) {
+                return Optional.empty();
+            }
+            Optional<String> saved = persist(image.get(), DESKTOP_ACTIVITY, type, capturedAt);
+            if (saved.isEmpty()) {
+                logger.warn("Desktop snapshot was captured but not saved.");
+            }
+            return saved;
+        } catch (RuntimeException failure) {
+            logger.warn("Desktop snapshot was not saved: {}", failure.toString());
+            return Optional.empty();
+        }
+    }
+
+    private void accompanyDesktop(String type, Instant capturedAt) {
+        if (!desktopEnabled()) {
+            return;
+        }
+        captureDesktop(type, capturedAt);
+    }
+
+    private boolean desktopEnabled() {
+        try {
+            return desktopSnapshotsEnabled.getAsBoolean();
+        } catch (RuntimeException failure) {
+            logger.warn("Desktop snapshot setting could not be read: {}", failure.toString());
+            return false;
+        }
+    }
+
+    private Optional<String> persist(BufferedImage image, String activity, String type, Instant capturedAt) {
         String activityKey = activityToken(activity);
         Path partial = null;
         try {
-            BufferedImage image = ImageConverter.toBufferedImage(frame);
             synchronized (WRITE_LOCK) {
-                Path directory = directory();
-                Files.createDirectories(directory);
-                Path target = reserve(directory, fileName(activityKey, type, capturedAt));
-                partial = directory.resolve(target.getFileName().toString() + ".partial");
+                Path snapshotDirectory = directory();
+                Files.createDirectories(snapshotDirectory);
+                Path target = reserve(snapshotDirectory, fileName(activityKey, type, capturedAt));
+                partial = snapshotDirectory.resolve(target.getFileName().toString() + ".partial");
                 if (!ImageIO.write(image, "png", partial.toFile())) {
                     Files.deleteIfExists(partial);
                     return Optional.empty();
@@ -76,7 +148,7 @@ public final class DiagnosticSnapshotStore {
                 moveIntoPlace(partial, target);
                 partial = null;
                 try {
-                    pruneActivity(directory, activityKey);
+                    pruneActivity(snapshotDirectory, activityKey);
                 } catch (IOException retentionFailure) {
                     // The saved capture stays referenceable when retention cannot run.
                 }
