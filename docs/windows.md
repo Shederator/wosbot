@@ -9,7 +9,7 @@ The [latest Stable release](https://github.com/Shederator/wosbot/releases/latest
 provides the tested Windows installer. The permanent
 [Latest Nightly](https://github.com/Shederator/wosbot/releases/tag/nightly)
 entry points to the current authenticated preview with a separate product
-identity. Git, Git LFS, and a JDK are needed only when building from source; the
+identity. Git and a JDK are needed only when building from source; the
 checked-in Maven Wrapper supplies Maven.
 
 ## Source development requirements
@@ -21,7 +21,7 @@ in the normal Stable or Nightly installation.
 
 - Windows 10 or Windows 11.
 - Java JDK 21 or newer.
-- Git and Git LFS.
+- Git.
 
 WiX Toolset 3.14.1 is required only when producing the native MSI installer.
 Running an installed native build does not require a separately installed JDK.
@@ -31,7 +31,6 @@ Recommended installs:
 ```powershell
 winget install Microsoft.Git
 winget install EclipseAdoptium.Temurin.21.JDK
-winget install GitHub.GitLFS
 ```
 
 From the repository root, verify:
@@ -39,7 +38,6 @@ From the repository root, verify:
 ```powershell
 java -version
 .\mvnw.cmd -version
-git lfs version
 ```
 
 ## Native application updates
