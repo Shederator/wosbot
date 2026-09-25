@@ -170,20 +170,40 @@ public final class CommonGameAreas {
     // button beside it, so it is matched inside the bar rather than tapped at a fixed point.
     public static final AreaData RALLY_BOTTOM_BUTTON_BAR      = region(0, 1130, 460, 1279);
     public static final AreaData RALLY_TROOP_TRAINING_AREA    = region(190, 900, 530, 1060);
+    public static final AreaData RALLY_SELECTED_TROOPS_OCR_AREA = region(38, 168, 235, 216);
     public static final AreaData RALLY_MARCH_QUEUE_FULL_AREA  = region(220, 300, 500, 380);
     public static final PointData RALLY_MARCH_QUEUE_FULL_CLOSE = point(640, 338);
+    // Rally-card OCR regions are anchored to the top edge of a matched green join button.
+    public static final int BEAR_RALLY_MEMBERS_X1 = 626;
+    public static final int BEAR_RALLY_MEMBERS_X2 = 688;
+    public static final int BEAR_RALLY_MEMBERS_DY1 = -57;
+    public static final int BEAR_RALLY_MEMBERS_DY2 = -24;
+    public static final int BEAR_RALLY_TROOPS_X1 = 284;
+    public static final int BEAR_RALLY_TROOPS_X2 = 521;
+    public static final int BEAR_RALLY_TROOPS_DY1 = -57;
+    public static final int BEAR_RALLY_TROOPS_DY2 = -25;
+    public static final int BEAR_RALLY_COUNTDOWN_X1 = 571;
+    public static final int BEAR_RALLY_COUNTDOWN_X2 = 691;
+    public static final int BEAR_RALLY_COUNTDOWN_DY1 = -163;
+    public static final int BEAR_RALLY_COUNTDOWN_DY2 = -124;
     // Body of the "Other Troops are marching toward the same target" confirmation.
     public static final AreaData SAME_TARGET_DIALOG_AREA      = region(60, 555, 680, 650);
 
     // ── Hold-a-rally preparation time ────────────────────────────────
     //
-    // The dialog keeps whatever preparation time was last picked in game and the bot never sets it,
-    // so the ticked option is read per rally. Only a green tick marks the active option.
+    // The dialog remembers the last preparation time. Automation that requires an exact duration
+    // taps the matching checkbox and accepts it only after a fresh frame shows its green tick.
 
     public static final int[] RALLY_SET_TIME_MINUTES = { 3, 5, 10, 15 };
     public static final AreaData[] RALLY_SET_TIME_CHECKBOXES = {
             region(110, 592, 152, 634), region(375, 592, 417, 634),
             region(110, 670, 152, 712), region(375, 670, 417, 712)
+    };
+    // Bear Hunt exposes only 5 and 10 minutes on the first row. Treating this as the generic
+    // four-option grid maps the right-hand 10-minute tick to 5 minutes and launches the wrong rally.
+    public static final int[] BEAR_RALLY_SET_TIME_MINUTES = { 5, 10 };
+    public static final AreaData[] BEAR_RALLY_SET_TIME_CHECKBOXES = {
+            region(110, 592, 152, 634), region(375, 592, 417, 634)
     };
 
     // Polar Terror search panel: the level number sits in the pill right of the slider, not on the
