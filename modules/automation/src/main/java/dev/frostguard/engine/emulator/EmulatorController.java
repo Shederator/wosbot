@@ -242,13 +242,21 @@ public class EmulatorController {
 
     public List<ImageSearchResultData> locateAllPatternsMono(String idx, TemplatesEnum t,
             PointData tl, PointData br, double th, int max) {
-        requireBackend(); RawImageData frame = captureScreen(idx);
+        return locateAllPatternsMono(idx, captureScreen(idx), t, tl, br, th, max);
+    }
+    public List<ImageSearchResultData> locateAllPatternsMono(String idx, RawImageData frame,
+            TemplatesEnum t, PointData tl, PointData br, double th, int max) {
+        requireBackend();
         try { OpenCvPatternLocator.setContextLabel(label(idx));
               return OpenCvPatternLocator.locateAllPatternsMono(frame, regionTpl(t.getTemplate()), tl, br, th, max);
         } finally { OpenCvPatternLocator.clearContextLabel(); }
     }
     public List<ImageSearchResultData> locateAllPatternsMono(String idx, TemplatesEnum t, double th, int max) {
         return locateAllPatternsMono(idx, t, ORIGIN, FULL, th, max);
+    }
+    public List<ImageSearchResultData> locateAllPatternsMono(String idx, RawImageData frame,
+            TemplatesEnum t, double th, int max) {
+        return locateAllPatternsMono(idx, frame, t, ORIGIN, FULL, th, max);
     }
 
     public List<ImageSearchResultData> locateAllPatterns(String idx, TemplatesEnum t,

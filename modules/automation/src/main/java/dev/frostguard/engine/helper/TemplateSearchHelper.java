@@ -6,6 +6,7 @@ import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.service.LoggingService;
 import dev.frostguard.vision.logging.ProfileContextLogger;
@@ -74,6 +75,22 @@ public class TemplateSearchHelper {
 
     public List<ImageSearchResultData> locateAllPatternsMono(TemplatesEnum tpl, SearchConfig cfg) {
         return retryMultiSearch(tpl, cfg, true);
+    }
+
+    /** Runs one monochrome multi-match against a caller-owned frame. */
+    public List<ImageSearchResultData> locateAllPatternsMono(
+            TemplatesEnum tpl, RawImageData frame, SearchConfig cfg) {
+        preemptionHook.run();
+        if (cfg.hasArea()) {
+            return emu.locateAllPatternsMono(device, frame, tpl, cfg.getArea().topLeft(),
+                    cfg.getArea().bottomRight(), cfg.getThreshold(), cfg.getMaxResults());
+        }
+        if (cfg.hasCoordinates()) {
+            return emu.locateAllPatternsMono(device, frame, tpl, cfg.getStartPoint(),
+                    cfg.getEndPoint(), cfg.getThreshold(), cfg.getMaxResults());
+        }
+        return emu.locateAllPatternsMono(device, frame, tpl,
+                cfg.getThreshold(), cfg.getMaxResults());
     }
 
     // ── retry loops ──────────────────────────────────────────────────
