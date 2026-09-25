@@ -192,7 +192,7 @@ class BearSessionCoordinatorTest {
     }
 
     @Test
-    void doesNotStartOrJoinFromAnUnverifiedMarchScreen() {
+    void retriesAnUnverifiedMarchScreenBeforeUsingTheVerifiedJoinSlot() {
         ScriptedDriver driver = new ScriptedDriver();
         driver.unreliableReads = 1;
         driver.freeSlots = 1;
@@ -205,11 +205,12 @@ class BearSessionCoordinatorTest {
 
         assertEquals(1, driver.recoveries);
         assertEquals(1, driver.startCalls);
-        assertEquals(0, driver.joined, "the confirmed own rally consumed the only verified free slot");
+        assertEquals(1, driver.joined,
+                "the Bear Special rally must not consume an ordinary verified join slot");
     }
 
     @Test
-    void ownRallyReservationIsRemovedBeforeFillingJoinSlots() {
+    void ownSpecialRallyLeavesEveryOrdinaryJoinSlotAvailable() {
         ScriptedDriver driver = new ScriptedDriver();
         driver.freeSlots = 2;
         driver.joinResults.addAll(List.of(
@@ -222,7 +223,7 @@ class BearSessionCoordinatorTest {
         coordinator.run();
 
         assertEquals(1, driver.ownRallyStarts.size());
-        assertEquals(1, driver.joined);
+        assertEquals(2, driver.joined);
         assertEquals(List.of(7), driver.ownRallyFlags);
     }
 
@@ -244,7 +245,7 @@ class BearSessionCoordinatorTest {
 
         assertEquals(1, driver.joined);
         assertEquals(List.of(4, 4), driver.ownRallyFlags);
-        assertEquals(List.of("own:4", "own:4", "join:2"), driver.actions,
+        assertEquals(List.of("own:4", "own:4", "join:2", "join:3"), driver.actions,
                 "joining must not bypass the configured own-rally flow after a recoverable failure");
     }
 
@@ -269,7 +270,7 @@ class BearSessionCoordinatorTest {
 
         coordinator.run();
 
-        assertEquals(List.of("own:4", "own:4", "own:4", "own:4", "join:2"), driver.actions,
+        assertEquals(List.of("own:4", "own:4", "own:4", "own:4", "join:2", "join:2"), driver.actions,
                 "joining must remain locked until the own rally is proven active");
         assertEquals(1, driver.marchReads,
                 "the verified march snapshot must be retained while the own-rally transaction retries");

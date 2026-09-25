@@ -16,6 +16,7 @@ import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.error.StopExecutionException;
 import dev.frostguard.engine.helper.BearTrapHelper;
 import dev.frostguard.engine.helper.DeploymentPostTapRead;
+import dev.frostguard.engine.helper.MarchHelper;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.BearTrapParticipationSchedule;
@@ -755,18 +756,27 @@ private void enablePetsFlow() {
     }
 
 private boolean reachBearTrap(int trapNumber) {
-        ImageSearchResultData world = findFreshTransition(GAME_HOME_WORLD, 90, 350);
-        if (!world.isFound()) {
-            navigationHelper.ensureCorrectScreenLocation(LaunchPoint.WORLD);
-            world = findFreshTransition(GAME_HOME_WORLD, 90, FRESH_TRANSITION_TIMEOUT_MS);
-        }
-        if (!world.isFound()) {
-            logError(routineLogBearTrapLine("World screen not verified before opening Alliance"));
-            return false;
-        }
+        boolean territoryReady = false;
+        for (int routeAttempt = 1; routeAttempt <= TERRITORY_TRANSITION_ATTEMPTS; routeAttempt++) {
+            ImageSearchResultData world = findFreshTransition(GAME_HOME_WORLD, 90, 350);
+            if (!world.isFound()) {
+                navigationHelper.ensureCorrectScreenLocation(LaunchPoint.WORLD);
+                world = findFreshTransition(GAME_HOME_WORLD, 90, FRESH_TRANSITION_TIMEOUT_MS);
+            }
+            if (!world.isFound()) {
+                continue;
+            }
 
-        tapInside(ALLIANCE_BUTTON_TL_VALUE, ALLIANCE_BUTTON_BR_VALUE);
-        if (!openTerritoryFromAllianceMenu()) {
+            tapInside(ALLIANCE_BUTTON_TL_VALUE, ALLIANCE_BUTTON_BR_VALUE);
+            if (openTerritoryFromAllianceMenu()) {
+                territoryReady = true;
+                break;
+            }
+            logWarning(routineLogBearTrapLine(
+                    "Alliance route did not reach Territory; retrying from World (attempt "
+                            + routeAttempt + "/" + TERRITORY_TRANSITION_ATTEMPTS + ")"));
+        }
+        if (!territoryReady) {
             logError(routineLogBearTrapLine("Territory screen did not open"));
             return false;
         }
@@ -872,6 +882,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         private final Instant eventEnd;
         private List<MarchSlotState> lastMarches = List.of();
         private BearSessionCoordinator.State lastState;
+        private Instant ownRallyBusyUntil;
         private final Map<Integer, Long> formationTroopCounts = new HashMap<>();
         private final Map<Integer, Set<String>> rejectedCandidatesByFormation = new HashMap<>();
         private boolean warListKnown;
@@ -920,7 +931,8 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         public BearSessionCoordinator.MarchSnapshot readMarches(
                 OptionalInt trackedOwnSlot, boolean mayAdoptExisting) {
             try {
-                List<MarchSlotState> slots = marchHelper.readMarchQueueSinglePass();
+                MarchHelper.MarchQueueSnapshot queue = marchHelper.readMarchQueueSnapshotSinglePass();
+                List<MarchSlotState> slots = queue.slots();
                 boolean reliable = !slots.isEmpty() && slots.stream()
                         .anyMatch(slot -> slot.availability() != MarchSlotAvailability.UNKNOWN);
                 if (!reliable) {
@@ -937,7 +949,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                         .min(Duration::compareTo)
                         .orElse(null);
                 BearSessionCoordinator.OwnRallyObservation own = observeOwnRally(
-                        slots, trackedOwnSlot, mayAdoptExisting);
+                        slots, queue.specialRallyPreparing(), trackedOwnSlot, mayAdoptExisting);
                 return new BearSessionCoordinator.MarchSnapshot(true, freeSlots, own, earliestRelease);
             } catch (StopExecutionException e) {
                 throw e;
@@ -1020,7 +1032,13 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
             if (postTap.sameTargetDialog()) {
                 leaveVerifiedFormationScreen();
                 recover(BearSessionCoordinator.State.OWN_RALLY_STARTING);
-                OptionalInt existing = existingRallySlot(readMarchRows());
+                MarchHelper.MarchQueueSnapshot queue = readMarchSnapshot();
+                OptionalInt existing = queue.specialRallyPreparing()
+                        ? OptionalInt.of(0)
+                        : existingRallySlot(queue.slots());
+                if (existing.isPresent()) {
+                    ownRallyBusyUntil = now().plus(Duration.ofMinutes(5).plusSeconds(30));
+                }
                 return existing.isPresent()
                         ? BearSessionCoordinator.OwnRallyStartResult.alreadyActive(existing.getAsInt())
                         : BearSessionCoordinator.OwnRallyStartResult.recoverable(
@@ -1033,7 +1051,12 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
 
             OptionalInt newRally = awaitNewRallySlot(before);
             if (newRally.isPresent()) {
-                logInfo(routineLogBearTrapLine("Own rally confirmed in march slot #" + newRally.getAsInt()));
+                ownRallyBusyUntil = now()
+                        .plusSeconds(rallySeconds + travelSeconds * 2)
+                        .plusSeconds(2);
+                logInfo(routineLogBearTrapLine(newRally.getAsInt() == 0
+                        ? "Own rally confirmed in the Bear Special row"
+                        : "Own rally confirmed in march slot #" + newRally.getAsInt()));
                 return BearSessionCoordinator.OwnRallyStartResult.confirmed(
                         newRally.getAsInt(), Duration.ofSeconds(rallySeconds), Duration.ofSeconds(travelSeconds));
             }
@@ -1171,16 +1194,40 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         }
 
         private List<MarchSlotState> readMarchRows() {
-            List<MarchSlotState> rows = marchHelper.readMarchQueueSinglePass();
+            return readMarchSnapshot().slots();
+        }
+
+        private MarchHelper.MarchQueueSnapshot readMarchSnapshot() {
+            MarchHelper.MarchQueueSnapshot snapshot = marchHelper.readMarchQueueSnapshotSinglePass();
+            List<MarchSlotState> rows = snapshot.slots();
             if (!rows.isEmpty()) {
                 lastMarches = rows;
             }
-            return rows;
+            return snapshot;
         }
 
         private BearSessionCoordinator.OwnRallyObservation observeOwnRally(
-                List<MarchSlotState> slots, OptionalInt trackedOwnSlot, boolean mayAdoptExisting) {
+                List<MarchSlotState> slots,
+                boolean specialRallyPreparing,
+                OptionalInt trackedOwnSlot,
+                boolean mayAdoptExisting) {
+            if (specialRallyPreparing) {
+                return trackedOwnSlot.isPresent()
+                        ? BearSessionCoordinator.OwnRallyObservation.active(
+                                0, BearSessionCoordinator.OwnRallyPhase.PREPARING, null)
+                        : BearSessionCoordinator.OwnRallyObservation.unclassifiedActive(0);
+            }
             if (trackedOwnSlot.isPresent()) {
+                if (trackedOwnSlot.getAsInt() == 0) {
+                    if (ownRallyBusyUntil != null && now().isBefore(ownRallyBusyUntil)) {
+                        return BearSessionCoordinator.OwnRallyObservation.active(
+                                0,
+                                BearSessionCoordinator.OwnRallyPhase.RETURNING,
+                                Duration.between(now(), ownRallyBusyUntil));
+                    }
+                    ownRallyBusyUntil = null;
+                    return BearSessionCoordinator.OwnRallyObservation.idle(0);
+                }
                 Optional<MarchSlotState> tracked = slots.stream()
                         .filter(slot -> slot.slot() == trackedOwnSlot.getAsInt())
                         .findFirst();
@@ -1244,8 +1291,11 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                     + Duration.ofMillis(POST_DEPLOY_CONFIRMATION_TIMEOUT_MS).toNanos();
             do {
                 checkPreemption();
-                List<MarchSlotState> after = readMarchRows();
-                OptionalInt confirmed = newlyOccupiedRallySlot(before, after);
+                MarchHelper.MarchQueueSnapshot after = readMarchSnapshot();
+                if (after.specialRallyPreparing()) {
+                    return OptionalInt.of(0);
+                }
+                OptionalInt confirmed = newlyOccupiedRallySlot(before, after.slots());
                 if (confirmed.isPresent()) {
                     return confirmed;
                 }
@@ -1343,10 +1393,12 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         }
 
         private boolean openWarList() {
-            for (int transition = 0; transition < 3; transition++) {
+            // The game does not reliably reorder an already-open War list. Every join attempt must
+            // return to World and tap the red rally indicator so the newest joinable rally is on top.
+            for (int transition = 0; transition < 4; transition++) {
                 BearNavigationPolicy.Screen screen = observeBearScreen();
                 BearNavigationPolicy.Action action = BearNavigationPolicy.next(
-                        screen, BearNavigationPolicy.Goal.WAR_LIST);
+                        screen, BearNavigationPolicy.Goal.FRESH_WAR_LIST);
                 switch (action) {
                     case READY -> {
                         return true;

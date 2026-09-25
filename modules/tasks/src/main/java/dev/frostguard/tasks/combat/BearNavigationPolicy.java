@@ -39,7 +39,8 @@ final class BearNavigationPolicy {
     enum Goal {
         PREPARED_AT_BEAR,
         OWN_RALLY,
-        WAR_LIST
+        WAR_LIST,
+        FRESH_WAR_LIST
     }
 
     enum Action {
@@ -90,6 +91,15 @@ final class BearNavigationPolicy {
                 case RALLY_TIMER_PANEL, FORMATION, WAR_LIST -> Action.BACK_ONCE;
                 case WORLD_ACTIVE_BEAR_ICON_READY, ALLIANCE_MENU, ALLIANCE_TERRITORY,
                         SPECIAL_BUILDINGS, TRANSITIONING, UNKNOWN -> Action.FAIL_CLOSED;
+            };
+        }
+        if (goal == Goal.FRESH_WAR_LIST) {
+            return switch (screen) {
+                case WORLD_AT_VERIFIED_BEAR, WORLD_AT_BEAR, WORLD_ACTIVE_BEAR_ICON_READY,
+                        WORLD -> Action.TAP_WAR;
+                case WAR_LIST, FORMATION, RALLY_TIMER_PANEL, BEAR_RALLY_PANEL -> Action.BACK_ONCE;
+                case ALLIANCE_MENU, ALLIANCE_TERRITORY, SPECIAL_BUILDINGS,
+                        TRANSITIONING, UNKNOWN -> Action.FAIL_CLOSED;
             };
         }
         return switch (screen) {

@@ -277,7 +277,8 @@ final class BearSessionCoordinator {
                     ownRallyCutoff = observedCycle.compareTo(MINIMUM_OWN_RALLY_CUTOFF) > 0
                             ? observedCycle
                             : MINIMUM_OWN_RALLY_CUTOFF;
-                    freeSlotsForJoining = Math.max(0, freeSlotsForJoining - 1);
+                    // Bear owns a separate "Special" march row. It does not consume one of the
+                    // ordinary Wilderness slots used by configured join formations.
                     transition(State.OWN_RALLY_ACTIVE);
                 } else if (start.outcome() == OwnRallyStartOutcome.ALREADY_ACTIVE) {
                     trackedOwnSlot = OptionalInt.of(start.slot());

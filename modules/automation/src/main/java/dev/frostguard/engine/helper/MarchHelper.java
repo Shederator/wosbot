@@ -56,6 +56,15 @@ public class MarchHelper {
     private static final double ACTIVITY_ICON_THRESHOLD = 85;
     // A non-gather row icon still contributes enough non-background colour to prove the row is not idle.
     private static final int ICON_PRESENT_MIN = 500;
+    // Bear own rallies appear in the separate green "Special" row, not in the ordinary Wilderness
+    // march slots. The row can move vertically as normal rows expand, so inspect the full left rail.
+    private static final int SPECIAL_RALLY_RAIL_X0 = 0;
+    private static final int SPECIAL_RALLY_RAIL_X1 = 58;
+    private static final int SPECIAL_RALLY_RAIL_Y0 = 150;
+    private static final int SPECIAL_RALLY_RAIL_Y1 = 700;
+    private static final int SPECIAL_RALLY_WINDOW_HEIGHT = 50;
+    private static final int SPECIAL_RALLY_GREEN_MIN = 400;
+    private static final int SPECIAL_RALLY_CYAN_MIN = 50;
 
     private final EmulatorController emu;
     private final String device;
@@ -63,6 +72,12 @@ public class MarchHelper {
     private final ResilientOcrExecutor<String> ocrStrings;
     private final ProfileContextLogger log;
     private final SidebarNavigator sidebar;
+
+    public record MarchQueueSnapshot(List<MarchSlotState> slots, boolean specialRallyPreparing) {
+        public MarchQueueSnapshot {
+            slots = List.copyOf(slots);
+        }
+    }
 
     public MarchHelper(EmulatorController emuManager, String emulatorNumber,
                        ResilientOcrExecutor<String> stringHelper, AccountDescriptor profile) {
@@ -99,9 +114,14 @@ public class MarchHelper {
      * for flows that already normalize their world state and do not need legacy multi-tap recovery.
      */
     public List<MarchSlotState> readMarchQueueSinglePass() {
+        return readMarchQueueSnapshotSinglePass().slots();
+    }
+
+    /** Reads ordinary march slots and the separate Bear "Special" rally from the same frame. */
+    public MarchQueueSnapshot readMarchQueueSnapshotSinglePass() {
         openLeftMenuSection(false);
         try {
-            return readVisibleMarchQueue();
+            return readVisibleMarchQueueSnapshot();
         } finally {
             dismissLeftPanel();
         }
@@ -112,14 +132,18 @@ public class MarchHelper {
      * row lacks queue evidence, which indicates that the preserved scroll position cannot be trusted.
      */
     public List<MarchSlotState> readVisibleMarchQueue() {
-        List<MarchSlotState> slots = readVisibleMarchQueueOnce();
-        if (hasReliableQueueEvidence(slots)) {
-            return slots;
+        return readVisibleMarchQueueSnapshot().slots();
+    }
+
+    private MarchQueueSnapshot readVisibleMarchQueueSnapshot() {
+        MarchQueueSnapshot snapshot = readVisibleMarchQueueOnce();
+        if (hasReliableQueueEvidence(snapshot.slots())) {
+            return snapshot;
         }
 
         log.warn("March Queue rows were not visible at the preserved position; reopening Wilderness once");
         if (!sidebar.close() || !sidebar.openSection(SidebarSection.WILDERNESS)) {
-            return List.of();
+            return new MarchQueueSnapshot(List.of(), false);
         }
         return readVisibleMarchQueueOnce();
     }
@@ -128,7 +152,7 @@ public class MarchHelper {
         return slots.stream().anyMatch(slot -> slot.availability() != MarchSlotAvailability.UNKNOWN);
     }
 
-    private List<MarchSlotState> readVisibleMarchQueueOnce() {
+    private MarchQueueSnapshot readVisibleMarchQueueOnce() {
         try {
             RawImageData frame = emu.captureScreen(device);
             BufferedImage image = dev.frostguard.vision.convert.ImageConverter.toBufferedImage(frame);
@@ -145,11 +169,63 @@ public class MarchHelper {
                             + (slot.countdown() == null ? "" : "(" + slot.countdown() + ")")
                             + (slot.evidence() == null ? "" : "{" + slot.evidence() + "}"))
                     .collect(Collectors.joining(" ")));
-            return slots;
+            boolean specialRallyPreparing = hasActiveSpecialRally(image);
+            if (specialRallyPreparing) {
+                log.info("Bear Special rally is preparing");
+            }
+            return new MarchQueueSnapshot(slots, specialRallyPreparing);
         } catch (Exception ex) {
             log.error("March queue read error: " + ex.getMessage());
-            return List.of();
+            return new MarchQueueSnapshot(List.of(), false);
         }
+    }
+
+    static boolean hasActiveSpecialRally(BufferedImage image) {
+        int y0 = Math.max(0, SPECIAL_RALLY_RAIL_Y0);
+        int y1 = Math.min(image.getHeight() - 1, SPECIAL_RALLY_RAIL_Y1);
+        int x0 = Math.max(0, SPECIAL_RALLY_RAIL_X0);
+        int x1 = Math.min(image.getWidth() - 1, SPECIAL_RALLY_RAIL_X1);
+        if (y1 - y0 + 1 < SPECIAL_RALLY_WINDOW_HEIGHT || x1 < x0) {
+            return false;
+        }
+
+        int[] greenByRow = new int[y1 - y0 + 1];
+        int[] cyanByRow = new int[y1 - y0 + 1];
+        for (int y = y0; y <= y1; y++) {
+            for (int x = x0; x <= x1; x++) {
+                int rgb = image.getRGB(x, y);
+                if (GameColors.isVividGreen(rgb)) {
+                    greenByRow[y - y0]++;
+                }
+                if (isSpecialRallySwordCyan(rgb)) {
+                    cyanByRow[y - y0]++;
+                }
+            }
+        }
+
+        int green = 0;
+        int cyan = 0;
+        for (int row = 0; row < greenByRow.length; row++) {
+            green += greenByRow[row];
+            cyan += cyanByRow[row];
+            if (row >= SPECIAL_RALLY_WINDOW_HEIGHT) {
+                green -= greenByRow[row - SPECIAL_RALLY_WINDOW_HEIGHT];
+                cyan -= cyanByRow[row - SPECIAL_RALLY_WINDOW_HEIGHT];
+            }
+            if (row >= SPECIAL_RALLY_WINDOW_HEIGHT - 1
+                    && green >= SPECIAL_RALLY_GREEN_MIN
+                    && cyan >= SPECIAL_RALLY_CYAN_MIN) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isSpecialRallySwordCyan(int rgb) {
+        int red = (rgb >> 16) & 0xFF;
+        int green = (rgb >> 8) & 0xFF;
+        int blue = rgb & 0xFF;
+        return green > 170 && blue > 150 && red < 210 && green > red + 20;
     }
 
     private MarchSlotState readSlot(RawImageData frame, BufferedImage image, int index) {

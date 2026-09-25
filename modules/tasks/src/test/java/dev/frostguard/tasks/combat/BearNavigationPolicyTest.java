@@ -125,4 +125,16 @@ class BearNavigationPolicyTest {
                         BearNavigationPolicy.Screen.WORLD,
                         BearNavigationPolicy.Goal.WAR_LIST));
     }
+
+    @Test
+    void refreshesAnOpenWarListThroughWorldBeforeUsingItAgain() {
+        assertEquals(BearNavigationPolicy.Action.BACK_ONCE,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.WAR_LIST,
+                        BearNavigationPolicy.Goal.FRESH_WAR_LIST));
+        assertEquals(BearNavigationPolicy.Action.TAP_WAR,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.WORLD_AT_BEAR,
+                        BearNavigationPolicy.Goal.FRESH_WAR_LIST));
+    }
 }
