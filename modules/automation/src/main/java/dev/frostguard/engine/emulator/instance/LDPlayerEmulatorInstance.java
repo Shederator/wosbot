@@ -30,6 +30,13 @@ public class LDPlayerEmulatorInstance extends EmulatorInstance {
         LOG.info("LDPlayer {} shutdown requested", id);
     }
 
+    // Prefer ldconsole runapp over ADB monkey so the game reaches the foreground
+    // reliably on cold LDPlayer starts.
+    @Override public void launchApp(String id, String pkg) {
+        exec("runapp", "--index", id, "--packagename", pkg);
+        LOG.info("LDPlayer runapp {} on index {}", pkg, id);
+    }
+
     @Override public boolean isRunning(String id) {
         try {
             Process p = pb("isrunning", "--index", id).start();
