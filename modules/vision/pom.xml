@@ -45,6 +45,12 @@
 
 		<!-- ═══ Computer Vision Libraries ═══ -->
 		
+		<!-- RapidOCR4j: PaddleOCR ONNX runtime wrapper -->
+		<dependency>
+			<groupId>io.github.hzkitty</groupId>
+			<artifactId>rapidocr4j</artifactId>
+		</dependency>
+
 		<!-- Tesseract: OCR engine for text recognition -->
 		<dependency>
 			<groupId>net.sourceforge.tess4j</groupId>

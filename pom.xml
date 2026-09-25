@@ -253,6 +253,11 @@
 
 			<!-- ── Vision / OCR ── -->
 			<dependency>
+				<groupId>io.github.hzkitty</groupId>
+				<artifactId>rapidocr4j</artifactId>
+				<version>1.0.3</version>
+			</dependency>
+			<dependency>
 				<groupId>net.sourceforge.tess4j</groupId>
 				<artifactId>tess4j</artifactId>
 				<version>${tess4j.version}</version>

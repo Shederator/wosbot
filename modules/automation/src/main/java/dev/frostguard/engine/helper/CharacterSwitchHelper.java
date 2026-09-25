@@ -51,12 +51,13 @@ public class CharacterSwitchHelper {
         String liveName = ocrRead(CommonGameAreas.CHARACTER_NAME_OCR_AREA, nameOcrCfg());
         log.debug("Live char: name='" + liveName + "' id='" + liveId + "'");
 
-        boolean idOk = blank(wantId) || (!blank(liveId) && wantId.equals(liveId));
-        boolean nameOk = blank(wantName) || (!blank(liveName) && nameMatch(liveName, wantName));
+        boolean idMatch = !blank(wantId) && !blank(liveId) && wantId.equals(liveId);
+        boolean nameMatched = !blank(wantName) && !blank(liveName) && nameMatch(liveName, wantName);
+
         if (!blank(wantId) && blank(liveId)) log.warn("ID configured but OCR failed");
         if (!blank(wantName) && blank(liveName)) log.warn("Name configured but OCR failed");
 
-        if (idOk || nameOk) { log.info("Char verified OK"); emu.pressBack(dev); return true; }
+        if (idMatch || nameMatched) { log.info("Char verified OK"); emu.pressBack(dev); return true; }
         log.warn("Char mismatch"); return false;
     }
 
