@@ -30,7 +30,7 @@ If you are unsure, install **Stable**.
    installation. The final page starts **Frostguard** by default.
 5. Continue at [Configure the emulator and game](#configure-the-emulator-and-game).
 
-The installer includes the Java runtime. You do not need Git, Git LFS, Maven,
+The installer includes the Java runtime. You do not need Git, Maven,
 or a separate Java installation.
 
 ## Option 2: Install Nightly

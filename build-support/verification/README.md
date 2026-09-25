@@ -20,11 +20,10 @@ without changing Stable, Nightly, or `main`.
 
 ## What the PR-test ZIP verifier does
 
-1. Checks out the repository **with Git LFS**, then asserts that every LFS asset
-   was really materialised. The check fails if `git lfs ls-files` returns nothing
-   at all, if one of the four critical assets is no longer tracked, if a file is
-   still a pointer stub, or if it is implausibly small. Without those guards the
-   step could pass vacuously and ship a bundle that fails only on a user's PC.
+1. Checks out the repository, then asserts that the seven shipped native
+   binaries are real files. The check fails if one is missing, still a Git LFS
+   pointer stub, or implausibly small. Without those guards the step could pass
+   vacuously and ship a bundle that fails only on a user's PC.
 2. Sets up **Temurin JDK 21** with a Maven dependency cache.
 3. Installs `libtesseract` / `libleptonica`, which tess4j binds at runtime for
    the OCR regression tests. OpenCV needs no system package — the
@@ -194,7 +193,7 @@ inside the runners. [`pr-test-cleanup.yml`](../../.github/workflows/pr-test-clea
 deletes each test release after 7 days or once every included PR is closed,
 and never touches `nightly` or real releases.
 
-The Git LFS pointer-stub guard shared with the nightly lives in
+The shipped-binary pointer-stub guard shared with the nightly lives in
 [`check_lfs_assets.sh`](check_lfs_assets.sh).
 
 Run the feature's tests locally:

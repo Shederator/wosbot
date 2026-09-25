@@ -141,14 +141,12 @@ automatically.
 
 ## For developers
 
-The repository uses Java 21 and the checked-in Maven Wrapper. Git LFS supplies
-the required vision and runtime assets.
+The repository uses Java 21 and the checked-in Maven Wrapper. The vision and
+runtime binaries are ordinary files in the clone.
 
 ```sh
 git clone https://github.com/Shederator/wosbot.git
 cd wosbot
-git lfs install
-git lfs pull
 ./mvnw package
 ```
 
