@@ -211,11 +211,11 @@ public enum ConfigurationKeyEnum {
 
     GATHER_ACTIVE_MARCH_QUEUE_INT   ("6",                   Integer.class,  ConfigCategory.GATHERING),
     GATHER_COAL_BOOL                ("false",               Boolean.class,  ConfigCategory.GATHERING),
-    GATHER_COAL_LEVEL_INT           ("8",                   Integer.class,  ConfigCategory.GATHERING),
+    GATHER_COAL_LEVEL_INT           ("9",                   Integer.class,  ConfigCategory.GATHERING),
     GATHER_IRON_BOOL                ("false",               Boolean.class,  ConfigCategory.GATHERING),
-    GATHER_IRON_LEVEL_INT           ("8",                   Integer.class,  ConfigCategory.GATHERING),
+    GATHER_IRON_LEVEL_INT           ("9",                   Integer.class,  ConfigCategory.GATHERING),
     GATHER_MEAT_BOOL                ("false",               Boolean.class,  ConfigCategory.GATHERING),
-    GATHER_MEAT_LEVEL_INT           ("8",                   Integer.class,  ConfigCategory.GATHERING),
+    GATHER_MEAT_LEVEL_INT           ("9",                   Integer.class,  ConfigCategory.GATHERING),
     GATHER_ONLY_FULL_RESOURCES_BOOL ("false",               Boolean.class,  ConfigCategory.GATHERING),
     GATHER_DOWNGRADE_LEVEL_BOOL     ("true",                Boolean.class,  ConfigCategory.GATHERING),
     GATHER_REMOVE_HEROS_BOOL        ("true",                Boolean.class,  ConfigCategory.GATHERING),
@@ -228,7 +228,7 @@ public enum ConfigurationKeyEnum {
     GATHER_SPEED_BOOST_TYPE_STRING  ("24h (600 gems)",      String.class,   ConfigCategory.GATHERING),
     GATHER_TASK_BOOL                ("false",               Boolean.class,  ConfigCategory.GATHERING),
     GATHER_WOOD_BOOL                ("false",               Boolean.class,  ConfigCategory.GATHERING),
-    GATHER_WOOD_LEVEL_INT           ("8",                   Integer.class,  ConfigCategory.GATHERING),
+    GATHER_WOOD_LEVEL_INT           ("9",                   Integer.class,  ConfigCategory.GATHERING),
 
     /* ─────────── pets ─────────── */
 
