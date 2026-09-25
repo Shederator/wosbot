@@ -1961,3 +1961,11 @@
     -fx-border-color: -fg-yellow;
     -fx-border-width: 2px;
 }
+
+/* Dave's #251 review: StatisticsLayoutController relies on this class to size the Statistics
+   tab's earnings-tile glyphs -- ikonli's own CSS pass overrides setIconSize() calls made in code,
+   so the size has to come from a style class instead (matches the .nav-button pattern above).
+   72px matches the same tiles' ImageView fallback size (see resolveGlyph()'s icon branch). */
+.stat-tile-glyph {
+    -fx-icon-size: 72;
+}
