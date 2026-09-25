@@ -8,14 +8,14 @@ import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
-final class BoundedProcessRunner {
+public final class BoundedProcessRunner {
 
     private static final long TERMINATION_GRACE_MILLIS = 1_000;
 
     private BoundedProcessRunner() {
     }
 
-    static ProcessResult run(ProcessBuilder builder, Duration timeout) throws IOException, InterruptedException {
+    public static ProcessResult run(ProcessBuilder builder, Duration timeout) throws IOException, InterruptedException {
         Objects.requireNonNull(builder, "builder");
         Objects.requireNonNull(timeout, "timeout");
         if (timeout.isZero() || timeout.isNegative()) {
@@ -62,6 +62,6 @@ final class BoundedProcessRunner {
         }
     }
 
-    record ProcessResult(int exitCode, String output, boolean timedOut) {
+    public record ProcessResult(int exitCode, String output, boolean timedOut) {
     }
 }
