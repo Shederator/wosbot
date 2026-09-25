@@ -109,6 +109,10 @@ private static final long FRESH_TRANSITION_TIMEOUT_MS = 1500;
 
 private static final long NAVIGATION_TRANSITION_TIMEOUT_MS = 4_000;
 
+private static final long POST_DEPLOY_CONFIRMATION_TIMEOUT_MS = 5_000;
+
+private static final long POST_DEPLOY_CONFIRMATION_POLL_MS = 100;
+
 private static final int TERRITORY_TRANSITION_ATTEMPTS = 2;
 
 private static final boolean DEFAULT_CALL_OWN_RALLY_VALUE = false;
@@ -1027,14 +1031,11 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                         BearSessionCoordinator.OwnRallyStartOutcome.DEPLOY_NOT_CONFIRMED);
             }
 
-            for (int attempt = 0; attempt < 3; attempt++) {
-                List<MarchSlotState> after = readMarchRows();
-                OptionalInt newRally = newlyOccupiedRallySlot(before, after);
-                if (newRally.isPresent()) {
-                    logInfo(routineLogBearTrapLine("Own rally confirmed in march slot #" + newRally.getAsInt()));
-                    return BearSessionCoordinator.OwnRallyStartResult.confirmed(
-                            newRally.getAsInt(), Duration.ofSeconds(rallySeconds), Duration.ofSeconds(travelSeconds));
-                }
+            OptionalInt newRally = awaitNewRallySlot(before);
+            if (newRally.isPresent()) {
+                logInfo(routineLogBearTrapLine("Own rally confirmed in march slot #" + newRally.getAsInt()));
+                return BearSessionCoordinator.OwnRallyStartResult.confirmed(
+                        newRally.getAsInt(), Duration.ofSeconds(rallySeconds), Duration.ofSeconds(travelSeconds));
             }
             return BearSessionCoordinator.OwnRallyStartResult.recoverable(
                     BearSessionCoordinator.OwnRallyStartOutcome.DEPLOY_NOT_CONFIRMED);
@@ -1042,7 +1043,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
 
         @Override
         public BearSessionCoordinator.JoinOutcome joinNext(int formation) {
-            int freeBefore = (int) lastMarches.stream().filter(MarchSlotState::isIdle).count();
+            List<MarchSlotState> before = List.copyOf(lastMarches);
             try {
                 if (!openWarList()) {
                     return BearSessionCoordinator.JoinOutcome.PAGE_NOT_READY;
@@ -1114,10 +1115,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                     return BearSessionCoordinator.JoinOutcome.RALLY_FULL;
                 }
 
-                List<MarchSlotState> after = readMarchRows();
-                int freeAfter = (int) after.stream().filter(MarchSlotState::isIdle).count();
-                if (freeAfter < freeBefore) {
-                    lastMarches = after;
+                if (awaitNewOccupiedSlot(before)) {
                     return BearSessionCoordinator.JoinOutcome.JOINED;
                 }
                 rejected.add(candidate.stableKey());
@@ -1241,6 +1239,44 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                     .findFirst();
         }
 
+        private OptionalInt awaitNewRallySlot(List<MarchSlotState> before) {
+            long deadline = System.nanoTime()
+                    + Duration.ofMillis(POST_DEPLOY_CONFIRMATION_TIMEOUT_MS).toNanos();
+            do {
+                checkPreemption();
+                List<MarchSlotState> after = readMarchRows();
+                OptionalInt confirmed = newlyOccupiedRallySlot(before, after);
+                if (confirmed.isPresent()) {
+                    return confirmed;
+                }
+                if (System.nanoTime() < deadline) {
+                    sleepTask(POST_DEPLOY_CONFIRMATION_POLL_MS);
+                }
+            } while (System.nanoTime() < deadline);
+            return OptionalInt.empty();
+        }
+
+        private boolean awaitNewOccupiedSlot(List<MarchSlotState> before) {
+            long deadline = System.nanoTime()
+                    + Duration.ofMillis(POST_DEPLOY_CONFIRMATION_TIMEOUT_MS).toNanos();
+            do {
+                checkPreemption();
+                List<MarchSlotState> after = readMarchRows();
+                boolean confirmed = after.stream()
+                        .filter(slot -> !slot.isIdle())
+                        .anyMatch(slot -> before.stream()
+                                .filter(previous -> previous.slot() == slot.slot())
+                                .anyMatch(MarchSlotState::isIdle));
+                if (confirmed) {
+                    return true;
+                }
+                if (System.nanoTime() < deadline) {
+                    sleepTask(POST_DEPLOY_CONFIRMATION_POLL_MS);
+                }
+            } while (System.nanoTime() < deadline);
+            return false;
+        }
+
         private boolean openBearRallyFromAnchor() {
             for (int transition = 0; transition < 4; transition++) {
                 BearNavigationPolicy.Screen screen = observeBearScreen();
@@ -1273,8 +1309,10 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                             return false;
                         }
                         tapInside(activeBear);
-                        if (!findFresh(
-                                GAME_HOME_WORLD, 90, NAVIGATION_TRANSITION_TIMEOUT_MS).isFound()) {
+                        if (!awaitTemplateGone(
+                                BEAR_HUNT_IS_RUNNING, 90, NAVIGATION_TRANSITION_TIMEOUT_MS)
+                                || !findFresh(
+                                        GAME_HOME_WORLD, 90, NAVIGATION_TRANSITION_TIMEOUT_MS).isFound()) {
                             return false;
                         }
                         bearAnchorVerifiedAt = now();
@@ -1402,6 +1440,11 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
             if (emuManager.locatePattern(EMULATOR_NUMBER, frame, RALLY_HOLD_BUTTON, 90).isFound()) {
                 return BearNavigationPolicy.Screen.RALLY_TIMER_PANEL;
             }
+            if (warListKnown
+                    || emuManager.locatePattern(EMULATOR_NUMBER, frame, BEAR_JOIN_PLUS_ICON, 80).isFound()) {
+                warListKnown = true;
+                return BearNavigationPolicy.Screen.WAR_LIST;
+            }
             if (emuManager.locatePattern(EMULATOR_NUMBER, frame, GAME_HOME_WORLD, 90).isFound()) {
                 warListKnown = false;
                 if (bearAnchorIsFresh()) {
@@ -1412,11 +1455,6 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                     return BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY;
                 }
                 return BearNavigationPolicy.Screen.WORLD;
-            }
-            if (warListKnown
-                    || emuManager.locatePattern(EMULATOR_NUMBER, frame, BEAR_JOIN_PLUS_ICON, 80).isFound()) {
-                warListKnown = true;
-                return BearNavigationPolicy.Screen.WAR_LIST;
             }
             if (emuManager.locatePattern(EMULATOR_NUMBER, frame, ALLIANCE_TERRITORY_BUTTON, 80).isFound()) {
                 return BearNavigationPolicy.Screen.ALLIANCE_MENU;

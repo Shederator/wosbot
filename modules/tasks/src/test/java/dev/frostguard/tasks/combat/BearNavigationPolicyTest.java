@@ -73,6 +73,16 @@ class BearNavigationPolicyTest {
     }
 
     @Test
+    void knownWarListWinsOverTheWorldVisibleBehindItsOverlay() {
+        assertEquals(BearNavigationPolicy.Screen.WAR_LIST,
+                BearNavigationPolicy.classify(new BearNavigationPolicy.Evidence(
+                        false, false, false, true, false, true, false, false)));
+        assertEquals(BearNavigationPolicy.Screen.WAR_LIST,
+                BearNavigationPolicy.classify(new BearNavigationPolicy.Evidence(
+                        false, false, false, true, false, false, true, false)));
+    }
+
+    @Test
     void reusesTheVerifiedBearAnchorInsteadOfReopeningAlliance() {
         assertEquals(BearNavigationPolicy.Action.TAP_BEAR_ANCHOR,
                 BearNavigationPolicy.next(

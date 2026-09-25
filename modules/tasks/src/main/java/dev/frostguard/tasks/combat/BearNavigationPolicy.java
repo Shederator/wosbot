@@ -69,11 +69,11 @@ final class BearNavigationPolicy {
         if (evidence.rallyTimerPanel()) {
             return Screen.RALLY_TIMER_PANEL;
         }
-        if (evidence.worldRoot()) {
-            return evidence.bearAnchorFresh() ? Screen.WORLD_AT_VERIFIED_BEAR : Screen.WORLD;
-        }
         if (evidence.warListKnown() || evidence.joinButton()) {
             return Screen.WAR_LIST;
+        }
+        if (evidence.worldRoot()) {
+            return evidence.bearAnchorFresh() ? Screen.WORLD_AT_VERIFIED_BEAR : Screen.WORLD;
         }
         if (evidence.allianceMenu()) {
             return Screen.ALLIANCE_MENU;
