@@ -108,6 +108,11 @@ public enum TpDailyTaskEnum {
     TREK_SUPPLIES          (8,   "Trek Supplies",                ConfigurationKeyEnum.TUNDRA_TREK_SUPPLIES_BOOL,              RoutineCategory.RESOURCE),
     VIP_POINTS             (5,   "VIP Points",                   ConfigurationKeyEnum.BOOL_VIP_POINTS,                        RoutineCategory.RESOURCE),
     WAR_ACADEMY            (3,   "War Academy Shards",           ConfigurationKeyEnum.WAR_ACADEMY_TASK_BOOL,                  RoutineCategory.RESOURCE),
+    // Deliberately gated on the SAME bool as Smart Gathering
+    // (GATHER_SMART_PRIORITY_BOOL), not a separate flag - the operator shouldn't need to find and
+    // check a second, unrelated-looking checkbox just to make the one he actually checked
+    // do anything. Enabling Smart Gathering is enabling this scan; there is no standalone toggle.
+    RESOURCE_STOCKPILE_SCAN (902, "Resource Stockpile Scan",     ConfigurationKeyEnum.GATHER_SMART_PRIORITY_BOOL,             RoutineCategory.RESOURCE),
 
     /* ── shop ── */
 
