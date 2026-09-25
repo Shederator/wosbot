@@ -62,6 +62,7 @@ class NotificationCenterControllerTest {
                 "Google Play foreground package after the in-game update action",
                 "Tapped verified Update and captured a fresh frame", "Pause and retry",
                 "gameStopped=true; slotReleased=true",
+                "logs/snapshot/20260921T143012.483Z-initialize-play-store-redirect.png",
                 "bounded log", now.plusHours(1), now.minusMinutes(8), now, 2,
                 acknowledgedAt, recoveredAt);
     }

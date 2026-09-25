@@ -14,16 +14,23 @@ public class ProfileCooldownException extends RuntimeException {
 
     private final LocalDateTime retryAt;
     private final ActionRequiredContext actionRequiredContext;
+    private final String evidencePath;
 
     public ProfileCooldownException(String message, LocalDateTime retryAt) {
-        this(message, retryAt, null);
+        this(message, retryAt, null, "");
     }
 
     public ProfileCooldownException(String message, LocalDateTime retryAt,
             ActionRequiredContext actionRequiredContext) {
+        this(message, retryAt, actionRequiredContext, "");
+    }
+
+    public ProfileCooldownException(String message, LocalDateTime retryAt,
+            ActionRequiredContext actionRequiredContext, String evidencePath) {
         super(message);
         this.retryAt = Objects.requireNonNull(retryAt, "retryAt");
         this.actionRequiredContext = actionRequiredContext;
+        this.evidencePath = evidencePath == null ? "" : evidencePath.trim();
     }
 
     public LocalDateTime getRetryAt() {
@@ -32,5 +39,16 @@ public class ProfileCooldownException extends RuntimeException {
 
     public Optional<ActionRequiredContext> getActionRequiredContext() {
         return Optional.ofNullable(actionRequiredContext);
+    }
+
+    public String getEvidencePath() {
+        return evidencePath;
+    }
+
+    public ProfileCooldownException withEvidencePath(String evidencePath) {
+        ProfileCooldownException copy = new ProfileCooldownException(
+                getMessage(), retryAt, actionRequiredContext, evidencePath);
+        copy.setStackTrace(getStackTrace());
+        return copy;
     }
 }

@@ -143,6 +143,20 @@
           </children>
       </HBox>
 
+      <VBox styleClass="content-card" VBox.vgrow="NEVER">
+          <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-teal">
+              <children><Label text="Diagnostics" /></children>
+          </HBox>
+          <VBox spacing="10" styleClass="content-card-inner">
+              <CheckBox fx:id="checkboxDesktopSnapshots" mnemonicParsing="false" wrapText="true"
+                        maxWidth="Infinity"
+                        text="Save a desktop screenshot alongside diagnostic snapshots" />
+              <Label text="Off by default. The image can include other windows. macOS is not tested."
+                     styleClass="description-label" style="-fx-text-fill: #8b949e; -fx-font-size: 11;"
+                     wrapText="true" />
+          </VBox>
+      </VBox>
+
    </children>
 </VBox>
     </content>

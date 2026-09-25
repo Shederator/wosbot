@@ -116,6 +116,9 @@ public class EmuConfigLayoutController {
 	@FXML
 	private CheckBox checkboxHideAnalyticsLogs;
 
+	@FXML
+	private CheckBox checkboxDesktopSnapshots;
+
 	/* ── Internal state ── */
 
 	private final FileChooser fileChooser = new FileChooser();
@@ -136,6 +139,7 @@ public class EmuConfigLayoutController {
 		configureStopBehaviorDropdowns(globalConfig);
 		configureAutoStartSection(globalConfig);
 		configureAnalyticsToggles(globalConfig);
+		configureDesktopSnapshots(globalConfig);
 	}
 
 	/* ────────────────────────────────────────────────
@@ -438,6 +442,16 @@ public class EmuConfigLayoutController {
 		checkboxHideAnalyticsLogs.selectedProperty().addListener((obs, prev, now) ->
 			ConfigService.obtain().writeGlobalSetting(
 					ConfigurationKeyEnum.HIDE_ANALYTICS_LOGS_BOOL, String.valueOf(now)));
+	}
+
+	private void configureDesktopSnapshots(Map<String, String> cfg) {
+		boolean enabled = Boolean.parseBoolean(cfg.getOrDefault(
+				ConfigurationKeyEnum.DESKTOP_SNAPSHOT_ENABLED_BOOL.name(),
+				ConfigurationKeyEnum.DESKTOP_SNAPSHOT_ENABLED_BOOL.getDefaultValue()));
+		checkboxDesktopSnapshots.setSelected(enabled);
+		checkboxDesktopSnapshots.selectedProperty().addListener((obs, prev, now) ->
+				ConfigService.obtain().writeGlobalSetting(
+						ConfigurationKeyEnum.DESKTOP_SNAPSHOT_ENABLED_BOOL, String.valueOf(now)));
 	}
 
 	/* ────────────────────────────────────────────────

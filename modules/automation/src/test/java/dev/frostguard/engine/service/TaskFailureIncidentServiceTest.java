@@ -95,6 +95,6 @@ class TaskFailureIncidentServiceTest {
                 7L, "Dave", "TASK", "Test task", signature,
                 "Task repeatedly failed", "The same operation failed",
                 "Successful completion", "Transient failure", "Attempted operation",
-                "Retry later", "No cleanup", LocalDateTime.now().plusMinutes(5), 3);
+                "Retry later", "No cleanup", LocalDateTime.now().plusMinutes(5), 3, "");
     }
 }

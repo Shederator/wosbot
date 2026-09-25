@@ -1,8 +1,8 @@
 package dev.frostguard.app.panel.console;
 
 import dev.frostguard.api.runtime.WorkspacePaths;
+import dev.frostguard.app.shared.LocalFileOpener;
 
-import java.awt.Desktop;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,6 +25,7 @@ import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
@@ -34,9 +35,14 @@ import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.text.Text;
+import javafx.stage.Window;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class ConsoleLogLayoutController implements ProfileDataChangeListener {
 
+	private static final Logger logger = LoggerFactory.getLogger(ConsoleLogLayoutController.class);
 	private static final String ALL_PROFILES = "All profiles";
 	private static final String ALL_LEVELS = "All levels";
 	private static final int MAX_LOG_ROWS = 600;
@@ -112,13 +118,24 @@ public class ConsoleLogLayoutController implements ProfileDataChangeListener {
 
 	@FXML
 	void handleButtonOpenLogFolder(ActionEvent event) {
+		Path logsDir = WorkspacePaths.current().logs();
 		try {
-			Path logsDir = WorkspacePaths.current().logs();
 			Files.createDirectories(logsDir);
-			Desktop.getDesktop().open(logsDir.toFile());
-		} catch (IOException e) {
-			System.err.println("Error opening logs folder: " + e.getMessage());
-			e.printStackTrace();
+			LocalFileOpener.open(logsDir);
+			logger.info("Opened logs folder {}", logsDir);
+		} catch (IOException | RuntimeException failure) {
+			logger.warn("Could not open logs folder {}: {}", logsDir, failure.toString());
+			Alert alert = new Alert(Alert.AlertType.WARNING);
+			alert.setTitle("Logs folder");
+			alert.setHeaderText("Could not open the logs folder");
+			alert.setContentText(logsDir + System.lineSeparator() + failure.getMessage());
+			if (buttonOpenLogFolder.getScene() != null) {
+				Window window = buttonOpenLogFolder.getScene().getWindow();
+				if (window != null) {
+					alert.initOwner(window);
+				}
+			}
+			alert.showAndWait();
 		}
 	}
 

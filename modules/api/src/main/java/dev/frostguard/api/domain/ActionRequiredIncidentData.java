@@ -16,6 +16,7 @@ public record ActionRequiredIncidentData(
         String lastAction,
         String retryOrFallback,
         String resourceOutcome,
+        String evidencePath,
         String logExcerpt,
         LocalDateTime retryAt,
         LocalDateTime firstSeenAt,

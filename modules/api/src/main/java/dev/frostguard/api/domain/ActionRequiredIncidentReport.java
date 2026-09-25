@@ -20,7 +20,8 @@ public record ActionRequiredIncidentReport(
         String lastAction,
         String retryOrFallback,
         String resourceOutcome,
-        LocalDateTime retryAt) {
+        LocalDateTime retryAt,
+        String evidencePath) {
 
     public ActionRequiredIncidentReport {
         Objects.requireNonNull(profileId, "profileId");
@@ -35,6 +36,7 @@ public record ActionRequiredIncidentReport(
         lastAction = normalize(lastAction);
         retryOrFallback = normalize(retryOrFallback);
         resourceOutcome = normalize(resourceOutcome);
+        evidencePath = normalize(evidencePath);
     }
 
     private static String requireText(String value, String name) {

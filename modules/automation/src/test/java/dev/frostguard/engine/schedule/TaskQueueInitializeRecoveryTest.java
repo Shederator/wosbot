@@ -2,20 +2,28 @@ package dev.frostguard.engine.schedule;
 
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.runtime.WorkspacePaths;
 import dev.frostguard.api.runtime.WorkspaceSession;
 import dev.frostguard.data.entity.DailyTask;
 import dev.frostguard.data.repository.DailyTaskRepository;
+import dev.frostguard.engine.diagnostics.DiagnosticSnapshotStore;
 import dev.frostguard.engine.error.ActionRequiredContext;
 import dev.frostguard.engine.error.ProfileCooldownException;
+import dev.frostguard.engine.service.ActionRequiredIncidentService;
 import dev.frostguard.engine.service.ProfileService;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -90,6 +98,49 @@ class TaskQueueInitializeRecoveryTest {
                 "verified overlay recovery must not create an Initialize retry");
     }
 
+    @Test
+    void terminalSnapshotIsOnDiskBeforeCooldownStopsTheGame() throws Exception {
+        Path snapshotWorkspace = Files.createTempDirectory("initialize-snapshot-order");
+        try {
+            DiagnosticSnapshotStore store = new DiagnosticSnapshotStore(snapshotWorkspace);
+            AccountDescriptor profile = new AccountDescriptor(
+                    null, "Initialize snapshot " + UUID.randomUUID(), "0", false, 100L, 30L);
+            ProfileService.obtain().createAccount(profile);
+            LocalDateTime retryAt = LocalDateTime.now().plusMinutes(15).truncatedTo(ChronoUnit.SECONDS);
+            SnapshotBeforeReleaseInitialize task =
+                    new SnapshotBeforeReleaseInitialize(profile, retryAt, store);
+            RecordingQueue queue = new RecordingQueue(profile);
+            queue.beforeGameStop = () -> assertTrue(
+                    Files.isRegularFile(snapshotWorkspace.resolve(task.evidencePath)),
+                    "the startup frame must exist before the game process is stopped");
+            queue.enqueue(task);
+
+            queue.runSchedulerTick();
+
+            assertEquals(1, queue.gameStopCount);
+            assertEquals(1, queue.slotReleaseCount);
+            String diagnostics = ActionRequiredIncidentService.formatDiagnostics(
+                    ActionRequiredIncidentService.obtain().findAll().stream()
+                            .filter(incident -> task.evidencePath.equals(incident.evidencePath()))
+                            .findFirst()
+                            .orElseThrow());
+            assertTrue(diagnostics.contains(task.evidencePath));
+        } finally {
+            deleteRecursively(snapshotWorkspace);
+        }
+    }
+
+    private static void deleteRecursively(Path root) throws Exception {
+        if (!Files.exists(root)) {
+            return;
+        }
+        try (Stream<Path> walk = Files.walk(root)) {
+            for (Path path : walk.sorted(Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(path);
+            }
+        }
+    }
+
     private static final class UnknownOverlayCooldownInitialize extends DelayedTask {
 
         private final LocalDateTime retryAt;
@@ -121,6 +172,40 @@ class TaskQueueInitializeRecoveryTest {
                 () -> "expected " + expected + " but was " + actual);
     }
 
+    private static final class SnapshotBeforeReleaseInitialize extends DelayedTask {
+
+        private final LocalDateTime retryAt;
+        private final DiagnosticSnapshotStore store;
+        private String evidencePath = "";
+
+        private SnapshotBeforeReleaseInitialize(
+                AccountDescriptor profile, LocalDateTime retryAt, DiagnosticSnapshotStore store) {
+            super(profile, TpDailyTaskEnum.INITIALIZE);
+            this.retryAt = retryAt;
+            this.store = store;
+        }
+
+        @Override
+        protected void execute() {
+            evidencePath = store.write(
+                    RawImageData.capture(new byte[2 * 2 * 4], 2, 2, 4),
+                    "initialize",
+                    "initialize-blocked",
+                    Instant.parse("2026-09-24T00:03:34.136Z")).orElseThrow();
+            throw new ProfileCooldownException(
+                    "home/world remained unavailable after bounded in-game recovery",
+                    retryAt,
+                    new ActionRequiredContext(
+                            "startup.home-unavailable-after-game-back",
+                            "Startup remains blocked after automatic recovery",
+                            "home/world",
+                            "unsupported startup screen",
+                            "One bounded Android Back in the foreground game",
+                            "Stop the game, release the slot, and retry after fifteen minutes"),
+                    evidencePath);
+        }
+    }
+
     private static final class VerifiedOverlayInitialize extends DelayedTask {
 
         private int executionCount;
@@ -144,6 +229,8 @@ class TaskQueueInitializeRecoveryTest {
         private int gameStopCount;
         private int slotReleaseCount;
         private int idleTransitionCount;
+        private Runnable beforeGameStop = () -> {
+        };
 
         private RecordingQueue(AccountDescriptor profile) {
             super(profile);
@@ -157,6 +244,7 @@ class TaskQueueInitializeRecoveryTest {
 
         @Override
         protected boolean stopBlockedGameProcess(DelayedTask task) {
+            beforeGameStop.run();
             gameStopCount++;
             return true;
         }
