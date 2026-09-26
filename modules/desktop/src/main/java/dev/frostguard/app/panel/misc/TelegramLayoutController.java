@@ -13,6 +13,7 @@ import java.util.Properties;
 
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.engine.service.ConfigService;
+import dev.frostguard.engine.service.DesktopJarLocator;
 import dev.frostguard.engine.service.TelegramBotService;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
@@ -240,31 +241,8 @@ public class TelegramLayoutController {
             }
         } catch (Exception ignored) {}
 
-        // 2. Relative path from working directory (project layout: modules/desktop/target/)
-        File targetDir = new File(System.getProperty("user.dir"),
-                "modules" + File.separator + "desktop" + File.separator + "target");
-        String found = findFrostguardJar(targetDir);
-        if (found != null) return found;
-
-        // 3. Current working directory itself
-        found = findFrostguardJar(new File(System.getProperty("user.dir")));
-        if (found != null) return found;
-
-        return "";
-    }
-
-    /** Scans a directory for the newest desktop application JAR. */
-    private static String findFrostguardJar(File dir) {
-        if (dir == null || !dir.isDirectory()) return null;
-        File[] candidates = dir.listFiles(
-                f -> f.isFile() && f.getName().startsWith("frostguard-desktop-")
-                        && f.getName().endsWith(".jar"));
-        if (candidates != null && candidates.length > 0) {
-            // Pick the lexicographically last name (highest version)
-            java.util.Arrays.sort(candidates, java.util.Comparator.comparing(File::getName).reversed());
-            return candidates[0].getAbsolutePath();
-        }
-        return null;
+        // 2. Search source and portable layouts from runtime anchor points.
+        return DesktopJarLocator.detect().map(Path::toString).orElse("");
     }
 
     /** Mirrors TelegramWatcher.configFilePath() – path convention kept in sync manually. */
