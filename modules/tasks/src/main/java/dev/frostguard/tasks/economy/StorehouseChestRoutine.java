@@ -8,7 +8,6 @@ import java.util.regex.Pattern;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.convert.RegexNumberParser;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
-import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.ImageSearchResultData;
@@ -31,9 +30,8 @@ import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
  * <ul>
  * <li>Navigates to the Storehouse via Research Center</li>
  * <li>Claims daily chest rewards (available every few hours)</li>
- * <li>Claims stamina rewards (available once per day at game reset)</li>
- * <li>Reads timers via OCR to determine next availability</li>
- * <li>Reschedules based on the nearest reward time</li>
+ * <li>Claims a visible stamina can on the same visit</li>
+ * <li>Reads the on-building countdown via OCR to schedule the next chest visit</li>
  * </ul>
  * 
  * <p>
@@ -77,6 +75,9 @@ public class StorehouseChestRoutine extends DelayedTask {
     private static final int SCROLL_ATTEMPT_COUNT = 2;
     private static final int SCROLL_REPEAT_DELAY = 300;
 
+    // On-building countdown glyphs measured on a 720x1280 city frame.
+    private static final Color BUILDING_TIMER_GREEN = new Color(61, 216, 13);
+
     // ========== OCR Settings ==========
     private static final OcrSettingsData STAMINA_OCR_SETTINGS = OcrSettingsData.assembler()
             .setTextColor(new Color(248, 247, 234))
@@ -86,13 +87,10 @@ public class StorehouseChestRoutine extends DelayedTask {
 
             .build();
 
-    // ========== Configuration (loaded in loadConfiguration()) ==========
-    private String storedStaminaTime;
     private ResilientOcrExecutor<LocalDateTime> textHelper;
 
     // ========== Execution State (reset each execution) ==========
     private LocalDateTime nextChestTime;
-    private LocalDateTime nextStaminaTime;
 
     public StorehouseChestRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDailyTask) {
         super(profile, tpDailyTask);
@@ -104,31 +102,16 @@ public class StorehouseChestRoutine extends DelayedTask {
     }
 
     /**
-     * Loads task configuration from profile.
-     */
-    private void loadConfiguration() {
-        // Check if we have a stored stamina claim time
-        String storedStaminaTime = profile.getConfig(
-                ConfigurationKeyEnum.STOREHOUSE_STAMINA_CLAIM_TIME_STRING, String.class);
-        this.storedStaminaTime = storedStaminaTime;
-
-        this.textHelper = new ResilientOcrExecutor<>(provider);
-
-        logDebug(String.format("Configuration loaded - Stored stamina time: %s", storedStaminaTime));
-    }
-
-    /**
      * Resets execution-specific state.
      */
     private void resetExecutionState() {
         this.nextChestTime = null;
-        this.nextStaminaTime = null;
         logDebug("Execution state reset");
     }
 
     @Override
     protected void execute() {
-        loadConfiguration();
+        this.textHelper = new ResilientOcrExecutor<>(provider);
         resetExecutionState();
 
         if (!openStorehouse()) {
@@ -138,13 +121,8 @@ public class StorehouseChestRoutine extends DelayedTask {
         }
 
         processChestReward();
-
-        if (isTimeToClaimStamina()) {
-            processStaminaReward();
-        }
-
+        processStaminaReward();
         scheduleToNearestTime();
-
     }
 
     /**
@@ -272,35 +250,8 @@ public class StorehouseChestRoutine extends DelayedTask {
     }
 
     /**
-     * Checks if it's time to claim the stamina reward.
-     * Stamina is claimed once per day at game reset.
-     */
-    private boolean isTimeToClaimStamina() {
-
-        if (storedStaminaTime != null && !storedStaminaTime.isEmpty()) {
-            try {
-                LocalDateTime nextClaimTime = LocalDateTime.parse(storedStaminaTime);
-                boolean timeToClaimAgain = LocalDateTime.now().isAfter(nextClaimTime);
-
-                if (!timeToClaimAgain) {
-                    logDebug("Stamina already claimed. Next claim at: " + nextClaimTime.format(DATETIME_FORMATTER));
-                }
-
-                nextStaminaTime = nextClaimTime;
-
-                return timeToClaimAgain;
-            } catch (Exception e) {
-                logWarning("Failed to parse stored stamina claim time: " + e.getMessage());
-            }
-        }
-
-        // First run or invalid stored time - allow claiming
-        return true;
-    }
-
-    /**
-     * Processes the stamina reward.
-     * Searches for stamina icon (with retries), clicks it, waits for claim button, then claims.
+     * Processes the stamina reward whenever the can is on screen.
+     * A stored claim time must not hide a can that is still visible.
      */
     private void processStaminaReward() {
         logInfo("Searching for Storehouse stamina reward icon (with retries).");
@@ -309,29 +260,22 @@ public class StorehouseChestRoutine extends DelayedTask {
                 TemplatesEnum.STOREHOUSE_STAMINA,
                 SearchConfigConstants.SINGLE_WITH_RETRIES);
 
-        if (stamina.isFound()) {
-            logInfo("Stamina icon found. Tapping to open popup.");
-            tapInside(stamina);
-            
-            // Changed by pernerch | Date: 2026-07-02 | Why: wait for claim button visibility confirmation (not blind wait) before proceeding with claim.
-            logDebug("Waiting for claim button to appear in popup...");
-            if (!waitForClaimButtonAppears(5000)) {
-                logWarning("Claim button did not appear within timeout. Popup may not have loaded properly.");
-                nextStaminaTime = LocalDateTime.now().plusMinutes(5);
-            } else {
-                logDebug("Claim button confirmed visible. Proceeding with claim.");
-                claimStaminaReward();
-                nextStaminaTime = GameTimeUtils.nextCycleReset();
-            }
-        } else {
-            logWarning("Stamina icon not found after retries. Will retry in 1 hour as fallback.");
-            nextStaminaTime = LocalDateTime.now().plusHours(1);
+        if (!stamina.isFound()) {
+            logWarning("Stamina icon not found after retries.");
+            return;
         }
 
-        // Store the next claim time
-        writeProfileSetting(
-                ConfigurationKeyEnum.STOREHOUSE_STAMINA_CLAIM_TIME_STRING,
-                nextStaminaTime.toString());
+        logInfo("Stamina icon found. Tapping to open popup.");
+        tapInside(stamina);
+
+        logDebug("Waiting for claim button to appear in popup...");
+        if (!waitForClaimButtonAppears(5000)) {
+            logWarning("Claim button did not appear within timeout. Popup may not have loaded properly.");
+            return;
+        }
+
+        logDebug("Claim button confirmed visible. Proceeding with claim.");
+        claimStaminaReward();
     }
 
     /**
@@ -368,8 +312,7 @@ public class StorehouseChestRoutine extends DelayedTask {
      * Claims the stamina reward and updates stamina service.
      */
     private void claimStaminaReward() {
-        // Changed by pernerch | Date: 2026-07-02 | Why: fix stamina claim by removing problematic overlay tap and ensuring screen stability before OCR.
-        // Let stamina details screen fully render
+        // Let the stamina details screen finish rendering before the amount OCR.
         sleepTask(1000);
 
         // Dismiss tutorial overlay (if present) by tapping on a safe neutral area, not on the stamina display itself
@@ -423,7 +366,7 @@ public class StorehouseChestRoutine extends DelayedTask {
                 .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
 
                 .stripBackground(true)
-                .setTextColor(new Color(255, 255, 255))
+                .setTextColor(BUILDING_TIMER_GREEN)
                 .charWhitelist("0123456789:")
                 .build();
 
@@ -455,63 +398,31 @@ public class StorehouseChestRoutine extends DelayedTask {
     }
 
     /**
-     * Schedules the task to the nearest reward time.
-     * Chest claims are checked more frequently than stamina (once per reset).
+     * Schedules the next visit from the chest countdown.
+     * A visible stamina can is claimed on the current visit, so it does not
+     * compete for this schedule. Using the full countdown as the stamina pick
+     * time would arrive as the can expires.
      */
     private void scheduleToNearestTime() {
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime nextReset = GameTimeUtils.dailyResetTime();
 
-        // Validate chest time
         if (nextChestTime != null && nextChestTime.isBefore(now)) {
             logDebug("Chest time is in the past, treating as invalid.");
             nextChestTime = null;
         }
 
-        // Cap chest time at reset to avoid missing stamina
-        if (nextChestTime != null && nextChestTime.isAfter(nextReset)) {
-            logInfo("Chest time exceeds reset, capping at reset time.");
-            nextChestTime = nextReset;
-        }
-
-        // Validate stamina time
-        if (nextStaminaTime != null && nextStaminaTime.isBefore(now)) {
-            logDebug("Stamina time is in the past, treating as invalid.");
-            nextStaminaTime = null;
-        }
-
-        // Determine which time is nearest and valid
         LocalDateTime scheduledTime;
         String reason;
-
-        if (nextChestTime == null && nextStaminaTime == null) {
+        if (nextChestTime == null) {
             scheduledTime = LocalDateTime.now().plusMinutes(FALLBACK_RESCHEDULE_MINUTES);
-            reason = "No valid times (fallback)";
-        } else if (nextChestTime == null) {
-            scheduledTime = nextStaminaTime;
-            reason = "stamina claim";
-        } else if (nextStaminaTime == null) {
+            reason = "no valid chest time (fallback)";
+        } else {
             scheduledTime = nextChestTime;
             reason = "chest claim";
-        } else {
-            // Both times valid - pick nearest
-            if (nextChestTime.isBefore(nextStaminaTime)) {
-                scheduledTime = nextChestTime;
-                reason = "chest claim (nearest)";
-            } else {
-                scheduledTime = nextStaminaTime;
-                reason = "stamina claim (nearest)";
-            }
         }
 
         logInfo(String.format("Rescheduling for %s at: %s",
                 reason, scheduledTime.format(DATETIME_FORMATTER)));
-
-        if (!reason.contains("fallback")) {
-            logDebug(String.format("Chest: %s, Stamina: %s",
-                    (nextChestTime != null) ? nextChestTime.format(DATETIME_FORMATTER) : "null",
-                    (nextStaminaTime != null) ? nextStaminaTime.format(DATETIME_FORMATTER) : "null"));
-        }
 
         reschedule(scheduledTime);
     }
