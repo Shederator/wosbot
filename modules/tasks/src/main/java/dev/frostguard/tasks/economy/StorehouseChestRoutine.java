@@ -64,8 +64,8 @@ public class StorehouseChestRoutine extends DelayedTask {
     private static final PointData STAMINA_CLAIM_BUTTON_BOTTOM_RIGHT = new PointData(450, 950);
 
     // ========== Fallback Timer OCR ==========
-    private static final PointData FALLBACK_TIMER_TOP_LEFT = new PointData(285, 642);
-    private static final PointData FALLBACK_TIMER_BOTTOM_RIGHT = new PointData(430, 666);
+    static final PointData FALLBACK_TIMER_TOP_LEFT = new PointData(285, 642);
+    static final PointData FALLBACK_TIMER_BOTTOM_RIGHT = new PointData(430, 666);
 
     // ========== Constants ==========
     private static final int TIMER_OCR_MAX_ATTEMPTS = 3;
@@ -76,7 +76,7 @@ public class StorehouseChestRoutine extends DelayedTask {
     private static final int SCROLL_REPEAT_DELAY = 300;
 
     // On-building countdown glyphs measured on a 720x1280 city frame.
-    private static final Color BUILDING_TIMER_GREEN = new Color(61, 216, 13);
+    static final Color BUILDING_TIMER_GREEN = new Color(61, 216, 13);
 
     // ========== OCR Settings ==========
     private static final OcrSettingsData STAMINA_OCR_SETTINGS = OcrSettingsData.assembler()
@@ -362,20 +362,12 @@ public class StorehouseChestRoutine extends DelayedTask {
     private LocalDateTime readFallbackTimer() {
         logDebug("Attempting fallback timer reading.");
 
-        OcrSettingsData configs = OcrSettingsData.assembler()
-                .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
-
-                .stripBackground(true)
-                .setTextColor(BUILDING_TIMER_GREEN)
-                .charWhitelist("0123456789:")
-                .build();
-
         LocalDateTime cooldown = textHelper.attemptRecognition(
                 FALLBACK_TIMER_TOP_LEFT,
                 FALLBACK_TIMER_BOTTOM_RIGHT,
                 TIMER_OCR_MAX_ATTEMPTS,
                 200L,
-                configs,
+                buildingCountdownSettings(),
                 GameTimeUtils::isAcceptedFormat,
                 text -> LocalDateTime.now().plus(GameTimeUtils.parseDuration(text)));
 
@@ -398,11 +390,26 @@ public class StorehouseChestRoutine extends DelayedTask {
     }
 
     /**
-     * Schedules the next visit from the chest countdown.
-     * A visible stamina can is claimed on the current visit, so it does not
-     * compete for this schedule. Using the full countdown as the stamina pick
-     * time would arrive as the can expires.
+     * Next visit from the chest countdown alone. A missing or past countdown
+     * retries after five minutes. A stored stamina instant is not an input:
+     * a visible can is claimed on the current visit.
      */
+    static LocalDateTime nextChestVisit(LocalDateTime now, LocalDateTime nextChestTime) {
+        if (nextChestTime == null || nextChestTime.isBefore(now)) {
+            return now.plusMinutes(FALLBACK_RESCHEDULE_MINUTES);
+        }
+        return nextChestTime;
+    }
+
+    static OcrSettingsData buildingCountdownSettings() {
+        return OcrSettingsData.assembler()
+                .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
+                .stripBackground(true)
+                .setTextColor(BUILDING_TIMER_GREEN)
+                .charWhitelist("0123456789:")
+                .build();
+    }
+
     private void scheduleToNearestTime() {
         LocalDateTime now = LocalDateTime.now();
 
@@ -411,15 +418,10 @@ public class StorehouseChestRoutine extends DelayedTask {
             nextChestTime = null;
         }
 
-        LocalDateTime scheduledTime;
-        String reason;
-        if (nextChestTime == null) {
-            scheduledTime = LocalDateTime.now().plusMinutes(FALLBACK_RESCHEDULE_MINUTES);
-            reason = "no valid chest time (fallback)";
-        } else {
-            scheduledTime = nextChestTime;
-            reason = "chest claim";
-        }
+        LocalDateTime scheduledTime = nextChestVisit(now, nextChestTime);
+        String reason = nextChestTime == null
+                ? "no valid chest time (fallback)"
+                : "chest claim";
 
         logInfo(String.format("Rescheduling for %s at: %s",
                 reason, scheduledTime.format(DATETIME_FORMATTER)));
