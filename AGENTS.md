@@ -57,6 +57,8 @@ fixture still proves the intended behavior. Run at least the affected module
 tests; use a full reactor build for cross-module or packaging changes.
 For supported world-map screenshots, use the standalone redactor documented in tools/privacy-redactor/README.md, then manually review the output before committing or sharing it.
 
+Review the tests that already cover the change and add or extend one when the changed behavior is a direct check, including a saved frame for vision, OCR, or pattern changes.
+
 ## Shared Engineering Rules
 
 - Use Java 21 conservatively, keep packages under `dev.frostguard`, use 4-space
