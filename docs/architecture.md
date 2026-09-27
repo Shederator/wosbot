@@ -109,6 +109,9 @@ Engine services are the normal callers. UI controllers should prefer engine serv
 `modules/vision` owns low-level image and OCR primitives:
 
 - `OpenCvPatternLocator` loads OpenCV and performs template matching.
+- `CloseCrossDetector` searches a predefined screen region or caller-supplied
+  area for light close-cross controls and returns full-frame bounds and center;
+  it does not interact with the emulator.
 - `TesseractOcrProvider` integrates Tess4J/Tesseract.
 - `ResilientOcrExecutor` adds retry and validation behavior around OCR extraction.
 - PNG templates live under `modules/vision/src/main/resources/templates`.
