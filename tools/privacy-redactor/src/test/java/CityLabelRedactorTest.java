@@ -14,6 +14,7 @@ class CityLabelRedactorTest {
 
     private static final Color NAMEPLATE = new Color(75, 83, 105);
     private static final Color CYAN = new Color(91, 186, 231);
+    private static final Color PRIVATE_OVERLAY = new Color(55, 72, 102);
 
     @Test
     void matchesReviewedSyntheticCityLabelSnapshot() throws IOException {
@@ -45,6 +46,24 @@ class CityLabelRedactorTest {
                 "The detected print area must be redacted up to the button column");
         assertEquals(CYAN.getRGB(), result.image().getRGB(635, 863),
                 "The protected right-side button column must not be painted");
+    }
+
+    @Test
+    void coversFixedProfilePortraitWithoutChangingNearbyPixels() {
+        BufferedImage frame = new BufferedImage(720, 1280, BufferedImage.TYPE_INT_ARGB);
+        Color insidePortrait = new Color(180, 30, 20);
+        Color outsidePortrait = new Color(20, 30, 180);
+        frame.setRGB(40, 40, insidePortrait.getRGB());
+        frame.setRGB(140, 40, outsidePortrait.getRGB());
+
+        BufferedImage redacted = CityLabelRedactor.redact(frame).image();
+
+        assertEquals(PRIVATE_OVERLAY.getRGB(), redacted.getRGB(40, 40));
+        assertEquals(outsidePortrait.getRGB(), redacted.getRGB(140, 40));
+
+        BufferedImage repeated = CityLabelRedactor.redact(redacted).image();
+        assertEquals(PRIVATE_OVERLAY.getRGB(), repeated.getRGB(40, 40));
+        assertEquals(outsidePortrait.getRGB(), repeated.getRGB(140, 40));
     }
 
     @Test
