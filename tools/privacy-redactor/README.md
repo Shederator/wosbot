@@ -6,9 +6,10 @@ opaque cyan block, preserving the nameplate border and the fixed right-side
 button column. Green labels such as `My City` are intentionally left unchanged.
 
 The empirical coordinate text and chat regions from the standard `720x1280`
-viewport are also covered with opaque grey-blue blocks. Those regions scale
-proportionally for other image sizes. The tool uses only the Java standard
-library and does not build or start Frostguard.
+viewport are also covered with opaque grey-blue blocks. The top-left profile
+portrait is covered by the fixed `720x1280` rectangle at `(4, 4)` with size
+`88x88`. Those fixed regions scale proportionally for other image sizes. The
+tool uses only the Java standard library and does not build or start Frostguard.
 
 Run it from the repository root with Java 21 or newer:
 
@@ -22,7 +23,7 @@ repository root.
 The output is always a new PNG; the input file is never modified. Review the
 result before sharing or committing it. The tool does not currently redact
 profile names, account identifiers, or private text outside the detected city
-labels, coordinate bar, and chat region.
+labels, coordinate bar, chat region, and top-left profile portrait.
 
 Run its standalone regression tests from the repository root:
 

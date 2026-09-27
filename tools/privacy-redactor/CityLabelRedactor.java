@@ -22,6 +22,8 @@ public final class CityLabelRedactor {
             new RedactionArea(220, 1052, 270, 31);
     private static final RedactionArea CHAT_AREA =
             new RedactionArea(0, 1105, 720, 74);
+    private static final RedactionArea PROFILE_PORTRAIT_AREA =
+            new RedactionArea(4, 4, 88, 88);
     private static final List<RedactionArea> PRIVATE_OVERLAY_AREAS = List.of(
             new RedactionArea(0, 92, 220, 20),
             new RedactionArea(704, 125, 16, 50));
@@ -95,6 +97,7 @@ public final class CityLabelRedactor {
             }
             fillScaled(graphics, COORDINATES_TEXT_AREA, width, height, COORDINATES_REDACTION);
             fillScaled(graphics, CHAT_AREA, width, height, CHAT_REDACTION);
+            fillScaled(graphics, PROFILE_PORTRAIT_AREA, width, height, PRIVATE_OVERLAY_REDACTION);
             for (RedactionArea area : PRIVATE_OVERLAY_AREAS) {
                 fillScaled(graphics, area, width, height, PRIVATE_OVERLAY_REDACTION);
             }
