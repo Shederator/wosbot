@@ -4,6 +4,10 @@ import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.domain.*;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
+import dev.frostguard.engine.helper.FurnacePanelDetector;
+import dev.frostguard.engine.diagnostics.DiagnosticSnapshotStore;
+import dev.frostguard.tasks.city.CityUpgradeFlow.Attempt;
+import dev.frostguard.tasks.city.CityUpgradeFlow.FailureReason;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.nav.SidebarSection;
 import dev.frostguard.engine.schedule.DelayedTask;
@@ -50,7 +54,13 @@ private static final int BLOCKER_RELEASE_GRACE_MINUTES = 5;
 
 private static final int COMPLETION_SETTLE_SECONDS = 2;
 
-private static final int MAX_RECOMMENDED_BUILDING_ATTEMPTS = 2;
+private static final int BUILDING_CONTROL_CHECKS = 3;
+
+private static final int BUILDING_CONTROL_POLL_MS = 300;
+
+private static final int UPGRADE_CONFIRMATION_THRESHOLD = 90;
+
+private final CityUpgradeDiagnostics diagnostics = new CityUpgradeDiagnostics();
 
 private static final int TEMPLATE_TAP_RADIUS = 8;
 
@@ -65,19 +75,6 @@ private static final SearchConfig REPLENISH_BUTTON_RECHECK = SearchConfig.builde
         .withCoordinates(new PointData(180, 1070), new PointData(535, 1195))
         .build();
 
-private static final SearchConfig BUILDING_CONFIRM_UPGRADE_SEARCH = SearchConfig.builder()
-        .withMaxAttempts(3)
-        .withDelay(300)
-        .withThreshold(90)
-        .withArea(BUILDING_CONFIRM_UPGRADE_SEARCH_AREA_VALUE)
-        .build();
-
-private static final SearchConfig BUILDING_CONFIRM_UPGRADE_POSTCONDITION = SearchConfig.builder()
-        .withMaxAttempts(1)
-        .withThreshold(90)
-        .withArea(BUILDING_CONFIRM_UPGRADE_SEARCH_AREA_VALUE)
-        .build();
-
 private final List<AreaData> queues = new ArrayList<>(Arrays.asList(QUEUE_AREA_1_VALUE, QUEUE_AREA_2_VALUE));
 
 public UpgradeBuildingsRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDailyTaskEnum) {
@@ -86,8 +83,29 @@ public UpgradeBuildingsRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDail
 
 @Override
     protected void execute() {
+        CityUpgradeFlow.execute(this::executeQueues, new CityUpgradeFlow.Recovery() {
+            @Override
+            public void retainFailure(String type) {
+                retainDiagnostic(type, false);
+            }
 
+            @Override
+            public void recoverRoot() {
+                recoverLocation(LaunchPoint.ANY);
+            }
 
+            @Override
+            public void reportRecovery(boolean recovered, RuntimeException original, RuntimeException recoveryFailure) {
+                logWarning(routineLogUpgradeBuildingsLine("Failure recovery: rootConfirmed=" + recovered
+                        + "; original=" + original.getMessage()
+                        + (recoveryFailure == null ? "; scheduler will retain the original failure and retry"
+                                : "; recoveryFailure=" + recoveryFailure.getMessage())));
+            }
+        });
+    }
+
+private void executeQueues() {
+        diagnostics.begin(0, 0);
         reachCityView();
 
 
@@ -124,7 +142,7 @@ public UpgradeBuildingsRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDail
                 }
             }
 
-            navigationHelper.ensureCorrectScreenLocation(LaunchPoint.HOME);
+            recoverLocation(LaunchPoint.HOME);
 
             logInfo(routineLogUpgradeBuildingsLine("Reanalyzing queues after processing idle queues..."));
 
@@ -211,21 +229,6 @@ private record ProductionBlocker(Set<ConstructionBlockerRegistry.Consumer> consu
 private record QueueHandlingResult(boolean constructionAttempted, ProductionBlocker blocker) {
     }
 
-private record QueueAttemptResult(boolean handled, ProductionBlocker blocker) {
-
-        private static QueueAttemptResult completed() {
-            return new QueueAttemptResult(true, null);
-        }
-
-        private static QueueAttemptResult blockedBy(ProductionBlocker blocker) {
-            return new QueueAttemptResult(true, blocker);
-        }
-
-        private static QueueAttemptResult unresolved() {
-            return new QueueAttemptResult(false, null);
-        }
-    }
-
 private String routineLogUpgradeBuildingsLine(String note) {
         return "UpgradeBuildingsRoutine | " + note;
     }
@@ -280,7 +283,7 @@ private PointData foundPoint(ImageSearchResultData result) {
         return result != null && result.isFound() ? result.getPoint() : null;
     }
 
-private void handleSurvivorBuilding() {
+private FailureReason handleSurvivorBuilding() {
         logInfo(routineLogUpgradeBuildingsLine("Handling Survivor Building"));
 
 
@@ -297,11 +300,14 @@ private void handleSurvivorBuilding() {
         }
 
 
+        if (!survivorUpgrade.isFound()) {
+            return FailureReason.CONTROL_NOT_RECOGNIZED;
+        }
         tapInside(survivorUpgrade.getPoint(), survivorUpgrade.getPoint(), 1, 1000);
 
 
         if (!refillResourcesIfNeededFlow()) {
-            return;
+            return FailureReason.RESOURCES_NOT_OBTAINED;
         }
 
 
@@ -312,10 +318,11 @@ private void handleSurvivorBuilding() {
             sleepTask(500);
             tapInside(new PointData(540, 1200), new PointData(700, 1250), 1, 1000);
         }
+        return null;
     }
 
 private void deferBasedOnBusyQueues(List<QueueReadout> queueResults) {
-        logInfo(routineLogUpgradeBuildingsLine("Zero IDLE queues available. Inspecting BUSY queues to reschedule..."));
+        logInfo(routineLogUpgradeBuildingsLine("Inspecting construction queue outcomes to reschedule..."));
 
 
         QueueReadout shortestBusyQueue = queueResults.stream()
@@ -368,12 +375,14 @@ private void logQueueSummaryFlow(List<UpgradeBuildingsRoutine.QueueReadout> queu
     }
 
 private ProductionBlocker handleProductionBlocker(int constructionQueue) {
-        ImageSearchResultData train = templateSearchHelper.locatePattern(BUILDING_BUTTON_TRAIN,
-                SearchConfigConstants.DEFAULT_SINGLE);
-        ImageSearchResultData research = train.isFound()
-                ? null
-                : templateSearchHelper.locatePattern(BUILDING_BUTTON_RESEARCH,
-                        SearchConfigConstants.DEFAULT_SINGLE);
+        checkPreemption();
+        RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+        ImageSearchResultData train = emuManager.locatePattern(EMULATOR_NUMBER, frame,
+                BUILDING_BUTTON_TRAIN, SearchConfigConstants.DEFAULT_SINGLE.getThreshold());
+        ImageSearchResultData research = train.isFound() ? null : emuManager.locatePattern(EMULATOR_NUMBER, frame,
+                BUILDING_BUTTON_RESEARCH, SearchConfigConstants.DEFAULT_SINGLE.getThreshold());
+        diagnostics.decision(frame, "threshold=" + SearchConfigConstants.DEFAULT_SINGLE.getThreshold()
+                + "; train=" + train + "; research=" + (research == null ? "not-searched" : research));
 
         if (!train.isFound() && (research == null || !research.isFound())) {
             return null;
@@ -407,6 +416,7 @@ private ProductionBlocker handleProductionBlocker(int constructionQueue) {
             return new ProductionBlocker(consumers, constructionQueue, retryAt);
         }
 
+        diagnostics.stage("production-timer");
         tapAround(speedupButton.getPoint(), TEMPLATE_TAP_RADIUS, 500);
         Duration remaining = durationHelper.attemptRecognition(
                 new PointData(292, 284),
@@ -444,6 +454,7 @@ private String readSelectedBuildingName() {
             logInfo(routineLogUpgradeBuildingsLine("Selected building name OCR: '" + text + "'"));
             return text;
         } catch (Exception e) {
+            CityUpgradeFlow.rethrowControlSignal(e);
             logWarning(routineLogUpgradeBuildingsLine("Could not read selected building name: " + e.getMessage()));
             return "";
         }
@@ -616,80 +627,53 @@ private long decodeTimeToMinutes(String timeString) {
             return totalMinutes;
 
         } catch (Exception e) {
+            CityUpgradeFlow.rethrowControlSignal(e);
             logError(routineLogUpgradeBuildingsLine("Error parsing time string '" + timeString + "': " + e.getMessage()));
             return 15;
 
         }
     }
 
-private boolean handleCityBuilding() {
-        logInfo(routineLogUpgradeBuildingsLine("Handling City Building"));
-
-
-        ImageSearchResultData upgradeButton = templateSearchHelper.locatePattern(BUILDING_BUTTON_UPGRADE,
-                SearchConfigConstants.RESILIENT);
-
-        if (!upgradeButton.isFound()) {
-            logWarning(routineLogUpgradeBuildingsLine("Upgrade button not detected"));
-            this.setRecurring(false);
-            return false;
+private FailureReason startBuildingAction(String actionName, ImageSearchResultData upgrade) {
+        diagnostics.stage("open-" + actionName + "-dialog");
+        logInfo(routineLogUpgradeBuildingsLine("Starting building " + actionName + "; target=" + upgrade));
+        if (upgrade != null) {
+            if (!tapInside(upgrade)) {
+                return FailureReason.CONTROL_NOT_RECOGNIZED;
+            }
+        } else {
+            tapInside(BUILDING_ACTION_BUTTON_AREA_VALUE);
         }
-
-
-        PointData center = upgradeButton.getPoint();
-        return startBuildingAction("upgrade",
-                new PointData(center.getX() - TEMPLATE_TAP_RADIUS, center.getY() - TEMPLATE_TAP_RADIUS),
-                new PointData(center.getX() + TEMPLATE_TAP_RADIUS, center.getY() + TEMPLATE_TAP_RADIUS));
-    }
-
-private boolean handleNewBuilding() {
-        logInfo(routineLogUpgradeBuildingsLine("Handling New Building"));
-
-        if (!isBuildButtonVisible()) {
-            logWarning(routineLogUpgradeBuildingsLine("Build button not detected"));
-            return false;
-        }
-
-        return startBuildingAction("build", BUILDING_ACTION_BUTTON_AREA_VALUE.topLeft(), BUILDING_ACTION_BUTTON_AREA_VALUE.bottomRight());
-    }
-
-private boolean startBuildingAction(String actionName, PointData buttonTopLeft, PointData buttonBottomRight) {
-        logInfo(routineLogUpgradeBuildingsLine("Starting building " + actionName + "..."));
-
-        tapInside(buttonTopLeft, buttonBottomRight);
         sleepTask(1000);
 
-
+        diagnostics.stage("replenish-resources");
         if (!refillResourcesIfNeededFlow()) {
-            return false;
+            return FailureReason.RESOURCES_NOT_OBTAINED;
         }
 
-
-        boolean confirmed = "upgrade".equals(actionName)
+        diagnostics.stage("confirm-" + actionName);
+        FailureReason failure = "upgrade".equals(actionName)
                 ? confirmDetectedBuildingUpgrade()
                 : confirmNewBuilding();
-        if (!confirmed) {
-            return false;
+        if (failure != null) {
+            return failure;
         }
-
-
+        diagnostics.stage("alliance-help");
         tapAllianceHelp();
-        return true;
+        return null;
     }
 
-private boolean confirmDetectedBuildingUpgrade() {
+private FailureReason confirmDetectedBuildingUpgrade() {
         BuildingUpgradeConfirmationFlow.Outcome outcome = BuildingUpgradeConfirmationFlow.run(
                 new BuildingUpgradeConfirmationFlow.Ui() {
                     @Override
                     public boolean tapDetectedUpgrade() {
-                        ImageSearchResultData upgrade = templateSearchHelper.locatePattern(
-                                GAME_HOME_SHORTCUTS_UPGRADE_TEXT, BUILDING_CONFIRM_UPGRADE_SEARCH);
+                        ImageSearchResultData upgrade = locateConfirmationWithEvidence();
                         if (!upgrade.isFound()) {
                             return false;
                         }
-                        logInfo(routineLogUpgradeBuildingsLine(
-                                "Upgrade confirmation detected at " + upgrade.getPoint()
-                                        + " with score " + String.format(Locale.ROOT, "%.2f", upgrade.getMatchScore()) + "%"));
+                        logInfo(routineLogUpgradeBuildingsLine("Upgrade confirmation detected: " + upgrade));
+                        diagnostics.stage("confirm-upgrade-transition");
                         return tapInside(upgrade);
                     }
 
@@ -700,34 +684,48 @@ private boolean confirmDetectedBuildingUpgrade() {
 
                     @Override
                     public boolean isConfirmationPending() {
-                        boolean upgradeActionVisible = templateSearchHelper.locatePattern(
-                                GAME_HOME_SHORTCUTS_UPGRADE_TEXT,
-                                BUILDING_CONFIRM_UPGRADE_POSTCONDITION).isFound();
-                        if (upgradeActionVisible) {
-                            return true;
-                        }
-                        return !templateSearchHelper.locatePattern(
-                                GAME_HOME_FURNACE,
-                                SearchConfigConstants.DEFAULT_SINGLE).isFound();
+                        checkPreemption();
+                        RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+                        ImageSearchResultData action = locateOnFrame(frame, GAME_HOME_SHORTCUTS_UPGRADE_TEXT,
+                                BUILDING_CONFIRM_UPGRADE_SEARCH_AREA_VALUE, UPGRADE_CONFIRMATION_THRESHOLD);
+                        ImageSearchResultData home = emuManager.locatePattern(EMULATOR_NUMBER, frame,
+                                GAME_HOME_FURNACE, SearchConfigConstants.DEFAULT_SINGLE.getThreshold());
+                        diagnostics.decision(frame, "confirmation=" + action + "; home=" + home);
+                        return action.isFound() || !home.isFound();
                     }
-                },
-                3);
-
+                }, BUILDING_CONTROL_CHECKS);
         if (outcome == BuildingUpgradeConfirmationFlow.Outcome.CONFIRMED) {
-            logInfo(routineLogUpgradeBuildingsLine("Building upgrade confirmed; upgrade dialog closed"));
-            return true;
+            logInfo(routineLogUpgradeBuildingsLine("Building upgrade confirmed; Home anchor returned"));
+            return null;
         }
-
-        logWarning(routineLogUpgradeBuildingsLine(
-                outcome == BuildingUpgradeConfirmationFlow.Outcome.BUTTON_NOT_FOUND
-                        ? "Upgrade confirmation button not detected in the building dialog"
-                        : "Upgrade confirmation did not return to the Home screen after the detected tap"));
-        return false;
+        return outcome == BuildingUpgradeConfirmationFlow.Outcome.BUTTON_NOT_FOUND
+                ? FailureReason.CONFIRMATION_NOT_FOUND
+                : FailureReason.HOME_TRANSITION_NOT_CONFIRMED;
     }
 
-private boolean confirmNewBuilding() {
+private ImageSearchResultData locateConfirmationWithEvidence() {
+        ImageSearchResultData result = ImageSearchResultData.miss();
+        for (int attempt = 0; attempt < BUILDING_CONTROL_CHECKS; attempt++) {
+            checkPreemption();
+            RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+            result = locateOnFrame(frame, GAME_HOME_SHORTCUTS_UPGRADE_TEXT,
+                    BUILDING_CONFIRM_UPGRADE_SEARCH_AREA_VALUE, UPGRADE_CONFIRMATION_THRESHOLD);
+            diagnostics.decision(frame, "confirmation threshold=" + UPGRADE_CONFIRMATION_THRESHOLD + " " + result);
+            if (result.isFound()) return result;
+            if (attempt < BUILDING_CONTROL_CHECKS - 1) sleepTask(BUILDING_CONTROL_POLL_MS);
+        }
+        return result;
+    }
+
+private FailureReason confirmNewBuilding() {
         tapInside(new PointData(489, 1034), new PointData(500, 1050));
-        return true;
+        sleepTask(500);
+        checkPreemption();
+        RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+        ImageSearchResultData home = emuManager.locatePattern(EMULATOR_NUMBER, frame,
+                GAME_HOME_FURNACE, SearchConfigConstants.DEFAULT_SINGLE.getThreshold());
+        diagnostics.decision(frame, "new-building home=" + home);
+        return home.isFound() ? null : FailureReason.HOME_TRANSITION_NOT_CONFIRMED;
     }
 
 private boolean isBuildButtonVisible() {
@@ -740,13 +738,14 @@ private boolean isBuildButtonVisible() {
                     WHITE_SETTINGS,
                     true);
             String normalized = buttonText == null ? "" : buttonText.toLowerCase().replaceAll("[^a-z]", "");
-            logDebug(routineLogUpgradeBuildingsLine("Build button OCR result: '" + buttonText + "'"));
+            diagnostics.observation("build OCR='" + normalized + "'");
             boolean detected = normalized.contains("build") || normalized.contains("bui");
             if (detected) {
                 logInfo(routineLogUpgradeBuildingsLine("Build button detected via OCR: '" + buttonText + "'"));
             }
             return detected;
         } catch (Exception e) {
+            CityUpgradeFlow.rethrowControlSignal(e);
             logWarning(routineLogUpgradeBuildingsLine("Build button OCR failed: " + e.getMessage()));
             return false;
         }
@@ -835,6 +834,7 @@ private UpgradeBuildingsRoutine.QueueSnapshot inspectQueueState(AreaData queueAr
             return new UpgradeBuildingsRoutine.QueueSnapshot(UpgradeBuildingsRoutine.QueueMood.UNKNOWN, null);
 
         } catch (Exception e) {
+            CityUpgradeFlow.rethrowControlSignal(e);
             logError(routineLogUpgradeBuildingsLine("Issue while OCR analysis: " + e.getMessage()));
             return new UpgradeBuildingsRoutine.QueueSnapshot(UpgradeBuildingsRoutine.QueueMood.UNKNOWN, null);
         }
@@ -910,6 +910,7 @@ private List<UpgradeBuildingsRoutine.QueueReadout> inspectAllQueues() {
                 results = updatedResults;
             }
         } catch (Exception e) {
+            CityUpgradeFlow.rethrowControlSignal(e);
             logError(routineLogUpgradeBuildingsLine("Error analyzing construction queues: " + e.getMessage()));
         }
 
@@ -935,69 +936,110 @@ private void reachCityView() {
         }
     }
 
-private QueueHandlingResult handleQueue(UpgradeBuildingsRoutine.QueueReadout queueResult) {
-        for (int attempt = 1; attempt <= MAX_RECOMMENDED_BUILDING_ATTEMPTS; attempt++) {
-            QueueAttemptResult result = handleQueueAttempt(queueResult);
-            if (result.handled()) {
-                return new QueueHandlingResult(result.blocker() == null, result.blocker());
+private QueueHandlingResult handleQueue(QueueReadout queueResult) {
+        return CityUpgradeFlow.handleQueue(queueResult.queueNumber(), new CityUpgradeFlow.QueueUi<>() {
+            @Override
+            public Attempt<QueueHandlingResult> attempt(int number) {
+                diagnostics.begin(queueResult.queueNumber(), number);
+                checkPreemption();
+                Attempt<QueueHandlingResult> result = handleQueueAttempt(queueResult);
+                if (result.failure() == null) {
+                    logInfo(routineLogUpgradeBuildingsLine("Recommended building handled; queue="
+                            + queueResult.queueNumber() + "; attempt=" + number
+                            + "; outcome=" + (result.result().blocker() == null ? "construction-attempted" : "production-blocked")));
+                }
+                return result;
             }
-            if (attempt < MAX_RECOMMENDED_BUILDING_ATTEMPTS) {
-                logInfo(routineLogUpgradeBuildingsLine(
-                        "Recommended building had no actionable button. Reopening it once in case the first tap claimed completed production."));
-                navigationHelper.ensureCorrectScreenLocation(LaunchPoint.HOME);
-                sleepTask(500);
-            }
-        }
 
-        logWarning(routineLogUpgradeBuildingsLine(
-                "Recommended building remained unresolved after " + MAX_RECOMMENDED_BUILDING_ATTEMPTS + " attempts."));
-        return new QueueHandlingResult(false, null);
+            @Override
+            public void retainFailure(int number, FailureReason reason) {
+                retainDiagnostic(reason.name().toLowerCase(Locale.ROOT), number == 1);
+            }
+
+            @Override
+            public void recoverHome() {
+                recoverLocation(LaunchPoint.HOME);
+            }
+        });
     }
 
-private QueueAttemptResult handleQueueAttempt(UpgradeBuildingsRoutine.QueueReadout queueResult) {
-
-
+private Attempt<QueueHandlingResult> handleQueueAttempt(QueueReadout queueResult) {
         reachCityView();
         sleepTask(500);
-
-
+        diagnostics.stage("open-recommended-building");
         tapInside(queueResult.queueArea);
         sleepTask(500);
 
-
-        ImageSearchResultData lowBuilding = templateSearchHelper.locatePattern(BUILDING_BUTTON_INFO,
-                SearchConfigConstants.RESILIENT);
-
-        if (lowBuilding.isFound()) {
-
-
-            tapNear(new PointData(lowBuilding.getPoint().getX() + 100, lowBuilding.getPoint().getY()));
-            handleSurvivorBuilding();
-            return QueueAttemptResult.completed();
-        } else {
-
-
-            tapInside(new PointData(338, 799), new PointData(353, 807), 3, 100);
-            ImageSearchResultData upgradeButton = templateSearchHelper.locatePattern(BUILDING_BUTTON_UPGRADE,
-                    SearchConfigConstants.RESILIENT);
-
-            if (upgradeButton.isFound()) {
-                return handleCityBuilding()
-                        ? QueueAttemptResult.completed()
-                        : QueueAttemptResult.unresolved();
-            } else {
-
-                if (isBuildButtonVisible()) {
-                    return handleNewBuilding()
-                            ? QueueAttemptResult.completed()
-                            : QueueAttemptResult.unresolved();
-                }
-
-                ProductionBlocker blocker = handleProductionBlocker(queueResult.queueNumber());
-                return blocker == null
-                        ? QueueAttemptResult.unresolved()
-                        : QueueAttemptResult.blockedBy(blocker);
+        diagnostics.stage("recognize-building-control");
+        // Poll without tapping: claiming completed production may leave no building selected.
+        for (int poll = 0; poll < BUILDING_CONTROL_CHECKS; poll++) {
+            checkPreemption();
+            RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+            FurnacePanelDetector.Evidence furnace = FurnacePanelDetector.inspect(
+                    (template, area, threshold) -> locateOnFrame(frame, template, area, threshold));
+            diagnostics.decision(frame, furnace.toString());
+            if (furnace.actionable()) {
+                logInfo(routineLogUpgradeBuildingsLine("Furnace entry recognized; " + furnace));
+                return buildingAttempt(startBuildingAction("upgrade", furnace.upgrade()));
             }
+
+            ImageSearchResultData info = emuManager.locatePattern(EMULATOR_NUMBER, frame,
+                    BUILDING_BUTTON_INFO, SearchConfigConstants.RESILIENT.getThreshold());
+            ImageSearchResultData upgrade = info.isFound() ? null : emuManager.locatePattern(EMULATOR_NUMBER, frame,
+                    BUILDING_BUTTON_UPGRADE, SearchConfigConstants.RESILIENT.getThreshold());
+            diagnostics.decision(frame, furnace + "; buildingControlThreshold="
+                    + SearchConfigConstants.RESILIENT.getThreshold() + "; info=" + info + "; upgrade="
+                    + (upgrade == null ? "not-searched" : upgrade));
+            if (info.isFound()) {
+                diagnostics.stage("survivor-building");
+                tapNear(new PointData(info.getPoint().getX() + 100, info.getPoint().getY()));
+                return buildingAttempt(handleSurvivorBuilding());
+            }
+            if (upgrade != null && upgrade.isFound()) {
+                return buildingAttempt(startBuildingAction("upgrade", upgrade));
+            }
+            if (poll < BUILDING_CONTROL_CHECKS - 1) sleepTask(BUILDING_CONTROL_POLL_MS);
+        }
+
+        diagnostics.stage("recognize-build-control");
+        if (isBuildButtonVisible()) {
+            return buildingAttempt(startBuildingAction("build", null));
+        }
+        diagnostics.stage("production-blocker");
+        ProductionBlocker blocker = handleProductionBlocker(queueResult.queueNumber());
+        return blocker == null
+                ? Attempt.unresolved(FailureReason.CONTROL_NOT_RECOGNIZED)
+                : Attempt.completed(new QueueHandlingResult(false, blocker));
+    }
+
+private Attempt<QueueHandlingResult> buildingAttempt(FailureReason failure) {
+        return failure == null ? Attempt.completed(new QueueHandlingResult(true, null))
+                : Attempt.unresolved(failure);
+    }
+
+private ImageSearchResultData locateOnFrame(RawImageData frame, TemplatesEnum template, AreaData area, int threshold) {
+        return emuManager.locatePattern(EMULATOR_NUMBER, frame, template,
+                area.topLeft(), area.bottomRight(), threshold);
+    }
+
+private void recoverLocation(LaunchPoint target) {
+        checkPreemption();
+        logInfo(routineLogUpgradeBuildingsLine("Recovering screen; target=" + target));
+        diagnostics.stage("recover-" + target.name().toLowerCase(Locale.ROOT));
+        LaunchPoint reached = navigationHelper.ensureCorrectScreenLocation(target, this::checkPreemption);
+        logInfo(routineLogUpgradeBuildingsLine("Recovery confirmed; target=" + target + "; reached=" + reached));
+    }
+
+private void retainDiagnostic(String type, boolean retryable) {
+        checkPreemption();
+        String snapshot = diagnostics.retain(DiagnosticSnapshotStore::forCurrentWorkspace,
+                () -> emuManager.captureScreen(EMULATOR_NUMBER), type);
+        String message = routineLogUpgradeBuildingsLine("City Upgrade diagnostic; reason=" + type
+                + "; " + diagnostics.context() + "; " + snapshot);
+        if (retryable) {
+            logDebug(message);
+        } else {
+            logWarning(message);
         }
     }
 }

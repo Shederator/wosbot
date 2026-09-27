@@ -379,10 +379,16 @@ public class NavigationHelper {
     // ── screen location ──────────────────────────────────────────────
 
     public void ensureCorrectScreenLocation(LaunchPoint target) {
+        ensureCorrectScreenLocation(target, () -> {});
+    }
+
+    /** Allows task-owned recovery to yield before every navigation action. */
+    public LaunchPoint ensureCorrectScreenLocation(LaunchPoint target, Runnable checkpoint) {
         broadcastDebug("Locating screen - need " + target);
         int budget = 10;
         int pass = 1;
         while (pass <= budget) {
+            checkpoint.run();
             // detect reconnect
             if (searcher.locatePattern(TemplatesEnum.GAME_HOME_RECONNECT,
                     SearchConfigConstants.DEFAULT_SINGLE).isFound()) {
@@ -394,35 +400,39 @@ public class NavigationHelper {
             boolean atWorld = !atHome && searcher.locatePattern(TemplatesEnum.GAME_HOME_WORLD,
                     SearchConfigConstants.DEFAULT_SINGLE).isFound();
 
+            checkpoint.run();
             // check if already at desired location
-            if (target == LaunchPoint.ANY && (atHome || atWorld)) return;
-            if (target == LaunchPoint.HOME && atHome) return;
-            if (target == LaunchPoint.WORLD && atWorld) return;
+            if (target == LaunchPoint.ANY && (atHome || atWorld)) return atHome ? LaunchPoint.HOME : LaunchPoint.WORLD;
+            if (target == LaunchPoint.HOME && atHome) return LaunchPoint.HOME;
+            if (target == LaunchPoint.WORLD && atWorld) return LaunchPoint.WORLD;
 
             // try to navigate to desired location
             if (target == LaunchPoint.HOME && atWorld) {
                 ImageSearchResultData w = searcher.locatePattern(TemplatesEnum.GAME_HOME_WORLD,
                         SearchConfigConstants.DEFAULT_SINGLE);
                 if (w.isFound() && isStableScreenAnchorFlow(TemplatesEnum.GAME_HOME_WORLD)) {
+                    checkpoint.run();
                     taps.tapInside(w);
                     interruptibleWait(2000);
                     if (searcher.locatePattern(TemplatesEnum.GAME_HOME_FURNACE,
-                            SearchConfigConstants.DEFAULT_SINGLE).isFound()) return;
+                            SearchConfigConstants.DEFAULT_SINGLE).isFound()) return target;
                 }
             } else if (target == LaunchPoint.WORLD && atHome) {
                 ImageSearchResultData h = searcher.locatePattern(TemplatesEnum.GAME_HOME_FURNACE,
                         SearchConfigConstants.DEFAULT_SINGLE);
                 if (h.isFound() && isStableScreenAnchorFlow(TemplatesEnum.GAME_HOME_FURNACE)) {
+                    checkpoint.run();
                     taps.tapInside(h);
                     interruptibleWait(2000);
                     if (searcher.locatePattern(TemplatesEnum.GAME_HOME_WORLD,
-                            SearchConfigConstants.DEFAULT_SINGLE).isFound()) return;
+                            SearchConfigConstants.DEFAULT_SINGLE).isFound()) return target;
                 }
             }
 
             // unknown screen - go back
             if (!atHome && !atWorld) {
                 broadcastDebug("Unknown screen - back (" + pass + "/" + budget + ")");
+                checkpoint.run();
                 emu.pressBack(device);
                 interruptibleWait(300);
             }
