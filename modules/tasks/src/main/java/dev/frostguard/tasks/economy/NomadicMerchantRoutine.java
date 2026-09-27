@@ -20,6 +20,8 @@ public class NomadicMerchantRoutine extends DelayedTask {
 
     private static final long MAX_TASK_EXECUTION_MS = 2 * 60 * 1000L;
     private static final long RESET_SETTLE_DELAY_MINUTES = 1L;
+    private static final long RESOURCE_ACTION_SETTLE_MS = 500L;
+    private static final long REFRESH_ACTION_SETTLE_MS = 2000L;
 
     private final TemplatesEnum[] TEMPLATES = { TemplatesEnum.NOMADIC_MERCHANT_COAL,
             TemplatesEnum.NOMADIC_MERCHANT_MEAT, TemplatesEnum.NOMADIC_MERCHANT_STONE,
@@ -67,11 +69,16 @@ public class NomadicMerchantRoutine extends DelayedTask {
 
                     if (result.isFound()) {
                         logInfo("Found resource: " + template.name() + ". Purchasing it.");
-                        tapInside(result);
-                        sleepTask(500);
+                        if (!tapInside(result)) {
+                            logWarning("Could not dispatch resource tap for " + template.name()
+                                    + ". Ending the resource scan to avoid repeating an unverified action.");
+                            break;
+                        }
+                        sleepTask(RESOURCE_ACTION_SETTLE_MS);
                         freeResourcesClaimedCount++;
                         foundResourceTemplate = true;
-                        break; // Restart resource search from beginning
+                        logInfo("Resource action dispatched. Rescanning the full shop for replacement items.");
+                        break; // Restart resource search from a fresh screen state
                     }
                 }
             }
@@ -110,6 +117,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
 
                     vipPointsPurchasedCount++;
                     foundVipTemplate = true;
+                    logInfo("VIP action dispatched. Rescanning the full shop for replacement items.");
                 }
             }
 
@@ -127,29 +135,35 @@ public class NomadicMerchantRoutine extends DelayedTask {
 
             if (dailyRefreshResult.isFound()) {
                 logInfo("Daily refresh is available. Using it now.");
-                tapInside(dailyRefreshResult.getPoint(), dailyRefreshResult.getPoint());
-                sleepTask(2000); // Wait longer for refresh to complete
-                dailyRefreshUsedCount++;
-                // Continue the main loop to check for new items after refresh
+                if (tapInside(dailyRefreshResult)) {
+                    sleepTask(REFRESH_ACTION_SETTLE_MS);
+                    dailyRefreshUsedCount++;
+                    logInfo("Free refresh action dispatched. Rescanning the full shop for replacement items.");
+                    // Continue the main loop to check every shop position again.
+                } else {
+                    logWarning("Could not dispatch the free refresh tap. Ending the cycle with refresh state unverified.");
+                    continueOperations = false;
+                }
             } else {
-                // PHASE 5: No refresh available, operations complete
-                logInfo("No daily refresh available. All Nomadic Merchant operations are complete.");
+                // PHASE 5: No refresh template is visible. This is the terminal state only
+                // after the preceding full resource and VIP scans found no authorized action.
+                logInfo("No free refresh detected after a full shop scan. All eligible Nomadic Merchant operations are complete.");
                 continueOperations = false;
             }
         }
 
-        if (System.currentTimeMillis() <= executionDeadlineMs) {
-            StatisticsService.obtain().addToCounter(profile, "Nomadic Merchant Free Resources Claimed", freeResourcesClaimedCount);
-            StatisticsService.obtain().addToCounter(profile, "Nomadic Merchant VIP Points Purchased", vipPointsPurchasedCount);
-            StatisticsService.obtain().addToCounter(profile, "Nomadic Merchant Daily Refresh Used", dailyRefreshUsedCount);
+        boolean timedOut = System.currentTimeMillis() >= executionDeadlineMs;
+        StatisticsService.obtain().addToCounter(profile, "Nomadic Merchant Free Resources Claimed", freeResourcesClaimedCount);
+        StatisticsService.obtain().addToCounter(profile, "Nomadic Merchant VIP Points Purchased", vipPointsPurchasedCount);
+        StatisticsService.obtain().addToCounter(profile, "Nomadic Merchant Daily Refresh Used", dailyRefreshUsedCount);
 
-            logInfo("Nomadic Merchant stats - free resources claimed: " + freeResourcesClaimedCount
-                    + ", VIP points purchased: " + vipPointsPurchasedCount
-                    + ", daily refresh used: " + dailyRefreshUsedCount);
-        }
-        else
-        {
-            logWarning("Nomadic Merchant task reached execution limit. Ending current cycle to avoid infinite loop.");
+        String stats = "Nomadic Merchant stats - free resources claimed: " + freeResourcesClaimedCount
+                + ", VIP points purchased: " + vipPointsPurchasedCount
+                + ", daily refresh used: " + dailyRefreshUsedCount;
+        if (timedOut) {
+            logWarning("Nomadic Merchant task reached execution limit. Ending current cycle with partial results. " + stats);
+        } else {
+            logInfo(stats);
         }
 
         // Wait briefly after reset so the shop has time to publish the new daily state.
