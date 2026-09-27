@@ -34,6 +34,10 @@ public final class CommonGameAreas {
     public static final AreaData INTEL_COOLDOWN_EMPTY_MAP_OCR_AREA    = region(378, 580, 530, 640);
     public static final AreaData INTEL_CLAIM_ALL_AREA                 = region(190, 1050, 530, 1200);
 
+    // Furnace detail entry, distinct from the final building confirmation dialog.
+    public static final AreaData FURNACE_PANEL_TITLE = region(0, 650, 245, 760);
+    public static final AreaData FURNACE_PANEL_UPGRADE = region(475, 650, 715, 760);
+
     // ── side panel navigation ────────────────────────────────────────
 
     // The collapsed panel exposes only a thin handle at the left edge. A trigger tap is allowed only
