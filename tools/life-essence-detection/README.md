@@ -21,6 +21,10 @@ means the green centroid is above the box center.
 The first run compiles `modules/tasks` and the tool. Re-run it after a
 detector change to compare the new picture with the previous one.
 
+The tool shares its image loading, annotation drawing, output naming, and
+benchmark timing with `tools/close-cross-detection` through
+`tools/detection-tool-support`.
+
 `--search color` is the default and the search the task uses. `--search template`
 runs the original 90 percent `claimCurrent.png` search, then `claim.png`.
 `--do-benchmark` measures the selected search only. Each image is read once, then
