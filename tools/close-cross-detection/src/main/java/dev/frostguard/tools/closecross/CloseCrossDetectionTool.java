@@ -5,6 +5,7 @@ import dev.frostguard.tools.detection.DetectionToolSupport.Benchmark;
 import dev.frostguard.tools.detection.DetectionToolSupport.Mark;
 import dev.frostguard.vision.detection.CloseCrossDetector;
 import dev.frostguard.vision.detection.CloseCrossDetector.Detection;
+import dev.frostguard.vision.detection.CloseCrossDetector.Region;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -44,9 +45,9 @@ public final class CloseCrossDetectionTool {
             try {
                 BufferedImage frame = DetectionToolSupport.readFrame(image);
                 if (arguments.benchmark()) {
-                    System.out.println(benchmark(image, frame, arguments.passes()));
+                    System.out.println(benchmark(image, frame, arguments.region(), arguments.passes()));
                 } else {
-                    Path written = annotate(image, frame, arguments.output(), timestamp);
+                    Path written = annotate(image, frame, arguments.output(), timestamp, arguments.region());
                     System.out.println(written);
                 }
             } catch (IOException | RuntimeException ex) {
@@ -59,18 +60,20 @@ public final class CloseCrossDetectionTool {
         }
     }
 
-    private static String benchmark(Path image, BufferedImage frame, int passes) {
+    private static String benchmark(Path image, BufferedImage frame, Region region, int passes) {
         Benchmark result = DetectionToolSupport.benchmark(passes,
-                () -> toMarks(CloseCrossDetector.locate(frame)));
+                () -> toMarks(CloseCrossDetector.locate(frame, region)));
         return image.getFileName()
                 + "  detector=opencv-multiscale"
+                + "  region=" + region
                 + "  passes=" + passes
                 + "  mean=" + String.format(Locale.ROOT, "%.3f", result.meanMillis()) + " ms"
                 + "  matches=" + result.detections();
     }
 
-    private static Path annotate(Path image, BufferedImage frame, Path output, String timestamp) throws IOException {
-        List<Detection> candidates = CloseCrossDetector.locate(frame);
+    private static Path annotate(Path image, BufferedImage frame, Path output, String timestamp,
+            Region region) throws IOException {
+        List<Detection> candidates = CloseCrossDetector.locate(frame, region);
         for (Detection detection : candidates) {
             System.out.println(image.getFileName() + "  center=" + detection.center().getX() + ","
                     + detection.center().getY() + " score=" + String.format(Locale.ROOT, "%.1f", detection.score())
@@ -83,22 +86,27 @@ public final class CloseCrossDetectionTool {
             String label = String.format(Locale.ROOT, "close %.1f%%", detection.score());
             return new Mark(detection.bounds(), detection.center(), null, true, label);
         }).toList();
-        Path destination = output.resolve(DetectionToolSupport.outputName(timestamp, image, "close-cross"));
+        Path destination = output.resolve(DetectionToolSupport.outputName(timestamp, image,
+                "close-cross-" + region.name().toLowerCase(Locale.ROOT)));
         return DetectionToolSupport.writeAnnotation(frame, marks, destination,
-                "green box = close-cross match, cyan cross = suggested center, threshold 55 percent");
+                "green box = close-cross match, cyan cross = screen-relative center, region=" + region
+                        + ", threshold 55 percent");
     }
 
     private static List<Mark> toMarks(List<Detection> detections) {
         return detections.stream().map(detection -> Mark.point(detection.center(), "close cross")).toList();
     }
 
-    private record Arguments(Path output, List<Path> inputs, boolean benchmark, int passes, boolean help) {
+    private record Arguments(Path output, List<Path> inputs, boolean benchmark, int passes,
+            Region region, boolean help) {
         static final String USAGE = """
-                Usage: detect.sh [--output dir] [--do-benchmark] [--passes N] <image-or-directory>...
+                Usage: detect.sh [--region REGION] [--output dir] [--do-benchmark] [--passes N] <image-or-directory>...
 
                 Writes an annotated PNG for each input. The default output is
-                tools/close-cross-detection/target/detections. The default search covers
-                the right half of the screen; callers can supply a bounded area through the API.
+                tools/close-cross-detection/target/detections. The default region is HALF_RIGHT.
+                Regions: UPPER_LEFT_QUARTER, UPPER_RIGHT_QUARTER, LOWER_LEFT_QUARTER,
+                LOWER_RIGHT_QUARTER, HALF_RIGHT, MIDDLE, FULL_SCREEN.
+                All annotations show coordinates relative to the full input frame.
                 --do-benchmark reads each image once, runs the detector --passes times (default 100),
                 and prints mean time per pass without writing PNGs.
                 """;
@@ -109,12 +117,23 @@ public final class CloseCrossDetectionTool {
             boolean help = args.length == 0;
             boolean benchmark = false;
             int passes = 100;
+            Region region = Region.HALF_RIGHT;
             for (int index = 0; index < args.length; index++) {
                 String arg = args[index];
                 if ("--help".equals(arg) || "-h".equals(arg)) {
                     help = true;
                 } else if ("--do-benchmark".equals(arg)) {
                     benchmark = true;
+                } else if ("--region".equals(arg)) {
+                    if (index + 1 >= args.length) {
+                        throw new IllegalArgumentException("--region requires a region name");
+                    }
+                    String value = args[++index].replace('-', '_').toUpperCase(Locale.ROOT);
+                    try {
+                        region = Region.valueOf(value);
+                    } catch (IllegalArgumentException ex) {
+                        throw new IllegalArgumentException("Unknown region: " + value);
+                    }
                 } else if ("--passes".equals(arg)) {
                     if (index + 1 >= args.length) {
                         throw new IllegalArgumentException("--passes requires a positive count");
@@ -138,7 +157,7 @@ public final class CloseCrossDetectionTool {
                     inputs.add(Path.of(arg));
                 }
             }
-            return new Arguments(output, List.copyOf(inputs), benchmark, passes, help);
+            return new Arguments(output, List.copyOf(inputs), benchmark, passes, region, help);
         }
     }
 }

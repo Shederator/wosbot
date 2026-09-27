@@ -1,8 +1,8 @@
 package dev.frostguard.tasks.lifecycle;
 
-import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.vision.detection.CloseCrossDetector;
+import dev.frostguard.api.domain.AreaData;
 import org.junit.jupiter.api.Test;
 
 import javax.imageio.ImageIO;
@@ -28,6 +28,9 @@ class CloseableStartupOverlayDetectionTest {
         assertTrue(detections.getFirst().score() >= 55.0);
         assertTrue(detections.getFirst().bounds().topLeft().getX() >= 540);
         assertTrue(detections.getFirst().bounds().bottomRight().getX() <= 680);
+        assertTrue(Math.abs(detections.getFirst().center().getX() - 610) <= 8);
+        assertTrue(Math.abs(detections.getFirst().center().getY() - 130) <= 8,
+                () -> "expected startup cross near (610,130), got " + detections);
     }
 
     @Test
@@ -36,7 +39,8 @@ class CloseableStartupOverlayDetectionTest {
                 "/startup/mandatory-update-dialog-20260820.png",
                 "/startup/resource-download-prompt-20260817.png",
                 "/startup/welcome-back-dialog-20260821.png" }) {
-            assertTrue(inspect(path).isEmpty(), path);
+            List<CloseCrossDetector.Detection> detections = inspect(path);
+            assertTrue(detections.isEmpty(), path + ": " + detections);
         }
     }
 

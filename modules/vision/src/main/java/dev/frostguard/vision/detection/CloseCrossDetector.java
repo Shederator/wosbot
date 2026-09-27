@@ -32,22 +32,20 @@ public final class CloseCrossDetector {
     private CloseCrossDetector() {
     }
 
-    /** Finds controls in the right half of the image, where these game controls normally appear. */
-    public static List<Detection> locate(BufferedImage frame) {
-        int left = frame.getWidth() / 2;
-        return locate(frame, AreaData.of(left, 0, frame.getWidth() - 1, frame.getHeight() - 1));
+    /** Finds controls in a named screen region. Returned coordinates are screen-relative. */
+    public static List<Detection> locate(BufferedImage frame, Region region) {
+        return locate(frame, areaFor(region, frame.getWidth(), frame.getHeight()));
     }
 
-    /** Finds controls in the right half of a raw emulator capture. */
-    public static List<Detection> locate(RawImageData frame) {
+    /** Finds controls in a named region of a raw emulator capture. */
+    public static List<Detection> locate(RawImageData frame, Region region) {
         if (frame == null) {
             throw new IllegalArgumentException("Raw close-cross frame must contain valid pixel data.");
         }
-        int left = frame.getWidth() / 2;
-        return locate(frame, AreaData.of(left, 0, frame.getWidth() - 1, frame.getHeight() - 1));
+        return locate(frame, areaFor(region, frame.getWidth(), frame.getHeight()));
     }
 
-    /** Finds controls inside an inclusive, image-relative search area. */
+    /** Finds controls inside an inclusive full-frame area. */
     public static List<Detection> locate(BufferedImage frame, AreaData searchArea) {
         AreaBounds bounds = clipArea(searchArea, frame.getWidth(), frame.getHeight());
         if (bounds == null) {
@@ -62,7 +60,7 @@ public final class CloseCrossDetector {
         }
     }
 
-    /** Finds controls directly from an emulator capture without an intermediate image conversion. */
+    /** Finds controls in an inclusive full-frame area without converting the raw capture to an image. */
     public static List<Detection> locate(RawImageData frame, AreaData searchArea) {
         if (frame == null) {
             throw new IllegalArgumentException("Raw close-cross frame must contain valid pixel data.");
@@ -224,6 +222,26 @@ public final class CloseCrossDetector {
                 : null;
     }
 
+    static AreaData areaFor(Region region, int width, int height) {
+        if (region == null) {
+            throw new IllegalArgumentException("Close-cross region must be specified.");
+        }
+        if (width <= 0 || height <= 0) {
+            throw new IllegalArgumentException("Screen dimensions must be positive.");
+        }
+        int middleX = width / 2;
+        int middleY = height / 2;
+        return switch (region) {
+            case UPPER_LEFT_QUARTER -> AreaData.of(0, 0, middleX - 1, middleY - 1);
+            case UPPER_RIGHT_QUARTER -> AreaData.of(middleX, 0, width - 1, middleY - 1);
+            case LOWER_LEFT_QUARTER -> AreaData.of(0, middleY, middleX - 1, height - 1);
+            case LOWER_RIGHT_QUARTER -> AreaData.of(middleX, middleY, width - 1, height - 1);
+            case HALF_RIGHT -> AreaData.of(middleX, 0, width - 1, height - 1);
+            case MIDDLE -> AreaData.of(width / 4, height / 4, width - width / 4 - 1, height - height / 4 - 1);
+            case FULL_SCREEN -> AreaData.of(0, 0, width - 1, height - 1);
+        };
+    }
+
     private static List<Detection> suppressDuplicates(List<Detection> candidates) {
         candidates.sort(Comparator.comparingDouble(Detection::score).reversed());
         List<Detection> unique = new ArrayList<>();
@@ -245,7 +263,7 @@ public final class CloseCrossDetector {
         return List.copyOf(unique);
     }
 
-    /** Bounds are inclusive; center is a suggested location inside those bounds. */
+    /** Inclusive screen-relative bounds; center is a suggested location inside those bounds. */
     public record Detection(AreaData bounds, PointData center, double score) {
         public int width() {
             return bounds.bottomRight().getX() - bounds.topLeft().getX() + 1;
@@ -254,6 +272,24 @@ public final class CloseCrossDetector {
         public int height() {
             return bounds.bottomRight().getY() - bounds.topLeft().getY() + 1;
         }
+    }
+
+    /** Predefined screen areas; all returned match coordinates remain relative to the full frame. */
+    public enum Region {
+        /** Top-left quarter of the frame. */
+        UPPER_LEFT_QUARTER,
+        /** Top-right quarter of the frame. */
+        UPPER_RIGHT_QUARTER,
+        /** Bottom-left quarter of the frame. */
+        LOWER_LEFT_QUARTER,
+        /** Bottom-right quarter of the frame. */
+        LOWER_RIGHT_QUARTER,
+        /** Right half of the frame. */
+        HALF_RIGHT,
+        /** Centered middle half of the frame in both dimensions. */
+        MIDDLE,
+        /** Entire frame. */
+        FULL_SCREEN
     }
 
     private record AreaBounds(int left, int top, int right, int bottom) {

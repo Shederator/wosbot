@@ -11,7 +11,7 @@ Initialization distinguishes startup blockers before attempting recovery:
   `Confirm` action both match in one fresh frame.
 - Closeable promotional overlays are dismissed at most three times per
   initialization, and only when their concrete top-right close control matches
-  in the measured startup region. Offer text, artwork, price, and currency are
+  inside the measured area `(540, 65)`–`(680, 200)`. Offer text, artwork, price, and currency are
   not used as evidence. Frostguard taps the matched control rather than sending
   a generic Back action.
 - The mandatory app-update dialog is identified pattern-first from both its
@@ -39,7 +39,9 @@ Initialization distinguishes startup blockers before attempting recovery:
   immediately retries Initialize.
 
 The generic `CloseCrossDetector` handles close controls in initialization,
-restricted to the measured top-right search area. It runs only after reconnect,
+restricted to the measured `(540, 65)`–`(680, 200)` area. A full upper-right
+quarter produced a false match on the Welcome back dialog in saved-frame tests,
+so initialization uses the detector's custom-area overload. It runs only after reconnect,
 resource-download, Welcome-back, and mandatory-update classification,
 preserving those higher-priority flows. Its shared template is covered by the
 redacted startup frame

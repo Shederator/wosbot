@@ -3,6 +3,7 @@ package dev.frostguard.vision.detection;
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.RawImageData;
+import dev.frostguard.vision.detection.CloseCrossDetector.Region;
 import org.junit.jupiter.api.Test;
 
 import javax.imageio.ImageIO;
@@ -14,10 +15,44 @@ import java.io.InputStream;
 import java.util.List;
 import java.util.Objects;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CloseCrossDetectorTest {
+
+    @Test
+    void predefinedRegionsUseInclusiveFullFrameCoordinates() {
+        assertEquals(AreaData.of(0, 0, 359, 639),
+                CloseCrossDetector.areaFor(Region.UPPER_LEFT_QUARTER, 720, 1280));
+        assertEquals(AreaData.of(360, 0, 719, 639),
+                CloseCrossDetector.areaFor(Region.UPPER_RIGHT_QUARTER, 720, 1280));
+        assertEquals(AreaData.of(0, 640, 359, 1279),
+                CloseCrossDetector.areaFor(Region.LOWER_LEFT_QUARTER, 720, 1280));
+        assertEquals(AreaData.of(360, 640, 719, 1279),
+                CloseCrossDetector.areaFor(Region.LOWER_RIGHT_QUARTER, 720, 1280));
+        assertEquals(AreaData.of(360, 0, 719, 1279),
+                CloseCrossDetector.areaFor(Region.HALF_RIGHT, 720, 1280));
+        assertEquals(AreaData.of(180, 320, 539, 959),
+                CloseCrossDetector.areaFor(Region.MIDDLE, 720, 1280));
+        assertEquals(AreaData.of(0, 0, 719, 1279),
+                CloseCrossDetector.areaFor(Region.FULL_SCREEN, 720, 1280));
+    }
+
+    @Test
+    void regionSearchReturnsCoordinatesRelativeToFullScreen() throws IOException {
+        BufferedImage frame = new BufferedImage(720, 1280, BufferedImage.TYPE_INT_RGB);
+        BufferedImage source = read("cross-tip-middle-right.png");
+        Graphics2D graphics = frame.createGraphics();
+        graphics.drawImage(source.getSubimage(605, 415, 60, 60), 145, 170, null);
+        graphics.dispose();
+
+        List<CloseCrossDetector.Detection> detections = CloseCrossDetector.locate(
+                frame, Region.UPPER_LEFT_QUARTER);
+
+        assertTrue(detections.stream().anyMatch(match -> near(match.center(), 175, 200)),
+                () -> "expected absolute coordinates near 175,200, got " + detections);
+    }
 
     @Test
     void locatesObservedCrossStylesAcrossThemesAndPositions() throws IOException {
@@ -28,7 +63,7 @@ class CloseCrossDetectorTest {
     }
 
     @Test
-    void restrictsSearchToCallerAreaAndDefaultsToRightHalf() throws IOException {
+    void selectsHalfRightAndAcceptsExplicitArea() throws IOException {
         BufferedImage source = read("cross-tip-middle-right.png");
         BufferedImage frame = new BufferedImage(720, 1280, BufferedImage.TYPE_INT_RGB);
         Graphics2D graphics = frame.createGraphics();
@@ -38,7 +73,7 @@ class CloseCrossDetectorTest {
         graphics.drawImage(source.getSubimage(605, 415, 60, 60), 605, 415, null);
         graphics.dispose();
 
-        List<CloseCrossDetector.Detection> defaultMatches = CloseCrossDetector.locate(frame);
+        List<CloseCrossDetector.Detection> defaultMatches = CloseCrossDetector.locate(frame, Region.HALF_RIGHT);
         assertTrue(defaultMatches.stream().anyMatch(match -> near(match.center(), 635, 445)));
         assertFalse(defaultMatches.stream().anyMatch(match -> near(match.center(), 180, 200)));
 
@@ -51,7 +86,7 @@ class CloseCrossDetectorTest {
     @Test
     void rejectsPlusControl() throws IOException {
         BufferedImage plus = read("candidate-more-control-negative.png");
-        List<CloseCrossDetector.Detection> detections = CloseCrossDetector.locate(plus);
+        List<CloseCrossDetector.Detection> detections = CloseCrossDetector.locate(plus, Region.HALF_RIGHT);
         assertTrue(detections.isEmpty(), () -> "plus control matched as a close cross: " + detections);
     }
 
@@ -59,7 +94,7 @@ class CloseCrossDetectorTest {
     void locatesCrossDirectlyFromRawEmulatorFrame() throws IOException {
         BufferedImage frame = read("cross-offer-top-right.png");
         List<CloseCrossDetector.Detection> detections = CloseCrossDetector.locate(
-                rawRgbaFrame(frame));
+                rawRgbaFrame(frame), Region.HALF_RIGHT);
 
         assertTrue(detections.stream().anyMatch(candidate -> near(candidate.center(), 610, 176)),
                 () -> "raw frame did not preserve the detected cross: " + detections);
@@ -67,7 +102,7 @@ class CloseCrossDetectorTest {
 
     private static void assertNear(String fixture, int x, int y) throws IOException {
         BufferedImage frame = read(fixture);
-        List<CloseCrossDetector.Detection> detections = CloseCrossDetector.locate(frame);
+        List<CloseCrossDetector.Detection> detections = CloseCrossDetector.locate(frame, Region.HALF_RIGHT);
         CloseCrossDetector.Detection match = detections.stream()
                 .filter(candidate -> near(candidate.center(), x, y))
                 .findFirst()

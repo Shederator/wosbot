@@ -11,8 +11,16 @@ Run it from the repository root:
   modules/vision/src/test/resources/closebutton
 ```
 
-The default search covers the right half of the frame. The detector API also
-accepts a caller-supplied area. Annotated output is written to
+Select one of the predefined screen regions with `--region` (the default is
+`HALF_RIGHT`): `UPPER_LEFT_QUARTER`, `UPPER_RIGHT_QUARTER`,
+`LOWER_LEFT_QUARTER`, `LOWER_RIGHT_QUARTER`, `HALF_RIGHT`, `MIDDLE`, or
+`FULL_SCREEN`. For example, `--region UPPER_RIGHT_QUARTER` checks the area used
+by initialization; `MIDDLE` is the central half of the frame in both width and
+height. Both annotation and benchmark modes accept the region, so
+the same saved frames can compare area coverage and runtime. Annotated boxes
+and returned detection coordinates are relative to the full screen. The API
+also accepts an explicit inclusive `AreaData` when a caller needs a custom
+rectangle. Annotated output is written to
 `tools/close-cross-detection/target/detections`, which stays out of git.
 
 Benchmark one or more images without writing annotations:
@@ -20,6 +28,13 @@ Benchmark one or more images without writing annotations:
 ```sh
 ./tools/close-cross-detection/detect.sh --do-benchmark --passes 100 \
   modules/vision/src/test/resources/closebutton
+```
+
+Choose a specific region for annotation or timing with `--region`, for example:
+
+```sh
+./tools/close-cross-detection/detect.sh --region UPPER_RIGHT_QUARTER \
+  --do-benchmark --passes 100 modules/vision/src/test/resources/closebutton
 ```
 
 The tool shares image loading, output naming, annotation drawing, and benchmark
@@ -37,5 +52,5 @@ Annotated saved-frame evidence:
 
 The 55 percent OpenCV match threshold is an empirical starting point for the
 four saved cross styles in the standard 720 x 1280 viewport. Detection alone
-does not prove that a dialog is safe to close. Consumers must constrain the
-search area and decide whether to act on the returned location.
+does not prove that a dialog is safe to close. Consumers must choose a suitable
+region or custom area and decide whether to act on the returned location.
