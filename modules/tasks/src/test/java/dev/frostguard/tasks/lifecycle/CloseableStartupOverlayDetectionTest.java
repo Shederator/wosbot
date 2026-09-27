@@ -1,8 +1,8 @@
 package dev.frostguard.tasks.lifecycle;
 
+import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.vision.detection.CloseCrossDetector;
-import dev.frostguard.api.domain.AreaData;
 import org.junit.jupiter.api.Test;
 
 import javax.imageio.ImageIO;
@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CloseableStartupOverlayDetectionTest {
 
-    private static final AreaData STARTUP_CLOSE_AREA = AreaData.of(540, 65, 680, 200);
+    private static final AreaData STARTUP_CLOSE_AREA = AreaData.of(540, 65, 680, 240);
 
     @Test
     void detectsStartupCloseControlUsingReusableDetector() throws IOException {
@@ -34,6 +34,22 @@ class CloseableStartupOverlayDetectionTest {
     }
 
     @Test
+    void detectsCloseControlExtendingBelowPreviousSearchArea() throws IOException {
+        String fixture = "/startup/closeable-offer-cross-below-old-limit.png";
+        assertTrue(inspect(fixture, AreaData.of(0, 0, 139, 135)).isEmpty(),
+                "the old bottom boundary must clip this cross");
+        List<CloseCrossDetector.Detection> detections = inspect(
+                fixture,
+                AreaData.of(0, 0, 139, 174));
+
+        assertFalse(detections.isEmpty());
+        assertTrue(detections.getFirst().bounds().bottomRight().getY() <= 175);
+        assertTrue(Math.abs(detections.getFirst().center().getX() - 70) <= 8);
+        assertTrue(Math.abs(detections.getFirst().center().getY() - 110) <= 8,
+                () -> "expected startup cross near (70,110), got " + detections);
+    }
+
+    @Test
     void rejectsHigherPriorityAndNonCloseableStartupDialogs() throws IOException {
         for (String path : new String[] {
                 "/startup/mandatory-update-dialog-20260820.png",
@@ -45,7 +61,11 @@ class CloseableStartupOverlayDetectionTest {
     }
 
     private static List<CloseCrossDetector.Detection> inspect(String path) throws IOException {
-        return CloseCrossDetector.locate(rawRgbaFrame(frame(path)), STARTUP_CLOSE_AREA);
+        return inspect(path, STARTUP_CLOSE_AREA);
+    }
+
+    private static List<CloseCrossDetector.Detection> inspect(String path, AreaData searchArea) throws IOException {
+        return CloseCrossDetector.locate(rawRgbaFrame(frame(path)), searchArea);
     }
 
     private static BufferedImage frame(String path) throws IOException {

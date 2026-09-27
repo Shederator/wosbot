@@ -80,7 +80,7 @@ public class InitializeRoutine extends DelayedTask {
 	private static final PointData UPDATE_TITLE_AREA_BOTTOM_RIGHT = new PointData(470, 350);
 	private static final PointData UPDATE_BUTTON_AREA_TOP_LEFT = new PointData(200, 850);
 	private static final PointData UPDATE_BUTTON_AREA_BOTTOM_RIGHT = new PointData(520, 1050);
-	private static final AreaData CLOSEABLE_OVERLAY_SEARCH_AREA = AreaData.of(540, 65, 680, 200);
+	private static final AreaData CLOSEABLE_OVERLAY_SEARCH_AREA = AreaData.of(540, 65, 680, 240);
 	private static final int UPDATE_PATTERN_THRESHOLD = 90;
 	private static final int UPDATE_POSTCONDITION_TIMEOUT_MINUTES = 10;
 	private static final int UPDATE_POSTCONDITION_POLL_DELAY_MS = 5000;

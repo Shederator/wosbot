@@ -15,18 +15,19 @@ bounded tap attempts.
 ## Evidence and limits
 
 Initialization now uses the shared detector in its measured
-`(540, 65)`–`(680, 200)` area, after higher-priority startup blockers have been
-checked. A full upper-right quarter produced a false match on Welcome back in
-saved-frame tests, so the narrower custom-area overload is used. The existing three
-dismissal limit and fresh home/world postcondition remain in place. The runtime
-passes the raw emulator frame directly to avoid an intermediate image
-conversion.
+`(540, 65)`–`(680, 240)` area, after higher-priority startup blockers have been
+checked. The lower edge was extended after a live offer's close-cross match
+spanned y=145–205 and was clipped by the previous y=200 boundary. A full
+upper-right quarter produced a false match on Welcome back in saved-frame tests,
+so the narrower custom-area overload is used. The existing three dismissal
+limit and fresh home/world postcondition remain in place. The runtime passes the
+raw emulator frame directly to avoid an intermediate image conversion.
 
-The saved-frame set contains four positive close-control crops spanning
-top-right and middle-right positions and one nearby green plus negative. All
-source captures contained identifying account or map details; test fixtures
-retain only manually reviewed crops around the relevant controls. The detector
-and startup integration have saved-frame tests, and annotated frames are in
+The saved-frame set contains five positive close-control crops spanning
+top-right and middle-right positions and one nearby green plus negative. Earlier
+source captures contained identifying account or map details; fixtures retain
+only manually reviewed crops around the relevant controls. The detector and
+startup integration have saved-frame tests, and annotated frames are in
 `tools/close-cross-detection/evidence/`.
 
 The initial 55% threshold is empirical for this small set. The green plus was
