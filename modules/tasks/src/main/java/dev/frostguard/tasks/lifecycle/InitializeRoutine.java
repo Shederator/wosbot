@@ -2,6 +2,7 @@ package dev.frostguard.tasks.lifecycle;
 
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
+import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.engine.diagnostics.DiagnosticSnapshotStore;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.error.ActionRequiredContext;
@@ -17,6 +18,7 @@ import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.helper.CharacterSwitchHelper;
 import dev.frostguard.vision.convert.ImageConverter;
+import dev.frostguard.vision.detection.CloseCrossDetector;
 import dev.frostguard.vision.match.OpenCvPatternLocator;
 
 import java.time.Instant;
@@ -78,8 +80,7 @@ public class InitializeRoutine extends DelayedTask {
 	private static final PointData UPDATE_TITLE_AREA_BOTTOM_RIGHT = new PointData(470, 350);
 	private static final PointData UPDATE_BUTTON_AREA_TOP_LEFT = new PointData(200, 850);
 	private static final PointData UPDATE_BUTTON_AREA_BOTTOM_RIGHT = new PointData(520, 1050);
-	private static final PointData CLOSEABLE_OVERLAY_AREA_TOP_LEFT = new PointData(540, 65);
-	private static final PointData CLOSEABLE_OVERLAY_AREA_BOTTOM_RIGHT = new PointData(680, 200);
+	private static final AreaData CLOSEABLE_OVERLAY_SEARCH_AREA = AreaData.of(540, 65, 680, 200);
 	private static final int UPDATE_PATTERN_THRESHOLD = 90;
 	private static final int UPDATE_POSTCONDITION_TIMEOUT_MINUTES = 10;
 	private static final int UPDATE_POSTCONDITION_POLL_DELAY_MS = 5000;
@@ -507,20 +508,22 @@ public class InitializeRoutine extends DelayedTask {
 		if (capture == null) {
 			return false;
 		}
-		ImageSearchResultData close = OpenCvPatternLocator.locatePattern(
-				capture,
-				TemplatesEnum.GAME_START_CLOSEABLE_OVERLAY_CLOSE.getTemplate(),
-				CLOSEABLE_OVERLAY_AREA_TOP_LEFT,
-				CLOSEABLE_OVERLAY_AREA_BOTTOM_RIGHT,
-				STARTUP_PATTERN_THRESHOLD);
-		if (!close.isFound()) {
+		CloseCrossDetector.Detection detectedClose = CloseCrossDetector.locate(
+				capture, CLOSEABLE_OVERLAY_SEARCH_AREA)
+				.stream()
+				.findFirst()
+				.orElse(null);
+		if (detectedClose == null) {
 			return false;
 		}
+		ImageSearchResultData close = ImageSearchResultData.hit(
+				detectedClose.center().getX(), detectedClose.center().getY(), detectedClose.score(),
+				detectedClose.width(), detectedClose.height());
 
 		closeableOverlayDismissals++;
 		lastVerifiedStartupState = "closeable startup overlay and concrete close control";
 		logInfo("Closeable startup overlay verified from a fresh frame"
-				+ "; closePattern="
+				+ "; closeCrossScore="
 				+ String.format(java.util.Locale.ROOT, "%.1f", close.getMatchScore())
 				+ "%"
 				+ "; dismissal=" + closeableOverlayDismissals

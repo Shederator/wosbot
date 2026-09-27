@@ -2,6 +2,7 @@ package dev.frostguard.vision.detection;
 
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.PointData;
+import dev.frostguard.api.domain.RawImageData;
 import org.junit.jupiter.api.Test;
 
 import javax.imageio.ImageIO;
@@ -54,6 +55,16 @@ class CloseCrossDetectorTest {
         assertTrue(detections.isEmpty(), () -> "plus control matched as a close cross: " + detections);
     }
 
+    @Test
+    void locatesCrossDirectlyFromRawEmulatorFrame() throws IOException {
+        BufferedImage frame = read("cross-offer-top-right.png");
+        List<CloseCrossDetector.Detection> detections = CloseCrossDetector.locate(
+                rawRgbaFrame(frame));
+
+        assertTrue(detections.stream().anyMatch(candidate -> near(candidate.center(), 610, 176)),
+                () -> "raw frame did not preserve the detected cross: " + detections);
+    }
+
     private static void assertNear(String fixture, int x, int y) throws IOException {
         BufferedImage frame = read(fixture);
         List<CloseCrossDetector.Detection> detections = CloseCrossDetector.locate(frame);
@@ -77,5 +88,19 @@ class CloseCrossDetectorTest {
         try (InputStream stream = CloseCrossDetectorTest.class.getResourceAsStream("/closebutton/" + name)) {
             return ImageIO.read(Objects.requireNonNull(stream, "Missing fixture " + name));
         }
+    }
+
+    private static RawImageData rawRgbaFrame(BufferedImage frame) {
+        byte[] pixels = new byte[frame.getWidth() * frame.getHeight() * 4];
+        for (int y = 0, offset = 0; y < frame.getHeight(); y++) {
+            for (int x = 0; x < frame.getWidth(); x++, offset += 4) {
+                int argb = frame.getRGB(x, y);
+                pixels[offset] = (byte) (argb >> 16);
+                pixels[offset + 1] = (byte) (argb >> 8);
+                pixels[offset + 2] = (byte) argb;
+                pixels[offset + 3] = (byte) 0xFF;
+            }
+        }
+        return RawImageData.capture(pixels, frame.getWidth(), frame.getHeight(), 32);
     }
 }

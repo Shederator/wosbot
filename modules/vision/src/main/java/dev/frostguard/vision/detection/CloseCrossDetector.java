@@ -2,12 +2,12 @@ package dev.frostguard.vision.detection;
 
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.PointData;
+import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.vision.match.OpenCvPatternLocator;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfByte;
-import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.imgcodecs.Imgcodecs;
@@ -38,28 +38,61 @@ public final class CloseCrossDetector {
         return locate(frame, AreaData.of(left, 0, frame.getWidth() - 1, frame.getHeight() - 1));
     }
 
+    /** Finds controls in the right half of a raw emulator capture. */
+    public static List<Detection> locate(RawImageData frame) {
+        if (frame == null) {
+            throw new IllegalArgumentException("Raw close-cross frame must contain valid pixel data.");
+        }
+        int left = frame.getWidth() / 2;
+        return locate(frame, AreaData.of(left, 0, frame.getWidth() - 1, frame.getHeight() - 1));
+    }
+
     /** Finds controls inside an inclusive, image-relative search area. */
     public static List<Detection> locate(BufferedImage frame, AreaData searchArea) {
-        return search(frame, searchArea);
+        AreaBounds bounds = clipArea(searchArea, frame.getWidth(), frame.getHeight());
+        if (bounds == null) {
+            return List.of();
+        }
+        loadOpenCv();
+        Mat gray = toGray(frame, bounds);
+        try {
+            return search(gray, bounds.left(), bounds.top());
+        } finally {
+            gray.release();
+        }
+    }
+
+    /** Finds controls directly from an emulator capture without an intermediate image conversion. */
+    public static List<Detection> locate(RawImageData frame, AreaData searchArea) {
+        if (frame == null) {
+            throw new IllegalArgumentException("Raw close-cross frame must contain valid pixel data.");
+        }
+        int bytesPerPixel = switch (frame.getBpp()) {
+            case 2, 16 -> 2;
+            case 4, 32 -> 4;
+            default -> throw new IllegalArgumentException("Unsupported raw close-cross pixel depth: "
+                    + frame.getBpp());
+        };
+        if (frame.getWidth() <= 0 || frame.getHeight() <= 0 || frame.getData() == null
+                || frame.getData().length < Math.multiplyExact(
+                        Math.multiplyExact(frame.getWidth(), frame.getHeight()), bytesPerPixel)) {
+            throw new IllegalArgumentException("Raw close-cross frame must contain valid pixel data.");
+        }
+        AreaBounds bounds = clipArea(searchArea, frame.getWidth(), frame.getHeight());
+        if (bounds == null) {
+            return List.of();
+        }
+        loadOpenCv();
+        Mat gray = toGray(frame, bytesPerPixel, bounds);
+        try {
+            return search(gray, bounds.left(), bounds.top());
+        } finally {
+            gray.release();
+        }
     }
 
     /** Returns matches scoring at least 55 percent in an inclusive image-relative area. */
-    private static List<Detection> search(BufferedImage frame, AreaData searchArea) {
-        int left = Math.max(0, searchArea.topLeft().getX());
-        int top = Math.max(0, searchArea.topLeft().getY());
-        int right = Math.min(frame.getWidth() - 1, searchArea.bottomRight().getX());
-        int bottom = Math.min(frame.getHeight() - 1, searchArea.bottomRight().getY());
-        if (left > right || top > bottom) {
-            return List.of();
-        }
-        try {
-            OpenCvPatternLocator.loadNativeLibrary();
-        } catch (IOException ex) {
-            throw new IllegalStateException("OpenCV native library could not be loaded", ex);
-        }
-
-        Mat gray = toGray(frame);
-        Mat roi = gray.submat(new Rect(left, top, right - left + 1, bottom - top + 1));
+    private static List<Detection> search(Mat roi, int offsetX, int offsetY) {
         MatOfByte encoded = null;
         Mat template = null;
         List<Mat> scaledTemplates = new ArrayList<>();
@@ -83,7 +116,7 @@ public final class CloseCrossDetector {
                 Imgproc.resize(template, scaled, new Size(width, height), 0, 0,
                         scale < 1 ? Imgproc.INTER_AREA : Imgproc.INTER_CUBIC);
                 scaledTemplates.add(scaled);
-                findMatchesAtScale(roi, scaled, width, height, left, top, candidates);
+                findMatchesAtScale(roi, scaled, width, height, offsetX, offsetY, candidates);
             }
             return suppressDuplicates(candidates);
         } catch (IOException ex) {
@@ -94,8 +127,14 @@ public final class CloseCrossDetector {
             }
             if (template != null) template.release();
             if (encoded != null) encoded.release();
-            roi.release();
-            gray.release();
+        }
+    }
+
+    private static void loadOpenCv() {
+        try {
+            OpenCvPatternLocator.loadNativeLibrary();
+        } catch (IOException ex) {
+            throw new IllegalStateException("OpenCV native library could not be loaded", ex);
         }
     }
 
@@ -127,13 +166,13 @@ public final class CloseCrossDetector {
         }
     }
 
-    private static Mat toGray(BufferedImage frame) {
-        int width = frame.getWidth();
-        int height = frame.getHeight();
-        byte[] pixels = new byte[width * height];
+    private static Mat toGray(BufferedImage frame, AreaBounds bounds) {
+        int width = bounds.width();
+        int height = bounds.height();
+        byte[] pixels = new byte[Math.multiplyExact(width, height)];
         int index = 0;
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
+        for (int y = bounds.top(); y <= bounds.bottom(); y++) {
+            for (int x = bounds.left(); x <= bounds.right(); x++) {
                 int rgb = frame.getRGB(x, y);
                 int red = (rgb >> 16) & 0xFF;
                 int green = (rgb >> 8) & 0xFF;
@@ -144,6 +183,45 @@ public final class CloseCrossDetector {
         Mat gray = new Mat(height, width, CvType.CV_8UC1);
         gray.put(0, 0, pixels);
         return gray;
+    }
+
+    private static Mat toGray(RawImageData frame, int bytesPerPixel, AreaBounds bounds) {
+        int width = bounds.width();
+        int height = bounds.height();
+        byte[] raw = frame.getData();
+        byte[] pixels = new byte[Math.multiplyExact(width, height)];
+        for (int y = bounds.top(), pixel = 0; y <= bounds.bottom(); y++) {
+            for (int x = bounds.left(); x <= bounds.right(); x++, pixel++) {
+                int source = (y * frame.getWidth() + x) * bytesPerPixel;
+                int red;
+                int green;
+                int blue;
+                if (bytesPerPixel == 4) {
+                    red = raw[source] & 0xFF;
+                    green = raw[source + 1] & 0xFF;
+                    blue = raw[source + 2] & 0xFF;
+                } else {
+                    int packed = ((raw[source + 1] & 0xFF) << 8) | (raw[source] & 0xFF);
+                    red = ((packed >> 11) & 0x1F) << 3;
+                    green = ((packed >> 5) & 0x3F) << 2;
+                    blue = (packed & 0x1F) << 3;
+                }
+                pixels[pixel] = (byte) ((299 * red + 587 * green + 114 * blue) / 1000);
+            }
+        }
+        Mat gray = new Mat(height, width, CvType.CV_8UC1);
+        gray.put(0, 0, pixels);
+        return gray;
+    }
+
+    private static AreaBounds clipArea(AreaData area, int width, int height) {
+        int left = Math.max(0, area.topLeft().getX());
+        int top = Math.max(0, area.topLeft().getY());
+        int right = Math.min(width - 1, area.bottomRight().getX());
+        int bottom = Math.min(height - 1, area.bottomRight().getY());
+        return left <= right && top <= bottom
+                ? new AreaBounds(left, top, right, bottom)
+                : null;
     }
 
     private static List<Detection> suppressDuplicates(List<Detection> candidates) {
@@ -175,6 +253,16 @@ public final class CloseCrossDetector {
 
         public int height() {
             return bounds.bottomRight().getY() - bounds.topLeft().getY() + 1;
+        }
+    }
+
+    private record AreaBounds(int left, int top, int right, int bottom) {
+        int width() {
+            return right - left + 1;
+        }
+
+        int height() {
+            return bottom - top + 1;
         }
     }
 
