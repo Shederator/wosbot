@@ -73,6 +73,7 @@ public class StatisticsLayoutController extends AbstractProfileController {
 
     @FXML private Button btnRefresh;
     @FXML private Button btnReset;
+    @FXML private ComboBox<Integer> cmbTelemetryInterval;
     @FXML private HBox hboxSummaryCards;
     @FXML private TableView<JobMetrics> tableTasks;
     @FXML private TableColumn<JobMetrics, String> colTaskName;
@@ -94,6 +95,9 @@ public class StatisticsLayoutController extends AbstractProfileController {
 
     @FXML
     private void initialize() {
+        cmbTelemetryInterval.setItems(FXCollections.observableArrayList(1, 2, 3, 4, 6, 8, 12, 24));
+        registerComboBox(cmbTelemetryInterval, ConfigurationKeyEnum.TELEMETRY_INTERVAL_HOURS_INT);
+        initializeChangeEvents();
         colTaskName.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().getTaskName()));
         colRuns.setCellValueFactory(cellData -> new SimpleIntegerProperty(cellData.getValue().getNumberOfRuns()));
         colAvgTime.setCellValueFactory(cellData -> new SimpleStringProperty(String.format("%.2f", cellData.getValue().getAverageExecutionTimeMs() / 1000.0)));
