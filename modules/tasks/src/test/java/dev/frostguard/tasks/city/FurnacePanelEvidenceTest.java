@@ -43,6 +43,17 @@ class FurnacePanelEvidenceTest {
     }
 
     @Test
+    void recognizesOrangeEntryWhenTutorialHandOverlaysTheButton() throws IOException {
+        var result = inspect(resource("/city/furnace-detail-upgrade-guidance-overlay-20260927.png"));
+        assertTrue(result.actionable(), result.toString());
+        assertTrue(result.title().getMatchScore() >= 90, result.toString());
+        assertTrue(result.upgrade().getMatchScore() >= FurnacePanelDetector.THRESHOLD, result.toString());
+        var point = result.upgrade().getPoint();
+        assertTrue(point.getX() > 488 && point.getX() < 700 && point.getY() > 674 && point.getY() < 734,
+                result.toString());
+    }
+
+    @Test
     void recognizesTheSameEntryThroughRuntimeRawFrameMatching() throws IOException {
         var image = ImageIO.read(new ByteArrayInputStream(resource(FRAME)));
         byte[] pixels = new byte[image.getWidth() * image.getHeight() * 4];

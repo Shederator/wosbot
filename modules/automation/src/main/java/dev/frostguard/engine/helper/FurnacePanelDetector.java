@@ -7,7 +7,9 @@ import dev.frostguard.engine.nav.CommonGameAreas;
 
 /** Identifies the Furnace detail entry, never the final upgrade confirmation. */
 public final class FurnacePanelDetector {
-    public static final int THRESHOLD = 90;
+    // The game's tutorial hand can cover the orange button and lower its template score.
+    // The independent Furnace title and tight button region still gate this match.
+    public static final int THRESHOLD = 70;
 
     private FurnacePanelDetector() {}
 

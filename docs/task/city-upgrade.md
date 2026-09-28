@@ -41,11 +41,14 @@ Logs identify decision frames versus best-effort later captures; capture/write
 failures do not replace ordinary task failures. Recovery failure gets its own
 capture. Runtime captures stay local and need redaction before sharing.
 
-Saved-frame coverage also uses `furnace-detail-upgrade-20260927.png` in the same
-fixture directory. Its account header is irreversibly removed; the Furnace panel
-is intact. Generic blue-arrow detection remains available when the orange
-entry is absent, even if the Furnace title matches. No saved low-level Furnace
-frame is available yet, so that layout's compatibility is not established.
+Saved-frame coverage also uses `furnace-detail-upgrade-20260927.png` and
+`furnace-detail-upgrade-guidance-overlay-20260927.png`. Both account headers are
+irreversibly removed; the second frame preserves the game's tutorial hand over
+the orange button. The Furnace title and bounded button region gate a 70% button
+template match to tolerate that overlay. Generic blue-arrow detection remains
+available when the orange entry is absent, even if the Furnace title matches. No
+saved low-level Furnace frame is available yet, so that layout's compatibility
+is not established.
 Tests cover the observed entry, missing identity/control negatives,
 separation from final Fire Crystal confirmation, and failure recovery sequencing.
 Live account-log confirmation of the new Furnace entry and next-task handoff
