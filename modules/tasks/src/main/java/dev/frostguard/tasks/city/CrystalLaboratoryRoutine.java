@@ -4,7 +4,9 @@ import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
+import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.diagnostics.DiagnosticSnapshotStore;
+import dev.frostguard.vision.convert.ImageConverter;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.schedule.DelayedTask;
@@ -97,8 +99,9 @@ protected void loadConfiguration() {
 
         redeemAllCrystals();
 
+        boolean discountedSettled = true;
         if (useDiscountedDailyRFC) {
-            purchaseDiscountedRFCFlow();
+            discountedSettled = purchaseDiscountedRFCFlow();
         }
 
         if (hasMonday() && weeklyRFCTarget > 0) {
@@ -118,6 +121,15 @@ protected void loadConfiguration() {
             }
         }
 
+
+        if (!discountedSettled) {
+            LocalDateTime retryAt = earlierOf(currentTime().plusMinutes(5), dailyResetTime());
+            logWarning(routineLogCrystalLaboratoryLine(
+                    "Discounted RFC purchase was not confirmed; retrying at "
+                            + retryAt.format(DATETIME_FORMATTER) + "."));
+            reschedule(retryAt);
+            return;
+        }
 
         reschedule(dailyResetTime());
     }
@@ -139,13 +151,14 @@ private String routineLogCrystalLaboratoryLine(String note) {
         return "CrystalLaboratoryRoutine | " + note;
     }
 
-void performDiscountedRFCPurchase() {
+boolean performDiscountedRFCPurchase() {
         ImageSearchResultData refineResult = locateRfcRefineButton();
 
         if (refineResult.isFound()) {
             if (tapDiscountedRfc(refineResult)) {
-                logInfo(routineLogCrystalLaboratoryLine(
-                        "Discounted RFC tap sent; purchase outcome was not independently confirmed."));
+                logWarning(routineLogCrystalLaboratoryLine(
+                        "Discounted RFC tap sent; purchase outcome was not confirmed; "
+                                + retainDiagnosticSnapshot("discounted-rfc-unconfirmed")));
             } else {
                 logWarning(routineLogCrystalLaboratoryLine(
                         "Discounted RFC tap was not sent; "
@@ -155,6 +168,7 @@ void performDiscountedRFCPurchase() {
             logWarning(routineLogCrystalLaboratoryLine("Discounted offer was detected, but its refine button "
                     + "was not detected; " + retainDiagnosticSnapshot("discounted-rfc-button-missing")));
         }
+        return false;
     }
 
 ImageSearchResultData locateRfcRefineButton() {
@@ -187,17 +201,17 @@ boolean performBulkRefinementsFlow(int currentRFC) {
         }
     }
 
-void purchaseDiscountedRFCFlow() {
+boolean purchaseDiscountedRFCFlow() {
         ImageSearchResultData discountedResult = locateDailyDiscountedRfc();
 
         if (!discountedResult.isFound()) {
             logInfo(routineLogCrystalLaboratoryLine(
                     "No discounted RFC offer was detected; skipping today's discounted purchase."));
-            return;
+            return true;
         }
 
         logInfo(routineLogCrystalLaboratoryLine("50% discounted RFC available. Attempting to purchase."));
-        performDiscountedRFCPurchase();
+        return performDiscountedRFCPurchase();
     }
 
 ImageSearchResultData locateDailyDiscountedRfc() {
@@ -507,10 +521,22 @@ boolean hasMonday() {
         return first.isBefore(second) ? first : second;
     }
 
+    static boolean isRetainableDiagnosticFrame(RawImageData frame) {
+        if (frame == null) {
+            return false;
+        }
+        try {
+            ImageConverter.toBufferedImage(frame);
+            return true;
+        } catch (RuntimeException failure) {
+            return false;
+        }
+    }
+
     String retainDiagnosticSnapshot(String type) {
         try {
             var frame = emuManager.captureScreen(EMULATOR_NUMBER);
-            if (frame == null || !frame.isValid()) {
+            if (!isRetainableDiagnosticFrame(frame)) {
                 return "snapshot=unavailable; reason=capture-returned-no-valid-frame";
             }
             var saved = DiagnosticSnapshotStore.forCurrentWorkspace().write(

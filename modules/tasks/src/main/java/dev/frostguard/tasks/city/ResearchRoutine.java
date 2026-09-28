@@ -191,9 +191,7 @@ public ResearchRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
                 return;
             }
         } catch (IOException | OcrException | RuntimeException e) {
-            if (e instanceof dev.frostguard.engine.error.StopExecutionException stop) {
-                throw stop;
-            }
+            CityUpgradeFlow.rethrowControlSignal(e);
             scheduleUnknownQueueRetry("queue status OCR failed: " + e.getClass().getSimpleName());
             return;
         }

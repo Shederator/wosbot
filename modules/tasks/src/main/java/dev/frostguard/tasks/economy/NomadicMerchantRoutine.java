@@ -86,8 +86,8 @@ public class NomadicMerchantRoutine extends DelayedTask {
                                         .withThreshold(90)
                                         .withCoordinates(new PointData(25, 412), new PointData(690, 1200))
                                         .build());
-                        if (stillAvailable.isFound()) {
-                            LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+                        if (tappedPointStillPresent(result.getPoint(), stillAvailable)) {
+                            LocalDateTime retryAt = unverifiedPurchaseRetry(LocalDateTime.now());
                             String snapshot = TaskDiagnosticSnapshots.capture(
                                     emuManager, EMULATOR_NUMBER, "nomadicmerchant", "resource-claim");
                             logWarning("Resource claim was not confirmed; retrying at "
@@ -139,12 +139,12 @@ public class NomadicMerchantRoutine extends DelayedTask {
                             TemplatesEnum.NOMADIC_MERCHANT_VIP,
                             SearchConfigConstants.DEFAULT_SINGLE);
                     if (vipStillAvailable.isFound()) {
-                        LocalDateTime retryAt = GameTimeUtils.dailyResetTime()
-                                .plusMinutes(RESET_SETTLE_DELAY_MINUTES);
+                        LocalDateTime retryAt = unverifiedPurchaseRetry(LocalDateTime.now());
                         String snapshot = TaskDiagnosticSnapshots.capture(
                                 emuManager, EMULATOR_NUMBER, "nomadicmerchant", "vip-purchase");
-                        logWarning("VIP purchase outcome is unverified; stopping to avoid repeating a paid action. "
-                                + "Next check at " + retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+                        logWarning("VIP purchase outcome is unverified; retrying at "
+                                + retryAt.format(DATETIME_FORMATTER)
+                                + " and buying again only if the offer is still present; " + snapshot + ".");
                         reschedule(retryAt);
                         return;
                     }
@@ -227,5 +227,16 @@ public class NomadicMerchantRoutine extends DelayedTask {
     @Override
     protected LaunchPoint getRequiredStartLocation() {
         return LaunchPoint.HOME;
+    }
+
+    static boolean tappedPointStillPresent(PointData tapped, ImageSearchResultData after) {
+        if (tapped == null || after == null || !after.isFound() || after.getPoint() == null) {
+            return false;
+        }
+        return tapped.getX() == after.getPoint().getX() && tapped.getY() == after.getPoint().getY();
+    }
+
+    static LocalDateTime unverifiedPurchaseRetry(LocalDateTime now) {
+        return now.plusMinutes(5);
     }
 }

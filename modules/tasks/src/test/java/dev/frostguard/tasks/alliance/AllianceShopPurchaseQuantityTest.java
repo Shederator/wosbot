@@ -1,6 +1,8 @@
 package dev.frostguard.tasks.alliance;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
@@ -15,5 +17,12 @@ class AllianceShopPurchaseQuantityTest {
     void quantityIsBoundedByValidatedStockAndReserve() {
         assertEquals(3, AllianceShopRoutine.computeBuyQtyFlow(150, 100, 10, 3));
         assertEquals(0, AllianceShopRoutine.computeBuyQtyFlow(100, 100, 10, 8));
+    }
+
+    @Test
+    void confirmsAPurchaseOnlyWhenTheRereadBalanceMatches() {
+        assertTrue(AllianceShopRoutine.coinsConfirmPurchase(90, 90));
+        assertFalse(AllianceShopRoutine.coinsConfirmPurchase(100, 90));
+        assertFalse(AllianceShopRoutine.coinsConfirmPurchase(null, 90));
     }
 }

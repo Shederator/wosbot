@@ -1,6 +1,8 @@
 package dev.frostguard.tasks.economy;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.LocalDateTime;
 
@@ -30,5 +32,18 @@ class StorehouseChestScheduleTest {
     @Test
     void keepsAChestCountdownThatIsExactlyNow() {
         assertEquals(NOW, StorehouseChestRoutine.nextChestVisit(NOW, NOW));
+    }
+
+    @Test
+    void keepsTheFallbackFlagWhenAnOutOfRangeTimerStillReturnsATime() {
+        assertTrue(StorehouseChestRoutine.fallbackAfterRead(true, NOW.plusHours(1)));
+        assertEquals("timer unreadable or invalid (fallback)", StorehouseChestRoutine.scheduleReason(true));
+    }
+
+    @Test
+    void callsAReadableCountdownValidatedOnlyWhenTheReaderAcceptedIt() {
+        assertFalse(StorehouseChestRoutine.fallbackAfterRead(false, NOW.plusMinutes(30)));
+        assertTrue(StorehouseChestRoutine.fallbackAfterRead(false, null));
+        assertEquals("validated chest timer", StorehouseChestRoutine.scheduleReason(false));
     }
 }

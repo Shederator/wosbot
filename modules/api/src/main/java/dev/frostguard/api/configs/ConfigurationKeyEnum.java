@@ -237,6 +237,7 @@ public enum ConfigurationKeyEnum {
     LIFE_ESSENCE_CONSECUTIVE_FAILURES_INT   ("0",       Integer.class,  ConfigCategory.PETS),
     LIFE_ESSENCE_NEXT_SCROLL_TIME_STRING    ("",        String.class,   ConfigCategory.PETS),
     LIFE_ESSENCE_OFFSET_INT                 ("360",     Integer.class,  ConfigCategory.PETS),
+    PET_ADVENTURE_OBSERVE_ONLY_BOOL         ("false",   Boolean.class,  ConfigCategory.PETS),
     PET_PERSONAL_TREASURE_BOOL              ("false",   Boolean.class,  ConfigCategory.PETS),
     PET_SKILL_FOOD_BOOL                     ("false",   Boolean.class,  ConfigCategory.PETS),
     PET_SKILL_GATHERING_BOOL                ("false",   Boolean.class,  ConfigCategory.PETS),

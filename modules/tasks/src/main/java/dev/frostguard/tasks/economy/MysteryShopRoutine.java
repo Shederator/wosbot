@@ -148,8 +148,8 @@ public class MysteryShopRoutine extends DelayedTask {
 			}
 		}
 
-		boolean incomplete = dailyRefreshUsedCount >= maxDailyRefreshes
-				|| iteration >= maxIterations && (foundFreeRewards || foundConfiguredPurchases);
+		boolean visibleWorkRemains = foundFreeRewards || foundConfiguredPurchases;
+		boolean incomplete = scanEndedIncomplete(iteration, maxIterations, visibleWorkRemains);
 		String snapshot = incomplete
 				? TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "mysteryshop", "iteration-limit")
 				: null;
@@ -161,7 +161,7 @@ public class MysteryShopRoutine extends DelayedTask {
 
 		// If no more actions possible, reschedule to game reset time
 		if (incomplete) {
-			LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+			LocalDateTime retryAt = unverifiedRetry(LocalDateTime.now());
 			this.reschedule(retryAt);
 			logWarning("Mystery Shop action scan reached its iteration limit; retrying at "
 					+ retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
@@ -181,17 +181,25 @@ public class MysteryShopRoutine extends DelayedTask {
 				logInfo("No free rewards, purchases or daily refresh available");
 			}
 		} else {
-			LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+			LocalDateTime retryAt = unverifiedRetry(LocalDateTime.now());
+			String unresolvedSnapshot = TaskDiagnosticSnapshots.capture(
+					emuManager, EMULATOR_NUMBER, "mysteryshop", "scan-unresolved");
 			this.reschedule(retryAt);
 			logWarning("Mystery Shop scan ended with unresolved actions; retrying at "
-					+ retryAt.format(DATETIME_FORMATTER) + ".");
+					+ retryAt.format(DATETIME_FORMATTER) + "; " + unresolvedSnapshot + ".");
 		}
 	}
 
+	static boolean scanEndedIncomplete(int iteration, int maxIterations, boolean visibleWorkRemains) {
+		return iteration >= maxIterations && visibleWorkRemains;
+	}
+
+	static LocalDateTime unverifiedRetry(LocalDateTime now) {
+		return now.plusMinutes(5);
+	}
+
 	private void scheduleUnknownActionAndExit(String action) {
-		LocalDateTime retryAt = action.contains("purchase")
-				? GameTimeUtils.dailyResetTime().plusMinutes(1)
-				: LocalDateTime.now().plusMinutes(5);
+		LocalDateTime retryAt = unverifiedRetry(LocalDateTime.now());
 		String snapshot = TaskDiagnosticSnapshots.capture(
 				emuManager, EMULATOR_NUMBER, "mysteryshop", "action-unverified");
 		reschedule(retryAt);

@@ -67,13 +67,15 @@ public class LifeEssenceRoutine extends DelayedTask {
 			return;
 		}
 
-		// Buy weekly free scroll if enabled and available
-		boolean weeklyScrollUnknown = buyWeeklyScroll && shouldBuyWeeklyScroll() && !buyWeeklyFreeScroll();
+		boolean weeklyScrollUnresolved = buyWeeklyScroll && shouldBuyWeeklyScroll() && !buyWeeklyFreeScroll();
+		if (!countsAsCompletedRun(weeklyScrollUnresolved)) {
+			scheduleRetry("Weekly scroll outcome is unknown");
+			return;
+		}
 
 		likeIsland();
 
-		// Exit and reschedule
-		exitAndReschedule(claim.confirmedClaims(), weeklyScrollUnknown);
+		exitAndReschedule(claim.confirmedClaims());
 	}
 
 	private void likeIsland() {
@@ -269,17 +271,41 @@ public class LifeEssenceRoutine extends DelayedTask {
 			return false;
 		}
 
-		// Confirm purchase
 		tapInside(buyButton);
-		sleepTask(500); // Wait for purchase to complete
+		sleepTask(500);
 
-		logWarning("Weekly scroll purchase tap was sent but its outcome was not verified. "
+		ImageSearchResultData offerStillPresent = templateSearchHelper.locatePattern(
+				TemplatesEnum.ISLAND_WEEKLY_FREE_SCROLL,
+				SearchConfig.builder().build());
+		if (!offerStillPresent.isFound()) {
+			LocalDateTime nextScrollTime = nextMondayReset(ZonedDateTime.now(ZoneOffset.UTC));
+			writeProfileSetting(ConfigurationKeyEnum.LIFE_ESSENCE_NEXT_SCROLL_TIME_STRING, nextScrollTime.toString());
+			logInfo("Weekly free scroll purchase confirmed because the offer is gone. Next check at: "
+					+ nextScrollTime);
+			tapNear(EXIT_BUTTON);
+			sleepTask(500);
+			return true;
+		}
+
+		logWarning("Weekly scroll purchase tap was sent but the offer is still present. "
 				+ TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "lifeessence", "weekly-scroll-outcome"));
-
-		// Exit shop
 		tapNear(EXIT_BUTTON);
 		sleepTask(500);
 		return false;
+	}
+
+	static boolean countsAsCompletedRun(boolean weeklyScrollUnresolved) {
+		return !weeklyScrollUnresolved;
+	}
+
+	static LocalDateTime nextMondayReset(ZonedDateTime nowUtc) {
+		ZonedDateTime nextMonday = nowUtc
+				.with(TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY))
+				.truncatedTo(ChronoUnit.DAYS);
+		if (!nextMonday.isAfter(nowUtc)) {
+			nextMonday = nextMonday.plusWeeks(1);
+		}
+		return nextMonday.toLocalDateTime();
 	}
 
 	/**
@@ -318,7 +344,7 @@ public class LifeEssenceRoutine extends DelayedTask {
 	 * 
 	 * @param claimedCount number of essence items claimed
 	 */
-	private void exitAndReschedule(int claimedCount, boolean weeklyScrollUnknown) {
+	private void exitAndReschedule(int claimedCount) {
 		// Exit Life Essence interface
 		logDebug("Exiting Life Essence interface");
 		tapNear(EXIT_BUTTON);
@@ -338,8 +364,7 @@ public class LifeEssenceRoutine extends DelayedTask {
 		reschedule(nextSchedule);
 
 		logInfo("Life Essence task completed. Claimed: " + claimedCount
-				+ (weeklyScrollUnknown ? "; weekly scroll state remains unknown" : "") +
-				". Next run in: " + GameTimeUtils.formatCountdown(nextSchedule));
+				+ ". Next run in: " + GameTimeUtils.formatCountdown(nextSchedule));
 	}
 
 	@Override

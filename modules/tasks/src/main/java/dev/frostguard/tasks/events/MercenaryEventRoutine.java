@@ -3,7 +3,6 @@ package dev.frostguard.tasks.events;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.data.entity.DailyTask;
 import dev.frostguard.data.repository.DailyTaskRepository;
-import dev.frostguard.data.repository.DailyTaskRepository;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
@@ -18,6 +17,7 @@ import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
 import dev.frostguard.engine.helper.DeploymentHelper;
+import dev.frostguard.tasks.diagnostics.TaskControlSignals;
 import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 import java.awt.Color;
 
@@ -124,11 +124,14 @@ public class MercenaryEventRoutine extends DelayedTask {
 
             scoutAndAttack(eventButton, sameLevelAsLastTime);
         } catch (Exception e) {
-            if (e instanceof dev.frostguard.engine.error.StopExecutionException stop) {
-                throw stop;
-            }
-            logError("An error occurred during the Mercenary Event task: " + e.getMessage(), e);
-            reschedule(LocalDateTime.now().plusMinutes(30)); // Reschedule on error
+            TaskControlSignals.rethrowControlSignal(e);
+            LocalDateTime retryAt = LocalDateTime.now().plusMinutes(30);
+            String snapshot = TaskDiagnosticSnapshots.capture(
+                    emuManager, EMULATOR_NUMBER, "mercenaryevent", "task-error");
+            logError("Mercenary Event stopped on " + e.getClass().getSimpleName()
+                    + "; retrying at " + retryAt.format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss"))
+                    + "; " + snapshot + ".", e);
+            reschedule(retryAt);
         }
     }
 

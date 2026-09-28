@@ -20,6 +20,7 @@ import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
+import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.runtime.WorkspacePaths;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
 
@@ -112,13 +113,39 @@ class CrystalLaboratoryRoutineTest {
         routine.discountedOfferFound = true;
         routine.refineButtonFound = true;
 
-        routine.purchaseDiscountedRFCFlow();
+        assertFalse(routine.purchaseDiscountedRFCFlow());
 
         assertEquals(1, routine.discountedOfferSearches);
         assertEquals(1, routine.refineButtonSearches);
         assertEquals(1, routine.discountedRfcTaps);
-        assertTrue(routine.infoMessages.stream()
-                .anyMatch(message -> message.contains("Discounted RFC tap sent; purchase outcome was not independently confirmed.")));
+        assertEquals(List.of("discounted-rfc-unconfirmed"), routine.snapshotTypes);
+        assertTrue(routine.warningMessages.stream()
+                .anyMatch(message -> message.contains("purchase outcome was not confirmed")));
+    }
+
+    @Test
+    void retriesSoonWhenADetectedDiscountedOfferIsUnconfirmed() {
+        TestRoutine routine = new TestRoutine();
+        routine.useDiscountedDailyRFC = true;
+        routine.discountedOfferFound = true;
+        routine.refineButtonFound = true;
+
+        routine.execute();
+
+        assertEquals(List.of(NOW.plusMinutes(5)), routine.scheduledTimes);
+        assertTrue(routine.warningMessages.stream()
+                .anyMatch(message -> message.contains("Discounted RFC purchase was not confirmed")));
+    }
+
+    @Test
+    void retainsAScreencapWhoseBitDepthFailsTheByteLengthCheck() {
+        RawImageData frame = RawImageData.capture(new byte[2 * 2 * 4], 2, 2, 32);
+
+        assertFalse(frame.isValid());
+        assertTrue(CrystalLaboratoryRoutine.isRetainableDiagnosticFrame(frame));
+        assertFalse(CrystalLaboratoryRoutine.isRetainableDiagnosticFrame(null));
+        assertFalse(CrystalLaboratoryRoutine.isRetainableDiagnosticFrame(
+                RawImageData.capture(new byte[1], 2, 2, 32)));
     }
 
     @Test

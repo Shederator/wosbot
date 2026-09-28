@@ -2,9 +2,10 @@ package dev.frostguard.tasks.diagnostics;
 
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.diagnostics.DiagnosticSnapshotStore;
-import dev.frostguard.engine.error.StopExecutionException;
 import dev.frostguard.engine.emulator.EmulatorController;
+
 import java.time.Instant;
+import java.util.function.Supplier;
 
 /** Captures terminal task failures to the workspace diagnostic snapshot store. */
 public final class TaskDiagnosticSnapshots {
@@ -13,8 +14,12 @@ public final class TaskDiagnosticSnapshots {
     }
 
     public static String capture(EmulatorController emulator, String emulatorNumber, String activity, String type) {
+        return capture(() -> emulator.captureScreen(emulatorNumber), activity, type);
+    }
+
+    static String capture(Supplier<RawImageData> takeFrame, String activity, String type) {
         try {
-            RawImageData frame = emulator.captureScreen(emulatorNumber);
+            RawImageData frame = takeFrame.get();
             if (frame == null) {
                 return "snapshot=unavailable; reason=no-frame";
             }
@@ -23,9 +28,7 @@ public final class TaskDiagnosticSnapshots {
                     .map(path -> "snapshot=" + path)
                     .orElse("snapshot=unavailable; reason=write-failed");
         } catch (RuntimeException failure) {
-            if (failure instanceof StopExecutionException stop) {
-                throw stop;
-            }
+            TaskControlSignals.rethrowControlSignal(failure);
             return "snapshot=unavailable; reason=" + failure.getClass().getSimpleName();
         }
     }

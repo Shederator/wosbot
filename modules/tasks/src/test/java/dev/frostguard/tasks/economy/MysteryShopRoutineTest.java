@@ -1,6 +1,7 @@
 package dev.frostguard.tasks.economy;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -32,6 +33,19 @@ class MysteryShopRoutineTest {
         assertEquals(5, routine.navigationAttempts);
         assertEquals(LaunchPoint.HOME, routine.requiredStartLocation());
         assertTrue(routine.scheduledTime().isAfter(before));
+    }
+
+    @Test
+    void retriesAnUnverifiedPurchaseInFiveMinutesInsteadOfAtTheDailyReset() {
+        LocalDateTime now = LocalDateTime.of(2026, 9, 28, 10, 0);
+
+        assertEquals(now.plusMinutes(5), MysteryShopRoutine.unverifiedRetry(now));
+    }
+
+    @Test
+    void doesNotTreatAnExhaustedRefreshBudgetAsAnUnfinishedScan() {
+        assertFalse(MysteryShopRoutine.scanEndedIncomplete(2, 5, false));
+        assertTrue(MysteryShopRoutine.scanEndedIncomplete(5, 5, true));
     }
 
     private static final class TestRoutine extends MysteryShopRoutine {

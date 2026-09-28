@@ -200,14 +200,12 @@ public class StorehouseChestRoutine extends DelayedTask {
         logWarning("Chest not found after maximum attempts. Trying fallback timer reading.");
         nextChestTime = readFallbackTimer();
 
+        nextChestTimeFallback = fallbackAfterRead(nextChestTimeFallback, nextChestTime);
         if (nextChestTime == null) {
-            nextChestTimeFallback = true;
             String snapshot = TaskDiagnosticSnapshots.capture(
                     emuManager, EMULATOR_NUMBER, "storehousechest", "fallback-timer");
             logWarning("Both Storehouse timer reads failed; using the five-minute retry. " + snapshot);
             nextChestTime = LocalDateTime.now().plusMinutes(FALLBACK_RESCHEDULE_MINUTES);
-        } else {
-            nextChestTimeFallback = false;
         }
     }
 
@@ -254,7 +252,7 @@ public class StorehouseChestRoutine extends DelayedTask {
                 text -> LocalDateTime.now().plus(GameTimeUtils.parseDuration(text)));
 
         if (cooldown == null) {
-            logDebug("Fallback timer OCR produced no valid countdown.");
+            logDebug("Claim timer OCR produced no valid countdown.");
             return null;
         }
 
@@ -412,6 +410,14 @@ public class StorehouseChestRoutine extends DelayedTask {
      * retries after five minutes. A stored stamina instant is not an input:
      * a visible can is claimed on the current visit.
      */
+    static boolean fallbackAfterRead(boolean markedOutOfRange, LocalDateTime recognized) {
+        return recognized == null || markedOutOfRange;
+    }
+
+    static String scheduleReason(boolean fallback) {
+        return fallback ? "timer unreadable or invalid (fallback)" : "validated chest timer";
+    }
+
     static LocalDateTime nextChestVisit(LocalDateTime now, LocalDateTime nextChestTime) {
         if (nextChestTime == null || nextChestTime.isBefore(now)) {
             return now.plusMinutes(FALLBACK_RESCHEDULE_MINUTES);
@@ -438,7 +444,7 @@ public class StorehouseChestRoutine extends DelayedTask {
         }
 
         LocalDateTime scheduledTime = nextChestVisit(now, nextChestTime);
-        String reason = nextChestTimeFallback ? "timer unreadable or invalid (fallback)" : "validated chest timer";
+        String reason = scheduleReason(nextChestTimeFallback);
 
         logInfo(String.format("Rescheduling for %s at: %s",
                 reason, scheduledTime.format(DATETIME_FORMATTER)));

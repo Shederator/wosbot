@@ -11,7 +11,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import dev.frostguard.vision.convert.GameTimeUtils;
-import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
@@ -21,6 +20,7 @@ import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.tasks.diagnostics.TaskControlSignals;
 import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
@@ -406,9 +406,7 @@ public class TundraTruckEventRoutine extends DelayedTask {
 
 			return true;
 		} catch (Exception e) {
-			if (e instanceof dev.frostguard.engine.error.StopExecutionException stop) {
-				throw stop;
-			}
+			TaskControlSignals.rethrowControlSignal(e);
 			LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
 			String snapshot = TaskDiagnosticSnapshots.capture(
 					emuManager, EMULATOR_NUMBER, "tundratruck", "remaining-count-error");
@@ -774,9 +772,7 @@ public class TundraTruckEventRoutine extends DelayedTask {
 			return Optional.of(returnTime);
 
 		} catch (Exception e) {
-			if (e instanceof dev.frostguard.engine.error.StopExecutionException stop) {
-				throw stop;
-			}
+			TaskControlSignals.rethrowControlSignal(e);
 			logError("Error extracting " + side + " truck time: " + e.getMessage());
 			return Optional.empty();
 		}

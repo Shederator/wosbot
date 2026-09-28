@@ -4,6 +4,7 @@ import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.vision.convert.GameTimeUtils;
+import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.ImageSearchResultData;
@@ -147,6 +148,12 @@ public class PetAdventureChestRoutine extends DelayedTask {
 		}
 
 		claimCompletedChests();
+		if (observeOnlyVisit()) {
+			clearObserveOnly();
+			logInfo("Re-reading Pet Adventure after an unverified start; Start will not be sent on this visit.");
+			rescheduleForChestCompletion();
+			return;
+		}
 		startAvailableChests();
 	}
 
@@ -322,12 +329,13 @@ public class PetAdventureChestRoutine extends DelayedTask {
 	 * <li>Tap chest to open detail screen</li>
 	 * <li>Tap Select button</li>
 	 * <li>Check for Start button vs No Attempts message</li>
-	 * <li>If Start found: tap it, subtract stamina, return to map</li>
+	 * <li>If Start remains visible, retry shortly without recording a start</li>
+	 * <li>If Start disappears without a confirmed adventure, re-read on the next visit and do not tap Start again</li>
 	 * <li>If No Attempts: reschedule and exit task</li>
 	 * </ol>
 	 * 
 	 * @param chestTemplate The chest template to search for
-	 * @return Result indicating what happened (STARTED, NO_ATTEMPTS, or NOT_FOUND)
+	 * @return NOT_FOUND, NO_ATTEMPTS, or UNKNOWN
 	 */
 	private ChestStartResult attemptToStartChest(TemplatesEnum chestTemplate) {
 		logDebug("Searching for " + chestTemplate);
@@ -378,11 +386,16 @@ public class PetAdventureChestRoutine extends DelayedTask {
 				return ChestStartResult.UNKNOWN;
 			}
 
-			scheduleUnknownChestRetry("Start control disappeared without a positive adventure-state signal",
-					"start-outcome");
-
-			pressBack(); // Return to adventure map
-			sleepTask(500); // Wait for screen transition
+			markObserveOnly();
+			LocalDateTime nextCheck = unverifiedStartRecheck(LocalDateTime.now());
+			String snapshot = TaskDiagnosticSnapshots.capture(
+					emuManager, EMULATOR_NUMBER, "petadventurechest", "start-outcome");
+			logWarning("Start tap was sent but the adventure state was not confirmed; "
+					+ "the next visit only re-reads. Next check at "
+					+ nextCheck.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+			reschedule(nextCheck);
+			pressBack();
+			sleepTask(500);
 			return ChestStartResult.UNKNOWN;
 		}
 
@@ -445,6 +458,23 @@ public class PetAdventureChestRoutine extends DelayedTask {
 		LocalDateTime retryTime = LocalDateTime.now().plusMinutes(NAVIGATION_RETRY_MINUTES);
 		reschedule(retryTime);
 		logWarning("Navigation failed. Retrying at " + retryTime.format(TIME_FORMATTER));
+	}
+
+	static LocalDateTime unverifiedStartRecheck(LocalDateTime now) {
+		return now.plusHours(CHEST_COMPLETION_HOURS);
+	}
+
+	private boolean observeOnlyVisit() {
+		return Boolean.TRUE.equals(profile.getConfig(
+				ConfigurationKeyEnum.PET_ADVENTURE_OBSERVE_ONLY_BOOL, Boolean.class));
+	}
+
+	private void markObserveOnly() {
+		writeProfileSetting(ConfigurationKeyEnum.PET_ADVENTURE_OBSERVE_ONLY_BOOL, true);
+	}
+
+	private void clearObserveOnly() {
+		writeProfileSetting(ConfigurationKeyEnum.PET_ADVENTURE_OBSERVE_ONLY_BOOL, false);
 	}
 
 	private void scheduleUnknownChestRetry(String reason, String type) {

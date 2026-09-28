@@ -346,10 +346,7 @@ private boolean reachShopAndReadCoins() {
         logDebug(routineLogAllianceShopLine("Shop button detected at: " + shopButton.getPoint()));
         tapInside(shopButton.getPoint(), shopButton.getPoint(), 1, 1000);
 
-        logDebug(routineLogAllianceShopLine("Entering shop details to read coins..."));
-        tapInside(SHOP_DETAILS_TOP_LEFT_VALUE, SHOP_DETAILS_BOTTOM_RIGHT_VALUE, 1, 1000);
-
-        currentCoins = scanCurrentCoins();
+        currentCoins = readCoinsFromShopDetails();
 
         if (currentCoins == null) {
             logWarning(routineLogAllianceShopLine("Could not read current alliance coins."));
@@ -357,10 +354,6 @@ private boolean reachShopAndReadCoins() {
         }
 
         logInfo(routineLogAllianceShopLine("Current alliance coins: " + currentCoins + ". Minimum to save: " + minCoins));
-
-
-        tapInside(CLOSE_TOP_LEFT_VALUE, CLOSE_BOTTOM_RIGHT_VALUE, 3, 200);
-
         return true;
     }
 
@@ -494,6 +487,18 @@ static int computeBuyQtyFlow(int currentCoins, int minCoins, int itemPrice, int 
         return Math.max(0, Math.min(availableQuantity, affordable));
     }
 
+static boolean coinsConfirmPurchase(Integer observedCoins, int expectedCoins) {
+        return observedCoins != null && observedCoins == expectedCoins;
+    }
+
+private Integer readCoinsFromShopDetails() {
+        logDebug(routineLogAllianceShopLine("Entering shop details to read coins..."));
+        tapInside(SHOP_DETAILS_TOP_LEFT_VALUE, SHOP_DETAILS_BOTTOM_RIGHT_VALUE, 1, 1000);
+        Integer coins = scanCurrentCoins();
+        tapInside(CLOSE_TOP_LEFT_VALUE, CLOSE_BOTTOM_RIGHT_VALUE, 3, 200);
+        return coins;
+    }
+
 private Integer scanCurrentCoins() {
         return integerHelper.attemptRecognition(
                 COINS_TOP_LEFT_VALUE,
@@ -609,19 +614,19 @@ private boolean performPurchase(
         chooseQuantity(qty);
         confirmPurchaseFlow();
         sleepTask(1000);
-        Integer observedCoins = scanCurrentCoins();
+        dismissPurchaseDialog();
+        sleepTask(500);
+        Integer observedCoins = readCoinsFromShopDetails();
         int expectedCoins = currentCoins - qty * itemPrice;
-        if (observedCoins == null || observedCoins != expectedCoins) {
+        if (!coinsConfirmPurchase(observedCoins, expectedCoins)) {
             String snapshot = TaskDiagnosticSnapshots.capture(
                     emuManager, EMULATOR_NUMBER, "allianceshop", "purchase-outcome");
             logWarning(routineLogAllianceShopLine("Purchase outcome for " + shopItem.getDisplayName()
                     + " is unverified; expected coins=" + expectedCoins + ", observed=" + observedCoins
                     + ". Stopping purchases. " + snapshot));
-            dismissPurchaseDialog();
             return false;
         }
         currentCoins = observedCoins;
-        dismissPurchaseDialog();
 
         logInfo(routineLogAllianceShopLine("Purchase confirmed by coin balance: " + qty + " of " + shopItem.getDisplayName() +
                 ". Remaining coins: " + currentCoins));

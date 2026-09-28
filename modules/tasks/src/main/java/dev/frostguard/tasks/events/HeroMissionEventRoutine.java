@@ -7,7 +7,6 @@ import java.util.List;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.data.entity.DailyTask;
 import dev.frostguard.data.repository.DailyTaskRepository;
-import dev.frostguard.data.repository.DailyTaskRepository;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
@@ -131,20 +130,58 @@ public class HeroMissionEventRoutine extends DelayedTask {
         rallyReaper();
     }
 
-    private boolean rallyReaper() {
-        ImageSearchResultData button = templateSearchHelper.locatePattern(
+    ImageSearchResultData findTraceButton() {
+        return templateSearchHelper.locatePattern(
                 TemplatesEnum.HERO_MISSION_EVENT_TRACE_BUTTON,
                 SearchConfig.builder()
                         .withThreshold(90)
                         .withMaxAttempts(3)
                         .build());
+    }
+
+    ImageSearchResultData findCaptureButton() {
+        return templateSearchHelper.locatePattern(
+                TemplatesEnum.HERO_MISSION_EVENT_CAPTURE_BUTTON,
+                SearchConfig.builder()
+                        .withThreshold(90)
+                        .withMaxAttempts(3)
+                        .build());
+    }
+
+    ImageSearchResultData findRallyButton() {
+        return templateSearchHelper.locatePattern(
+                TemplatesEnum.RALLY_BUTTON,
+                SearchConfig.builder()
+                        .withThreshold(90)
+                        .withMaxAttempts(3)
+                        .build());
+    }
+
+    ImageSearchResultData findDeployButton() {
+        return templateSearchHelper.locatePattern(
+                TemplatesEnum.DEPLOY_BUTTON,
+                SearchConfig.builder()
+                        .withThreshold(90)
+                        .withMaxAttempts(3)
+                        .build());
+    }
+
+    String diagnosticSnapshot(String control) {
+        return TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "heromission", control);
+    }
+
+    void scheduleMissingControlRetry(String control) {
+        LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+        String snapshot = diagnosticSnapshot(control);
+        logWarning(control + " was not detected; retrying at "
+                + retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+        reschedule(retryAt);
+    }
+
+    boolean rallyReaper() {
+        ImageSearchResultData button = findTraceButton();
         if (!button.isFound()) {
-            button = templateSearchHelper.locatePattern(
-                    TemplatesEnum.HERO_MISSION_EVENT_CAPTURE_BUTTON,
-                    SearchConfig.builder()
-                            .withThreshold(90)
-                            .withMaxAttempts(3)
-                            .build());
+            button = findCaptureButton();
             if (!button.isFound()) {
                 LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
                 String snapshot = TaskDiagnosticSnapshots.capture(
@@ -161,15 +198,10 @@ public class HeroMissionEventRoutine extends DelayedTask {
         sleepTask(300);
 
         // Search for rally button
-        ImageSearchResultData rallyButton = templateSearchHelper.locatePattern(
-                TemplatesEnum.RALLY_BUTTON,
-                SearchConfig.builder()
-                        .withThreshold(90)
-                        .withMaxAttempts(3)
-                        .build());
+        ImageSearchResultData rallyButton = findRallyButton();
 
         if (!rallyButton.isFound()) {
-            logDebug("Rally button not found. Rescheduling to try again in 5 minutes.");
+            scheduleMissingControlRetry("rally-button");
             return false;
         }
 
@@ -205,15 +237,10 @@ public class HeroMissionEventRoutine extends DelayedTask {
         }
 
         // Deploy march
-        ImageSearchResultData deploy = templateSearchHelper.locatePattern(
-                TemplatesEnum.DEPLOY_BUTTON,
-                SearchConfig.builder()
-                        .withThreshold(90)
-                        .withMaxAttempts(3)
-                        .build());
+        ImageSearchResultData deploy = findDeployButton();
 
         if (!deploy.isFound()) {
-            logDebug("Deploy button not found. Rescheduling to try again in 5 minutes.");
+            scheduleMissingControlRetry("deploy-button");
             return false;
         }
 
