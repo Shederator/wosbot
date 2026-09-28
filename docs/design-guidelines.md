@@ -55,17 +55,37 @@ exit paths must reschedule or intentionally stop. Centralize scheduling decision
 when practical to avoid hidden double-rescheduling, and verify important actions
 before continuing when a reliable success signal exists.
 
+An unconfirmed tap, a missing read, or an unreadable screen is an unknown
+outcome. Do not record completion, a purchase, a claim, progress, or a resource
+spend for it, and do not log that run as completed. Retry an unknown outcome on
+a short bounded delay. Do not schedule the next daily or weekly reset for it,
+and do not leave a recurring task's schedule unchanged: an unchanged schedule
+runs again immediately. Schedule a reset only after positive evidence that the
+action landed, the offer or attempt is actually exhausted, or the required
+control is absent for a reason the task already treats as finished.
+
+When data or a required control should have been visible and was not, save one
+diagnostic snapshot and log one precise line: what was expected, what was
+observed, the next run time, and the snapshot path. Do not add that line to a
+success path or to a hot retry loop. Retain a frame the image converter can
+decode. A screencap stores color depth in bits per pixel, so
+RawImageData.isValid() does not decide retention.
+
 Scheduler and profile-switching behavior must leave enough time for screens and
 emulator state to stabilize. Avoid aggressive back-to-back work after profile
 load unless the task is explicitly time-sensitive. Unknown states should exit
-conservatively rather than create implicit loops.
+conservatively rather than create implicit loops. A capture or OCR failure that
+is an ADB, stop, preemption, cooldown, or reconnect signal must propagate.
+Swallowing it as a domain retry hides the connection failure.
 
 ## Logging And Statistics
 
 Log important state transitions, decisions, evidence, fallback reasons, and the
-next scheduling outcome. Use debug or trace for failed intermediate attempts in
-a retry chain that later succeeds. Avoid noisy logs in hot loops and do not emit
-high-level incidents for recovered retries.
+next scheduling outcome. Name an unknown outcome as unknown, and name a
+validated timer or completed action only when the evidence passed. Use debug or
+trace for failed intermediate attempts in a retry chain that later succeeds.
+Avoid noisy logs in hot loops and do not emit high-level incidents for
+recovered retries.
 
 Update statistics only for meaningful outcomes such as fights won or lost,
 items claimed, purchases made, or refreshes used.

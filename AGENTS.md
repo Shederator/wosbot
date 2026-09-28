@@ -57,7 +57,7 @@ fixture still proves the intended behavior. Run at least the affected module
 tests; use a full reactor build for cross-module or packaging changes.
 For supported world-map screenshots, use the standalone redactor documented in tools/privacy-redactor/README.md, then manually review the output before committing or sharing it.
 
-Review the tests that already cover the change and add or extend one when the changed behavior is a direct check, including a saved frame for vision, OCR, or pattern changes.
+Review the tests that already cover the change and add or extend one when the changed behavior is a direct check, including a saved frame for vision, OCR, or pattern changes. For a scheduling or completion change, assert the chosen next time and assert that an unknown outcome did not record completion, spend, progress, or a reset-based schedule. Do not stub the diagnostic or scheduling decision under test. A test that only checks a log string or a tapped control does not cover a false success, a reset schedule, or an unchanged schedule that runs again immediately. Do not stub a routine's diagnostic retention. Assert that path keeps a normal screencap whose color depth is bits per pixel even when RawImageData.isValid() returns false. When a rejected countdown is replaced by a fallback time, assert that the reason stays a fallback and is not named a validated timer.
 
 ## Shared Engineering Rules
 
