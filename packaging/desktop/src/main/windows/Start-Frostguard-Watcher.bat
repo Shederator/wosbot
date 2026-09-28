@@ -10,26 +10,26 @@ setlocal enabledelayedexpansion
 set "JAR="
 set "SEARCH_DIR=%~dp0"
 
-for /l %%i in (1,1,5) do (
-    for %%f in ("!SEARCH_DIR!frostguard-watcher*.jar") do (
+for /l %%i in (1,1,6) do (
+    for /f "delims=" %%f in ('dir /b /a-d /o-d "!SEARCH_DIR!frostguard-watcher*.jar" 2^>nul') do (
         set "CAND=%%~nxf"
         if /I not "!CAND:original-=!"=="!CAND!" (
             rem skip original-* backup artifact
         ) else if /I not "!CAND:-shaded=!"=="!CAND!" (
             rem skip *-shaded duplicate artifact
         ) else (
-            set "JAR=%%f"
+            set "JAR=!SEARCH_DIR!%%f"
             goto :found
         )
     )
-    for %%f in ("!SEARCH_DIR!modules\watcher\target\frostguard-watcher*.jar") do (
+    for /f "delims=" %%f in ('dir /b /a-d /o-d "!SEARCH_DIR!modules\watcher\target\frostguard-watcher*.jar" 2^>nul') do (
         set "CAND=%%~nxf"
         if /I not "!CAND:original-=!"=="!CAND!" (
             rem skip original-* backup artifact
         ) else if /I not "!CAND:-shaded=!"=="!CAND!" (
             rem skip *-shaded duplicate artifact
         ) else (
-            set "JAR=%%f"
+            set "JAR=!SEARCH_DIR!modules\watcher\target\%%f"
             goto :found
         )
     )
