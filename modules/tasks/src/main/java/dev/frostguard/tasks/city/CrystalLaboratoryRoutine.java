@@ -521,6 +521,10 @@ boolean hasMonday() {
         return first.isBefore(second) ? first : second;
     }
 
+    RawImageData captureDiagnosticFrame() {
+        return emuManager.captureScreen(EMULATOR_NUMBER);
+    }
+
     static boolean isRetainableDiagnosticFrame(RawImageData frame) {
         if (frame == null) {
             return false;
@@ -535,7 +539,7 @@ boolean hasMonday() {
 
     String retainDiagnosticSnapshot(String type) {
         try {
-            var frame = emuManager.captureScreen(EMULATOR_NUMBER);
+            var frame = captureDiagnosticFrame();
             if (!isRetainableDiagnosticFrame(frame)) {
                 return "snapshot=unavailable; reason=capture-returned-no-valid-frame";
             }

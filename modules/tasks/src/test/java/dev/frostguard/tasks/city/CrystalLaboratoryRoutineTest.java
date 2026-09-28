@@ -140,12 +140,17 @@ class CrystalLaboratoryRoutineTest {
     @Test
     void retainsAScreencapWhoseBitDepthFailsTheByteLengthCheck() {
         RawImageData frame = RawImageData.capture(new byte[2 * 2 * 4], 2, 2, 32);
-
         assertFalse(frame.isValid());
-        assertTrue(CrystalLaboratoryRoutine.isRetainableDiagnosticFrame(frame));
-        assertFalse(CrystalLaboratoryRoutine.isRetainableDiagnosticFrame(null));
-        assertFalse(CrystalLaboratoryRoutine.isRetainableDiagnosticFrame(
-                RawImageData.capture(new byte[1], 2, 2, 32)));
+
+        String retained = new RetentionRoutine(frame).retainDiagnosticSnapshot("bit-depth");
+        assertFalse(retained.contains("no-valid-frame"), retained);
+        assertTrue(retained.startsWith("snapshot="), retained);
+
+        assertTrue(new RetentionRoutine(null).retainDiagnosticSnapshot("bit-depth")
+                .contains("no-valid-frame"));
+        assertTrue(new RetentionRoutine(RawImageData.capture(new byte[1], 2, 2, 32))
+                .retainDiagnosticSnapshot("bit-depth")
+                .contains("no-valid-frame"));
     }
 
     @Test
@@ -227,6 +232,21 @@ class CrystalLaboratoryRoutineTest {
         assertEquals(1, routine.weeklyHandlerCalls);
         assertEquals(List.of(DAILY_RESET), routine.scheduledTimes);
         assertEquals(0, routine.discountedOfferSearches);
+    }
+
+    private static final class RetentionRoutine extends CrystalLaboratoryRoutine {
+        private final RawImageData frame;
+
+        private RetentionRoutine(RawImageData frame) {
+            super(new AccountDescriptor(1L, "Test", "1", true, 1L, 30L),
+                    TpDailyTaskEnum.CRYSTAL_LABORATORY);
+            this.frame = frame;
+        }
+
+        @Override
+        RawImageData captureDiagnosticFrame() {
+            return frame;
+        }
     }
 
     private static final class TestRoutine extends CrystalLaboratoryRoutine {
