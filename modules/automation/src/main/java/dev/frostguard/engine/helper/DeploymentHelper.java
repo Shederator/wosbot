@@ -186,6 +186,37 @@ public class DeploymentHelper {
         return false;
     }
 
+    /**
+     * Outcome after pressing Deploy. Button disappearance alone is ambiguous; a positive World
+     * screen anchor is required before callers record stamina or a march.
+     */
+    public LaunchCheck verifyLaunchTransition() {
+        ImageSearchResultData deploy = templates.locatePattern(
+                TemplatesEnum.DEPLOY_BUTTON,
+                search(CommonGameAreas.RALLY_BOTTOM_BUTTON_BAR, 3, 85));
+        ImageSearchResultData world = templates.locatePattern(
+                TemplatesEnum.GAME_HOME_WORLD,
+                TemplateSearchHelper.SearchConfig.builder()
+                        .withMaxAttempts(3)
+                        .withDelay(200)
+                        .withThreshold(85)
+                        .build());
+        return classifyLaunchCheck(deploy.isFound(), world.isFound());
+    }
+
+    static LaunchCheck classifyLaunchCheck(boolean deployStillVisible, boolean worldAnchorVisible) {
+        if (deployStillVisible) {
+            return LaunchCheck.STILL_ON_DEPLOYMENT;
+        }
+        return worldAnchorVisible ? LaunchCheck.WORLD_VERIFIED : LaunchCheck.UNKNOWN;
+    }
+
+    public enum LaunchCheck {
+        WORLD_VERIFIED,
+        STILL_ON_DEPLOYMENT,
+        UNKNOWN
+    }
+
     /** Equalises the troop sliders. Its x shifts with the Balance button, so it is matched, not tapped blind. */
     public boolean tapEqualize() {
         ImageSearchResultData equalize = templates.locatePattern(

@@ -23,7 +23,7 @@ class NomadicMerchantRoutineTest {
     @Test
     void stopsAndReschedulesWhenSharedShopNavigationFails() {
         TestRoutine routine = new TestRoutine();
-        LocalDateTime before = LocalDateTime.now().plusMinutes(59);
+        LocalDateTime before = LocalDateTime.now().plusMinutes(4);
 
         routine.execute();
 

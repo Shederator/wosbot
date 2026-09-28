@@ -18,6 +18,7 @@ import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
 import dev.frostguard.engine.helper.DeploymentHelper;
+import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 import java.awt.Color;
 
 import java.time.LocalDateTime;
@@ -75,8 +76,11 @@ public class MercenaryEventRoutine extends DelayedTask {
             attempt++;
         }
 
-        logWarning("Could not find the Mercenary event tab. Assuming event is unavailable. Rescheduling to reset.");
-        reschedule(GameTimeUtils.dailyResetTime());
+        LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+        String snapshot = TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "mercenaryevent", "event-navigation");
+        logWarning("Mercenary event navigation is unverified; retrying at "
+                + retryAt.format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss")) + "; " + snapshot + ".");
+        reschedule(retryAt);
     }
 
     private void handleMercenaryEvent() {
@@ -90,8 +94,12 @@ public class MercenaryEventRoutine extends DelayedTask {
             ImageSearchResultData eventButton = findMercenaryEventButton();
 
             if (eventButton == null) {
-                logInfo("No scout or challenge button found, assuming event is completed. Rescheduling to reset.");
-                reschedule(GameTimeUtils.dailyResetTime());
+                LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+                String snapshot = TaskDiagnosticSnapshots.capture(
+                        emuManager, EMULATOR_NUMBER, "mercenaryevent", "action-controls");
+                logWarning("Neither event action control was detected; completion is unknown. Retrying at "
+                        + retryAt.format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss")) + "; " + snapshot + ".");
+                reschedule(retryAt);
                 return;
             }
 
@@ -116,6 +124,9 @@ public class MercenaryEventRoutine extends DelayedTask {
 
             scoutAndAttack(eventButton, sameLevelAsLastTime);
         } catch (Exception e) {
+            if (e instanceof dev.frostguard.engine.error.StopExecutionException stop) {
+                throw stop;
+            }
             logError("An error occurred during the Mercenary Event task: " + e.getMessage(), e);
             reschedule(LocalDateTime.now().plusMinutes(30)); // Reschedule on error
         }
@@ -294,11 +305,6 @@ public class MercenaryEventRoutine extends DelayedTask {
             return;
         }
 
-        if (scout) {
-            logInfo("Scouting mercenary. Decreasing stamina by 15.");
-            StaminaService.getServices().subtractStamina(profile.getId(), 15);
-        }
-
         // Click on the button (whether it's scout or challenge)
         tapInside(eventButton);
         sleepTask(4000); // Wait to travel to mercenary location on map
@@ -324,6 +330,11 @@ public class MercenaryEventRoutine extends DelayedTask {
             logWarning("Attack/Rally button not found after scouting/challenging. Retrying in 5 minutes.");
             reschedule(LocalDateTime.now().plusMinutes(5));
             return;
+        }
+
+        if (scout) {
+            logInfo("Scout outcome confirmed by the attack/rally control. Decreasing stamina by 15.");
+            StaminaService.getServices().subtractStamina(profile.getId(), 15);
         }
 
         if (rally && deferIfBearTrapBlocksRallyStart()) {
@@ -392,11 +403,11 @@ public class MercenaryEventRoutine extends DelayedTask {
                 reschedule(LocalDateTime.now().plusMinutes(1));
                 return;
             }
-            ImageSearchResultData deployStillPresent = templateSearchHelper.locatePattern(
-                    TemplatesEnum.DEPLOY_BUTTON,
-                    SearchConfigConstants.SINGLE_WITH_2_RETRIES);
-            if (deployStillPresent.isFound()) {
-                logWarning("Deploy button remained visible; stamina was not deducted.");
+            DeploymentHelper.LaunchCheck launchCheck = deploymentHelper.verifyLaunchTransition();
+            if (launchCheck != DeploymentHelper.LaunchCheck.WORLD_VERIFIED) {
+                String snapshot = TaskDiagnosticSnapshots.capture(
+                        emuManager, EMULATOR_NUMBER, "mercenaryevent", "deployment-unknown-travel");
+                logWarning("Deployment was not verified (" + launchCheck + "); stamina was not deducted. " + snapshot);
                 reschedule(LocalDateTime.now().plusMinutes(5));
                 return;
             }
@@ -425,12 +436,11 @@ public class MercenaryEventRoutine extends DelayedTask {
         }
 
         // Verify deployment succeeded
-        ImageSearchResultData deployStillPresent = templateSearchHelper.locatePattern(
-                TemplatesEnum.DEPLOY_BUTTON,
-                SearchConfigConstants.SINGLE_WITH_2_RETRIES);
-        if (deployStillPresent.isFound()) {
-            logWarning(
-                    "Deploy button still present after attempting to deploy. March may have failed. Retrying in 5 minutes.");
+        DeploymentHelper.LaunchCheck launchCheck = deploymentHelper.verifyLaunchTransition();
+        if (launchCheck != DeploymentHelper.LaunchCheck.WORLD_VERIFIED) {
+            String snapshot = TaskDiagnosticSnapshots.capture(
+                    emuManager, EMULATOR_NUMBER, "mercenaryevent", "deployment-unknown");
+            logWarning("Deployment was not verified (" + launchCheck + "); stamina was not deducted. " + snapshot);
             reschedule(LocalDateTime.now().plusMinutes(5));
             return;
         }

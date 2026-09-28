@@ -4,6 +4,7 @@ import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
+import dev.frostguard.engine.diagnostics.DiagnosticSnapshotStore;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.schedule.DelayedTask;
@@ -11,6 +12,7 @@ import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import java.time.Clock;
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -28,6 +30,8 @@ private static final int MAX_SCREEN_VALIDATION_ATTEMPTS = 3;
 private static final int MAX_NAVIGATION_ATTEMPTS = 2;
 
 private static final int INSUFFICIENT_FC_RETRY_HOURS_VALUE = 2;
+
+private static final int OCR_RETRY_HOURS_VALUE = 1;
 
 private static final int RFC_COST_TIER_1_VALUE = 20;
 
@@ -59,9 +63,9 @@ private static final PointData CURRENT_RFC_BOTTOM_RIGHT_VALUE = new PointData(51
 
 private static final Pattern NUMBER_PATTERN = Pattern.compile("(\\d{1,3}(?:[.,]\\d{3})*|\\d+)");
 
-private boolean useDiscountedDailyRFC;
+boolean useDiscountedDailyRFC;
 
-private int weeklyRFCTarget;
+int weeklyRFCTarget;
 
 private int consecutiveNavigationFailures;
 
@@ -95,21 +99,27 @@ protected void loadConfiguration() {
 
         if (useDiscountedDailyRFC) {
             purchaseDiscountedRFCFlow();
+        }
 
-            if (hasMonday()) {
-                WeeklyRFCResultShape result = handleWeeklyRFC();
+        if (hasMonday() && weeklyRFCTarget > 0) {
+            WeeklyRFCResultShape result = handleWeeklyRFC();
 
-                if (result == WeeklyRFCResultShape.INSUFFICIENT_FC) {
-
-
-                    reschedule(LocalDateTime.now().plusHours(INSUFFICIENT_FC_RETRY_HOURS_VALUE));
-                    return;
-                }
+            if (result == WeeklyRFCResultShape.INSUFFICIENT_FC
+                    || result == WeeklyRFCResultShape.OCR_FAILED
+                    || result == WeeklyRFCResultShape.ACTION_FAILED) {
+                int retryHours = result == WeeklyRFCResultShape.INSUFFICIENT_FC
+                        ? INSUFFICIENT_FC_RETRY_HOURS_VALUE : OCR_RETRY_HOURS_VALUE;
+                LocalDateTime retryAt = earlierOf(
+                        currentTime().plusHours(retryHours), dailyResetTime());
+                logInfo(routineLogCrystalLaboratoryLine("Weekly RFC retry scheduled at "
+                        + retryAt.format(DATETIME_FORMATTER) + "; reason=" + result + "."));
+                reschedule(retryAt);
+                return;
             }
         }
 
 
-        reschedule(GameTimeUtils.dailyResetTime());
+        reschedule(dailyResetTime());
     }
 
 @Override
@@ -117,11 +127,12 @@ protected void loadConfiguration() {
         return LaunchPoint.HOME;
     }
 
-private enum WeeklyRFCResultShape {
+enum WeeklyRFCResultShape {
         REFINEMENTS_DONE,
         TARGET_REACHED,
         INSUFFICIENT_FC,
-        OCR_FAILED
+        OCR_FAILED,
+        ACTION_FAILED
     }
 
 private String routineLogCrystalLaboratoryLine(String note) {
@@ -132,11 +143,17 @@ void performDiscountedRFCPurchase() {
         ImageSearchResultData refineResult = locateRfcRefineButton();
 
         if (refineResult.isFound()) {
-            tapDiscountedRfc(refineResult);
-
-            logInfo(routineLogCrystalLaboratoryLine("Discounted RFC purchased finished cleanly."));
+            if (tapDiscountedRfc(refineResult)) {
+                logInfo(routineLogCrystalLaboratoryLine(
+                        "Discounted RFC tap sent; purchase outcome was not independently confirmed."));
+            } else {
+                logWarning(routineLogCrystalLaboratoryLine(
+                        "Discounted RFC tap was not sent; "
+                                + retainDiagnosticSnapshot("discounted-rfc-tap-failed")));
+            }
         } else {
-            logWarning(routineLogCrystalLaboratoryLine("Could not find RFC refine button for discounted purchase."));
+            logWarning(routineLogCrystalLaboratoryLine("Discounted offer was detected, but its refine button "
+                    + "was not detected; " + retainDiagnosticSnapshot("discounted-rfc-button-missing")));
         }
     }
 
@@ -146,12 +163,13 @@ ImageSearchResultData locateRfcRefineButton() {
                 SearchConfig.builder().build());
     }
 
-void tapDiscountedRfc(ImageSearchResultData refineResult) {
-        tapInside(refineResult);
+boolean tapDiscountedRfc(ImageSearchResultData refineResult) {
+        boolean tapped = tapInside(refineResult);
         sleepTask(500);
+        return tapped;
     }
 
-private void performBulkRefinementsFlow(int currentRFC) {
+boolean performBulkRefinementsFlow(int currentRFC) {
         int refinesToDo = weeklyRFCTarget - currentRFC;
 
         logInfo(routineLogCrystalLaboratoryLine(String.format("Sufficient FC available. Performing %d refinements.", refinesToDo)));
@@ -161,10 +179,11 @@ private void performBulkRefinementsFlow(int currentRFC) {
                 SearchConfig.builder().build());
 
         if (refineResult.isFound()) {
-            tapInside(refineResult.getPoint(), refineResult.getPoint(), refinesToDo, 500);
-            logInfo(routineLogCrystalLaboratoryLine("Bulk refinements completed."));
+            return tapInside(refineResult, refinesToDo, 500);
         } else {
-            logWarning(routineLogCrystalLaboratoryLine("Could not find RFC refine button for bulk refinements."));
+            logWarning(routineLogCrystalLaboratoryLine("Could not detect RFC refine button for weekly "
+                    + "refinements; " + retainDiagnosticSnapshot("weekly-rfc-button-missing")));
+            return false;
         }
     }
 
@@ -172,7 +191,8 @@ void purchaseDiscountedRFCFlow() {
         ImageSearchResultData discountedResult = locateDailyDiscountedRfc();
 
         if (!discountedResult.isFound()) {
-            logInfo(routineLogCrystalLaboratoryLine("Zero discounted RFC available today."));
+            logInfo(routineLogCrystalLaboratoryLine(
+                    "No discounted RFC offer was detected; skipping today's discounted purchase."));
             return;
         }
 
@@ -198,8 +218,9 @@ private boolean validateCrystalLabInterface() {
             }
         }
 
-        logWarning(routineLogCrystalLaboratoryLine(
-                "Crystal Lab UI not detected after " + MAX_SCREEN_VALIDATION_ATTEMPTS + " checks."));
+        logWarning(routineLogCrystalLaboratoryLine("Crystal Lab UI not detected after "
+                + MAX_SCREEN_VALIDATION_ATTEMPTS + " checks; "
+                + retainDiagnosticSnapshot("screen-validation-failed")));
         return false;
     }
 
@@ -210,7 +231,7 @@ boolean isCrystalLabInterfaceVisible() {
         return validationResult.isFound();
     }
 
-private int extractNumberWithOCRFlow(PointData topLeft, PointData bottomRight, String description) {
+int extractNumberWithOCRFlow(PointData topLeft, PointData bottomRight, String description) {
         for (int attempt = 1; attempt <= MAX_OCR_RETRIES_LIMIT; attempt++) {
             logDebug(routineLogCrystalLaboratoryLine("Extracting " + description + " via OCR (attempt " +
                     attempt + "/" + MAX_OCR_RETRIES_LIMIT + ")"));
@@ -222,7 +243,7 @@ private int extractNumberWithOCRFlow(PointData topLeft, PointData bottomRight, S
                         1,
                         300L,
                         null,
-                        s -> !s.isEmpty(),
+                        s -> s != null && !s.isBlank(),
                         s -> s);
                 Integer number = decodeNumberFromOCR(ocrResult);
 
@@ -232,7 +253,9 @@ private int extractNumberWithOCRFlow(PointData topLeft, PointData bottomRight, S
                 }
 
             } catch (Exception e) {
-                logWarning(routineLogCrystalLaboratoryLine("OCR attempt " + attempt + " threw exception: " + e.getMessage()));
+                CityUpgradeFlow.rethrowControlSignal(e);
+                logDebug(routineLogCrystalLaboratoryLine(
+                        "OCR attempt " + attempt + " failed: " + e.getClass().getSimpleName()));
             }
 
             if (attempt < MAX_OCR_RETRIES_LIMIT) {
@@ -241,7 +264,9 @@ private int extractNumberWithOCRFlow(PointData topLeft, PointData bottomRight, S
             }
         }
 
-        logWarning(routineLogCrystalLaboratoryLine("Could not extract " + description + " after " + MAX_OCR_RETRIES_LIMIT + " attempts"));
+        logWarning(routineLogCrystalLaboratoryLine("Could not extract " + description + " after "
+                + MAX_OCR_RETRIES_LIMIT + " attempts; "
+                + retainDiagnosticSnapshot("ocr-failed-" + description.replace(' ', '-'))));
         return -1;
     }
 
@@ -287,8 +312,8 @@ boolean navigateToCrystalLaboratoryViaSidebar() {
                         .withDelay(500)
                         .build());
         if (!entryResult.isFound()) {
-            logWarning(routineLogCrystalLaboratoryLine(
-                    "Crystal Laboratory building marker was not found after sidebar navigation."));
+            logWarning(routineLogCrystalLaboratoryLine("Crystal Laboratory building marker was not detected "
+                    + "after sidebar navigation; " + retainDiagnosticSnapshot("building-marker-missing")));
             return false;
         }
 
@@ -351,7 +376,7 @@ private int resolveRefinementCost(int refineLevel) {
         return RFC_COST_TIER_5_VALUE;
     }
 
-private Integer extractCurrentRFCFlow() {
+Integer extractCurrentRFCFlow() {
         int rfc = extractNumberWithOCRFlow(
                 CURRENT_RFC_TOP_LEFT_VALUE,
                 CURRENT_RFC_BOTTOM_RIGHT_VALUE,
@@ -360,7 +385,7 @@ private Integer extractCurrentRFCFlow() {
         return rfc == -1 ? null : rfc;
     }
 
-private WeeklyRFCResultShape handleRFCRefinements(int currentFC, int currentRFC) {
+WeeklyRFCResultShape handleRFCRefinements(int currentFC, int currentRFC) {
         if (currentRFC >= weeklyRFCTarget) {
             logInfo(routineLogCrystalLaboratoryLine(String.format("Weekly target (%d) already reached. Current: %d",
                     weeklyRFCTarget, currentRFC)));
@@ -378,7 +403,26 @@ private WeeklyRFCResultShape handleRFCRefinements(int currentFC, int currentRFC)
             return WeeklyRFCResultShape.INSUFFICIENT_FC;
         }
 
-        performBulkRefinementsFlow(currentRFC);
+        if (!performBulkRefinementsFlow(currentRFC)) {
+            logWarning(routineLogCrystalLaboratoryLine("Weekly RFC refinement taps could not be sent; "
+                    + retainDiagnosticSnapshot("weekly-rfc-tap-failed")));
+            return WeeklyRFCResultShape.ACTION_FAILED;
+        }
+
+        sleepTask(500);
+        Integer updatedRFC = extractCurrentRFCFlow();
+        if (updatedRFC == null) {
+            return WeeklyRFCResultShape.OCR_FAILED;
+        }
+        if (updatedRFC < weeklyRFCTarget) {
+            logWarning(routineLogCrystalLaboratoryLine(String.format(
+                    "Weekly RFC progress was not confirmed: current=%d, target=%d; %s.",
+                    updatedRFC, weeklyRFCTarget,
+                    retainDiagnosticSnapshot("weekly-rfc-progress-unconfirmed"))));
+            return WeeklyRFCResultShape.ACTION_FAILED;
+        }
+        logInfo(routineLogCrystalLaboratoryLine(String.format(
+                "Weekly RFC target confirmed after refinement: %d/%d.", updatedRFC, weeklyRFCTarget)));
         return WeeklyRFCResultShape.REFINEMENTS_DONE;
     }
 
@@ -391,7 +435,11 @@ private Integer extractCurrentFCFlow() {
         return fc == -1 ? null : fc;
     }
 
-private Integer decodeNumberFromOCR(String ocrText) {
+    private Integer decodeNumberFromOCR(String ocrText) {
+        if (ocrText == null || ocrText.isBlank()) {
+            return null;
+        }
+
         Matcher matcher = NUMBER_PATTERN.matcher(ocrText);
 
         if (!matcher.find()) {
@@ -416,15 +464,16 @@ void redeemAllCrystals() {
                     "Crystal collecting stopped at the safety limit after " + result.claims() + " claim(s)."));
         } else if (result.claims() == 0) {
             logInfo(routineLogCrystalLaboratoryLine(
-                    "Zero crystals available after " + result.consecutiveMisses() + " checks."));
+                    "No crystal claim control detected after " + result.consecutiveMisses()
+                            + " checks; no crystals were claimed."));
         } else {
             logInfo(routineLogCrystalLaboratoryLine(
-                    "Crystal collecting completed after " + result.claims() + " claim(s) and "
-                            + result.consecutiveMisses() + " final misses."));
+                    "Collected " + result.claims() + " crystal(s); no further claim control detected after "
+                            + result.consecutiveMisses() + " final checks."));
         }
     }
 
-private WeeklyRFCResultShape handleWeeklyRFC() {
+WeeklyRFCResultShape handleWeeklyRFC() {
         logInfo(routineLogCrystalLaboratoryLine("Processing weekly RFC refinements (Monday check)"));
 
         Integer currentFC = extractCurrentFCFlow();
@@ -450,7 +499,29 @@ private int computeFCNeeded(int currentLevel, int targetLevel) {
         return totalFC;
     }
 
-private boolean hasMonday() {
+boolean hasMonday() {
         return LocalDateTime.now(Clock.systemUTC()).getDayOfWeek() == DayOfWeek.MONDAY;
+    }
+
+    private LocalDateTime earlierOf(LocalDateTime first, LocalDateTime second) {
+        return first.isBefore(second) ? first : second;
+    }
+
+    String retainDiagnosticSnapshot(String type) {
+        try {
+            var frame = emuManager.captureScreen(EMULATOR_NUMBER);
+            if (frame == null || !frame.isValid()) {
+                return "snapshot=unavailable; reason=capture-returned-no-valid-frame";
+            }
+            var saved = DiagnosticSnapshotStore.forCurrentWorkspace().write(
+                    frame, "crystallaboratory", type, Instant.now());
+            return saved.map(path -> "snapshot=" + path)
+                    .orElse("snapshot=unavailable; reason=write-failed");
+        } catch (RuntimeException failure) {
+            CityUpgradeFlow.rethrowControlSignal(failure);
+            logDebug(routineLogCrystalLaboratoryLine(
+                    "Diagnostic snapshot unavailable; reason=" + failure.getClass().getSimpleName()));
+            return "snapshot=unavailable";
+        }
     }
 }

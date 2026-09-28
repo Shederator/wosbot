@@ -13,6 +13,7 @@ import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.nav.ShopTab;
 import dev.frostguard.engine.helper.TemplateSearchHelper;
+import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 
 import java.time.LocalDateTime;
 
@@ -35,8 +36,11 @@ public class NomadicMerchantRoutine extends DelayedTask {
     protected void execute() {
 
         if (!navigateToNomadicMerchantShop()) {
-            logWarning("Nomadic Merchant shop navigation failed. Rescheduling for 1 hour.");
-            LocalDateTime nextAttempt = LocalDateTime.now().plusHours(1);
+            LocalDateTime nextAttempt = LocalDateTime.now().plusMinutes(5);
+            String snapshot = TaskDiagnosticSnapshots.capture(
+                    emuManager, EMULATOR_NUMBER, "nomadicmerchant", "shop-navigation");
+            logWarning("Nomadic Merchant shop navigation was not verified; retrying at "
+                    + nextAttempt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
             this.reschedule(nextAttempt);
             return;
         }
@@ -75,6 +79,22 @@ public class NomadicMerchantRoutine extends DelayedTask {
                             break;
                         }
                         sleepTask(RESOURCE_ACTION_SETTLE_MS);
+                        ImageSearchResultData stillAvailable = templateSearchHelper.locatePattern(
+                                template,
+                                TemplateSearchHelper.SearchConfig.builder()
+                                        .withMaxAttempts(1)
+                                        .withThreshold(90)
+                                        .withCoordinates(new PointData(25, 412), new PointData(690, 1200))
+                                        .build());
+                        if (stillAvailable.isFound()) {
+                            LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+                            String snapshot = TaskDiagnosticSnapshots.capture(
+                                    emuManager, EMULATOR_NUMBER, "nomadicmerchant", "resource-claim");
+                            logWarning("Resource claim was not confirmed; retrying at "
+                                    + retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+                            reschedule(retryAt);
+                            return;
+                        }
                         freeResourcesClaimedCount++;
                         foundResourceTemplate = true;
                         logInfo("Resource action dispatched. Rescanning the full shop for replacement items.");
@@ -115,6 +135,20 @@ public class NomadicMerchantRoutine extends DelayedTask {
                     tapNear(new PointData(355, 788));
                     sleepTask(1000);
 
+                    ImageSearchResultData vipStillAvailable = templateSearchHelper.locatePattern(
+                            TemplatesEnum.NOMADIC_MERCHANT_VIP,
+                            SearchConfigConstants.DEFAULT_SINGLE);
+                    if (vipStillAvailable.isFound()) {
+                        LocalDateTime retryAt = GameTimeUtils.dailyResetTime()
+                                .plusMinutes(RESET_SETTLE_DELAY_MINUTES);
+                        String snapshot = TaskDiagnosticSnapshots.capture(
+                                emuManager, EMULATOR_NUMBER, "nomadicmerchant", "vip-purchase");
+                        logWarning("VIP purchase outcome is unverified; stopping to avoid repeating a paid action. "
+                                + "Next check at " + retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+                        reschedule(retryAt);
+                        return;
+                    }
+
                     vipPointsPurchasedCount++;
                     foundVipTemplate = true;
                     logInfo("VIP action dispatched. Rescanning the full shop for replacement items.");
@@ -137,6 +171,18 @@ public class NomadicMerchantRoutine extends DelayedTask {
                 logInfo("Daily refresh is available. Using it now.");
                 if (tapInside(dailyRefreshResult)) {
                     sleepTask(REFRESH_ACTION_SETTLE_MS);
+                    ImageSearchResultData refreshStillAvailable = templateSearchHelper.locatePattern(
+                            TemplatesEnum.MYSTERY_SHOP_DAILY_REFRESH,
+                            SearchConfigConstants.DEFAULT_SINGLE);
+                    if (refreshStillAvailable.isFound()) {
+                        LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+                        String snapshot = TaskDiagnosticSnapshots.capture(
+                                emuManager, EMULATOR_NUMBER, "nomadicmerchant", "daily-refresh");
+                        logWarning("Daily refresh outcome is unverified; retrying at "
+                                + retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+                        reschedule(retryAt);
+                        return;
+                    }
                     dailyRefreshUsedCount++;
                     logInfo("Free refresh action dispatched. Rescanning the full shop for replacement items.");
                     // Continue the main loop to check every shop position again.
@@ -153,6 +199,16 @@ public class NomadicMerchantRoutine extends DelayedTask {
         }
 
         boolean timedOut = System.currentTimeMillis() >= executionDeadlineMs;
+        if (timedOut) {
+            LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+            String snapshot = TaskDiagnosticSnapshots.capture(
+                    emuManager, EMULATOR_NUMBER, "nomadicmerchant", "execution-limit");
+            logWarning("Nomadic Merchant scan did not finish before its execution limit; retrying at "
+                    + retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+            reschedule(retryAt);
+            return;
+        }
+
         StatisticsService.obtain().addToCounter(profile, "Nomadic Merchant Free Resources Claimed", freeResourcesClaimedCount);
         StatisticsService.obtain().addToCounter(profile, "Nomadic Merchant VIP Points Purchased", vipPointsPurchasedCount);
         StatisticsService.obtain().addToCounter(profile, "Nomadic Merchant Daily Refresh Used", dailyRefreshUsedCount);
@@ -160,12 +216,6 @@ public class NomadicMerchantRoutine extends DelayedTask {
         String stats = "Nomadic Merchant stats - free resources claimed: " + freeResourcesClaimedCount
                 + ", VIP points purchased: " + vipPointsPurchasedCount
                 + ", daily refresh used: " + dailyRefreshUsedCount;
-        if (timedOut) {
-            logWarning("Nomadic Merchant task reached execution limit. Ending current cycle with partial results. " + stats);
-        } else {
-            logInfo(stats);
-        }
-
         // Wait briefly after reset so the shop has time to publish the new daily state.
         reschedule(GameTimeUtils.dailyResetTime().plusMinutes(RESET_SETTLE_DELAY_MINUTES));
     }

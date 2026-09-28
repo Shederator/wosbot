@@ -1,6 +1,7 @@
 package dev.frostguard.tasks.pets;
 
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.api.configs.TemplatesEnum;
@@ -52,7 +53,6 @@ public class PetAdventureChestRoutine extends DelayedTask {
 	// GAME MECHANICS CONSTANTS
 	// ========================================================================
 
-	private static final int STAMINA_PER_CHEST = 10;
 	private static final int MIN_STAMINA_REQUIRED = 10;
 	private static final int TARGET_STAMINA_FOR_REFRESH = 40;
 	private static final int MAX_CHEST_START_ITERATIONS = 12;
@@ -289,9 +289,7 @@ public class PetAdventureChestRoutine extends DelayedTask {
 
 			// Safety check to prevent infinite loops
 			if (iterationCount > MAX_CHEST_START_ITERATIONS) {
-				logWarning("Reached maximum iteration limit (" + MAX_CHEST_START_ITERATIONS +
-						"). Stopping chest search.");
-				rescheduleForChestCompletion();
+				scheduleUnknownChestRetry("chest scan reached its iteration limit", "iteration-limit");
 				return;
 			}
 
@@ -299,11 +297,10 @@ public class PetAdventureChestRoutine extends DelayedTask {
 			for (TemplatesEnum chestTemplate : CHEST_PRIORITY) {
 				ChestStartResult result = attemptToStartChest(chestTemplate);
 
-				if (result == ChestStartResult.STARTED) {
-					foundAnyChest = true;
-					break; // Restart search from highest priority
-				} else if (result == ChestStartResult.NO_ATTEMPTS) {
+				if (result == ChestStartResult.NO_ATTEMPTS) {
 					return; // Task already rescheduled
+				} else if (result == ChestStartResult.UNKNOWN) {
+					return;
 				}
 				// Continue to next chest type if NOT_FOUND
 			}
@@ -355,8 +352,9 @@ public class PetAdventureChestRoutine extends DelayedTask {
 				SearchConfigConstants.DEFAULT_SINGLE);
 
 		if (!selectButton.isFound()) {
-			logWarning("Select button not found for " + chestTemplate);
-			return ChestStartResult.NOT_FOUND;
+			scheduleUnknownChestRetry("Select control was missing for " + chestTemplate, "select-control");
+			pressBack();
+			return ChestStartResult.UNKNOWN;
 		}
 
 		tapInside(selectButton);
@@ -370,16 +368,22 @@ public class PetAdventureChestRoutine extends DelayedTask {
 		if (startButton.isFound()) {
 			// Start the adventure
 			tapInside(startButton);
-			sleepTask(500); // Wait for start confirmation
+			sleepTask(1000); // Wait for a changed screen before deciding whether the start was accepted.
+			ImageSearchResultData startStillVisible = templateSearchHelper.locatePattern(
+					TemplatesEnum.PETS_CHEST_START,
+					SearchConfigConstants.DEFAULT_SINGLE);
+			if (startStillVisible.isFound()) {
+				scheduleUnknownChestRetry("Start control remained visible after the tap", "start-unconfirmed");
+				pressBack();
+				return ChestStartResult.UNKNOWN;
+			}
 
-			staminaHelper.subtractStamina(STAMINA_PER_CHEST, false);
-			logInfo("Started " + chestTemplate + " adventure (consumed " +
-					STAMINA_PER_CHEST + " stamina)");
+			scheduleUnknownChestRetry("Start control disappeared without a positive adventure-state signal",
+					"start-outcome");
 
 			pressBack(); // Return to adventure map
 			sleepTask(500); // Wait for screen transition
-
-			return ChestStartResult.STARTED;
+			return ChestStartResult.UNKNOWN;
 		}
 
 		// Check for No Attempts message
@@ -395,8 +399,9 @@ public class PetAdventureChestRoutine extends DelayedTask {
 
 		// Neither Start nor No Attempts found - unknown state
 		logWarning("Could not determine chest start status for " + chestTemplate);
+		scheduleUnknownChestRetry("neither Start nor No Attempts was detected", "start-status");
 		pressBack(); // Try to recover by going back
-		return ChestStartResult.NOT_FOUND;
+		return ChestStartResult.UNKNOWN;
 	}
 
 	// ========================================================================
@@ -442,6 +447,14 @@ public class PetAdventureChestRoutine extends DelayedTask {
 		logWarning("Navigation failed. Retrying at " + retryTime.format(TIME_FORMATTER));
 	}
 
+	private void scheduleUnknownChestRetry(String reason, String type) {
+		LocalDateTime retryTime = LocalDateTime.now().plusMinutes(NAVIGATION_RETRY_MINUTES);
+		String snapshot = TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "petadventurechest", type);
+		logWarning("Pet Adventure outcome is unknown: " + reason + "; retrying at "
+				+ retryTime.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+		reschedule(retryTime);
+	}
+
 	// ========================================================================
 	// HELPER ENUMS
 	// ========================================================================
@@ -450,13 +463,13 @@ public class PetAdventureChestRoutine extends DelayedTask {
 	 * Result of attempting to start a chest adventure.
 	 */
 	private enum ChestStartResult {
-		/** Chest was found and adventure started successfully */
-		STARTED,
-
 		/** No daily attempts remaining (task rescheduled) */
 		NO_ATTEMPTS,
 
 		/** Chest not found or could not be started */
-		NOT_FOUND
+		NOT_FOUND,
+
+		/** The screen or action outcome could not be verified. */
+		UNKNOWN
 	}
 }

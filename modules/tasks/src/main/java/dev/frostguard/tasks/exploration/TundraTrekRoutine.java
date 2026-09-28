@@ -13,6 +13,7 @@ import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.nav.SearchConfigConstants;
+import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 
 public class TundraTrekRoutine extends DelayedTask {
 
@@ -54,18 +55,30 @@ public class TundraTrekRoutine extends DelayedTask {
                         null,
                         GameTimeUtils::isAcceptedFormat,
                         GameTimeUtils::parseDuration);
+                if (nextRewardTimeDuration == null || nextRewardTimeDuration.isZero()
+                        || nextRewardTimeDuration.isNegative()) {
+                    scheduleTimerRetry("OCR returned no valid positive duration");
+                    return;
+                }
                 LocalDateTime nextRewardTime = LocalDateTime.now().plus(nextRewardTimeDuration);
                 reschedule(nextRewardTime);
                 logInfo("Successfully parsed the next reward time. Rescheduling the task for: "
                         + nextRewardTime.format(DATETIME_FORMATTER));
-            } catch (IllegalArgumentException e) {
-                logError("Failed to read or parse the next reward time. Rescheduling for 1 hour from now.", e);
-                reschedule(LocalDateTime.now().plusHours(1));
+            } catch (java.time.DateTimeException | IllegalArgumentException e) {
+                scheduleTimerRetry("duration was outside the supported range");
             }
         } else {
             logError("Failed to navigate to Tundra Trek Supplies after multiple attempts. Rescheduling for 1 hour.");
             reschedule(LocalDateTime.now().plusHours(1)); // Reschedule for later
         }
+    }
+
+    private void scheduleTimerRetry(String reason) {
+        LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+        String snapshot = TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "tundratrek", "reward-timer");
+        logWarning("Tundra Trek reward timer is unknown; " + reason + ". Retrying at "
+                + retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+        reschedule(retryAt);
     }
 
     private boolean navigateToTrekSupplies() {

@@ -11,6 +11,7 @@ import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 import dev.frostguard.engine.service.BotOcrEngine;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
@@ -171,6 +172,18 @@ public AllianceMobilizationRoutine(AccountDescriptor profile, TpDailyTaskEnum tp
         }
 
         AttemptStatusShape attemptStatus = scanAttemptsCounter();
+
+        if (attemptStatus == null || attemptStatus.remaining() < 0
+                || attemptStatus.total() != null && (attemptStatus.total() <= 0
+                || attemptStatus.remaining() > attemptStatus.total())) {
+            LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+            String snapshot = TaskDiagnosticSnapshots.capture(
+                    emuManager, EMULATOR_NUMBER, "alliancemobilization", "attempt-counter");
+            logWarning(routineLogAllianceMobilizationLine("Attempt counter is unknown; skipping mission actions and retrying at "
+                    + retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + "."));
+            reschedule(retryAt);
+            return;
+        }
 
         if (!validateAttemptsRemainingFlow(attemptStatus)) {
             return;
@@ -446,7 +459,8 @@ private boolean validateAttemptsRemainingFlow(AttemptStatusShape attemptStatus) 
                 return false;
             }
         } else {
-            logWarning(routineLogAllianceMobilizationLine("Could not detect attempts counter. Proceeding with default processing."));
+            logWarning(routineLogAllianceMobilizationLine("Could not detect attempts counter."));
+            return false;
         }
         return true;
     }
@@ -695,8 +709,12 @@ private boolean seekAndProcessAllTasks() {
             logInfo(routineLogAllianceMobilizationLine("Zero missions detected. Consecutive count: " + consecutiveNoMissionsCount + "/3"));
 
             if (consecutiveNoMissionsCount >= 3) {
-                logInfo(routineLogAllianceMobilizationLine("Zero missions detected for 3 consecutive runs - both mission slots completed for today"));
-                deferForGameReset();
+                LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+                String snapshot = TaskDiagnosticSnapshots.capture(
+                        emuManager, EMULATOR_NUMBER, "alliancemobilization", "mission-scan-empty");
+                logWarning(routineLogAllianceMobilizationLine("No missions were detected in three scans; completion is unverified. "
+                        + "Retrying at " + retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + "."));
+                reschedule(retryAt);
                 return true;
             }
         } else {
@@ -1082,8 +1100,14 @@ private TaskPassResult handleIndividualTask(
         int detectedPoints = scanPointsNearBonus(bonusLocation);
 
         if (detectedPoints < 0) {
-            logWarning(routineLogAllianceMobilizationLine("Could not read points for " + bonusPercentage + " task - skipping"));
-            return new TaskPassResult(false, currentShortestCooldown, true, false);
+            LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+            String snapshot = TaskDiagnosticSnapshots.capture(
+                    emuManager, EMULATOR_NUMBER, "alliancemobilization", "points-ocr");
+            logWarning(routineLogAllianceMobilizationLine("Points for " + bonusPercentage
+                    + " task are unknown; stopping mission actions and retrying at "
+                    + retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + "."));
+            reschedule(retryAt);
+            return new TaskPassResult(true, currentShortestCooldown, true, false);
 
 
         }
@@ -1205,13 +1229,20 @@ private int scanPointsNearBonus(PointData bonusLocation) {
             String numericValue = ocrResult.replaceAll("[^0-9]", "");
 
             if (!numericValue.isEmpty()) {
-                int points = Integer.parseInt(numericValue);
-                logInfo(routineLogAllianceMobilizationLine("Detected points on overview: " + points));
-                return points;
+                try {
+                    int points = Integer.parseInt(numericValue);
+                    logInfo(routineLogAllianceMobilizationLine("Detected points on overview: " + points));
+                    return points;
+                } catch (NumberFormatException malformed) {
+                    String snapshot = TaskDiagnosticSnapshots.capture(
+                            emuManager, EMULATOR_NUMBER, "alliancemobilization", "points-ocr");
+                    logWarning(routineLogAllianceMobilizationLine("Points OCR was outside the supported numeric range; "
+                            + snapshot + "."));
+                }
             }
         }
 
-        logWarning(routineLogAllianceMobilizationLine("Could not read points near bonus after OcrSpec attempts"));
+        logDebug(routineLogAllianceMobilizationLine("Points OCR produced no valid numeric value."));
         return -1;
     }
 
@@ -1227,7 +1258,12 @@ private AttemptStatusShape scanAttemptsCounter() {
 
         logDebug(routineLogAllianceMobilizationLine("Attempts counter OcrSpec result: '" + ocrResult + "'"));
 
-        return decodeAttemptsFromOCR(ocrResult);
+        try {
+            return decodeAttemptsFromOCR(ocrResult);
+        } catch (NumberFormatException malformed) {
+            logDebug(routineLogAllianceMobilizationLine("Attempts counter OCR exceeded the supported numeric range."));
+            return null;
+        }
     }
 
 private String resolveConfigString(ConfigurationKeyEnum key, String defaultValue) {
@@ -1315,12 +1351,6 @@ private void restoreHomeScreen() {
         } catch (Exception e) {
             logWarning(routineLogAllianceMobilizationLine("Could not return to home screen: " + e.getMessage()));
         }
-    }
-
-private void deferForGameReset() {
-        LocalDateTime nextReset = GameTimeUtils.dailyResetTime();
-        logInfo(routineLogAllianceMobilizationLine("Planning next run for game reset at " + nextReset.format(DATETIME_FORMATTER) + " (next day 00:00 UTC)"));
-        reschedule(nextReset);
     }
 
 private int resolveConfigInt(ConfigurationKeyEnum key, int defaultValue) {

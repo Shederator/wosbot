@@ -14,9 +14,12 @@ import dev.frostguard.engine.nav.ShopTab;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.service.StatisticsService;
+import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 import dev.frostguard.vision.convert.GameTimeUtils;
 
 public class MysteryShopRoutine extends DelayedTask {
+
+	private boolean unresolvedActionOutcome;
 
 	public MysteryShopRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 		super(profile, tpTask);
@@ -37,10 +40,13 @@ public class MysteryShopRoutine extends DelayedTask {
 			attempt++;
 		}
 
-		// If navigation fails after 5 attempts, reschedule for 1 hour
+		// Retry soon because the shop state could not be inspected.
 		if (attempt >= 5) {
-			logWarning("Shop navigation failed after multiple attempts, rescheduling task for 1 hour");
-			LocalDateTime nextAttempt = LocalDateTime.now().plusHours(1);
+			LocalDateTime nextAttempt = LocalDateTime.now().plusMinutes(5);
+			String snapshot = TaskDiagnosticSnapshots.capture(
+					emuManager, EMULATOR_NUMBER, "mysteryshop", "shop-navigation");
+			logWarning("Shop navigation was not verified after five attempts; retrying at "
+					+ nextAttempt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
 			this.reschedule(nextAttempt);
 		}
 	}
@@ -84,10 +90,18 @@ public class MysteryShopRoutine extends DelayedTask {
 			// First, try to claim all free rewards
 			foundFreeRewards = claimAllFreeRewards();
 			totalClaimedAny = totalClaimedAny || foundFreeRewards;
+			if (unresolvedActionOutcome) {
+				scheduleUnknownActionAndExit("free reward claim");
+				return;
+			}
 
 			// Second, try to make configured purchases
 			foundConfiguredPurchases = makeConfiguredPurchases();
 			totalPurchasedAny = totalPurchasedAny || foundConfiguredPurchases;
+			if (unresolvedActionOutcome) {
+				scheduleUnknownActionAndExit("configured purchase");
+				return;
+			}
 
 			// If no free rewards or purchases found, try to use daily refresh one or more
 			// times (up to remaining limit)
@@ -96,6 +110,10 @@ public class MysteryShopRoutine extends DelayedTask {
 				// reach the limit
 				while (dailyRefreshUsedCount < maxDailyRefreshes) {
 					boolean used = tryUseDailyRefresh();
+					if (unresolvedActionOutcome) {
+						scheduleUnknownActionAndExit("daily refresh");
+						return;
+					}
 					if (!used)
 						break; // no refresh available now
 					dailyRefreshUsedCount++;
@@ -109,9 +127,17 @@ public class MysteryShopRoutine extends DelayedTask {
 					// After refresh, attempt to claim rewards and make purchases again
 					foundFreeRewards = claimAllFreeRewards();
 					totalClaimedAny = totalClaimedAny || foundFreeRewards;
+					if (unresolvedActionOutcome) {
+						scheduleUnknownActionAndExit("free reward claim after refresh");
+						return;
+					}
 
 					foundConfiguredPurchases = makeConfiguredPurchases();
 					totalPurchasedAny = totalPurchasedAny || foundConfiguredPurchases;
+					if (unresolvedActionOutcome) {
+						scheduleUnknownActionAndExit("configured purchase after refresh");
+						return;
+					}
 
 					// If we found rewards or purchases after this refresh, break inner refresh loop
 					// and continue outer loop
@@ -122,13 +148,24 @@ public class MysteryShopRoutine extends DelayedTask {
 			}
 		}
 
+		boolean incomplete = dailyRefreshUsedCount >= maxDailyRefreshes
+				|| iteration >= maxIterations && (foundFreeRewards || foundConfiguredPurchases);
+		String snapshot = incomplete
+				? TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "mysteryshop", "iteration-limit")
+				: null;
+
 		// Navigate back
 		pressBack();
 		sleepTask(1000);
 		pressBack();
 
 		// If no more actions possible, reschedule to game reset time
-		if (!foundFreeRewards && !foundConfiguredPurchases) {
+		if (incomplete) {
+			LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+			this.reschedule(retryAt);
+			logWarning("Mystery Shop action scan reached its iteration limit; retrying at "
+					+ retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+		} else if (!foundFreeRewards && !foundConfiguredPurchases) {
 			LocalDateTime nextReset = GameTimeUtils.dailyResetTime();
 			this.reschedule(nextReset);
 			if (totalClaimedAny) {
@@ -143,7 +180,26 @@ public class MysteryShopRoutine extends DelayedTask {
 			if (!totalClaimedAny && !totalPurchasedAny && dailyRefreshUsedCount == 0) {
 				logInfo("No free rewards, purchases or daily refresh available");
 			}
+		} else {
+			LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+			this.reschedule(retryAt);
+			logWarning("Mystery Shop scan ended with unresolved actions; retrying at "
+					+ retryAt.format(DATETIME_FORMATTER) + ".");
 		}
+	}
+
+	private void scheduleUnknownActionAndExit(String action) {
+		LocalDateTime retryAt = action.contains("purchase")
+				? GameTimeUtils.dailyResetTime().plusMinutes(1)
+				: LocalDateTime.now().plusMinutes(5);
+		String snapshot = TaskDiagnosticSnapshots.capture(
+				emuManager, EMULATOR_NUMBER, "mysteryshop", "action-unverified");
+		reschedule(retryAt);
+		logWarning("Mystery Shop " + action + " outcome is unverified; next check at "
+				+ retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+		pressBack();
+		sleepTask(500);
+		pressBack();
 	}
 
 	/**
@@ -177,6 +233,13 @@ public class MysteryShopRoutine extends DelayedTask {
 				// Confirm the claim (tap on confirm button or area)
 				tapNear(new PointData(360, 830));
 				sleepTask(300);
+				ImageSearchResultData rewardStillVisible = templateSearchHelper.locatePattern(
+						TemplatesEnum.MYSTERY_SHOP_FREE_REWARD,
+						SearchConfigConstants.DEFAULT_SINGLE);
+				if (rewardStillVisible.isFound()) {
+					unresolvedActionOutcome = true;
+					return foundAnyReward;
+				}
 
 				logInfo("A free reward has been claimed.");
 				StatisticsService.obtain().addToCounter(profile, "Mystery Shop Free Claims", 1);
@@ -205,6 +268,13 @@ public class MysteryShopRoutine extends DelayedTask {
 			// Tap on daily refresh
 			tapInside(dailyRefreshResult.getPoint(), dailyRefreshResult.getPoint());
 			sleepTask(1000);
+			ImageSearchResultData refreshStillVisible = templateSearchHelper.locatePattern(
+					TemplatesEnum.MYSTERY_SHOP_DAILY_REFRESH,
+					SearchConfigConstants.DEFAULT_SINGLE);
+			if (refreshStillVisible.isFound()) {
+				unresolvedActionOutcome = true;
+				return false;
+			}
 
 			logInfo("Daily refresh used successfully");
 			StatisticsService.obtain().addToCounter(profile, "Daily Refreshes Used", 1);
@@ -304,6 +374,13 @@ public class MysteryShopRoutine extends DelayedTask {
 				// Confirm the purchase (tap on confirm button or area)
 				tapNear(new PointData(360, 830));
 				sleepTask(600);
+				ImageSearchResultData widgetStillVisible = templateSearchHelper.locatePattern(
+						TemplatesEnum.MYSTERY_SHOP_250_BADGES_BUTTON,
+						SearchConfigConstants.DEFAULT_SINGLE);
+				if (widgetStillVisible.isFound()) {
+					unresolvedActionOutcome = true;
+					return foundAnyWidget;
+				}
 
 				logInfo("250 Hero Widget found and purchased on attempt " + purchaseAttempt + ".");
 				StatisticsService.obtain().addToCounter(profile, "Mystery Shop Purchases", 1);

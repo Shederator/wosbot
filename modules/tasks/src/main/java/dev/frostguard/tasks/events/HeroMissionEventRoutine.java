@@ -22,6 +22,7 @@ import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.helper.DeploymentHelper;
+import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 
 import java.awt.Color;
 
@@ -88,9 +89,12 @@ public class HeroMissionEventRoutine extends DelayedTask {
 
         // If menu is not found after 2 attempts, cancel the task
         if (attempt >= 2) {
-            logWarning(
-                    "Could not find the Hero's Mission event tab. Assuming event is unavailable. Rescheduling for next reset.");
-            reschedule(GameTimeUtils.dailyResetTime());
+            LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+            String snapshot = TaskDiagnosticSnapshots.capture(
+                    emuManager, EMULATOR_NUMBER, "heromission", "event-navigation");
+            logWarning("Hero's Mission navigation was not verified; retrying at "
+                    + retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+            reschedule(retryAt);
         }
     }
 
@@ -124,9 +128,7 @@ public class HeroMissionEventRoutine extends DelayedTask {
         }
 
         claimAllRewards();
-        if (!rallyReaper() && !bearProtectionDeferred) {
-            reschedule(LocalDateTime.now().plusMinutes(5));
-        }
+        rallyReaper();
     }
 
     private boolean rallyReaper() {
@@ -144,8 +146,12 @@ public class HeroMissionEventRoutine extends DelayedTask {
                             .withMaxAttempts(3)
                             .build());
             if (!button.isFound()) {
-                logWarning(
-                        "Could not find 'Trace' or 'Capture' button to rally reapers. Rescheduling to try again in 5 minutes.");
+                LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+                String snapshot = TaskDiagnosticSnapshots.capture(
+                        emuManager, EMULATOR_NUMBER, "heromission", "action-controls");
+                logWarning("Neither Trace nor Capture was detected; retrying at "
+                        + retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+                reschedule(retryAt);
                 return false;
             }
         }
@@ -226,15 +232,13 @@ public class HeroMissionEventRoutine extends DelayedTask {
             return false;
         }
 
-        deploy = templateSearchHelper.locatePattern(
-                TemplatesEnum.DEPLOY_BUTTON,
-                SearchConfig.builder()
-                        .withThreshold(90)
-                        .withMaxAttempts(3)
-                        .build());
-        if (deploy.isFound()) {
-            // Probably march got taken by auto-join or something
-            logInfo("Deploy button still found after trying to deploy march. Rescheduling to try again in 5 minutes.");
+        DeploymentHelper.LaunchCheck launchCheck = deploymentHelper.verifyLaunchTransition();
+        if (launchCheck != DeploymentHelper.LaunchCheck.WORLD_VERIFIED) {
+            String snapshot = TaskDiagnosticSnapshots.capture(
+                    emuManager, EMULATOR_NUMBER, "heromission", "deployment-unknown");
+            logWarning("Hero Mission deployment was not verified (" + launchCheck
+                    + "); stamina was not deducted. " + snapshot);
+            reschedule(LocalDateTime.now().plusMinutes(5));
             return false;
         }
 

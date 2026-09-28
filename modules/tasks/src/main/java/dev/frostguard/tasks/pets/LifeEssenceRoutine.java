@@ -23,6 +23,7 @@ import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
+import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 
 public class LifeEssenceRoutine extends DelayedTask {
 
@@ -67,14 +68,12 @@ public class LifeEssenceRoutine extends DelayedTask {
 		}
 
 		// Buy weekly free scroll if enabled and available
-		if (buyWeeklyScroll && shouldBuyWeeklyScroll()) {
-			buyWeeklyFreeScroll();
-		}
+		boolean weeklyScrollUnknown = buyWeeklyScroll && shouldBuyWeeklyScroll() && !buyWeeklyFreeScroll();
 
 		likeIsland();
 
 		// Exit and reschedule
-		exitAndReschedule(claim.confirmedClaims());
+		exitAndReschedule(claim.confirmedClaims(), weeklyScrollUnknown);
 	}
 
 	private void likeIsland() {
@@ -229,7 +228,7 @@ public class LifeEssenceRoutine extends DelayedTask {
 	 * 4. Click buy button to confirm
 	 * 5. Update next available time to next Monday 00:00 UTC
 	 */
-	private void buyWeeklyFreeScroll() {
+	private boolean buyWeeklyFreeScroll() {
 		logInfo("Attempting to buy weekly free scroll");
 
 		// Navigate to shop tab
@@ -243,17 +242,11 @@ public class LifeEssenceRoutine extends DelayedTask {
 				SearchConfig.builder().build());
 
 		if (!scrollOffer.isFound()) {
-			logInfo("Weekly free scroll not available (already purchased this week)");
-
-			// Set next available time even though we didn't buy
-			// This prevents repeatedly checking for an already-purchased scroll
-			LocalDateTime nextScrollTime = calculateNextMondayReset();
-			writeProfileSetting(ConfigurationKeyEnum.LIFE_ESSENCE_NEXT_SCROLL_TIME_STRING,
-					nextScrollTime.toString());
-			logInfo("Next scroll purchase check scheduled for: " + nextScrollTime);
+			logWarning("Weekly free scroll offer was not detected; availability is unknown. "
+					+ TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "lifeessence", "weekly-scroll-offer"));
 
 			tapNear(EXIT_BUTTON);
-			return;
+			return false;
 		}
 
 		// Click scroll to open purchase dialog
@@ -267,28 +260,26 @@ public class LifeEssenceRoutine extends DelayedTask {
 				SearchConfig.builder().build());
 
 		if (!buyButton.isFound()) {
-			logWarning("Buy button not found. Purchase may have failed.");
+			logWarning("Weekly scroll purchase control was not detected; outcome is unknown. "
+					+ TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "lifeessence", "weekly-scroll-control"));
 			pressBack(); // Close dialog
 			sleepTask(500);
 			tapNear(EXIT_BUTTON); // Exit shop
 			sleepTask(500);
-			return;
+			return false;
 		}
 
 		// Confirm purchase
 		tapInside(buyButton);
 		sleepTask(500); // Wait for purchase to complete
 
-		logInfo("Weekly free scroll purchased successfully");
-
-		LocalDateTime nextScrollTime = calculateNextMondayReset();
-		writeProfileSetting(ConfigurationKeyEnum.LIFE_ESSENCE_NEXT_SCROLL_TIME_STRING,
-				nextScrollTime.toString());
-		logInfo("Next scroll purchase available at: " + nextScrollTime);
+		logWarning("Weekly scroll purchase tap was sent but its outcome was not verified. "
+				+ TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "lifeessence", "weekly-scroll-outcome"));
 
 		// Exit shop
 		tapNear(EXIT_BUTTON);
 		sleepTask(500);
+		return false;
 	}
 
 	/**
@@ -323,30 +314,11 @@ public class LifeEssenceRoutine extends DelayedTask {
 	}
 
 	/**
-	 * Calculates and returns next Monday game reset time
-	 */
-	private LocalDateTime calculateNextMondayReset() {
-		ZonedDateTime nowUtc = ZonedDateTime.now(ZoneOffset.UTC);
-
-		// Get next Monday at 00:00 UTC (or current Monday if before reset)
-		ZonedDateTime nextMonday = nowUtc
-				.with(TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY))
-				.truncatedTo(ChronoUnit.DAYS);
-
-		// If we're past the reset time on Monday, move to next week
-		if (!nextMonday.isAfter(nowUtc)) {
-			nextMonday = nextMonday.plusWeeks(1);
-		}
-
-		return nextMonday.toLocalDateTime();
-	}
-
-	/**
 	 * Exit Life Essence interface and reschedule task
 	 * 
 	 * @param claimedCount number of essence items claimed
 	 */
-	private void exitAndReschedule(int claimedCount) {
+	private void exitAndReschedule(int claimedCount, boolean weeklyScrollUnknown) {
 		// Exit Life Essence interface
 		logDebug("Exiting Life Essence interface");
 		tapNear(EXIT_BUTTON);
@@ -365,7 +337,8 @@ public class LifeEssenceRoutine extends DelayedTask {
 		LocalDateTime nextSchedule = LocalDateTime.now().plusMinutes(scheduleOffset);
 		reschedule(nextSchedule);
 
-		logInfo("Life Essence task completed. Claimed: " + claimedCount +
+		logInfo("Life Essence task completed. Claimed: " + claimedCount
+				+ (weeklyScrollUnknown ? "; weekly scroll state remains unknown" : "") +
 				". Next run in: " + GameTimeUtils.formatCountdown(nextSchedule));
 	}
 

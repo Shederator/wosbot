@@ -17,6 +17,7 @@ import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 import dev.frostguard.engine.service.TaskManagementService;
 import dev.frostguard.vision.convert.GameTimeUtils;
 
@@ -737,15 +738,25 @@ private boolean openUpPolarsMenu(int polarLevel) {
         tapInside(polarTerror);
         sleepTask(500);
         if (polarLevel != -1) {
+            boolean levelSelected;
             if (huntHighestLevel) {
-                selectHighestPolarLevel();
+                levelSelected = selectHighestPolarLevel();
             } else {
                 if (polarLevel < MIN_POLAR_LEVEL || polarLevel > MAX_POLAR_LEVEL_LIMIT) {
                     logError(routineLogPolarTerrorHuntingLine(String.format("Invalid Polar Terror level configured: %d. Must be between %d and %d.",
                             polarLevel, MIN_POLAR_LEVEL, MAX_POLAR_LEVEL_LIMIT)));
                     return false;
                 }
-                selectPolarLevel(polarLevel);
+                levelSelected = selectPolarLevel(polarLevel);
+            }
+            if (!levelSelected) {
+                LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+                String snapshot = TaskDiagnosticSnapshots.capture(
+                        emuManager, EMULATOR_NUMBER, "polarterror", "level-selection");
+                logWarning(routineLogPolarTerrorHuntingLine("Level selection was not verified; aborting search and retrying at "
+                        + retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + "."));
+                reschedule(retryAt);
+                return false;
             }
         }
 
@@ -801,12 +812,12 @@ private RallyLaunchResult openUpRallyMenu() {
 
 // Drives the selector against its ceiling instead of trusting a hard-coded maximum, so a server that
 // unlocks a new polar level needs no config change. A level that stops rising marks the top.
-private void selectHighestPolarLevel() {
+private boolean selectHighestPolarLevel() {
         Integer currentLevel = readPolarLevelSelection();
         if (currentLevel == null) {
             logWarning(routineLogPolarTerrorHuntingLine(
                     "Level selector: OCR unreadable; cannot determine the highest level, keeping the current selection"));
-            return;
+            return false;
         }
 
         for (int attempt = 1; attempt <= LEVEL_SELECTOR_MAX_ADJUSTMENTS; attempt++) {
@@ -817,12 +828,12 @@ private void selectHighestPolarLevel() {
             if (updatedLevel == null) {
                 logWarning(routineLogPolarTerrorHuntingLine(
                         "Level selector: post-sweep OCR unreadable; continuing at level " + currentLevel));
-                return;
+                return false;
             }
             if (updatedLevel.equals(currentLevel)) {
                 logInfo(routineLogPolarTerrorHuntingLine("Level selector: highest selectable level is " + currentLevel));
                 polarTerrorLevel = currentLevel;
-                return;
+                return true;
             }
             currentLevel = updatedLevel;
         }
@@ -831,12 +842,13 @@ private void selectHighestPolarLevel() {
                 "Level selector: level still rising after %d sweeps; continuing at %d",
                 LEVEL_SELECTOR_MAX_ADJUSTMENTS, currentLevel)));
         polarTerrorLevel = currentLevel;
+        return true;
     }
 
 // Steers the selector by reading the level back after every adjustment. The lowest selectable level
 // is not always 1 - older profiles start at 4 - so counting taps from an assumed floor would land on
 // the wrong level. A level that refuses to move marks the end of the selector's range.
-private void selectPolarLevel(int polarLevel) {
+private boolean selectPolarLevel(int polarLevel) {
         Integer currentLevel = readPolarLevelSelection();
         if (currentLevel == null) {
             logWarning(routineLogPolarTerrorHuntingLine(
@@ -848,7 +860,7 @@ private void selectPolarLevel(int polarLevel) {
         if (currentLevel == null) {
             logWarning(routineLogPolarTerrorHuntingLine(
                     "Level selector: still unreadable; hunting at the selector minimum, which is the safest target"));
-            return;
+            return false;
         }
 
         for (int attempt = 1; attempt <= LEVEL_SELECTOR_MAX_ADJUSTMENTS && currentLevel != polarLevel; attempt++) {
@@ -864,23 +876,26 @@ private void selectPolarLevel(int polarLevel) {
             if (updatedLevel == null) {
                 logWarning(routineLogPolarTerrorHuntingLine(
                         "Level selector: post-adjustment OCR unreadable; continuing with the selected UI state"));
-                return;
+                return false;
             }
             if (updatedLevel.equals(currentLevel)) {
                 logWarning(routineLogPolarTerrorHuntingLine(String.format(
                         "Level selector: stuck at %d while aiming for %d; this profile cannot select that level",
                         currentLevel, polarLevel)));
-                return;
+                return false;
             }
             currentLevel = updatedLevel;
         }
 
         if (currentLevel == polarLevel) {
             logInfo(routineLogPolarTerrorHuntingLine("Level selector: confirmed level " + polarLevel));
+            polarTerrorLevel = polarLevel;
+            return true;
         } else {
             logWarning(routineLogPolarTerrorHuntingLine(String.format(
                     "Level selector: settled at %d instead of %d after %d adjustments",
                     currentLevel, polarLevel, LEVEL_SELECTOR_MAX_ADJUSTMENTS)));
+            return false;
         }
     }
 
