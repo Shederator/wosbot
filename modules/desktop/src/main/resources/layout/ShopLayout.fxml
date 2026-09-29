@@ -61,6 +61,13 @@
                     <Separator style="-fx-opacity: 0.25;" />
                     <CheckBox fx:id="checkBoxMysteryShop50DiscountGear" mnemonicParsing="false"
                               text="Buy 50% discounted hero gear (250 badges)" />
+                    <CheckBox fx:id="checkBoxMysteryShopShards" mnemonicParsing="false"
+                              text="Buy generic shards (250 badges)" />
+                    <HBox spacing="10" alignment="CENTER_LEFT">
+                        <Label styleClass="task-field-label" text="UTC time for refresh completion:" />
+                        <TextField fx:id="textFieldMysteryRefreshCompletion" prefWidth="90.0" />
+                    </HBox>
+                    <Label fx:id="labelMysteryRefreshCompletionError" styleClass="task-field-error" />
                 </VBox>
             </TitledPane>
 

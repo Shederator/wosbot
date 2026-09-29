@@ -29,6 +29,11 @@ public final class CommonOCRSettings {
     public static final OcrSettingsData SPENT_STAMINA_SETTINGS =
             buildSpentStaminaConfig();
 
+    // Mystery Shop badge counter: near-white digits, optional thousands comma.
+    // Measured glyphs are about (232, 235, 238), inside the channel tolerance of white.
+    public static final OcrSettingsData MYSTERY_BADGE_BALANCE_SETTINGS =
+            buildConfig("0123456789,", true, 255, 255, 255, TextLayout.SINGLE_LINE);
+
     // travel time: "12:34:56" in white, next to a clock icon that has no white pixel at all
     public static final OcrSettingsData TRAVEL_TIME_SETTINGS =
             buildConfig("0123456789:", true, 255, 255, 255, TextLayout.SINGLE_LINE);

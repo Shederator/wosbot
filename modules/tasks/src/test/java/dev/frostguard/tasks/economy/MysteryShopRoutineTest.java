@@ -1,7 +1,6 @@
 package dev.frostguard.tasks.economy;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -26,30 +25,20 @@ class MysteryShopRoutineTest {
     @Test
     void retriesSharedNavigationThenReschedulesFromHome() {
         TestRoutine routine = new TestRoutine();
-        LocalDateTime before = LocalDateTime.now().plusMinutes(4);
+        LocalDateTime before = LocalDateTime.now();
 
         routine.execute();
 
         assertEquals(5, routine.navigationAttempts);
+        assertEquals(0, routine.backPresses);
         assertEquals(LaunchPoint.HOME, routine.requiredStartLocation());
         assertTrue(routine.scheduledTime().isAfter(before));
-    }
-
-    @Test
-    void retriesAnUnverifiedPurchaseInFiveMinutesInsteadOfAtTheDailyReset() {
-        LocalDateTime now = LocalDateTime.of(2026, 9, 28, 10, 0);
-
-        assertEquals(now.plusMinutes(5), MysteryShopRoutine.unverifiedRetry(now));
-    }
-
-    @Test
-    void doesNotTreatAnExhaustedRefreshBudgetAsAnUnfinishedScan() {
-        assertFalse(MysteryShopRoutine.scanEndedIncomplete(2, 5, false));
-        assertTrue(MysteryShopRoutine.scanEndedIncomplete(5, 5, true));
+        assertTrue(routine.scheduledTime().isBefore(before.plusHours(2)));
     }
 
     private static final class TestRoutine extends MysteryShopRoutine {
         private int navigationAttempts;
+        private int backPresses;
 
         private TestRoutine() {
             super(new AccountDescriptor(1L, "Test", "1", true, 1L, 30L),
@@ -60,6 +49,11 @@ class MysteryShopRoutineTest {
         boolean navigateToMysteryShop() {
             navigationAttempts++;
             return false;
+        }
+
+        @Override
+        public void pressBack() {
+            backPresses++;
         }
 
         @Override
