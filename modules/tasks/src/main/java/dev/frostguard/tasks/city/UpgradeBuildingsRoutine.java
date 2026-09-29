@@ -8,6 +8,7 @@ import dev.frostguard.engine.helper.FurnacePanelDetector;
 import dev.frostguard.engine.diagnostics.DiagnosticSnapshotStore;
 import dev.frostguard.tasks.city.CityUpgradeFlow.Attempt;
 import dev.frostguard.tasks.city.CityUpgradeFlow.FailureReason;
+import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.nav.SidebarSection;
 import dev.frostguard.engine.schedule.DelayedTask;
@@ -48,7 +49,7 @@ private static final AreaData BUILDING_ACTION_BUTTON_AREA_VALUE = new AreaData(n
 private static final AreaData BUILDING_CONFIRM_UPGRADE_SEARCH_AREA_VALUE =
         new AreaData(new PointData(350, 900), new PointData(700, 1255));
 
-private static final AreaData BUILDING_NAME_AREA_VALUE = new AreaData(new PointData(260, 510), new PointData(510, 575));
+static final AreaData BUILDING_NAME_AREA_VALUE = new AreaData(new PointData(260, 510), new PointData(510, 575));
 
 private static final int BLOCKER_RELEASE_GRACE_MINUTES = 5;
 
@@ -371,6 +372,42 @@ private void logQueueSummaryFlow(List<UpgradeBuildingsRoutine.QueueReadout> queu
         logInfo(routineLogUpgradeBuildingsLine("=== Queue Analysis Summary ==="));
         for (UpgradeBuildingsRoutine.QueueReadout result : queueResults) {
             logInfo(routineLogUpgradeBuildingsLine(result.toString()));
+        }
+    }
+
+private ProductionBlocker readBusyTrainingCamp(int constructionQueue) {
+        diagnostics.stage("training-clock");
+        String buildingName = readSelectedBuildingName();
+        String clockText = readTrainingClock();
+        diagnostics.observation("training name='" + buildingName + "' clock='" + clockText + "'");
+        TrainingCampBusyRead.Decision decision = TrainingCampBusyRead.positive(buildingName, clockText, false);
+        if (decision == null) {
+            return null;
+        }
+
+        LocalDateTime completionTime = LocalDateTime.now().plus(decision.remaining());
+        reserveConsumers(EnumSet.of(decision.camp()), constructionQueue, completionTime);
+        logInfo(routineLogUpgradeBuildingsLine(
+                "Training camp " + decision.camp() + " is busy; name='" + buildingName
+                        + "'; clock='" + clockText
+                        + "'; upgrade control absent. Next visit at " + completionTime
+                        + ". Construction was not started."));
+        return new ProductionBlocker(EnumSet.of(decision.camp()), constructionQueue, completionTime);
+    }
+
+private String readTrainingClock() {
+        try {
+            String text = emuManager.readText(
+                    EMULATOR_NUMBER,
+                    TrainingCampBusyRead.CLOCK_AREA.topLeft(),
+                    TrainingCampBusyRead.CLOCK_AREA.bottomRight(),
+                    CommonOCRSettings.MARCH_QUEUE_TIMER_SETTINGS,
+                    true);
+            return text == null ? "" : text.trim();
+        } catch (Exception e) {
+            CityUpgradeFlow.rethrowControlSignal(e);
+            logWarning(routineLogUpgradeBuildingsLine("Could not read the training clock: " + e.getMessage()));
+            return "";
         }
     }
 
@@ -1004,6 +1041,10 @@ private Attempt<QueueHandlingResult> handleQueueAttempt(QueueReadout queueResult
         diagnostics.stage("recognize-build-control");
         if (isBuildButtonVisible()) {
             return buildingAttempt(startBuildingAction("build", null));
+        }
+        ProductionBlocker training = readBusyTrainingCamp(queueResult.queueNumber());
+        if (training != null) {
+            return Attempt.completed(new QueueHandlingResult(false, training));
         }
         diagnostics.stage("production-blocker");
         ProductionBlocker blocker = handleProductionBlocker(queueResult.queueNumber());

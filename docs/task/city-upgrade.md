@@ -53,3 +53,15 @@ Tests cover the observed entry, missing identity/control negatives,
 separation from final Fire Crystal confirmation, and failure recovery sequencing.
 Live account-log confirmation of the new Furnace entry and next-task handoff
 remains outstanding.
+
+The construction guide can open a training camp that is already training. On
+`lancer-camp-training-busy-20260928.png` the name reader returns `LancerCamp`
+from `(260, 510)-(510, 575)` and the white march-timer reader returns `07:41:01`
+from `(300, 640)-(470, 700)`. The upgrade template scores 70.0 at the bottom
+edge, below 90, and the Train and Speedup templates stay below 90 under the
+tutorial hand. A positive needs all three: a camp name, a full `HH:MM:SS`
+clock, and the upgrade control already absent. Two of the three stay an unknown
+short retry. The task then waits until that clock plus the existing two-second
+settle, reserves only the named camp, and does not tap Finish, Speedup, or Train.
+The portrait and the lower chat strip are removed from the fixture. Live
+confirmation of this handoff remains outstanding.
