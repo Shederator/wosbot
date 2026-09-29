@@ -276,6 +276,7 @@ public enum ConfigurationKeyEnum {
     BOOL_DEBUG                          ("false",       Boolean.class,  ConfigCategory.SYSTEM),
     CURRENT_EMULATOR_STRING             ("",            String.class,   ConfigCategory.SYSTEM),
     DESKTOP_SNAPSHOT_ENABLED_BOOL       ("false",       Boolean.class,  ConfigCategory.SYSTEM),
+    MISSING_TEMPLATE_SNAPSHOT_ENABLED_BOOL ("false",   Boolean.class,  ConfigCategory.SYSTEM),
     DISCORD_TOKEN_STRING                ("",            String.class,   ConfigCategory.SYSTEM),
     GAME_VERSION_STRING                 ("GLOBAL",      String.class,   ConfigCategory.SYSTEM),
     IDLE_BEHAVIOR_STRING                ("CLOSE_EMULATOR", String.class, ConfigCategory.SYSTEM),

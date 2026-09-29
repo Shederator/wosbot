@@ -119,6 +119,8 @@ public class EmuConfigLayoutController {
 	@FXML
 	private CheckBox checkboxDesktopSnapshots;
 
+	private CheckBox checkboxMissingTemplateSnapshots;
+
 	/* ── Internal state ── */
 
 	private final FileChooser fileChooser = new FileChooser();
@@ -452,6 +454,14 @@ public class EmuConfigLayoutController {
 		checkboxDesktopSnapshots.selectedProperty().addListener((obs, prev, now) ->
 				ConfigService.obtain().writeGlobalSetting(
 						ConfigurationKeyEnum.DESKTOP_SNAPSHOT_ENABLED_BOOL, String.valueOf(now)));
+
+		boolean missingTemplate = Boolean.parseBoolean(cfg.getOrDefault(
+				ConfigurationKeyEnum.MISSING_TEMPLATE_SNAPSHOT_ENABLED_BOOL.name(),
+				ConfigurationKeyEnum.MISSING_TEMPLATE_SNAPSHOT_ENABLED_BOOL.getDefaultValue()));
+		checkboxMissingTemplateSnapshots.setSelected(missingTemplate);
+		checkboxMissingTemplateSnapshots.selectedProperty().addListener((obs, prev, now) ->
+				ConfigService.obtain().writeGlobalSetting(
+						ConfigurationKeyEnum.MISSING_TEMPLATE_SNAPSHOT_ENABLED_BOOL, String.valueOf(now)));
 	}
 
 	/* ────────────────────────────────────────────────
