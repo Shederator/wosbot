@@ -8,7 +8,11 @@ import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.OcrSettingsData;
+import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
+import dev.frostguard.engine.helper.NavigationHelper.EventMenuOpenResult;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
+import dev.frostguard.tasks.events.EventMenuRetryState;
+import dev.frostguard.tasks.events.EventPeriodVisit;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
@@ -157,6 +161,8 @@ private int consecutiveNoMissionsCount = 0;
 
 private int consecutiveOnlyRunningMissionCount = 0;
 
+private final EventMenuRetryState menuRetry = new EventMenuRetryState();
+
 public AllianceMobilizationRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
         super(profile, tpTask);
     }
@@ -166,10 +172,12 @@ public AllianceMobilizationRoutine(AccountDescriptor profile, TpDailyTaskEnum tp
         initializeOCRHelpersFlow();
         hydrateConfiguration();
 
-        if (!navigateWithRetryFlow()) {
-            manageNavigationFailure();
+        EventMenuOpenResult opened = navigateWithRetryFlow();
+        if (opened != EventMenuOpenResult.REACHED) {
+            respondToMenu(opened);
             return;
         }
+        menuRetry.found();
 
         AttemptStatusShape attemptStatus = scanAttemptsCounter();
 
@@ -558,19 +566,18 @@ private int scanTaskAvailabilityTimers() {
         return 0;
     }
 
-private boolean reachAllianceMobilization() {
+private EventMenuOpenResult reachAllianceMobilization() {
         logInfo(routineLogAllianceMobilizationLine("Moving to Alliance Mobilization..."));
 
-        boolean success = navigationHelper.navigateToEventMenu(
-                dev.frostguard.engine.helper.NavigationHelper.EventMenu.ALLIANCE_MOBILIZATION);
+        EventMenuOpenResult opened = navigationHelper.openEventMenu(EventMenu.ALLIANCE_MOBILIZATION);
 
-        if (!success) {
+        if (opened != EventMenuOpenResult.REACHED) {
             logWarning(routineLogAllianceMobilizationLine("Could not navigate to Alliance Mobilization event"));
-            return false;
+            return opened;
         }
 
         sleepTask(2000);
-        return true;
+        return opened;
     }
 
 private void inspectAndUseFreeMission() {
@@ -637,12 +644,34 @@ private AttemptStatusShape decodeZeroAttemptsFormat(String normalized) {
         return null;
     }
 
-private void manageNavigationFailure() {
-        LocalDateTime nextMonday = GameTimeUtils.nextWeekStart();
-        logInfo(routineLogAllianceMobilizationLine("Could not navigate after " + RoutineLimits.MAX_NAVIGATION_ATTEMPTS +
-                " attempts. Event may not be active. Retrying on next Monday at "
-                + nextMonday.format(DATETIME_FORMATTER) + "."));
-        reschedule(nextMonday);
+protected void respondToMenu(EventMenuOpenResult opened) {
+        if (opened == EventMenuOpenResult.REACHED) {
+            menuRetry.found();
+            return;
+        }
+        if (opened == EventMenuOpenResult.PANEL_CLOSED) {
+            LocalDateTime retryAt = EventPeriodVisit.retryAt(LocalDateTime.now());
+            logWarning(routineLogAllianceMobilizationLine("Events panel did not open. Retrying at "
+                    + retryAt.format(DATETIME_FORMATTER) + "; " + diagnosticSnapshot("event-panel") + "."));
+            reschedule(retryAt);
+            return;
+        }
+
+        EventMenuRetryState.Choice choice = menuRetry.choose(LocalDateTime.now(), GameTimeUtils.dailyResetTime());
+        String snapshot = diagnosticSnapshot("event-navigation");
+        if (!choice.resting()) {
+            logWarning(routineLogAllianceMobilizationLine("Alliance Mobilization tab was not in view. One more menu visit at "
+                    + choice.at().format(DATETIME_FORMATTER) + "; " + snapshot + "."));
+        } else {
+            logWarning(routineLogAllianceMobilizationLine(
+                    "Alliance Mobilization tab was still not in view after the extra menu visit. Next visit at "
+                            + choice.at().format(DATETIME_FORMATTER) + "; event was not completed; " + snapshot + "."));
+        }
+        reschedule(choice.at());
+    }
+
+protected String diagnosticSnapshot(String type) {
+        return TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "alliancemobilization", type);
     }
 
 private boolean seekAndProcessAllTasks() {
@@ -792,12 +821,17 @@ private boolean inspectForRunningTasks(TaskFilterPack filters) {
         return false;
     }
 
-private boolean navigateWithRetryFlow() {
+private EventMenuOpenResult navigateWithRetryFlow() {
+        EventMenuOpenResult last = EventMenuOpenResult.PANEL_CLOSED;
         for (int attempt = 1; attempt <= RoutineLimits.MAX_NAVIGATION_ATTEMPTS; attempt++) {
             logInfo(routineLogAllianceMobilizationLine("Navigation attempt " + attempt + "/" + RoutineLimits.MAX_NAVIGATION_ATTEMPTS));
 
-            if (reachAllianceMobilization()) {
-                return true;
+            EventMenuOpenResult opened = reachAllianceMobilization();
+            if (opened == EventMenuOpenResult.REACHED) {
+                return opened;
+            }
+            if (opened == EventMenuOpenResult.TAB_ABSENT) {
+                last = opened;
             }
 
             if (attempt < RoutineLimits.MAX_NAVIGATION_ATTEMPTS) {
@@ -807,7 +841,7 @@ private boolean navigateWithRetryFlow() {
 
             }
         }
-        return false;
+        return last;
     }
 
 private boolean hasTaskAlreadyRunning(PointData bonusLocation) {

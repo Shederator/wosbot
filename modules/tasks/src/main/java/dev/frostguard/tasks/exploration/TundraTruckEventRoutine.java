@@ -23,7 +23,11 @@ import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.tasks.diagnostics.TaskControlSignals;
 import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 import dev.frostguard.engine.nav.SearchConfigConstants;
+import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
+import dev.frostguard.engine.helper.NavigationHelper.EventMenuOpenResult;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
+import dev.frostguard.tasks.events.EventMenuRetryState;
+import dev.frostguard.tasks.events.EventPeriodVisit;
 
 public class TundraTruckEventRoutine extends DelayedTask {
 
@@ -87,6 +91,7 @@ public class TundraTruckEventRoutine extends DelayedTask {
 	private boolean truckSSR;
 	private String activationTime; // Format: "HH:mm"
 	private boolean useActivationTime;
+	private final EventMenuRetryState menuRetry = new EventMenuRetryState();
 
 	public TundraTruckEventRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDailyTask) {
 		super(profile, tpDailyTask);
@@ -106,24 +111,37 @@ public class TundraTruckEventRoutine extends DelayedTask {
 		}
 
 		// Attempt navigation
+		boolean tabWasAbsent = false;
 		for (int attempt = 0; attempt < MAX_NAVIGATION_ATTEMPTS; attempt++) {
 			TundraNavigationResult result = navigateToTundraEvent();
 
 			switch (result) {
 				case SUCCESS:
+					menuRetry.found();
 					logInfo("Successfully navigated to Tundra Truck event");
 					handleTundraEvent();
 					return;
 
 				case COUNTDOWN:
+					menuRetry.found();
 					logInfo("Event in countdown. Waiting for next activation time.");
 					return;
 
 				case ENDED:
+					menuRetry.found();
 					logInfo("Event has ended. Task disabled.");
 					return;
 
-				case FAILURE:
+				case TAB_ABSENT:
+					tabWasAbsent = true;
+					logError("Navigation failed (attempt " + (attempt + 1) + "/" + MAX_NAVIGATION_ATTEMPTS + ")");
+					if (attempt < MAX_NAVIGATION_ATTEMPTS - 1) {
+						sleepTask(300);
+						pressBack();
+					}
+					break;
+
+				case PANEL_CLOSED:
 					logError("Navigation failed (attempt " + (attempt + 1) + "/" + MAX_NAVIGATION_ATTEMPTS + ")");
 					if (attempt < MAX_NAVIGATION_ATTEMPTS - 1) {
 						sleepTask(300);
@@ -133,10 +151,7 @@ public class TundraTruckEventRoutine extends DelayedTask {
 			}
 		}
 
-		// All navigation attempts failed
-		logWarning("Could not find Tundra Truck event after " + MAX_NAVIGATION_ATTEMPTS +
-				" attempts.");
-		rescheduleWithActivationTime();
+		respondToMenu(tabWasAbsent ? EventMenuOpenResult.TAB_ABSENT : EventMenuOpenResult.PANEL_CLOSED);
 	}
 
 	/**
@@ -215,48 +230,73 @@ public class TundraTruckEventRoutine extends DelayedTask {
 	 * Reschedule with activation time or game reset
 	 */
 	private void rescheduleWithActivationTime() {
+		LocalDateTime rest = activationRest();
+		if (useActivationTime) {
+			logInfo("Rescheduling for next activation at " + activationTime + " UTC tomorrow (" +
+					rest.format(DATETIME_FORMATTER) + " local time)");
+		} else {
+			logInfo("Rescheduling for game reset time");
+		}
+		reschedule(rest);
+	}
+
+	protected void respondToMenu(EventMenuOpenResult opened) {
+		if (opened == EventMenuOpenResult.REACHED) {
+			menuRetry.found();
+			return;
+		}
+		if (opened == EventMenuOpenResult.PANEL_CLOSED) {
+			LocalDateTime retryAt = EventPeriodVisit.retryAt(LocalDateTime.now());
+			logWarning("Events panel did not open. Retrying at " + retryAt.format(DATETIME_FORMATTER) + "; "
+					+ diagnosticSnapshot("event-panel") + ".");
+			reschedule(retryAt);
+			return;
+		}
+
+		EventMenuRetryState.Choice choice = menuRetry.choose(LocalDateTime.now(), activationRest());
+		String snapshot = diagnosticSnapshot("event-navigation");
+		if (!choice.resting()) {
+			logWarning("Tundra Truck tab was not in view. One more menu visit at "
+					+ choice.at().format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+		} else {
+			logWarning("Tundra Truck tab was still not in view after the extra menu visit. Next visit at "
+					+ choice.at().format(DATETIME_FORMATTER) + "; event was not completed; " + snapshot + ".");
+		}
+		reschedule(choice.at());
+	}
+
+	protected String diagnosticSnapshot(String type) {
+		return TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "tundratruck", type);
+	}
+
+	protected LocalDateTime activationRest() {
 		if (useActivationTime) {
 			validateActivationTime();
 			try {
 				LocalTime targetTime = LocalTime.parse(activationTime.trim(), TIME_FORMATTER);
-				ZonedDateTime nowUtc = ZonedDateTime.now(ZoneId.of("UTC"));
-
-				// Schedule for tomorrow at activation time
-				ZonedDateTime tomorrowActivationUtc = nowUtc.toLocalDate().plusDays(1)
+				ZonedDateTime tomorrowActivationUtc = ZonedDateTime.now(ZoneId.of("UTC")).toLocalDate().plusDays(1)
 						.atTime(targetTime)
 						.atZone(ZoneId.of("UTC"));
-
-				ZonedDateTime localActivationTime = tomorrowActivationUtc.withZoneSameInstant(ZoneId.systemDefault());
-
-				logInfo("Rescheduling for next activation at " + activationTime + " UTC tomorrow (" +
-						localActivationTime.format(DATETIME_FORMATTER) + " local time)");
-
-				reschedule(localActivationTime.toLocalDateTime());
+				return tomorrowActivationUtc.withZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime();
 			} catch (DateTimeParseException e) {
 				logError("Failed to parse activation time: " + e.getMessage());
-				reschedule(GameTimeUtils.dailyResetTime());
 			}
-		} else {
-			logInfo("Rescheduling for game reset time");
-			reschedule(GameTimeUtils.dailyResetTime());
 		}
+		return GameTimeUtils.dailyResetTime();
 	}
 
-	/**
-	 * Navigate to Tundra Truck event section
-	 * 
-	 * <p>
-	 * Uses the generic NavigationHelper.navigateToEventMenu() method.
-	 */
 	private TundraNavigationResult navigateToTundraEvent() {
 		logInfo("Navigating to Tundra Truck event");
 
-		boolean success = navigationHelper.navigateToEventMenu(
-				dev.frostguard.engine.helper.NavigationHelper.EventMenu.TUNDRA_TRUCK);
+		EventMenuOpenResult opened = navigationHelper.openEventMenu(EventMenu.TUNDRA_TRUCK);
 
-		if (!success) {
+		if (opened == EventMenuOpenResult.PANEL_CLOSED) {
 			logWarning("Failed to navigate to Tundra Truck event");
-			return TundraNavigationResult.FAILURE;
+			return TundraNavigationResult.PANEL_CLOSED;
+		}
+		if (opened == EventMenuOpenResult.TAB_ABSENT) {
+			logWarning("Failed to navigate to Tundra Truck event");
+			return TundraNavigationResult.TAB_ABSENT;
 		}
 
 		sleepTask(2000);
@@ -795,7 +835,8 @@ public class TundraTruckEventRoutine extends DelayedTask {
 
 	private enum TundraNavigationResult {
 		SUCCESS,
-		FAILURE,
+		PANEL_CLOSED,
+		TAB_ABSENT,
 		COUNTDOWN,
 		ENDED
 	}

@@ -19,6 +19,7 @@ import dev.frostguard.engine.service.TaskManagementService;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
+import dev.frostguard.engine.helper.NavigationHelper.EventMenuOpenResult;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.helper.DeploymentHelper;
 import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
@@ -33,6 +34,7 @@ public class HeroMissionEventRoutine extends DelayedTask {
     private int flagNumber = 0;
     private boolean useFlag = false;
     private boolean bearProtectionDeferred = false;
+    private final EventMenuRetryState menuRetry = new EventMenuRetryState();
 
     public HeroMissionEventRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
         super(profile, tpTask);
@@ -70,14 +72,19 @@ public class HeroMissionEventRoutine extends DelayedTask {
         if (!staminaHelper.checkStaminaAndMarchesOrReschedule(minStaminaLevel, refreshStaminaLevel, this))
             return;
 
+        boolean tabWasAbsent = false;
         int attempt = 0;
         while (attempt < 2) {
-            boolean result = navigateToEventScreen();
-            if (result) {
+            EventMenuOpenResult opened = openHeroMenu();
+            if (opened == EventMenuOpenResult.REACHED) {
+                menuRetry.found();
                 logInfo("Successfully navigated to Hero's Mission event.");
                 sleepTask(500);
                 handleHeroMissionEvent();
                 return;
+            }
+            if (opened == EventMenuOpenResult.TAB_ABSENT) {
+                tabWasAbsent = true;
             }
 
             logDebug("Failed to navigate to Hero's Mission event. Attempt " + (attempt + 1) + "/2.");
@@ -86,29 +93,46 @@ public class HeroMissionEventRoutine extends DelayedTask {
             attempt++;
         }
 
-        // If menu is not found after 2 attempts, cancel the task
-        if (attempt >= 2) {
-            LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
-            String snapshot = TaskDiagnosticSnapshots.capture(
-                    emuManager, EMULATOR_NUMBER, "heromission", "event-navigation");
-            logWarning("Hero's Mission navigation was not verified; retrying at "
-                    + retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
-            reschedule(retryAt);
-        }
+        respondToMenu(tabWasAbsent ? EventMenuOpenResult.TAB_ABSENT : EventMenuOpenResult.PANEL_CLOSED);
     }
 
-    private boolean navigateToEventScreen() {
+    EventMenuOpenResult openHeroMenu() {
         logInfo("Navigating to Hero's Mission event...");
 
-        boolean success = navigationHelper.navigateToEventMenu(EventMenu.HERO_MISSION);
+        EventMenuOpenResult opened = navigationHelper.openEventMenu(EventMenu.HERO_MISSION);
 
-        if (!success) {
+        if (opened != EventMenuOpenResult.REACHED) {
             logWarning("Failed to navigate to Hero's Mission event");
-            return false;
+            return opened;
         }
 
         sleepTask(2000);
-        return true;
+        return opened;
+    }
+
+    void respondToMenu(EventMenuOpenResult opened) {
+        if (opened == EventMenuOpenResult.REACHED) {
+            menuRetry.found();
+            return;
+        }
+        if (opened == EventMenuOpenResult.PANEL_CLOSED) {
+            LocalDateTime retryAt = EventPeriodVisit.retryAt(LocalDateTime.now());
+            logWarning("Events panel did not open. Retrying at " + retryAt.format(DATETIME_FORMATTER) + "; "
+                    + diagnosticSnapshot("event-panel") + ".");
+            reschedule(retryAt);
+            return;
+        }
+
+        EventMenuRetryState.Choice choice = menuRetry.choose(LocalDateTime.now(), GameTimeUtils.dailyResetTime());
+        String snapshot = diagnosticSnapshot("event-navigation");
+        if (!choice.resting()) {
+            logWarning("Hero's Mission tab was not in view. One more menu visit at "
+                    + choice.at().format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+        } else {
+            logWarning("Hero's Mission tab was still not in view after the extra menu visit. Next visit at "
+                    + choice.at().format(DATETIME_FORMATTER) + "; event was not completed; " + snapshot + ".");
+        }
+        reschedule(choice.at());
     }
 
     private void handleHeroMissionEvent() {
