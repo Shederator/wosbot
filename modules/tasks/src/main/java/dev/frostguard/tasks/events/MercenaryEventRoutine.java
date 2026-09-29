@@ -16,7 +16,9 @@ import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
+import dev.frostguard.engine.helper.NavigationHelper.EventMenuOpenResult;
 import dev.frostguard.engine.helper.DeploymentHelper;
+import dev.frostguard.engine.diagnostics.MissingTemplateSnapshotSettings;
 import dev.frostguard.tasks.diagnostics.TaskControlSignals;
 import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 import java.awt.Color;
@@ -36,6 +38,7 @@ public class MercenaryEventRoutine extends DelayedTask {
     private final int refreshStaminaLevel = 100;
     private final int minStaminaLevel = 40;
     private boolean scout = false;
+    private final EventMenuRetryState menuRetry = new EventMenuRetryState();
 
     public MercenaryEventRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDailyTask) {
         super(profile, tpDailyTask);
@@ -64,11 +67,17 @@ public class MercenaryEventRoutine extends DelayedTask {
         if (!staminaHelper.checkStaminaAndMarchesOrReschedule(minStaminaLevel, refreshStaminaLevel, this))
             return;
 
+        boolean tabWasAbsent = false;
         int attempt = 0;
         while (attempt < 2) {
-            if (navigateToEventScreen()) {
+            EventMenuOpenResult opened = openMercenaryMenu();
+            if (opened == EventMenuOpenResult.REACHED) {
+                menuRetry.found();
                 handleMercenaryEvent();
                 return;
+            }
+            if (opened == EventMenuOpenResult.TAB_ABSENT) {
+                tabWasAbsent = true;
             }
             logDebug("Navigation to Mercenary event failed, attempt " + (attempt + 1));
             sleepTask(300);
@@ -76,11 +85,7 @@ public class MercenaryEventRoutine extends DelayedTask {
             attempt++;
         }
 
-        LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
-        String snapshot = TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "mercenaryevent", "event-navigation");
-        logWarning("Mercenary event navigation is unverified; retrying at "
-                + retryAt.format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss")) + "; " + snapshot + ".");
-        reschedule(retryAt);
+        respondToMenu(tabWasAbsent ? EventMenuOpenResult.TAB_ABSENT : EventMenuOpenResult.PANEL_CLOSED);
     }
 
     private void handleMercenaryEvent() {
@@ -94,14 +99,10 @@ public class MercenaryEventRoutine extends DelayedTask {
             ImageSearchResultData eventButton = findMercenaryEventButton();
 
             if (eventButton == null) {
-                LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
-                String snapshot = TaskDiagnosticSnapshots.capture(
-                        emuManager, EMULATOR_NUMBER, "mercenaryevent", "action-controls");
-                logWarning("Neither event action control was detected; completion is unknown. Retrying at "
-                        + retryAt.format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss")) + "; " + snapshot + ".");
-                reschedule(retryAt);
+                respondToOpenedScreen(false);
                 return;
             }
+            respondToOpenedScreen(true);
 
             // Handle attack loss, if the attack was lost, skip flag selection to use
             // strongest march
@@ -250,18 +251,89 @@ public class MercenaryEventRoutine extends DelayedTask {
         return true;
     }
 
-    private boolean navigateToEventScreen() {
+    EventMenuOpenResult openMercenaryMenu() {
         logInfo("Navigating to Mercenary event...");
 
-        boolean success = navigationHelper.navigateToEventMenu(EventMenu.MERCENARY);
+        EventMenuOpenResult opened = navigationHelper.openEventMenu(EventMenu.MERCENARY);
 
-        if (!success) {
+        if (opened != EventMenuOpenResult.REACHED) {
             logWarning("Failed to navigate to Mercenary event");
-            return false;
+            return opened;
         }
 
         sleepTask(2000);
-        return true;
+        return opened;
+    }
+
+    void respondToMenu(EventMenuOpenResult opened) {
+        if (opened == EventMenuOpenResult.REACHED) {
+            menuRetry.found();
+            return;
+        }
+        if (opened == EventMenuOpenResult.PANEL_CLOSED) {
+            LocalDateTime retryAt = EventPeriodVisit.retryAt(LocalDateTime.now());
+            logWarning("Events panel did not open. Retrying at " + stamp(retryAt) + "; "
+                    + diagnosticSnapshot("event-panel") + ".");
+            reschedule(retryAt);
+            return;
+        }
+
+        EventMenuRetryState.Choice choice = menuRetry.choose(LocalDateTime.now(), GameTimeUtils.dailyResetTime());
+        String snapshot = diagnosticSnapshot("event-navigation");
+        if (!choice.resting()) {
+            logWarning("Mercenary event tab was not in view. One more menu visit at " + stamp(choice.at())
+                    + "; " + snapshot + ".");
+        } else {
+            logWarning("Mercenary event tab was still not in view after the extra menu visit. Next visit at "
+                    + stamp(choice.at()) + "; hunt was not completed; " + snapshot + ".");
+        }
+        reschedule(choice.at());
+    }
+
+    void respondToOpenedScreen(boolean huntControlPresent) {
+        EventPeriodVisit.OpenedScreen screen = EventPeriodVisit.openedScreen(
+                huntControlPresent,
+                EventPeriodTemplates.installed(EventPeriodTemplates.MERCENARY_COMPLETION),
+                EventPeriodTemplates.installed(EventPeriodTemplates.MERCENARY_START_COUNTDOWN));
+        noteEndCountdown(screen == EventPeriodVisit.OpenedScreen.COMPLETED);
+        if (screen == EventPeriodVisit.OpenedScreen.ACTIVE) {
+            return;
+        }
+
+        LocalDateTime next = EventPeriodVisit.nextVisit(
+                screen, LocalDateTime.now(), GameTimeUtils.dailyResetTime(), null);
+        if (screen == EventPeriodVisit.OpenedScreen.COMPLETED) {
+            logInfo("Mercenary hunt completed. Next visit at " + stamp(next) + ".");
+            reschedule(next);
+            return;
+        }
+
+        String line = "Mercenary hunt controls were absent and completion is not confirmed. Retrying at "
+                + stamp(next);
+        String missing = MissingTemplateSnapshotSettings.note(
+                MissingTemplateSnapshotSettings.enabled(),
+                EventPeriodTemplates.MERCENARY_COMPLETION,
+                () -> diagnosticSnapshot("completion-template"));
+        logWarning(missing.isEmpty() ? line + "." : line + "; " + missing + ".");
+        reschedule(next);
+    }
+
+    private void noteEndCountdown(boolean completionConfirmed) {
+        if (!EventPeriodVisit.endCountdownUnconfirmed(
+                EventPeriodTemplates.installed(EventPeriodTemplates.MERCENARY_END_COUNTDOWN),
+                completionConfirmed)) {
+            return;
+        }
+        logError("Mercenary end countdown was read and the hunt is not confirmed; "
+                + diagnosticSnapshot("end-countdown") + ".");
+    }
+
+    String diagnosticSnapshot(String type) {
+        return TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "mercenaryevent", type);
+    }
+
+    private static String stamp(LocalDateTime time) {
+        return time.format(DATETIME_FORMATTER);
     }
 
     /**
@@ -303,8 +375,7 @@ public class MercenaryEventRoutine extends DelayedTask {
         logInfo("Starting scout/attack process for mercenary event.");
 
         if (eventButton == null) {
-            logInfo("No scout or challenge button found, assuming event is completed. Rescheduling to reset.");
-            reschedule(GameTimeUtils.dailyResetTime());
+            respondToOpenedScreen(false);
             return;
         }
 
