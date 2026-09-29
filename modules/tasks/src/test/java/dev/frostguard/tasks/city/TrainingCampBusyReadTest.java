@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.time.Duration;
+import java.util.EnumSet;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
@@ -16,8 +18,20 @@ class TrainingCampBusyReadTest {
     void threeExactReadsAreABusyLancerCamp() {
         Decision decision = TrainingCampBusyRead.positive("LancerCamp", "07:41:01", false);
 
-        assertEquals(Consumer.LANCER, decision.camp());
+        assertEquals(Set.of(Consumer.LANCER), decision.camps());
         assertEquals(Duration.ofHours(7).plusMinutes(41).plusSeconds(1), decision.remaining());
+    }
+
+    @Test
+    void campAloneReservesEveryTrainingCamp() {
+        Set<Consumer> allCamps = EnumSet.of(Consumer.INFANTRY, Consumer.LANCER, Consumer.MARKSMAN);
+
+        assertEquals(Set.of(Consumer.INFANTRY),
+                TrainingCampBusyRead.positive("Infantry Camp", "07:41:01", false).camps());
+        assertEquals(Set.of(Consumer.MARKSMAN),
+                TrainingCampBusyRead.positive("Marksman Campo", "07:41:01", false).camps());
+        assertEquals(allCamps, TrainingCampBusyRead.positive("Camp", "07:41:01", false).camps());
+        assertEquals(allCamps, TrainingCampBusyRead.positive("Campo", "07:41:01", false).camps());
     }
 
     @Test

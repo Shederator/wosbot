@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.Set;
 
 import javax.imageio.ImageIO;
 
@@ -63,7 +64,7 @@ class CityUpgradeTrainingBusyFrameTest {
         assertEquals("07:41:01", clock);
         assertFalse(upgrade.isFound(), () -> "Upgrade control should stay absent: " + upgrade);
         TrainingCampBusyRead.Decision decision = TrainingCampBusyRead.positive(name, clock, upgrade.isFound());
-        assertEquals(Consumer.LANCER, decision.camp());
+        assertEquals(Set.of(Consumer.LANCER), decision.camps());
         assertEquals(Duration.ofHours(7).plusMinutes(41).plusSeconds(1), decision.remaining());
     }
 

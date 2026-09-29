@@ -386,13 +386,13 @@ private ProductionBlocker readBusyTrainingCamp(int constructionQueue) {
         }
 
         LocalDateTime completionTime = LocalDateTime.now().plus(decision.remaining());
-        reserveConsumers(EnumSet.of(decision.camp()), constructionQueue, completionTime);
+        reserveConsumers(decision.camps(), constructionQueue, completionTime);
         logInfo(routineLogUpgradeBuildingsLine(
-                "Training camp " + decision.camp() + " is busy; name='" + buildingName
+                "Training camp " + decision.camps() + " is busy; name='" + buildingName
                         + "'; clock='" + clockText
                         + "'; upgrade control absent. Next visit at " + completionTime
                         + ". Construction was not started."));
-        return new ProductionBlocker(EnumSet.of(decision.camp()), constructionQueue, completionTime);
+        return new ProductionBlocker(decision.camps(), constructionQueue, completionTime);
     }
 
 private String readTrainingClock() {
