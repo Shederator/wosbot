@@ -159,13 +159,20 @@ private void executeQueues() {
 
 
             if (!productionBlockers.isEmpty()) {
-                LocalDateTime retryAt = productionBlockers.stream()
+                LocalDateTime now = LocalDateTime.now();
+                LocalDateTime trainingHandoff = productionBlockers.stream()
                         .map(ProductionBlocker::completionTime)
                         .min(LocalDateTime::compareTo)
-                        .orElse(LocalDateTime.now().plusMinutes(5))
+                        .orElse(now)
                         .plusSeconds(COMPLETION_SETTLE_SECONDS);
+                Optional<LocalDateTime> constructionSlot = earliestConstructionSlot(updatedResults, now);
+                LocalDateTime retryAt = constructionSlot
+                        .map(slot -> CityUpgradeSchedule.earliest(trainingHandoff, slot))
+                        .orElse(trainingHandoff);
                 logInfo(routineLogUpgradeBuildingsLine(
-                        "Recommended building is blocked by production. Planning exact handoff retry for: " + retryAt));
+                        "Next visit at " + retryAt
+                                + "; training handoff=" + trainingHandoff
+                                + "; construction slot=" + constructionSlot.map(LocalDateTime::toString).orElse("none")));
                 this.reschedule(retryAt);
                 marchHelper.closeLeftMenu();
                 return;
@@ -337,20 +344,15 @@ private void deferBasedOnBusyQueues(List<QueueReadout> queueResults) {
 
         if (shortestBusyQueue != null) {
             long minutesToWait = decodeTimeToMinutes(shortestBusyQueue.state.timeRemaining);
-            LocalDateTime rescheduleTime;
+            LocalDateTime rescheduleTime = CityUpgradeSchedule.constructionRetry(LocalDateTime.now(), minutesToWait);
 
             if (minutesToWait > 30) {
-
-                long halfTime = minutesToWait / 2;
-                rescheduleTime = LocalDateTime.now().plusMinutes(halfTime);
                 logInfo(routineLogUpgradeBuildingsLine("Wait time exceeds 30 minutes (" + minutesToWait + " min). Planning next run for half time: " +
-                        halfTime + " minutes from now"));
+                        minutesToWait / 2 + " minutes from now"));
             } else if (minutesToWait < 5) {
-                rescheduleTime = LocalDateTime.now().plusMinutes(minutesToWait);
                 logInfo(routineLogUpgradeBuildingsLine("Wait time is less than 5 minutes. Keeping normal schedule: " +
                         minutesToWait + " minutes from now"));
             } else {
-                rescheduleTime = LocalDateTime.now().plusMinutes(minutesToWait);
                 logInfo(routineLogUpgradeBuildingsLine("Wait time is " + minutesToWait + " minutes. Using normal schedule"));
             }
 
@@ -366,6 +368,14 @@ private void deferBasedOnBusyQueues(List<QueueReadout> queueResults) {
             logWarning(routineLogUpgradeBuildingsLine("Zero BUSY queues with time information detected. Planning next run for 1 hour: " + rescheduleTime));
             this.reschedule(rescheduleTime);
         }
+    }
+
+private Optional<LocalDateTime> earliestConstructionSlot(List<QueueReadout> queues, LocalDateTime now) {
+        return queues.stream()
+                .filter(result -> result.state.status == QueueMood.BUSY && result.state.timeRemaining != null)
+                .map(result -> decodeTimeToMinutes(result.state.timeRemaining))
+                .min(Long::compare)
+                .map(minutes -> CityUpgradeSchedule.constructionRetry(now, minutes));
     }
 
 private void logQueueSummaryFlow(List<UpgradeBuildingsRoutine.QueueReadout> queueResults) {

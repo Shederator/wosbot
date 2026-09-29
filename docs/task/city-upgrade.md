@@ -62,8 +62,11 @@ edge, below 90, and the Train and Speedup templates stay below 90 under the
 tutorial hand. A positive needs all three: a title containing `camp`, a full `HH:MM:SS`
 clock, and the upgrade control already absent. `LancerCamp`, `Infantry Camp`,
 and `Marksman Camp` reserve that camp. `Camp` or `Campo` alone reserves all
-three. Two of the three stay an unknown short retry. The task then waits until
-that clock plus the existing two-second settle and does not tap Finish,
-Speedup, or Train. The upgrade threshold stays at 90.
+three. Two of the three stay an unknown short retry. The training countdown plus
+the existing two-second settle is one candidate for the next visit. A busy
+construction slot is the other, using the existing half-time rule past 30
+minutes. The visit takes the earlier candidate. The named camp stays reserved
+until the full countdown. Finish, Speedup, and Train are not tapped. The upgrade
+threshold stays at 90.
 The portrait and the lower chat strip are removed from the fixture. Live
 confirmation of this handoff remains outstanding.
