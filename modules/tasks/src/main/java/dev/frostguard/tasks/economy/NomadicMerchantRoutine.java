@@ -6,6 +6,7 @@ import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
+import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.engine.schedule.DelayedTask;
@@ -35,29 +36,13 @@ public class NomadicMerchantRoutine extends DelayedTask {
     /** Neighbor card centers on the 720-wide shop sit well beyond this radius. */
     static final int SAME_OFFER_RADIUS_PX = 24;
     private static final int OFFER_SEARCH_REACH_PX = 80;
-    private static final int RESOURCE_GRID_LEFT_PX = 25;
-    private static final int RESOURCE_GRID_RIGHT_PX = 690;
-    /**
-     * On the 720-wide 2026-09-30 frames, the product icon sits in the upper
-     * card body and the price sits on the bottom strip (about y 640-680 on
-     * the first row, 930-970 on the second). A resource price (coal, meat,
-     * stone, wood) is a take; a gem price is left for the VIP path. Tapping
-     * the small price icon does not buy the card.
-     */
-    static final int RESOURCE_ICON_TOP_ROW_MIN_Y = 448;
-    static final int RESOURCE_ICON_TOP_ROW_MAX_Y = 575;
-    static final int RESOURCE_ICON_BOTTOM_ROW_MIN_Y = 738;
-    static final int RESOURCE_ICON_BOTTOM_ROW_MAX_Y = 865;
+    static final int GEM_PRICE_THRESHOLD = 80;
     /** Open the gem purchase sheet from the VIP product icon. */
     static final int VIP_PURCHASE_OFFSET_Y = 100;
     /** Buy-with-gems control on the VIP sheet (no template captured yet). */
     static final PointData VIP_BUY_WITH_GEMS = new PointData(368, 830);
     /** Confirm control on the VIP sheet (no template captured yet). */
     static final PointData VIP_CONFIRM = new PointData(355, 788);
-
-    private final TemplatesEnum[] TEMPLATES = { TemplatesEnum.NOMADIC_MERCHANT_COAL,
-            TemplatesEnum.NOMADIC_MERCHANT_MEAT, TemplatesEnum.NOMADIC_MERCHANT_STONE,
-            TemplatesEnum.NOMADIC_MERCHANT_WOOD };
 
     /**
      * Remembered across visits on this task instance. It is not a reason to
@@ -90,7 +75,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
         int freeResourcesClaimedCount = 0;
         int vipPointsPurchasedCount = 0;
         int dailyRefreshUsedCount = 0;
-        List<PointData> skippedResourceOffers = new ArrayList<>();
+        List<Integer> skippedResourceOffers = new ArrayList<>();
         long executionDeadlineMs = System.currentTimeMillis() + MAX_TASK_EXECUTION_MS;
         boolean unconfirmed = false;
         boolean complete = false;
@@ -116,7 +101,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
                         break;
                     }
                     if (vipBought > 0) {
-                        logInfo("VIP points purchased. Re-checking for new resource templates.");
+                        logInfo("VIP points purchased. Re-checking for resource-priced cards.");
                     } else {
                         int refreshed = useFreeRefresh(skippedResourceOffers);
                         dailyRefreshUsedCount += Math.max(refreshed, 0);
@@ -141,32 +126,43 @@ public class NomadicMerchantRoutine extends DelayedTask {
         }
     }
 
-    private int claimResourceOffers(List<PointData> skippedResourceOffers, long executionDeadlineMs) {
+    private int claimResourceOffers(List<Integer> skippedResourceOffers, long executionDeadlineMs) {
         int claimed = 0;
-        boolean foundResourceTemplate = true;
+        boolean foundTake = true;
         phase = NomadicMerchantPhase.SEARCHING_RESOURCES;
-        logInfo("Searching for free resources to claim.");
+        logInfo("Searching for non-VIP cards priced in natural resources.");
 
-        while (foundResourceTemplate && System.currentTimeMillis() < executionDeadlineMs) {
-            foundResourceTemplate = false;
+        while (foundTake && System.currentTimeMillis() < executionDeadlineMs) {
+            foundTake = false;
             phase = NomadicMerchantPhase.SEARCHING_RESOURCES;
-            for (TemplatesEnum template : TEMPLATES) {
-                ImageSearchResultData result = locateFreeResource(template, skippedResourceOffers);
-                if (!result.isFound()) {
+            for (int slot = 0; slot < NomadicMerchantDecisions.SLOT_COUNT; slot++) {
+                if (skippedResourceOffers.contains(slot)) {
+                    continue;
+                }
+                boolean gemOnPrice = foundInSlot(TemplatesEnum.NOMADIC_MERCHANT_GEM_PRICE,
+                        NomadicMerchantDecisions.priceTopLeft(slot),
+                        NomadicMerchantDecisions.priceBottomRight(slot),
+                        GEM_PRICE_THRESHOLD);
+                boolean vipOnProduct = foundInSlot(TemplatesEnum.NOMADIC_MERCHANT_VIP,
+                        NomadicMerchantDecisions.productTopLeft(slot),
+                        NomadicMerchantDecisions.productBottomRight(slot),
+                        90);
+                if (!NomadicMerchantDecisions.takeNonVip(gemOnPrice, vipOnProduct)) {
                     continue;
                 }
                 phase = NomadicMerchantPhase.CLAIMING_RESOURCE;
-                logInfo("Found resource: " + template.name() + ". Purchasing it.");
-                boolean tapped = tapInside(result);
+                logInfo("Found a resource-priced offer in slot " + slot + ". Purchasing it.");
+                RawImageData before = emuManager.captureScreen(EMULATOR_NUMBER);
+                tapNear(NomadicMerchantDecisions.productTap(slot));
                 phase = NomadicMerchantPhase.WAITING_CLAIM_ANIMATION;
-                if (!tapped || !confirmResourceLeft(result.getPoint(), template)) {
-                    skippedResourceOffers.add(result.getPoint());
+                if (!confirmSlotChanged(slot, before)) {
+                    skippedResourceOffers.add(slot);
                     logWarning("Resource claim was not confirmed. Skipping this offer and continuing the shop scan.");
-                    foundResourceTemplate = true;
+                    foundTake = true;
                     break;
                 }
                 claimed++;
-                foundResourceTemplate = true;
+                foundTake = true;
                 logInfo("Resource action dispatched. Rescanning the full shop for replacement items.");
                 break;
             }
@@ -213,7 +209,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
     }
 
     /** @return 1 when Free Refresh was used, 0 when the shop is done or the tap is unverified */
-    private int useFreeRefresh(List<PointData> skippedResourceOffers) {
+    private int useFreeRefresh(List<Integer> skippedResourceOffers) {
         phase = NomadicMerchantPhase.SEARCHING_FREE_REFRESH;
         logInfo("No more resources or VIP points found. Checking for daily refresh.");
         ImageSearchResultData dailyRefreshResult = templateSearchHelper.locatePattern(
@@ -304,62 +300,17 @@ public class NomadicMerchantRoutine extends DelayedTask {
         return LaunchPoint.HOME;
     }
 
-    /**
-     * True for a match on the card product. Price-row icons on the 2026-09-30
-     * frames sit outside these two bands (coal at ~660, wood cost at ~950).
-     */
-    static boolean isMerchandiseIcon(PointData point) {
-        if (point == null) {
-            return false;
-        }
-        int y = point.getY();
-        return y >= RESOURCE_ICON_TOP_ROW_MIN_Y && y <= RESOURCE_ICON_TOP_ROW_MAX_Y
-                || y >= RESOURCE_ICON_BOTTOM_ROW_MIN_Y && y <= RESOURCE_ICON_BOTTOM_ROW_MAX_Y;
-    }
-
-    static boolean isSkippedOffer(PointData candidate, List<PointData> skipped) {
-        if (candidate == null || skipped == null || skipped.isEmpty()) {
-            return false;
-        }
-        ImageSearchResultData hit = new ImageSearchResultData(true, candidate, 100);
-        for (PointData skip : skipped) {
-            if (sameOffer(skip, hit)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private ImageSearchResultData locateFreeResource(TemplatesEnum template, List<PointData> skipped) {
-        ImageSearchResultData top = locateInRow(template,
-                RESOURCE_ICON_TOP_ROW_MIN_Y, RESOURCE_ICON_TOP_ROW_MAX_Y);
-        if (usableResourceMatch(top, skipped)) {
-            return top;
-        }
-        ImageSearchResultData bottom = locateInRow(template,
-                RESOURCE_ICON_BOTTOM_ROW_MIN_Y, RESOURCE_ICON_BOTTOM_ROW_MAX_Y);
-        if (usableResourceMatch(bottom, skipped)) {
-            return bottom;
-        }
-        return new ImageSearchResultData(false, null, 0);
-    }
-
-    private static boolean usableResourceMatch(ImageSearchResultData result, List<PointData> skipped) {
-        return result != null && result.isFound() && isMerchandiseIcon(result.getPoint())
-                && !isSkippedOffer(result.getPoint(), skipped);
-    }
-
-    private ImageSearchResultData locateInRow(TemplatesEnum template, int minY, int maxY) {
-        return templateSearchHelper.locatePattern(
+    private boolean foundInSlot(TemplatesEnum template, PointData topLeft, PointData bottomRight,
+            int threshold) {
+        ImageSearchResultData hit = templateSearchHelper.locatePattern(
                 template,
                 TemplateSearchHelper.SearchConfig.builder()
                         .withMaxAttempts(1)
-                        .withThreshold(90)
-                        .withDelay(300L)
-                        .withCoordinates(
-                                new PointData(RESOURCE_GRID_LEFT_PX, minY),
-                                new PointData(RESOURCE_GRID_RIGHT_PX, maxY))
+                        .withThreshold(threshold)
+                        .withDelay(0)
+                        .withCoordinates(topLeft, bottomRight)
                         .build());
+        return hit != null && hit.isFound();
     }
 
     static boolean sameOffer(PointData tapped, ImageSearchResultData after) {
@@ -377,13 +328,13 @@ public class NomadicMerchantRoutine extends DelayedTask {
         return !offerStillPresent && elapsedMs >= RESOURCE_CONFIRM_MIN_SETTLE_MS;
     }
 
-    private boolean confirmResourceLeft(PointData tapped, TemplatesEnum template) {
+    private boolean confirmSlotChanged(int slot, RawImageData before) {
         long started = System.currentTimeMillis();
         while (true) {
             long elapsed = System.currentTimeMillis() - started;
             long remainingToWindow = RESOURCE_CONFIRM_WINDOW_MS - elapsed;
             if (remainingToWindow <= 0) {
-                return resourceClaimConfirmed(sameOffer(tapped, locateOffer(template, tapped)), elapsed);
+                return slotReplaced(slot, before);
             }
             long pause = RESOURCE_CONFIRM_POLL_MS;
             long remainingToSettle = RESOURCE_CONFIRM_MIN_SETTLE_MS - elapsed;
@@ -392,14 +343,24 @@ public class NomadicMerchantRoutine extends DelayedTask {
             }
             sleepTask(Math.min(pause, remainingToWindow));
             elapsed = System.currentTimeMillis() - started;
-            boolean stillPresent = sameOffer(tapped, locateOffer(template, tapped));
-            if (resourceClaimConfirmed(stillPresent, elapsed)) {
+            boolean replaced = slotReplaced(slot, before);
+            if (resourceClaimConfirmed(!replaced, elapsed)) {
                 return true;
             }
-            if (stillPresent && elapsed >= RESOURCE_CONFIRM_WINDOW_MS) {
+            if (!replaced && elapsed >= RESOURCE_CONFIRM_WINDOW_MS) {
                 return false;
             }
         }
+    }
+
+    private boolean slotReplaced(int slot, RawImageData before) {
+        RawImageData after = emuManager.captureScreen(EMULATOR_NUMBER);
+        double delta = NomadicMerchantDecisions.meanChannelDelta(
+                before, after,
+                NomadicMerchantDecisions.productTopLeft(slot),
+                NomadicMerchantDecisions.productBottomRight(slot),
+                8);
+        return NomadicMerchantDecisions.slotChanged(delta);
     }
 
     private boolean confirmRefreshTaken(PointData tapped) {
