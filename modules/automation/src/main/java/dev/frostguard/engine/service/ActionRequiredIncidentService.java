@@ -39,7 +39,7 @@ public class ActionRequiredIncidentService {
     private static final Pattern EMAIL_ADDRESS = Pattern.compile(
             "(?i)\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b");
     private static final Pattern SNAPSHOT_EVIDENCE = Pattern.compile(
-            "logs/snapshot/\\d{8}T\\d{6}\\.\\d{3}Z-[a-z0-9]+(?:-[a-z0-9]+)+\\.png");
+            "logs/snapshot/(?:[a-z0-9]+/)?\\d{8}T\\d{6}\\.\\d{3}Z-[a-z0-9]+(?:-[a-z0-9]+)*\\.png");
 
     private static volatile ActionRequiredIncidentService instance;
 

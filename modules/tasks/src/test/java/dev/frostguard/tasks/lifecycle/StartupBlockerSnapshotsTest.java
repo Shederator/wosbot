@@ -40,7 +40,7 @@ class StartupBlockerSnapshotsTest {
         assertEquals("decision-frame", retention.basis());
         assertEquals(0, freshCaptures.get());
         assertEquals(
-                "logs/snapshot/20260924T000334.136Z-initialize-initialize-blocked.png",
+                "logs/snapshot/initialize/20260924T000334.136Z-initialize-blocked.png",
                 retention.relativePath());
         assertTrue(Files.exists(workspace.resolve(retention.relativePath())));
     }

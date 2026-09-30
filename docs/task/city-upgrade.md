@@ -36,7 +36,7 @@ profile cooldown and ADB failures bypass recovery.
 
 Attempt diagnostics distinguish control recognition, resource replenishment,
 confirmation and Home transition failures. Captures precede recovery under
-`logs/snapshot` with activity `cityupgrade` and the existing 20-capture quota.
+`logs/snapshot/cityupgrade` and the existing 20-capture quota.
 Logs identify decision frames versus best-effort later captures; capture/write
 failures do not replace ordinary task failures. Recovery failure gets its own
 capture. Runtime captures stay local and need redaction before sharing.

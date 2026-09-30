@@ -37,7 +37,7 @@ class DiagnosticSnapshotStoreTest {
         Optional<String> relative = store.write(frame(4, 2), "Initialize", "initialize blocked", CAPTURED_AT);
 
         assertEquals(
-                "logs/snapshot/20260921T143012.483Z-initialize-initialize-blocked.png",
+                "logs/snapshot/initialize/20260921T143012.483Z-initialize-blocked.png",
                 relative.orElseThrow());
         Path image = workspace.resolve(relative.orElseThrow());
         BufferedImage decoded = ImageIO.read(image.toFile());
@@ -50,18 +50,43 @@ class DiagnosticSnapshotStoreTest {
     @Test
     void sanitizesIdentifiersOutOfTheFilename() {
         String fileName = DiagnosticSnapshotStore.fileName(
-                "Profile Default / 127.0.0.1:16384",
                 "../serial exception: device offline",
                 CAPTURED_AT);
+        String relative = DiagnosticSnapshotStore.relativePath(
+                "Profile Default / 127.0.0.1:16384", fileName);
 
         assertEquals(
-                "20260921T143012.483Z-profiledefault12700116384-serial-exception-device-offline.png",
+                "20260921T143012.483Z-serial-exception-device-offline.png",
                 fileName);
+        assertEquals(
+                "logs/snapshot/profiledefault12700116384/" + fileName,
+                relative);
         assertEquals("bear", DiagnosticSnapshotStore.activityToken("bear"));
         assertEquals("bearrally", DiagnosticSnapshotStore.activityToken("Bear Rally"));
         assertFalse(fileName.contains("/"));
         assertFalse(fileName.contains(":"));
         assertFalse(fileName.contains(".."));
+        assertFalse(relative.contains(".."));
+    }
+
+    @Test
+    void movesOlderFlatCapturesIntoTheActivityDirectory() throws IOException {
+        DiagnosticSnapshotStore store = new DiagnosticSnapshotStore(workspace);
+        Files.createDirectories(store.directory());
+        Path flat = store.directory().resolve(
+                "20260921T120000.000Z-nomadicmerchant-vip-purchase.png");
+        Path notes = store.directory().resolve("notes.png");
+        Files.writeString(flat, "flat");
+        Files.writeString(notes, "keep");
+
+        store.write(frame(2, 2), "bear", "rally-button-missing", CAPTURED_AT);
+
+        Path grouped = store.directory().resolve("nomadicmerchant")
+                .resolve("20260921T120000.000Z-vip-purchase.png");
+        assertEquals("flat", Files.readString(grouped));
+        assertFalse(Files.exists(flat));
+        assertEquals("keep", Files.readString(notes));
+        assertTrue(Files.exists(store.directory().resolve("bear")));
     }
 
     @Test
@@ -73,7 +98,7 @@ class DiagnosticSnapshotStoreTest {
         Optional<String> second = store.write(frame(3, 2), "initialize", "initialize-blocked", CAPTURED_AT);
 
         assertEquals(
-                "logs/snapshot/20260921T143012.483Z-initialize-initialize-blocked-2.png",
+                "logs/snapshot/initialize/20260921T143012.483Z-initialize-blocked-2.png",
                 second.orElseThrow());
         assertEquals(firstSize, Files.size(workspace.resolve(first.orElseThrow())));
         assertEquals(3, ImageIO.read(workspace.resolve(second.orElseThrow()).toFile()).getWidth());
@@ -113,7 +138,7 @@ class DiagnosticSnapshotStoreTest {
         assertFalse(capturesFor(store.directory(), "bear").stream()
                 .anyMatch(path -> path.getFileName().toString().startsWith("20260921T010000.000Z-")));
         assertTrue(capturesFor(store.directory(), "bear").stream()
-                .anyMatch(path -> path.getFileName().toString().contains("-bear-rally-button-missing")));
+                .anyMatch(path -> path.getFileName().toString().contains("rally-button-missing")));
         assertEquals("keep", Files.readString(notes));
     }
 
@@ -174,12 +199,12 @@ class DiagnosticSnapshotStoreTest {
         Optional<String> relative = store.write(frame(2, 2), "initialize", "initialize-blocked", CAPTURED_AT);
 
         assertEquals(
-                "logs/snapshot/20260921T143012.483Z-initialize-initialize-blocked.png",
+                "logs/snapshot/initialize/20260921T143012.483Z-initialize-blocked.png",
                 relative.orElseThrow());
         assertTrue(Files.exists(workspace.resolve(
-                "logs/snapshot/20260921T143012.483Z-desktop-initialize-blocked.png")));
-        assertEquals(3, ImageIO.read(store.directory().resolve(
-                "20260921T143012.483Z-desktop-initialize-blocked.png").toFile()).getWidth());
+                "logs/snapshot/desktop/20260921T143012.483Z-initialize-blocked.png")));
+        assertEquals(3, ImageIO.read(store.directory().resolve("desktop").resolve(
+                "20260921T143012.483Z-initialize-blocked.png").toFile()).getWidth());
     }
 
     @Test
@@ -231,10 +256,13 @@ class DiagnosticSnapshotStoreTest {
     }
 
     private static List<Path> capturesFor(Path directory, String activity) throws IOException {
-        String marker = "Z-" + activity + "-";
-        try (Stream<Path> files = Files.list(directory)) {
+        Path activityDirectory = directory.resolve(activity);
+        if (!Files.isDirectory(activityDirectory)) {
+            return List.of();
+        }
+        try (Stream<Path> files = Files.list(activityDirectory)) {
             return files
-                    .filter(path -> path.getFileName().toString().contains(marker))
+                    .filter(path -> path.getFileName().toString().endsWith(".png"))
                     .sorted(Comparator.comparing(path -> path.getFileName().toString()))
                     .toList();
         }

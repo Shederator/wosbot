@@ -89,6 +89,8 @@ class ActionRequiredIncidentServiceTest {
         assertTrue(framedDiagnostics.contains("Evidence: " + evidence));
         assertEquals("", ActionRequiredIncidentService.safeEvidencePath(
                 "logs/snapshot/../../profile-Default.png"));
+        String grouped = "logs/snapshot/nomadicmerchant/20260929T001439.393Z-vip-purchase.png";
+        assertEquals(grouped, ActionRequiredIncidentService.safeEvidencePath(grouped));
     }
 
     private static ActionRequiredIncidentReport report() {
