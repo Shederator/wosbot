@@ -54,10 +54,6 @@ public class StorehouseChestRoutine extends DelayedTask {
     private static final PointData STOREHOUSE_SCROLL_START = new PointData(1, 636);
     private static final PointData STOREHOUSE_SCROLL_END = new PointData(2, 636);
 
-    // ========== Chest Reward Coordinates ==========
-    private static final PointData CHEST_TIMER_TOP_LEFT = new PointData(266, 1100);
-    private static final PointData CHEST_TIMER_BOTTOM_RIGHT = new PointData(450, 1145);
-
     // ========== Stamina Reward Coordinates ==========
     private static final PointData STAMINA_AMOUNT_TOP_LEFT = new PointData(436, 632);
     private static final PointData STAMINA_AMOUNT_BOTTOM_RIGHT = new PointData(487, 657);
@@ -72,6 +68,11 @@ public class StorehouseChestRoutine extends DelayedTask {
     private static final int TIMER_OCR_MAX_ATTEMPTS = 3;
     private static final int MAX_TIMER_SECONDS = 7200; // 2 hours
     private static final int FALLBACK_RESCHEDULE_MINUTES = 5;
+    // Night crate scores about 80; stamina-can and cooldown frames stay below 50.
+    static final int CHEST_SEARCH_THRESHOLD = 75;
+    static final int UNREADABLE_WITHOUT_CHEST_HOURS = 1;
+    private static final int CLAIM_CLOSE_SETTLE_MILLIS = 800;
+    private static final String BUILDING_COUNTDOWN_WHITELIST = "0123456789:d";
     private static final int BASE_STOREHOUSE_STAMINA = 120;
     private static final int SCROLL_ATTEMPT_COUNT = 2;
     private static final int SCROLL_REPEAT_DELAY = 300;
@@ -178,22 +179,18 @@ public class StorehouseChestRoutine extends DelayedTask {
         if (chest.isFound()) {
             logInfo("Chest found. Claiming reward.");
             tapInside(chest);
-            sleepTask(500); // Wait for reward screen
+            sleepTask(500);
+            tapInside(STOREHOUSE_SCROLL_START, STOREHOUSE_SCROLL_END, SCROLL_ATTEMPT_COUNT, SCROLL_REPEAT_DELAY);
+            sleepTask(CLAIM_CLOSE_SETTLE_MILLIS);
 
-            nextChestTime = readChestTimer();
-
+            nextChestTime = readFallbackTimer();
             if (nextChestTime == null) {
                 nextChestTimeFallback = true;
                 String snapshot = TaskDiagnosticSnapshots.capture(
                         emuManager, EMULATOR_NUMBER, "storehousechest", "claim-timer");
                 nextChestTime = LocalDateTime.now().plusMinutes(FALLBACK_RESCHEDULE_MINUTES);
                 logWarning("Claimed chest timer was unreadable; using the five-minute retry. " + snapshot);
-            } else {
-                nextChestTimeFallback = false;
             }
-
-            // Close reward screen
-            tapInside(STOREHOUSE_SCROLL_START, STOREHOUSE_SCROLL_END, SCROLL_ATTEMPT_COUNT, SCROLL_REPEAT_DELAY);
             return;
         }
 
@@ -204,8 +201,8 @@ public class StorehouseChestRoutine extends DelayedTask {
         if (nextChestTime == null) {
             String snapshot = TaskDiagnosticSnapshots.capture(
                     emuManager, EMULATOR_NUMBER, "storehousechest", "fallback-timer");
-            logWarning("Both Storehouse timer reads failed; using the five-minute retry. " + snapshot);
-            nextChestTime = LocalDateTime.now().plusMinutes(FALLBACK_RESCHEDULE_MINUTES);
+            nextChestTime = nextVisitWhenChestAbsent(LocalDateTime.now(), null);
+            logWarning("Both Storehouse timer reads failed; using the one-hour retry. " + snapshot);
         }
     }
 
@@ -213,52 +210,22 @@ public class StorehouseChestRoutine extends DelayedTask {
      * Searches for chest templates with retries.
      */
     private ImageSearchResultData searchForChest() {
+        SearchConfig chestSearch = SearchConfig.builder()
+                .withMaxAttempts(3)
+                .withThreshold(CHEST_SEARCH_THRESHOLD)
+                .withDelay(200L)
+                .build();
+
         ImageSearchResultData chest = templateSearchHelper.locatePattern(
-                TemplatesEnum.STOREHOUSE_CHEST,
-                SearchConfigConstants.SINGLE_WITH_RETRIES);
+                TemplatesEnum.STOREHOUSE_CHEST, chestSearch);
 
         if (chest.isFound()) {
             logDebug("Storehouse chest found");
             return chest;
         }
 
-        // Try alternative chest template
         return templateSearchHelper.locatePattern(
-                TemplatesEnum.STOREHOUSE_CHEST_2,
-                SearchConfigConstants.SINGLE_WITH_RETRIES);
-    }
-
-    /**
-     * Reads the chest timer via OCR.
-     */
-    private LocalDateTime readChestTimer() {
-        logDebug("Reading chest timer via OCR");
-
-        OcrSettingsData configs = OcrSettingsData.assembler()
-                .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
-
-                .stripBackground(true)
-                .setTextColor(new Color(255, 95, 95))
-                .charWhitelist("0123456789:")
-                .build();
-
-        LocalDateTime cooldown = textHelper.attemptRecognition(
-                CHEST_TIMER_TOP_LEFT,
-                CHEST_TIMER_BOTTOM_RIGHT,
-                TIMER_OCR_MAX_ATTEMPTS,
-                200L,
-                configs,
-                GameTimeUtils::isAcceptedFormat,
-                text -> LocalDateTime.now().plus(GameTimeUtils.parseDuration(text)));
-
-        if (cooldown == null) {
-            logDebug("Claim timer OCR produced no valid countdown.");
-            return null;
-        }
-
-        logDebug("Time OCR result: '" + GameTimeUtils.formatCountdown(cooldown) + "'");
-
-        return cooldown;
+                TemplatesEnum.STOREHOUSE_CHEST_2, chestSearch);
     }
 
     /**
@@ -374,14 +341,10 @@ public class StorehouseChestRoutine extends DelayedTask {
     private LocalDateTime readFallbackTimer() {
         logDebug("Attempting fallback timer reading.");
 
-        LocalDateTime cooldown = textHelper.attemptRecognition(
-                FALLBACK_TIMER_TOP_LEFT,
-                FALLBACK_TIMER_BOTTOM_RIGHT,
-                TIMER_OCR_MAX_ATTEMPTS,
-                200L,
-                buildingCountdownSettings(),
-                GameTimeUtils::isAcceptedFormat,
-                text -> LocalDateTime.now().plus(GameTimeUtils.parseDuration(text)));
+        LocalDateTime cooldown = readBuildingCountdown(buildingCountdownSettings());
+        if (cooldown == null) {
+            cooldown = readBuildingCountdown(buildingCountdownWhiteSettings());
+        }
 
         if (cooldown == null) {
             logWarning("OCR returned empty time text");
@@ -390,7 +353,6 @@ public class StorehouseChestRoutine extends DelayedTask {
 
         logDebug("Time OCR result: '" + GameTimeUtils.formatCountdown(cooldown) + "'");
 
-        // Validate timer is reasonable
         long secondsDiff = Duration.between(LocalDateTime.now(), cooldown).getSeconds();
 
         if (secondsDiff > MAX_TIMER_SECONDS) {
@@ -399,10 +361,21 @@ public class StorehouseChestRoutine extends DelayedTask {
             logWarning(String.format("Timer exceeds 2 hours (%d min), using 1 hour fallback.", secondsDiff / 60));
             logWarning(snapshot);
             nextChestTimeFallback = true;
-            return LocalDateTime.now().plusHours(1);
+            return LocalDateTime.now().plusHours(UNREADABLE_WITHOUT_CHEST_HOURS);
         }
 
         return cooldown;
+    }
+
+    private LocalDateTime readBuildingCountdown(OcrSettingsData settings) {
+        return textHelper.attemptRecognition(
+                FALLBACK_TIMER_TOP_LEFT,
+                FALLBACK_TIMER_BOTTOM_RIGHT,
+                TIMER_OCR_MAX_ATTEMPTS,
+                200L,
+                settings,
+                GameTimeUtils::isAcceptedFormat,
+                text -> LocalDateTime.now().plus(GameTimeUtils.parseDuration(text)));
     }
 
     /**
@@ -425,12 +398,27 @@ public class StorehouseChestRoutine extends DelayedTask {
         return nextChestTime;
     }
 
+    static LocalDateTime nextVisitWhenChestAbsent(LocalDateTime now, LocalDateTime recognized) {
+        if (recognized == null || recognized.isBefore(now)) {
+            return now.plusHours(UNREADABLE_WITHOUT_CHEST_HOURS);
+        }
+        return recognized;
+    }
+
     static OcrSettingsData buildingCountdownSettings() {
+        return buildingCountdownSettings(BUILDING_TIMER_GREEN);
+    }
+
+    static OcrSettingsData buildingCountdownWhiteSettings() {
+        return buildingCountdownSettings(Color.WHITE);
+    }
+
+    private static OcrSettingsData buildingCountdownSettings(Color textColor) {
         return OcrSettingsData.assembler()
                 .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
                 .stripBackground(true)
-                .setTextColor(BUILDING_TIMER_GREEN)
-                .charWhitelist("0123456789:")
+                .setTextColor(textColor)
+                .charWhitelist(BUILDING_COUNTDOWN_WHITELIST)
                 .build();
     }
 

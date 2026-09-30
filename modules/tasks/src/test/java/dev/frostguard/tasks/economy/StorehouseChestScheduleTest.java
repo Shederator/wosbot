@@ -46,4 +46,19 @@ class StorehouseChestScheduleTest {
         assertTrue(StorehouseChestRoutine.fallbackAfterRead(false, null));
         assertEquals("validated chest timer", StorehouseChestRoutine.scheduleReason(false));
     }
+
+    @Test
+    void retriesOneHourWhenTheChestIsAbsentAndTheCountdownIsUnread() {
+        assertEquals(NOW.plusHours(StorehouseChestRoutine.UNREADABLE_WITHOUT_CHEST_HOURS),
+                StorehouseChestRoutine.nextVisitWhenChestAbsent(NOW, null));
+        assertEquals(NOW.plusHours(StorehouseChestRoutine.UNREADABLE_WITHOUT_CHEST_HOURS),
+                StorehouseChestRoutine.nextVisitWhenChestAbsent(NOW, NOW.minusMinutes(1)));
+    }
+
+    @Test
+    void keepsAReadableBuildingCountdownWhenTheChestIsAbsent() {
+        LocalDateTime remaining = NOW.plusMinutes(15).plusSeconds(58);
+
+        assertEquals(remaining, StorehouseChestRoutine.nextVisitWhenChestAbsent(NOW, remaining));
+    }
 }
