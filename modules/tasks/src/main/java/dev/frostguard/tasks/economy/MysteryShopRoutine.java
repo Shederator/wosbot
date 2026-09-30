@@ -295,7 +295,8 @@ public class MysteryShopRoutine extends DelayedTask {
      * A free refresh that is still visible is not a failure while more free
      * refreshes remain. The grid fingerprint distinguishes a real restock
      * from a tap that did nothing. The button disappearing means the last
-     * free refresh was consumed.
+     * free refresh was consumed. A dead first tap is retried once in this
+     * visit; a second miss is unconfirmed.
      */
     private boolean useFreeRefresh(Integer balance) {
         ImageSearchResultData refresh = templateSearchHelper.locatePattern(
@@ -307,38 +308,49 @@ public class MysteryShopRoutine extends DelayedTask {
         }
         logInfo("No target remains. Using free refresh. Badge balance is " + balance + ".");
         RawImageData before = emuManager.captureScreen(EMULATOR_NUMBER);
-        if (!tapInside(refresh)) {
+        int tapsTried = 0;
+        while (true) {
+            if (!tapInside(refresh)) {
+                finishUnconfirmed("action-unverified",
+                        "Could not dispatch the free refresh tap", true);
+                return false;
+            }
+            tapsTried++;
+            sleepTask(REFRESH_SETTLE_MS);
+            ImageSearchResultData stillVisible = templateSearchHelper.locatePattern(
+                    TemplatesEnum.MYSTERY_SHOP_DAILY_REFRESH,
+                    SearchConfigConstants.DEFAULT_SINGLE);
+            if (!isFreeRefresh(stillVisible)) {
+                StatisticsService.obtain().addToCounter(profile, REFRESHES, 1);
+                noteConfirmed();
+                logInfo("Free refresh used. The free refresh button is gone.");
+                return true;
+            }
+            RawImageData after = emuManager.captureScreen(EMULATOR_NUMBER);
+            double delta = MysteryShopDecisions.meanChannelDelta(before, after,
+                    MysteryShopDecisions.GRID_LEFT, MysteryShopDecisions.GRID_TOP,
+                    MysteryShopDecisions.GRID_RIGHT, MysteryShopDecisions.GRID_BOTTOM,
+                    MysteryShopDecisions.GRID_STEP);
+            if (MysteryShopDecisions.gridChanged(delta)) {
+                StatisticsService.obtain().addToCounter(profile, REFRESHES, 1);
+                noteConfirmed();
+                logInfo("Free refresh used. The button is still visible and the grid changed by mean "
+                        + String.format(Locale.ROOT, "%.1f", delta) + ".");
+                return true;
+            }
+            if (MysteryShopDecisions.retryRefreshTap(tapsTried, true, delta)) {
+                logInfo("Free refresh button is still visible and the grid is unchanged (mean "
+                        + String.format(Locale.ROOT, "%.1f", delta)
+                        + "). Tapping it once more.");
+                refresh = stillVisible;
+                continue;
+            }
             finishUnconfirmed("action-unverified",
-                    "Could not dispatch the free refresh tap", true);
+                    "Free refresh button is still visible and the grid is unchanged (mean "
+                            + String.format(Locale.ROOT, "%.1f", delta) + ")",
+                    true);
             return false;
         }
-        sleepTask(REFRESH_SETTLE_MS);
-        ImageSearchResultData stillVisible = templateSearchHelper.locatePattern(
-                TemplatesEnum.MYSTERY_SHOP_DAILY_REFRESH,
-                SearchConfigConstants.DEFAULT_SINGLE);
-        if (!isFreeRefresh(stillVisible)) {
-            StatisticsService.obtain().addToCounter(profile, REFRESHES, 1);
-            noteConfirmed();
-            logInfo("Free refresh used. The free refresh button is gone.");
-            return true;
-        }
-        RawImageData after = emuManager.captureScreen(EMULATOR_NUMBER);
-        double delta = MysteryShopDecisions.meanChannelDelta(before, after,
-                MysteryShopDecisions.GRID_LEFT, MysteryShopDecisions.GRID_TOP,
-                MysteryShopDecisions.GRID_RIGHT, MysteryShopDecisions.GRID_BOTTOM,
-                MysteryShopDecisions.GRID_STEP);
-        if (MysteryShopDecisions.gridChanged(delta)) {
-            StatisticsService.obtain().addToCounter(profile, REFRESHES, 1);
-            noteConfirmed();
-            logInfo("Free refresh used. The button is still visible and the grid changed by mean "
-                    + String.format(Locale.ROOT, "%.1f", delta) + ".");
-            return true;
-        }
-        finishUnconfirmed("action-unverified",
-                "Free refresh button is still visible and the grid is unchanged (mean "
-                        + String.format(Locale.ROOT, "%.1f", delta) + ")",
-                true);
-        return false;
     }
 
     private Offer findPricedOffer(TemplatesEnum iconTemplate, int iconThreshold) {

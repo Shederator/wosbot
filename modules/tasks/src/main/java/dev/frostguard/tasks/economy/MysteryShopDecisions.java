@@ -43,8 +43,13 @@ final class MysteryShopDecisions {
      * Mean per-channel change that counts as a new grid. No before/after pair
      * of the same shop was captured, so this is a first cut: an untouched
      * grid stays near zero and a replaced card moves the sample well past it.
+     * A measured dead tap scored 9.5 without consuming the refresh; that
+     * miss is retried once rather than lowering this cut.
      */
     static final double GRID_CHANGE_MEAN = 12.0;
+
+    /** Dead first tap (button still there, grid under GRID_CHANGE_MEAN). */
+    static final int REFRESH_TAP_ATTEMPTS = 2;
 
     private static final int EARN_BADGES_HOURS = 4;
     private static final int FIRST_RETRY_MINUTES = 5;
@@ -249,6 +254,16 @@ final class MysteryShopDecisions {
 
     static boolean gridChanged(double meanDelta) {
         return meanDelta >= GRID_CHANGE_MEAN;
+    }
+
+    /**
+     * Retry a Free Refresh tap that left the button on screen and the grid
+     * under {@link #GRID_CHANGE_MEAN}. The second miss is unconfirmed.
+     */
+    static boolean retryRefreshTap(int tapsTried, boolean buttonStillVisible, double meanDelta) {
+        return tapsTried < REFRESH_TAP_ATTEMPTS
+                && buttonStillVisible
+                && !gridChanged(meanDelta);
     }
 
     private static LocalDateTime capBeforeReset(LocalDateTime now, LocalDateTime reset,

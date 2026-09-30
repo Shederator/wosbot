@@ -107,6 +107,15 @@ class MysteryShopDecisionsTest {
         assertTrue(MysteryShopDecisions.gridChanged(12));
     }
 
+    @Test
+    void retriesADeadRefreshTapOnceThenTreatsTheSecondMissAsUnconfirmed() {
+        assertEquals(2, MysteryShopDecisions.REFRESH_TAP_ATTEMPTS);
+        assertTrue(MysteryShopDecisions.retryRefreshTap(1, true, 9.5));
+        assertFalse(MysteryShopDecisions.retryRefreshTap(2, true, 9.5));
+        assertFalse(MysteryShopDecisions.retryRefreshTap(1, true, 12.0));
+        assertFalse(MysteryShopDecisions.retryRefreshTap(1, false, 0.0));
+    }
+
     private static RawImageData solid(int width, int height, int bpp, byte channel) {
         byte[] pixels = new byte[width * height * 4];
         for (int index = 0; index < pixels.length; index += 4) {
