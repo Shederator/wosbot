@@ -1,8 +1,6 @@
 package dev.frostguard.tasks.economy;
 
-import java.time.DateTimeException;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.RawImageData;
@@ -20,7 +18,6 @@ final class MysteryShopDecisions {
 
     static final int BADGE_PRICE = 250;
     static final int MAX_BALANCE = 999_999;
-    static final LocalTime DEFAULT_REFRESH_COMPLETION = LocalTime.of(18, 0);
 
     /** Price centre may sit this far left or right of the icon centre. */
     static final int PRICE_DX_LIMIT = 80;
@@ -62,7 +59,7 @@ final class MysteryShopDecisions {
     enum RefreshChoice {
         /** No target remains, and a free refresh may be spent. */
         REFRESH,
-        /** Keep the free refresh, or keep a target that cannot be paid for yet. */
+        /** Keep a target that cannot be paid for yet. */
         WAIT_FOR_BADGES,
         /** Nothing left to buy and no free refresh remains. */
         DAY_COMPLETE
@@ -88,14 +85,6 @@ final class MysteryShopDecisions {
 
     static boolean isFreeRefresh(boolean templateFound) {
         return templateFound;
-    }
-
-    /**
-     * True when the UTC clock is at or past the operator's completion time.
-     * Eighteen o'clock exactly is already past.
-     */
-    static boolean pastRefreshCompletion(LocalTime utcNow, LocalTime cutoff) {
-        return !utcNow.isBefore(cutoff);
     }
 
     /** A free reward costs nothing, so an unknown balance still allows it. */
@@ -165,56 +154,21 @@ final class MysteryShopDecisions {
     }
 
     /**
-     * Refresh only when no enabled target remains. An unaffordable chest or
-     * shard stays on screen and blocks the refresh even after the completion
-     * time, because refreshing would discard it. With nothing left to buy,
-     * a balance of at least 250 badges allows the refresh immediately. After
-     * the completion time the refresh is used anyway so the free refresh is
-     * not lost. Without a free refresh the shop is clear for the day.
+     * Refresh as soon as no enabled target remains and a free refresh is
+     * visible. The badge balance does not delay that refresh: a balance under
+     * 250 with an empty target list spends the free refresh and the visit
+     * scans the new grid. An unaffordable chest or shard stays on screen and
+     * blocks the refresh, because refreshing would discard it. Without a free
+     * refresh the shop is clear for the day.
      */
-    static RefreshChoice choose(boolean targetsRemain, boolean refreshVisible,
-            Integer balance, boolean pastCompletion) {
+    static RefreshChoice choose(boolean targetsRemain, boolean refreshVisible) {
         if (targetsRemain) {
             return RefreshChoice.WAIT_FOR_BADGES;
         }
         if (!refreshVisible) {
             return RefreshChoice.DAY_COMPLETE;
         }
-        if (isAffordable(balance) || pastCompletion) {
-            return RefreshChoice.REFRESH;
-        }
-        return RefreshChoice.WAIT_FOR_BADGES;
-    }
-
-    /**
-     * Parses the operator's UTC completion clock. A missing or malformed
-     * value falls back to 18:00. The text is a clock, not a timezone offset.
-     */
-    static LocalTime completionTime(String raw) {
-        if (raw == null) {
-            return DEFAULT_REFRESH_COMPLETION;
-        }
-        String candidate = raw.trim();
-        if (!candidate.matches("\\d{2}:\\d{2}")) {
-            return DEFAULT_REFRESH_COMPLETION;
-        }
-        try {
-            return LocalTime.parse(candidate);
-        } catch (DateTimeException exception) {
-            return DEFAULT_REFRESH_COMPLETION;
-        }
-    }
-
-    static boolean acceptsCompletionTime(String raw) {
-        if (raw == null || !raw.trim().matches("\\d{2}:\\d{2}")) {
-            return false;
-        }
-        try {
-            LocalTime.parse(raw.trim());
-            return true;
-        } catch (DateTimeException exception) {
-            return false;
-        }
+        return RefreshChoice.REFRESH;
     }
 
     /**

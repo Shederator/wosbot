@@ -2,8 +2,6 @@ package dev.frostguard.tasks.economy;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -122,7 +120,6 @@ public class MysteryShopRoutine extends DelayedTask {
     private void visitOpenShop(long deadline) {
         boolean buyChest = enabled(ConfigurationKeyEnum.BOOL_MYSTERY_SHOP_250_HERO_WIDGET);
         boolean buyShard = enabled(ConfigurationKeyEnum.BOOL_MYSTERY_SHOP_250_SHARD);
-        LocalTime cutoff = refreshCutoff();
         phase = MysteryShopPhase.READING_BALANCE;
         Integer balance = readBadgeBalance();
         if (balance == null) {
@@ -195,19 +192,17 @@ public class MysteryShopRoutine extends DelayedTask {
 
             phase = MysteryShopPhase.REFRESHING;
             boolean refreshVisible = isFreeRefresh();
-            boolean pastCompletion = MysteryShopDecisions.pastRefreshCompletion(
-                    LocalTime.now(ZoneOffset.UTC), cutoff);
             MysteryShopDecisions.RefreshChoice choice = MysteryShopDecisions.choose(
-                    targetsRemain, refreshVisible, balance, pastCompletion);
+                    targetsRemain, refreshVisible);
             if (choice == MysteryShopDecisions.RefreshChoice.WAIT_FOR_BADGES) {
-                finishWaiting(balance, targetsRemain, cutoff);
+                finishWaiting(balance);
                 return;
             }
             if (choice == MysteryShopDecisions.RefreshChoice.DAY_COMPLETE) {
                 finishDay();
                 return;
             }
-            if (!useFreeRefresh(balance, pastCompletion)) {
+            if (!useFreeRefresh(balance)) {
                 return;
             }
             revealedLowerGrid = false;
@@ -302,7 +297,7 @@ public class MysteryShopRoutine extends DelayedTask {
      * from a tap that did nothing. The button disappearing means the last
      * free refresh was consumed.
      */
-    private boolean useFreeRefresh(Integer balance, boolean pastCompletion) {
+    private boolean useFreeRefresh(Integer balance) {
         ImageSearchResultData refresh = templateSearchHelper.locatePattern(
                 TemplatesEnum.MYSTERY_SHOP_DAILY_REFRESH,
                 SearchConfigConstants.DEFAULT_SINGLE);
@@ -310,12 +305,7 @@ public class MysteryShopRoutine extends DelayedTask {
             finishDay();
             return false;
         }
-        if (pastCompletion && !MysteryShopDecisions.isAffordable(balance)) {
-            logInfo("Refresh completion time has passed and no target remains. "
-                    + "Refreshing despite badge balance " + balance + ".");
-        } else {
-            logInfo("No target remains and at least 250 badges are left. Using free refresh.");
-        }
+        logInfo("No target remains. Using free refresh. Badge balance is " + balance + ".");
         RawImageData before = emuManager.captureScreen(EMULATOR_NUMBER);
         if (!tapInside(refresh)) {
             finishUnconfirmed("action-unverified",
@@ -462,15 +452,6 @@ public class MysteryShopRoutine extends DelayedTask {
                 + balance + " and the reread is " + reread + ". No badges were deducted.");
     }
 
-    private LocalTime refreshCutoff() {
-        String raw = profile.getConfig(
-                ConfigurationKeyEnum.MYSTERY_SHOP_REFRESH_COMPLETION_UTC_STRING, String.class);
-        if (!MysteryShopDecisions.acceptsCompletionTime(raw)) {
-            logWarning("UTC refresh completion '" + raw + "' is not HH:mm. Using 18:00.");
-        }
-        return MysteryShopDecisions.completionTime(raw);
-    }
-
     private void noteConfirmed() {
         consecutiveUnconfirmed = 0;
         if (progress == MysteryShopProgress.UNCONFIRMED) {
@@ -478,17 +459,14 @@ public class MysteryShopRoutine extends DelayedTask {
         }
     }
 
-    private void finishWaiting(Integer balance, boolean targetsRemain, LocalTime cutoff) {
+    private void finishWaiting(Integer balance) {
         consecutiveUnconfirmed = 0;
         progress = MysteryShopProgress.WAITING_FOR_BADGES;
         phase = MysteryShopPhase.FINISHED;
         LocalDateTime next = MysteryShopDecisions.earnMoneyVisit(
                 LocalDateTime.now(), GameTimeUtils.dailyResetTime());
-        String reason = targetsRemain
-                ? "A 250 badge target is still on screen and the balance is " + balance
-                : "No target is on screen, the balance is " + balance
-                        + ", and the free refresh is kept until " + cutoff + " UTC";
-        logInfo(reason + ". Next check at " + next.format(DATETIME_FORMATTER) + ".");
+        logInfo("A 250 badge target is still on screen and the balance is " + balance
+                + ". Next check at " + next.format(DATETIME_FORMATTER) + ".");
         reschedule(next);
         leaveShop();
     }

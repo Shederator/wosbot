@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 
 import org.junit.jupiter.api.Test;
 
@@ -57,38 +56,15 @@ class MysteryShopDecisionsTest {
     }
 
     @Test
-    void keepsAnUnaffordableTargetEvenAfterTheCompletionTime() {
-        assertEquals(RefreshChoice.WAIT_FOR_BADGES, MysteryShopDecisions.choose(
-                true, true, 100, true));
-        assertEquals(RefreshChoice.WAIT_FOR_BADGES, MysteryShopDecisions.choose(
-                true, true, 8350, false));
+    void keepsAnUnaffordableTargetOnScreen() {
+        assertEquals(RefreshChoice.WAIT_FOR_BADGES, MysteryShopDecisions.choose(true, true));
+        assertEquals(RefreshChoice.WAIT_FOR_BADGES, MysteryShopDecisions.choose(true, false));
     }
 
     @Test
-    void refreshesOnlyWhenNoTargetRemainsAndTheBudgetOrTheCutoffAllowsIt() {
-        assertEquals(RefreshChoice.REFRESH, MysteryShopDecisions.choose(
-                false, true, 250, false));
-        assertEquals(RefreshChoice.WAIT_FOR_BADGES, MysteryShopDecisions.choose(
-                false, true, 249, false));
-        assertEquals(RefreshChoice.REFRESH, MysteryShopDecisions.choose(
-                false, true, 0, true));
-        assertEquals(RefreshChoice.DAY_COMPLETE, MysteryShopDecisions.choose(
-                false, false, 8350, true));
-        assertEquals(RefreshChoice.DAY_COMPLETE, MysteryShopDecisions.choose(
-                false, false, 0, false));
-    }
-
-    @Test
-    void completionTimeIsInclusiveAndFallsBackToEighteenHundred() {
-        assertFalse(MysteryShopDecisions.pastRefreshCompletion(LocalTime.of(17, 59), LocalTime.of(18, 0)));
-        assertTrue(MysteryShopDecisions.pastRefreshCompletion(LocalTime.of(18, 0), LocalTime.of(18, 0)));
-        assertTrue(MysteryShopDecisions.pastRefreshCompletion(LocalTime.of(18, 1), LocalTime.of(18, 0)));
-        assertEquals(LocalTime.of(18, 0), MysteryShopDecisions.completionTime("18:00"));
-        assertEquals(LocalTime.of(18, 0), MysteryShopDecisions.completionTime(null));
-        assertEquals(LocalTime.of(18, 0), MysteryShopDecisions.completionTime("18:00:00"));
-        assertEquals(LocalTime.of(18, 0), MysteryShopDecisions.completionTime("24:00"));
-        assertFalse(MysteryShopDecisions.acceptsCompletionTime("24:00"));
-        assertTrue(MysteryShopDecisions.acceptsCompletionTime("18:00"));
+    void refreshesAsSoonAsNoTargetRemainsAndAFreeRefreshIsVisible() {
+        assertEquals(RefreshChoice.REFRESH, MysteryShopDecisions.choose(false, true));
+        assertEquals(RefreshChoice.DAY_COMPLETE, MysteryShopDecisions.choose(false, false));
     }
 
     @Test

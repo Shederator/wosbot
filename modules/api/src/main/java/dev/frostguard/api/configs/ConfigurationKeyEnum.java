@@ -258,7 +258,6 @@ public enum ConfigurationKeyEnum {
     BOOL_MYSTERY_SHOP                       ("false",   Boolean.class,  ConfigCategory.SHOPS),
     BOOL_MYSTERY_SHOP_250_HERO_WIDGET       ("false",   Boolean.class,  ConfigCategory.SHOPS),
     BOOL_MYSTERY_SHOP_250_SHARD             ("false",   Boolean.class,  ConfigCategory.SHOPS),
-    MYSTERY_SHOP_REFRESH_COMPLETION_UTC_STRING ("18:00", String.class,  ConfigCategory.SHOPS),
     BOOL_NOMADIC_MERCHANT                   ("false",   Boolean.class,  ConfigCategory.SHOPS),
     BOOL_NOMADIC_MERCHANT_VIP_POINTS        ("false",   Boolean.class,  ConfigCategory.SHOPS),
     BOOL_VIP_POINTS                         ("false",   Boolean.class,  ConfigCategory.SHOPS),

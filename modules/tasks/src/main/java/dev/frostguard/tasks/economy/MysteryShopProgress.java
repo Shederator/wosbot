@@ -24,10 +24,12 @@ public enum MysteryShopProgress {
     READY,
 
     /**
-     * The last visit left a free refresh unused, or left a 250-badge target
-     * it could not pay for. The next visit is scheduled before the daily
-     * reset so badges earned in the meantime can still be spent. The visit
-     * still scans; a newly affordable target is bought.
+     * The last visit left a 250-badge target it could not pay for. The free
+     * refresh was left unused on purpose so that card is not replaced. The
+     * next visit is scheduled before the daily reset so badges earned in the
+     * meantime can still be spent. The visit still scans; a newly affordable
+     * target is bought. An empty target list never waits: a visible free
+     * refresh is spent immediately.
      */
     WAITING_FOR_BADGES,
 

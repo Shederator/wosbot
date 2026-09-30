@@ -1,13 +1,11 @@
 package dev.frostguard.app.panel.economy;
 
 import dev.frostguard.app.shared.AbstractProfileController;
-import dev.frostguard.app.shared.SettingValidators;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import javafx.fxml.FXML;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
-import javafx.scene.control.TextField;
 
 import java.util.List;
 
@@ -22,24 +20,13 @@ public class ShopLayoutController extends AbstractProfileController {
 	private ComboBox<Integer> comboBoxBankDelay;
 
 	@FXML
-	private TextField textFieldMysteryRefreshCompletion;
-
-	@FXML
 	private Label labelPeriod;
-
-	@FXML
-	private Label labelMysteryRefreshCompletionError;
 
 	@FXML
 	private void initialize() {
 		shopSwitches().forEach(binding -> checkBoxMappings.put(binding.control(), binding.configKey()));
 		comboBoxBankDelay.getItems().setAll(1, 7, 15, 30);
 		comboBoxMappings.put(comboBoxBankDelay, ConfigurationKeyEnum.INT_BANK_DELAY);
-		registerTimeTextField(
-				textFieldMysteryRefreshCompletion,
-				labelMysteryRefreshCompletionError,
-				ConfigurationKeyEnum.MYSTERY_SHOP_REFRESH_COMPLETION_UTC_STRING,
-				SettingValidators.localTime("UTC time for refresh completion"));
 		initializeChangeEvents();
 	}
 
