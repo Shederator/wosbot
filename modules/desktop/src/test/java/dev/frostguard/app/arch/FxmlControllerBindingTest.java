@@ -143,6 +143,39 @@ class FxmlControllerBindingTest {
     }
 
     /**
+     * The reverse mismatch: an {@code fx:id} whose controller field exists but
+     * lacks {@code @FXML}. The loader never injects that field, {@code initialize}
+     * can NPE, and {@code loadNode} swallows the failure into an empty pane —
+     * which is how Config → Emulators went blank after the missing-template
+     * snapshot checkbox was added.
+     */
+    @Test
+    void everyDocumentIdWithAControllerFieldIsAnnotatedForInjection() throws IOException {
+        List<String> offenders = new ArrayList<>();
+
+        for (Path document : documents()) {
+            Path controller = controllerFor(document);
+            if (controller == null) {
+                continue;
+            }
+
+            String documentName = documentName(document);
+            Set<String> declaredIds = matches(FX_ID, Files.readString(document));
+            Set<String> injected = injectedFieldNames(controller);
+            for (String field : declaredFieldNames(controller)) {
+                if (!declaredIds.contains(field) || injected.contains(field)) {
+                    continue;
+                }
+                offenders.add(documentName + "#" + field);
+            }
+        }
+
+        assertEquals(List.of(), new ArrayList<>(new TreeSet<>(offenders)),
+                "These fx:id controls have a controller field without @FXML, so injection "
+                        + "leaves the field null. Annotate the field or remove the unused declaration.");
+    }
+
+    /**
      * The node-name input that issue #136 reported as missing. Pinned by name so
      * a future document edit cannot quietly drop it again.
      */
@@ -293,6 +326,32 @@ class FxmlControllerBindingTest {
             String text = Files.readString(current);
             names.addAll(injectedFieldNames(stripComments(text)));
             Matcher superclass = SUPERCLASS.matcher(text);
+            current = superclass.find() ? controllerSources.get(superclass.group(1)) : null;
+        }
+        return names;
+    }
+
+    /** Instance field names declared in the controller hierarchy, with or without {@code @FXML}. */
+    private static Set<String> declaredFieldNames(Path controller) throws IOException {
+        Set<String> names = new LinkedHashSet<>();
+        Path current = controller;
+        Set<Path> visited = new LinkedHashSet<>();
+        Pattern field = Pattern.compile(
+                "(?m)^\\s*(?:private|protected|public)\\s+(?:static\\s+)?(?:final\\s+)?"
+                        + "[\\w.]+(?:\\s*<[^;{]+>)?\\s+([\\w\\s,=\\[\\]]+);");
+
+        while (current != null && visited.add(current)) {
+            String text = stripComments(Files.readString(current));
+            Matcher matcher = field.matcher(text);
+            while (matcher.find()) {
+                for (String candidate : matcher.group(1).split(",")) {
+                    String name = candidate.split("=")[0].replace("[]", "").trim();
+                    if (IDENTIFIER.matcher(name).matches()) {
+                        names.add(name);
+                    }
+                }
+            }
+            Matcher superclass = SUPERCLASS.matcher(Files.readString(current));
             current = superclass.find() ? controllerSources.get(superclass.group(1)) : null;
         }
         return names;

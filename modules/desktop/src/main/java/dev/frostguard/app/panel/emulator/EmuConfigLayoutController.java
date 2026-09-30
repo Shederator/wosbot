@@ -119,6 +119,7 @@ public class EmuConfigLayoutController {
 	@FXML
 	private CheckBox checkboxDesktopSnapshots;
 
+	@FXML
 	private CheckBox checkboxMissingTemplateSnapshots;
 
 	/* ── Internal state ── */
