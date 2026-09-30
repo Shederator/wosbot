@@ -1,11 +1,11 @@
 # Nomadic Merchant
 
 The shop is a fixed 3×2 grid on the 720×1280 viewport. Pass one takes every
-non-VIP card whose price strip has no gem (natural-resource price, including
-accelerators and teleports). Pass two buys each VIP product icon with the
-existing gem sheet taps. Free Refresh runs after both passes.
+card whose price strip has no gem (natural-resource price, including
+accelerators, teleports, and a VIP if one is ever priced that way). Pass two
+buys remaining VIP product icons with the existing gem sheet taps. Free
+Refresh runs after both passes.
 
-VIP is identified by the yellow product icon, not by a gem on the price.
 Tapping the price strip does not buy; the tap is the product body.
 
 Gem-price template `gemprice.png` was cropped from a 19-gem VIP card on

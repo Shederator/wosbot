@@ -130,7 +130,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
         int claimed = 0;
         boolean foundTake = true;
         phase = NomadicMerchantPhase.SEARCHING_RESOURCES;
-        logInfo("Searching for non-VIP cards priced in natural resources.");
+        logInfo("Searching for cards priced in natural resources.");
 
         while (foundTake && System.currentTimeMillis() < executionDeadlineMs) {
             foundTake = false;
@@ -143,11 +143,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
                         NomadicMerchantDecisions.priceTopLeft(slot),
                         NomadicMerchantDecisions.priceBottomRight(slot),
                         GEM_PRICE_THRESHOLD);
-                boolean vipOnProduct = foundInSlot(TemplatesEnum.NOMADIC_MERCHANT_VIP,
-                        NomadicMerchantDecisions.productTopLeft(slot),
-                        NomadicMerchantDecisions.productBottomRight(slot),
-                        90);
-                if (!NomadicMerchantDecisions.takeNonVip(gemOnPrice, vipOnProduct)) {
+                if (!NomadicMerchantDecisions.takeIfNotGemPriced(gemOnPrice)) {
                     continue;
                 }
                 phase = NomadicMerchantPhase.CLAIMING_RESOURCE;

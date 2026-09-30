@@ -43,7 +43,7 @@ class NomadicMerchantFrameTest {
 
         assertEquals(List.of(2, 3, 4), takes, () -> describe(encoded));
         assertTrue(vipInSlot(encoded, 0), () -> describe(encoded));
-        assertFalse(NomadicMerchantDecisions.takeNonVip(gemInSlot(encoded, 0), true));
+        assertFalse(NomadicMerchantDecisions.takeIfNotGemPriced(gemInSlot(encoded, 0)));
     }
 
     @Test
@@ -67,9 +67,7 @@ class NomadicMerchantFrameTest {
     private List<Integer> takes(byte[] encoded) {
         List<Integer> takes = new ArrayList<>();
         for (int slot = 0; slot < NomadicMerchantDecisions.SLOT_COUNT; slot++) {
-            boolean gem = gemInSlot(encoded, slot);
-            boolean vip = vipInSlot(encoded, slot);
-            if (NomadicMerchantDecisions.takeNonVip(gem, vip)) {
+            if (NomadicMerchantDecisions.takeIfNotGemPriced(gemInSlot(encoded, slot))) {
                 takes.add(slot);
             }
         }

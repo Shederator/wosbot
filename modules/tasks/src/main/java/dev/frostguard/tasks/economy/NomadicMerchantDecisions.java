@@ -12,7 +12,8 @@ import dev.frostguard.api.domain.RawImageData;
  * columns sit at x 47 / 268 / 489. The top row occupies y 420-685 and the
  * bottom row y 720-980. The price strip is the bottom 60 pixels of the
  * card. A gem on that strip is paid; its absence is a natural-resource
- * price. VIP is identified by the product icon, not by the price.</p>
+ * price, including a VIP if one ever appears that way. Remaining VIP
+ * icons are bought on the second pass.</p>
  */
 final class NomadicMerchantDecisions {
 
@@ -80,12 +81,9 @@ final class NomadicMerchantDecisions {
         return new PointData(slotLeft(slot) + SLOT_WIDTH / 2, (top + priceTop) / 2);
     }
 
-    /**
-     * Non-VIP pass: take when the price is not gems and the product is not
-     * VIP. VIP cards stay for the second pass even with a resource price.
-     */
-    static boolean takeNonVip(boolean gemOnPrice, boolean vipOnProduct) {
-        return !gemOnPrice && !vipOnProduct;
+    /** First pass: take when the price strip has no gem. */
+    static boolean takeIfNotGemPriced(boolean gemOnPrice) {
+        return !gemOnPrice;
     }
 
     static boolean slotChanged(double meanDelta) {

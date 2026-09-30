@@ -12,20 +12,19 @@ import org.junit.jupiter.api.Test;
 class NomadicMerchantDecisionsTest {
 
     @Test
-    void takesNonVipCardsWhenThePriceIsNotGemsThenLeavesVipForTheSecondPass() {
+    void firstPassTakesAnyCardWithoutAGemIncludingAResourcePricedVip() {
         boolean[] gemOnPrice = { true, true, false, false, false, true };
-        boolean[] vipOnProduct = { true, false, false, false, false, false };
 
         List<Integer> takes = new ArrayList<>();
         for (int slot = 0; slot < NomadicMerchantDecisions.SLOT_COUNT; slot++) {
-            if (NomadicMerchantDecisions.takeNonVip(gemOnPrice[slot], vipOnProduct[slot])) {
+            if (NomadicMerchantDecisions.takeIfNotGemPriced(gemOnPrice[slot])) {
                 takes.add(slot);
             }
         }
 
         assertEquals(List.of(2, 3, 4), takes);
-        assertFalse(NomadicMerchantDecisions.takeNonVip(false, true));
-        assertTrue(vipOnProduct[0]);
+        assertTrue(NomadicMerchantDecisions.takeIfNotGemPriced(false));
+        assertFalse(NomadicMerchantDecisions.takeIfNotGemPriced(true));
     }
 
     @Test
