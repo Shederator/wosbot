@@ -56,6 +56,15 @@ class NomadicMerchantRoutineTest {
     }
 
     @Test
+    void treatsOnlyTheCardArtworkAsAFreeResource() {
+        assertTrue(NomadicMerchantRoutine.isMerchandiseIcon(new PointData(360, 520)));
+        assertTrue(NomadicMerchantRoutine.isMerchandiseIcon(new PointData(600, 800)));
+        assertFalse(NomadicMerchantRoutine.isMerchandiseIcon(new PointData(600, 660)));
+        assertFalse(NomadicMerchantRoutine.isMerchandiseIcon(new PointData(360, 950)));
+        assertFalse(NomadicMerchantRoutine.isMerchandiseIcon(null));
+    }
+
+    @Test
     void waitsOutTheRewardFlyoutBeforeTreatingAMissAsClaimed() {
         assertFalse(NomadicMerchantRoutine.resourceClaimConfirmed(
                 false, NomadicMerchantRoutine.RESOURCE_CONFIRM_MIN_SETTLE_MS - 1));

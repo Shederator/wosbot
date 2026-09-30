@@ -33,6 +33,18 @@ public class NomadicMerchantRoutine extends DelayedTask {
     /** Neighbor card centers on the 720-wide shop sit well beyond this radius. */
     static final int SAME_OFFER_RADIUS_PX = 24;
     private static final int OFFER_SEARCH_REACH_PX = 80;
+    private static final int RESOURCE_GRID_LEFT_PX = 25;
+    private static final int RESOURCE_GRID_RIGHT_PX = 690;
+    /**
+     * On the 720-wide 2026-09-30 frames, each card's merchandise icon sits in
+     * the upper body and the resource or gem price sits on the bottom strip
+     * (about y 640-680 on the first row, 930-970 on the second). Searching
+     * the whole grid matches those price icons as free claims.
+     */
+    static final int RESOURCE_ICON_TOP_ROW_MIN_Y = 448;
+    static final int RESOURCE_ICON_TOP_ROW_MAX_Y = 575;
+    static final int RESOURCE_ICON_BOTTOM_ROW_MIN_Y = 738;
+    static final int RESOURCE_ICON_BOTTOM_ROW_MAX_Y = 865;
 
     private final TemplatesEnum[] TEMPLATES = { TemplatesEnum.NOMADIC_MERCHANT_COAL,
             TemplatesEnum.NOMADIC_MERCHANT_MEAT, TemplatesEnum.NOMADIC_MERCHANT_STONE,
@@ -72,14 +84,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
 
                 // Iterate through each resource template
                 for (TemplatesEnum template : TEMPLATES) {
-                    ImageSearchResultData result = templateSearchHelper.locatePattern(
-                            template,
-                            TemplateSearchHelper.SearchConfig.builder()
-                                    .withMaxAttempts(1)
-                                    .withThreshold(90)
-                                    .withDelay(300L)
-                                    .withCoordinates(new PointData(25, 412), new PointData(690, 1200))
-                                    .build());
+                    ImageSearchResultData result = locateFreeResource(template);
 
                     if (result.isFound()) {
                         logInfo("Found resource: " + template.name() + ". Purchasing it.");
@@ -219,6 +224,46 @@ public class NomadicMerchantRoutine extends DelayedTask {
     @Override
     protected LaunchPoint getRequiredStartLocation() {
         return LaunchPoint.HOME;
+    }
+
+    /**
+     * True for a match on the card artwork. Price-row icons on the 2026-09-30
+     * frames sit outside these two bands (coal at ~660, wood cost at ~950).
+     */
+    static boolean isMerchandiseIcon(PointData point) {
+        if (point == null) {
+            return false;
+        }
+        int y = point.getY();
+        return y >= RESOURCE_ICON_TOP_ROW_MIN_Y && y <= RESOURCE_ICON_TOP_ROW_MAX_Y
+                || y >= RESOURCE_ICON_BOTTOM_ROW_MIN_Y && y <= RESOURCE_ICON_BOTTOM_ROW_MAX_Y;
+    }
+
+    private ImageSearchResultData locateFreeResource(TemplatesEnum template) {
+        ImageSearchResultData top = locateInRow(template,
+                RESOURCE_ICON_TOP_ROW_MIN_Y, RESOURCE_ICON_TOP_ROW_MAX_Y);
+        if (top.isFound() && isMerchandiseIcon(top.getPoint())) {
+            return top;
+        }
+        ImageSearchResultData bottom = locateInRow(template,
+                RESOURCE_ICON_BOTTOM_ROW_MIN_Y, RESOURCE_ICON_BOTTOM_ROW_MAX_Y);
+        if (bottom.isFound() && isMerchandiseIcon(bottom.getPoint())) {
+            return bottom;
+        }
+        return new ImageSearchResultData(false, null, 0);
+    }
+
+    private ImageSearchResultData locateInRow(TemplatesEnum template, int minY, int maxY) {
+        return templateSearchHelper.locatePattern(
+                template,
+                TemplateSearchHelper.SearchConfig.builder()
+                        .withMaxAttempts(1)
+                        .withThreshold(90)
+                        .withDelay(300L)
+                        .withCoordinates(
+                                new PointData(RESOURCE_GRID_LEFT_PX, minY),
+                                new PointData(RESOURCE_GRID_RIGHT_PX, maxY))
+                        .build());
     }
 
     static boolean sameOffer(PointData tapped, ImageSearchResultData after) {
