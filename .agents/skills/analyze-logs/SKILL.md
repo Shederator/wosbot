@@ -16,19 +16,19 @@ Extract one routine's visits from the workspace logs and return a timeline that 
 
 State the scope in the reply, then search.
 
-Ask only when the routine is missing, matches more than one class, or matches nothing, or when more than one logs directory exists and the user did not choose one. Profiles default to all. The window defaults to the machine's current local calendar day. Name that date in the scope.
+Ask only when the routine is missing, matches more than one class, or matches nothing, or when more than one logs directory exists and the user did not choose one. Profiles default to all. The window defaults to the machine's current local calendar day. Name that date in the scope. Captures the user names replace that default: the window is those UTC filenames converted to local time.
 
 | Input | Resolution |
 |---|---|
 | Routine | Required. A class simple name, a `TpDailyTaskEnum` constant, its display text, or a spoken alias below. |
 | Profiles | `all`, or the profile names the user gave. |
-| Window | A local calendar day, or an inclusive range of local days. Default: today. |
+| Window | A local calendar day, or an inclusive range of local days. Default: today. Named PNG captures set the window from their UTC stamps. |
 | Logs directory | A directory the user names. Otherwise the first existing path below. |
 | Question | Optional. With no question, return the timeline. |
 
 Logs directory, in order:
 
-1. The directory the user names. A copied folder is valid.
+1. The directory the user names. A copied folder is valid. A folder that holds only PNG captures is not a logs directory: use a logs path named in the same request, including a dump copied for another routine that ran the same night.
 2. `<repo>/.frostguard-dev/logs` when that directory exists.
 3. `~/.frostguard/workspaces/<channel>/<name>/logs` for an installed Stable or Nightly workspace. If several exist, list them and ask.
 
@@ -57,7 +57,9 @@ Include rolled files for the selected days:
 - `account_<safeName>_<id>.<yyyy-MM-dd>.<n>.gz` beside the account log
 - `archive/frostguard.<yyyy-MM-dd>.<n>.log.gz`
 
-The account file is that profile's routine stream. `frostguard.log` is the SLF4J log for every profile. A routine `INFO`, `WARN`, or `ERROR` is written to both, in different formats. Routine `DEBUG` is written to the account file and is dropped from `frostguard.log` while the tasks logger stays at INFO. `TaskQueue`, template search, and OCR lines are in `frostguard.log`.
+The account file is that profile's routine stream. `frostguard.log` is the SLF4J log for every profile. A routine `INFO`, `WARN`, or `ERROR` is written to both, in different formats. Routine `DEBUG` is written to the account file and is dropped from `frostguard.log` while the tasks logger stays at INFO. `TaskQueue` lines are in `frostguard.log`. Template-search DEBUG (`TemplateSearchHelper`) and routine DEBUG OCR live in the account file; `frostguard.log` at INFO may only keep the routine's INFO or WARN summary of those reads.
+
+Account files can still hold earlier local days after `frostguard.log` has rotated to the current slice. Include those account lines. Do not treat a day as empty because `frostguard.log` starts later.
 
 ## Line format
 
@@ -101,14 +103,14 @@ Leave a line whose class or logger is a different routine, including a line that
 
 Search the message only after the class prefix matches. Keep the full message. A negative is its own outcome: `not found` is a miss, and a test for `found` must not count it.
 
-A snapshot path in a message joins a capture by the timestamp and the activity name. Words added after the routine name in a renamed capture are the user's annotation.
+A snapshot path in a message joins a capture by the UTC stamp and the activity token. The filename stamp is UTC (`yyyyMMdd'T'HHmmss.SSSZ`). Convert it to the account clock with the offset on `frostguard.log` (`+02:00` means add two hours). Filter account lines on that local time. Flat path: `logs/snapshot/<UTC>-<activity>-<type>.png`. Grouped path: `logs/snapshot/<activity>/<UTC>-<type>.png`. Words added after the activity in a renamed file are the user's annotation.
 
 ## Timeline
 
 1. **Scope.** Directory, files opened, profiles, day or range, class, display text, lines kept.
-2. **Visits, in time order.** One block per `Executing:` / routine start through `Completed:`, `PREEMPTED:`, or the routine's own exit. Each block names the profile, the start, the end, the exit sentence copied from the log, the next schedule copied from the log, and any `snapshot=` path.
-3. **Decision lines under the visit, copied.** Search, hit, miss, tap, confirmation, and exit stay in order.
+2. **Visits, in time order.** One block per `Executing:` / routine start through `Completed:`, `PREEMPTED:`, or the routine's own exit. Each block names the profile, the start, the end, the exit sentence copied from the log, the next schedule copied from the log, and any `snapshot=` path. When the user gave captures, lead with the visits that join those files and summarize the other visits in the window as counts.
+3. **Decision lines under the visit, copied.** Search, hit, miss, tap, confirmation, and exit stay in order. Copy those lines for the joined visits.
 4. **Queue lines,** each marked `TaskQueue`, separate from the routine's own lines.
-5. **What the log does not show.** No capture, no balance, or a matching template logged by another class.
+5. **What the log does not show.** No capture, no balance, a dump that ends before a later PNG, or a matching template logged by another class.
 
 Answer the user's question from that timeline. Profile names may appear in the reply. Keep them out of GitHub issues, fixtures, filenames, and commits.
