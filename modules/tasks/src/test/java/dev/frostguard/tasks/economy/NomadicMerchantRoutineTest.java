@@ -43,15 +43,26 @@ class NomadicMerchantRoutineTest {
     }
 
     @Test
-    void treatsADifferentRemainingIconAsANewOfferRatherThanAFailedTap() {
+    void keepsASlightlyShiftedIconAsTheSameOffer() {
         PointData tapped = new PointData(100, 500);
         ImageSearchResultData samePoint = new ImageSearchResultData(true, new PointData(100, 500), 95);
-        ImageSearchResultData otherPoint = new ImageSearchResultData(true, new PointData(400, 700), 95);
+        ImageSearchResultData shifted = new ImageSearchResultData(true, new PointData(112, 508), 95);
+        ImageSearchResultData otherCard = new ImageSearchResultData(true, new PointData(400, 700), 95);
 
-        assertTrue(NomadicMerchantRoutine.tappedPointStillPresent(tapped, samePoint));
-        assertFalse(NomadicMerchantRoutine.tappedPointStillPresent(tapped, otherPoint));
-        assertFalse(NomadicMerchantRoutine.tappedPointStillPresent(tapped,
-                new ImageSearchResultData(false, null, 0)));
+        assertTrue(NomadicMerchantRoutine.sameOffer(tapped, samePoint));
+        assertTrue(NomadicMerchantRoutine.sameOffer(tapped, shifted));
+        assertFalse(NomadicMerchantRoutine.sameOffer(tapped, otherCard));
+        assertFalse(NomadicMerchantRoutine.sameOffer(tapped, new ImageSearchResultData(false, null, 0)));
+    }
+
+    @Test
+    void waitsOutTheRewardFlyoutBeforeTreatingAMissAsClaimed() {
+        assertFalse(NomadicMerchantRoutine.resourceClaimConfirmed(
+                false, NomadicMerchantRoutine.RESOURCE_CONFIRM_MIN_SETTLE_MS - 1));
+        assertFalse(NomadicMerchantRoutine.resourceClaimConfirmed(
+                true, NomadicMerchantRoutine.RESOURCE_CONFIRM_WINDOW_MS));
+        assertTrue(NomadicMerchantRoutine.resourceClaimConfirmed(
+                false, NomadicMerchantRoutine.RESOURCE_CONFIRM_MIN_SETTLE_MS));
     }
 
     private static final class TestRoutine extends NomadicMerchantRoutine {
