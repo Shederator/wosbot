@@ -16,6 +16,8 @@ import dev.frostguard.engine.helper.TemplateSearchHelper;
 import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 public class NomadicMerchantRoutine extends DelayedTask {
 
@@ -36,10 +38,11 @@ public class NomadicMerchantRoutine extends DelayedTask {
     private static final int RESOURCE_GRID_LEFT_PX = 25;
     private static final int RESOURCE_GRID_RIGHT_PX = 690;
     /**
-     * On the 720-wide 2026-09-30 frames, each card's merchandise icon sits in
-     * the upper body and the resource or gem price sits on the bottom strip
-     * (about y 640-680 on the first row, 930-970 on the second). Searching
-     * the whole grid matches those price icons as free claims.
+     * On the 720-wide 2026-09-30 frames, the product icon sits in the upper
+     * card body and the price sits on the bottom strip (about y 640-680 on
+     * the first row, 930-970 on the second). A resource price (coal, meat,
+     * stone, wood) is a take; a gem price is left for the VIP path. Tapping
+     * the small price icon does not buy the card.
      */
     static final int RESOURCE_ICON_TOP_ROW_MIN_Y = 448;
     static final int RESOURCE_ICON_TOP_ROW_MAX_Y = 575;
@@ -72,6 +75,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
         int freeResourcesClaimedCount = 0;
         int vipPointsPurchasedCount = 0;
         int dailyRefreshUsedCount = 0;
+        List<PointData> skippedResourceOffers = new ArrayList<>();
         long executionDeadlineMs = System.currentTimeMillis() + MAX_TASK_EXECUTION_MS;
 
         while (continueOperations && System.currentTimeMillis() < executionDeadlineMs) {
@@ -84,20 +88,16 @@ public class NomadicMerchantRoutine extends DelayedTask {
 
                 // Iterate through each resource template
                 for (TemplatesEnum template : TEMPLATES) {
-                    ImageSearchResultData result = locateFreeResource(template);
+                    ImageSearchResultData result = locateFreeResource(template, skippedResourceOffers);
 
                     if (result.isFound()) {
                         logInfo("Found resource: " + template.name() + ". Purchasing it.");
-                        if (!tapInside(result)) {
-                            logWarning("Could not dispatch resource tap for " + template.name()
-                                    + ". Ending the resource scan to avoid repeating an unverified action.");
+                        if (!tapInside(result)
+                                || !confirmResourceLeft(result.getPoint(), template)) {
+                            skippedResourceOffers.add(result.getPoint());
+                            logWarning("Resource claim was not confirmed. Skipping this offer and continuing the shop scan.");
+                            foundResourceTemplate = true;
                             break;
-                        }
-                        if (!confirmResourceLeft(result.getPoint(), template)) {
-                            retryUnverifiedAction(freeResourcesClaimedCount, vipPointsPurchasedCount,
-                                    dailyRefreshUsedCount, "resource-claim",
-                                    "Resource claim was not confirmed");
-                            return;
                         }
                         freeResourcesClaimedCount++;
                         foundResourceTemplate = true;
@@ -189,6 +189,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
                     }
                 }
                 dailyRefreshUsedCount++;
+                skippedResourceOffers.clear();
                 logInfo("Free refresh action dispatched. Rescanning the full shop for replacement items.");
                 // Continue the main loop to check every shop position again.
             } else {
@@ -227,7 +228,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
     }
 
     /**
-     * True for a match on the card artwork. Price-row icons on the 2026-09-30
+     * True for a match on the card product. Price-row icons on the 2026-09-30
      * frames sit outside these two bands (coal at ~660, wood cost at ~950).
      */
     static boolean isMerchandiseIcon(PointData point) {
@@ -239,18 +240,36 @@ public class NomadicMerchantRoutine extends DelayedTask {
                 || y >= RESOURCE_ICON_BOTTOM_ROW_MIN_Y && y <= RESOURCE_ICON_BOTTOM_ROW_MAX_Y;
     }
 
-    private ImageSearchResultData locateFreeResource(TemplatesEnum template) {
+    static boolean isSkippedOffer(PointData candidate, List<PointData> skipped) {
+        if (candidate == null || skipped == null || skipped.isEmpty()) {
+            return false;
+        }
+        ImageSearchResultData hit = new ImageSearchResultData(true, candidate, 100);
+        for (PointData skip : skipped) {
+            if (sameOffer(skip, hit)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private ImageSearchResultData locateFreeResource(TemplatesEnum template, List<PointData> skipped) {
         ImageSearchResultData top = locateInRow(template,
                 RESOURCE_ICON_TOP_ROW_MIN_Y, RESOURCE_ICON_TOP_ROW_MAX_Y);
-        if (top.isFound() && isMerchandiseIcon(top.getPoint())) {
+        if (usableResourceMatch(top, skipped)) {
             return top;
         }
         ImageSearchResultData bottom = locateInRow(template,
                 RESOURCE_ICON_BOTTOM_ROW_MIN_Y, RESOURCE_ICON_BOTTOM_ROW_MAX_Y);
-        if (bottom.isFound() && isMerchandiseIcon(bottom.getPoint())) {
+        if (usableResourceMatch(bottom, skipped)) {
             return bottom;
         }
         return new ImageSearchResultData(false, null, 0);
+    }
+
+    private static boolean usableResourceMatch(ImageSearchResultData result, List<PointData> skipped) {
+        return result != null && result.isFound() && isMerchandiseIcon(result.getPoint())
+                && !isSkippedOffer(result.getPoint(), skipped);
     }
 
     private ImageSearchResultData locateInRow(TemplatesEnum template, int minY, int maxY) {

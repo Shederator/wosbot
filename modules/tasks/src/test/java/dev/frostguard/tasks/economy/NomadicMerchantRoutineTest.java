@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -56,12 +58,23 @@ class NomadicMerchantRoutineTest {
     }
 
     @Test
-    void treatsOnlyTheCardArtworkAsAFreeResource() {
+    void tapsTheProductIconRatherThanThePriceIcon() {
         assertTrue(NomadicMerchantRoutine.isMerchandiseIcon(new PointData(360, 520)));
         assertTrue(NomadicMerchantRoutine.isMerchandiseIcon(new PointData(600, 800)));
         assertFalse(NomadicMerchantRoutine.isMerchandiseIcon(new PointData(600, 660)));
         assertFalse(NomadicMerchantRoutine.isMerchandiseIcon(new PointData(360, 950)));
         assertFalse(NomadicMerchantRoutine.isMerchandiseIcon(null));
+    }
+
+    @Test
+    void skipsAnUnconfirmedOfferAndKeepsScanning() {
+        PointData failedWood = new PointData(600, 520);
+        List<PointData> skipped = new ArrayList<>();
+        skipped.add(failedWood);
+
+        assertTrue(NomadicMerchantRoutine.isSkippedOffer(failedWood, skipped));
+        assertTrue(NomadicMerchantRoutine.isSkippedOffer(new PointData(608, 524), skipped));
+        assertFalse(NomadicMerchantRoutine.isSkippedOffer(new PointData(120, 800), skipped));
     }
 
     @Test
