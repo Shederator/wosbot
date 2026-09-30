@@ -35,6 +35,8 @@ class NomadicMerchantRoutineTest {
 
         assertTrue(routine.navigationAttempted);
         assertTrue(routine.scheduledTime().isAfter(before));
+        assertEquals(NomadicMerchantRoutine.DayProgress.RETRY, routine.dayProgress());
+        assertEquals(NomadicMerchantRoutine.VisitStep.SUMMARIZING, routine.visitStep());
     }
 
     @Test
@@ -42,6 +44,28 @@ class NomadicMerchantRoutineTest {
         LocalDateTime now = LocalDateTime.of(2026, 9, 28, 10, 0);
 
         assertEquals(now.plusMinutes(5), NomadicMerchantRoutine.unverifiedPurchaseRetry(now));
+    }
+
+    @Test
+    void schedulesFromDayProgress() {
+        LocalDateTime now = LocalDateTime.of(2026, 9, 30, 10, 0);
+        LocalDateTime reset = LocalDateTime.of(2026, 10, 1, 2, 0);
+
+        assertEquals(now.plusMinutes(5), NomadicMerchantRoutine.nextRun(
+                NomadicMerchantRoutine.DayProgress.CLAIMING, now, reset));
+        assertEquals(now.plusMinutes(5), NomadicMerchantRoutine.nextRun(
+                NomadicMerchantRoutine.DayProgress.RETRY, now, reset));
+        assertEquals(reset.plusMinutes(1), NomadicMerchantRoutine.nextRun(
+                NomadicMerchantRoutine.DayProgress.COMPLETED, now, reset));
+    }
+
+    @Test
+    void namesTheVipPurchaseTaps() {
+        assertEquals(100, NomadicMerchantRoutine.VIP_PURCHASE_OFFSET_Y);
+        assertEquals(368, NomadicMerchantRoutine.VIP_BUY_WITH_GEMS.getX());
+        assertEquals(830, NomadicMerchantRoutine.VIP_BUY_WITH_GEMS.getY());
+        assertEquals(355, NomadicMerchantRoutine.VIP_CONFIRM.getX());
+        assertEquals(788, NomadicMerchantRoutine.VIP_CONFIRM.getY());
     }
 
     @Test
