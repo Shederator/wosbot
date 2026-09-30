@@ -35,8 +35,21 @@ class NomadicMerchantRoutineTest {
 
         assertTrue(routine.navigationAttempted);
         assertTrue(routine.scheduledTime().isAfter(before));
-        assertEquals(NomadicMerchantRoutine.DayProgress.RETRY, routine.dayProgress());
-        assertEquals(NomadicMerchantRoutine.VisitStep.SUMMARIZING, routine.visitStep());
+        assertEquals(NomadicMerchantProgress.UNCONFIRMED, routine.progress());
+        assertEquals(NomadicMerchantPhase.FINISHED, routine.phase());
+    }
+
+    @Test
+    void remembersUnconfirmedProgressAcrossVisitsWithoutSkippingTheScan() {
+        TestRoutine routine = new TestRoutine();
+
+        routine.execute();
+        assertEquals(NomadicMerchantProgress.UNCONFIRMED, routine.progress());
+
+        routine.execute();
+        assertEquals(NomadicMerchantProgress.UNCONFIRMED, routine.progress());
+        assertEquals(2, routine.navigationAttempts);
+        assertEquals(NomadicMerchantPhase.FINISHED, routine.phase());
     }
 
     @Test
@@ -47,16 +60,16 @@ class NomadicMerchantRoutineTest {
     }
 
     @Test
-    void schedulesFromDayProgress() {
+    void schedulesFromRememberedProgress() {
         LocalDateTime now = LocalDateTime.of(2026, 9, 30, 10, 0);
         LocalDateTime reset = LocalDateTime.of(2026, 10, 1, 2, 0);
 
         assertEquals(now.plusMinutes(5), NomadicMerchantRoutine.nextRun(
-                NomadicMerchantRoutine.DayProgress.CLAIMING, now, reset));
+                NomadicMerchantProgress.READY, now, reset));
         assertEquals(now.plusMinutes(5), NomadicMerchantRoutine.nextRun(
-                NomadicMerchantRoutine.DayProgress.RETRY, now, reset));
+                NomadicMerchantProgress.UNCONFIRMED, now, reset));
         assertEquals(reset.plusMinutes(1), NomadicMerchantRoutine.nextRun(
-                NomadicMerchantRoutine.DayProgress.COMPLETED, now, reset));
+                NomadicMerchantProgress.COMPLETE_UNTIL_RESET, now, reset));
     }
 
     @Test
@@ -113,6 +126,7 @@ class NomadicMerchantRoutineTest {
 
     private static final class TestRoutine extends NomadicMerchantRoutine {
         private boolean navigationAttempted;
+        private int navigationAttempts;
 
         private TestRoutine() {
             super(new AccountDescriptor(1L, "Test", "1", true, 1L, 30L),
@@ -122,6 +136,7 @@ class NomadicMerchantRoutineTest {
         @Override
         boolean navigateToNomadicMerchantShop() {
             navigationAttempted = true;
+            navigationAttempts++;
             return false;
         }
 

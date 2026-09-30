@@ -55,31 +55,16 @@ public class NomadicMerchantRoutine extends DelayedTask {
     /** Confirm control on the VIP sheet (no template captured yet). */
     static final PointData VIP_CONFIRM = new PointData(355, 788);
 
-    enum DayProgress {
-        CLAIMING,
-        RETRY,
-        COMPLETED
-    }
-
-    enum VisitStep {
-        NAVIGATING_SHOP,
-        SEARCHING_RESOURCE_TEMPLATES,
-        CLAIMING_RESOURCE,
-        WAITING_CLAIM_ANIMATION,
-        SEARCHING_VIP,
-        BUYING_VIP,
-        SEARCHING_FREE_REFRESH,
-        CLAIMING_FREE_REFRESH,
-        WAITING_REFRESH,
-        SUMMARIZING
-    }
-
     private final TemplatesEnum[] TEMPLATES = { TemplatesEnum.NOMADIC_MERCHANT_COAL,
             TemplatesEnum.NOMADIC_MERCHANT_MEAT, TemplatesEnum.NOMADIC_MERCHANT_STONE,
             TemplatesEnum.NOMADIC_MERCHANT_WOOD };
 
-    private DayProgress dayProgress = DayProgress.CLAIMING;
-    private VisitStep visitStep = VisitStep.NAVIGATING_SHOP;
+    /**
+     * Remembered across visits on this task instance. It is not a reason to
+     * skip the next scan.
+     */
+    private NomadicMerchantProgress progress = NomadicMerchantProgress.READY;
+    private NomadicMerchantPhase phase = NomadicMerchantPhase.OPENING;
     private String retrySnapshotType;
     private String retryReason;
 
@@ -87,43 +72,47 @@ public class NomadicMerchantRoutine extends DelayedTask {
         super(profile, tpDailyTask);
     }
 
-    DayProgress dayProgress() {
-        return dayProgress;
+    NomadicMerchantProgress progress() {
+        return progress;
     }
 
-    VisitStep visitStep() {
-        return visitStep;
+    NomadicMerchantPhase phase() {
+        return phase;
     }
 
     @Override
     protected void execute() {
-        dayProgress = DayProgress.CLAIMING;
-        visitStep = VisitStep.NAVIGATING_SHOP;
+        phase = NomadicMerchantPhase.OPENING;
         retrySnapshotType = null;
         retryReason = null;
+        logInfo("Resuming Nomadic Merchant from " + progress + ".");
 
         int freeResourcesClaimedCount = 0;
         int vipPointsPurchasedCount = 0;
         int dailyRefreshUsedCount = 0;
         List<PointData> skippedResourceOffers = new ArrayList<>();
         long executionDeadlineMs = System.currentTimeMillis() + MAX_TASK_EXECUTION_MS;
+        boolean unconfirmed = false;
+        boolean complete = false;
 
         try {
             if (!navigateToNomadicMerchantShop()) {
-                markRetry("shop-navigation", "Nomadic Merchant shop navigation was not verified");
+                markUnconfirmed("shop-navigation", "Nomadic Merchant shop navigation was not verified");
+                unconfirmed = true;
             } else {
-                while (dayProgress == DayProgress.CLAIMING
+                while (!unconfirmed && !complete
                         && System.currentTimeMillis() < executionDeadlineMs) {
                     int claimed = claimResourceOffers(skippedResourceOffers, executionDeadlineMs);
                     freeResourcesClaimedCount += claimed;
-                    if (dayProgress != DayProgress.CLAIMING
+                    if (retrySnapshotType != null
                             || System.currentTimeMillis() >= executionDeadlineMs) {
                         break;
                     }
 
                     int vipBought = buyVipIfEnabled(executionDeadlineMs);
                     vipPointsPurchasedCount += Math.max(vipBought, 0);
-                    if (dayProgress != DayProgress.CLAIMING) {
+                    if (retrySnapshotType != null) {
+                        unconfirmed = true;
                         break;
                     }
                     if (vipBought > 0) {
@@ -131,15 +120,20 @@ public class NomadicMerchantRoutine extends DelayedTask {
                     } else {
                         int refreshed = useFreeRefresh(skippedResourceOffers);
                         dailyRefreshUsedCount += Math.max(refreshed, 0);
+                        if (retrySnapshotType != null) {
+                            unconfirmed = true;
+                            break;
+                        }
                         if (refreshed <= 0) {
+                            complete = true;
                             break;
                         }
                     }
                 }
-                if (dayProgress == DayProgress.CLAIMING
+                if (!complete && retrySnapshotType == null
                         && System.currentTimeMillis() >= executionDeadlineMs) {
-                    retrySnapshotType = "execution-limit";
-                    retryReason = "Nomadic Merchant task reached execution limit. Ending current cycle with partial results";
+                    markUnconfirmed("execution-limit",
+                            "Nomadic Merchant task reached execution limit. Ending current cycle with partial results");
                 }
             }
         } finally {
@@ -150,21 +144,21 @@ public class NomadicMerchantRoutine extends DelayedTask {
     private int claimResourceOffers(List<PointData> skippedResourceOffers, long executionDeadlineMs) {
         int claimed = 0;
         boolean foundResourceTemplate = true;
-        visitStep = VisitStep.SEARCHING_RESOURCE_TEMPLATES;
+        phase = NomadicMerchantPhase.SEARCHING_RESOURCES;
         logInfo("Searching for free resources to claim.");
 
         while (foundResourceTemplate && System.currentTimeMillis() < executionDeadlineMs) {
             foundResourceTemplate = false;
-            visitStep = VisitStep.SEARCHING_RESOURCE_TEMPLATES;
+            phase = NomadicMerchantPhase.SEARCHING_RESOURCES;
             for (TemplatesEnum template : TEMPLATES) {
                 ImageSearchResultData result = locateFreeResource(template, skippedResourceOffers);
                 if (!result.isFound()) {
                     continue;
                 }
-                visitStep = VisitStep.CLAIMING_RESOURCE;
+                phase = NomadicMerchantPhase.CLAIMING_RESOURCE;
                 logInfo("Found resource: " + template.name() + ". Purchasing it.");
                 boolean tapped = tapInside(result);
-                visitStep = VisitStep.WAITING_CLAIM_ANIMATION;
+                phase = NomadicMerchantPhase.WAITING_CLAIM_ANIMATION;
                 if (!tapped || !confirmResourceLeft(result.getPoint(), template)) {
                     skippedResourceOffers.add(result.getPoint());
                     logWarning("Resource claim was not confirmed. Skipping this offer and continuing the shop scan.");
@@ -185,7 +179,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
         if (System.currentTimeMillis() >= executionDeadlineMs) {
             return 0;
         }
-        visitStep = VisitStep.SEARCHING_VIP;
+        phase = NomadicMerchantPhase.SEARCHING_VIP;
         boolean vipBuyEnabled = profile.getConfig(ConfigurationKeyEnum.BOOL_NOMADIC_MERCHANT_VIP_POINTS,
                 Boolean.class);
         if (!vipBuyEnabled) {
@@ -199,7 +193,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
             return 0;
         }
 
-        visitStep = VisitStep.BUYING_VIP;
+        phase = NomadicMerchantPhase.BUYING_VIP;
         logInfo("Found VIP points. Purchasing with gems.");
         tapNear(new PointData(vipResult.getPoint().getX(), vipResult.getPoint().getY() + VIP_PURCHASE_OFFSET_Y));
         sleepTask(1000);
@@ -210,7 +204,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
 
         if (sameOffer(vipResult.getPoint(),
                 locateOffer(TemplatesEnum.NOMADIC_MERCHANT_VIP, vipResult.getPoint()))) {
-            markRetry("vip-purchase",
+            markUnconfirmed("vip-purchase",
                     "VIP purchase outcome is unverified; buying again only if the offer is still present");
             return 0;
         }
@@ -220,38 +214,37 @@ public class NomadicMerchantRoutine extends DelayedTask {
 
     /** @return 1 when Free Refresh was used, 0 when the shop is done or the tap is unverified */
     private int useFreeRefresh(List<PointData> skippedResourceOffers) {
-        visitStep = VisitStep.SEARCHING_FREE_REFRESH;
+        phase = NomadicMerchantPhase.SEARCHING_FREE_REFRESH;
         logInfo("No more resources or VIP points found. Checking for daily refresh.");
         ImageSearchResultData dailyRefreshResult = templateSearchHelper.locatePattern(
                 TemplatesEnum.MYSTERY_SHOP_DAILY_REFRESH,
                 SearchConfigConstants.DEFAULT_SINGLE);
         if (!dailyRefreshResult.isFound()) {
             logInfo("No free refresh detected after a full shop scan. All eligible Nomadic Merchant operations are complete.");
-            dayProgress = DayProgress.COMPLETED;
             return 0;
         }
 
-        visitStep = VisitStep.CLAIMING_FREE_REFRESH;
+        phase = NomadicMerchantPhase.CLAIMING_FREE_REFRESH;
         logInfo("Daily refresh is available. Using it now.");
         if (!tapInside(dailyRefreshResult)) {
-            markRetry("daily-refresh", "Could not dispatch the free refresh tap");
+            markUnconfirmed("daily-refresh", "Could not dispatch the free refresh tap");
             return 0;
         }
-        visitStep = VisitStep.WAITING_REFRESH;
+        phase = NomadicMerchantPhase.WAITING_REFRESH;
         if (!confirmRefreshTaken(dailyRefreshResult.getPoint())) {
             ImageSearchResultData refreshStillAvailable = templateSearchHelper.locatePattern(
                     TemplatesEnum.MYSTERY_SHOP_DAILY_REFRESH,
                     SearchConfigConstants.DEFAULT_SINGLE);
             if (refreshStillAvailable.isFound()) {
                 logInfo("Free refresh button is still present after the first tap. Tapping it once more.");
-                visitStep = VisitStep.CLAIMING_FREE_REFRESH;
+                phase = NomadicMerchantPhase.CLAIMING_FREE_REFRESH;
                 if (!tapInside(refreshStillAvailable)) {
-                    markRetry("daily-refresh", "Daily refresh outcome is unverified");
+                    markUnconfirmed("daily-refresh", "Daily refresh outcome is unverified");
                     return 0;
                 }
-                visitStep = VisitStep.WAITING_REFRESH;
+                phase = NomadicMerchantPhase.WAITING_REFRESH;
                 if (!confirmRefreshTaken(refreshStillAvailable.getPoint())) {
-                    markRetry("daily-refresh", "Daily refresh outcome is unverified");
+                    markUnconfirmed("daily-refresh", "Daily refresh outcome is unverified");
                     return 0;
                 }
             }
@@ -261,35 +254,42 @@ public class NomadicMerchantRoutine extends DelayedTask {
         return 1;
     }
 
-    private void markRetry(String snapshotType, String reason) {
-        dayProgress = DayProgress.RETRY;
+    private void markUnconfirmed(String snapshotType, String reason) {
         retrySnapshotType = snapshotType;
         retryReason = reason;
     }
 
     private void finishVisit(int freeResourcesClaimedCount, int vipPointsPurchasedCount,
             int dailyRefreshUsedCount) {
-        visitStep = VisitStep.SUMMARIZING;
+        NomadicMerchantPhase failedDuring = phase;
+        if (retrySnapshotType != null) {
+            progress = NomadicMerchantProgress.UNCONFIRMED;
+        } else if (failedDuring != NomadicMerchantPhase.OPENING) {
+            progress = NomadicMerchantProgress.COMPLETE_UNTIL_RESET;
+        }
+        phase = NomadicMerchantPhase.FINISHED;
         recordConfirmedResults(freeResourcesClaimedCount, vipPointsPurchasedCount, dailyRefreshUsedCount);
         String stats = resultSummary(freeResourcesClaimedCount, vipPointsPurchasedCount, dailyRefreshUsedCount);
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime next = dayProgress == DayProgress.COMPLETED
-                ? nextRun(dayProgress, now, GameTimeUtils.dailyResetTime())
-                : nextRun(dayProgress, now, now);
-        String state = "dayProgress=" + dayProgress + "; visitStep=" + visitStep;
+        LocalDateTime next = progress == NomadicMerchantProgress.COMPLETE_UNTIL_RESET
+                ? nextRun(progress, now, GameTimeUtils.dailyResetTime())
+                : nextRun(progress, now, now);
         if (retrySnapshotType != null) {
             String snapshot = TaskDiagnosticSnapshots.capture(
                     emuManager, EMULATOR_NUMBER, "nomadicmerchant", retrySnapshotType);
-            logWarning(retryReason + "; confirmed results kept; " + stats + "; " + state
-                    + "; retrying at " + next.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+            logWarning(retryReason + ". Progress " + progress + " after " + failedDuring
+                    + "; confirmed results kept; " + stats
+                    + "; next check at " + next.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
         } else {
-            logInfo(stats + "; " + state + "; next at " + next.format(DATETIME_FORMATTER) + ".");
+            logInfo(stats + ". Progress " + progress + " after " + failedDuring
+                    + ". Next check at " + next.format(DATETIME_FORMATTER) + ".");
         }
         reschedule(next);
     }
 
-    static LocalDateTime nextRun(DayProgress progress, LocalDateTime now, LocalDateTime dailyReset) {
-        if (progress == DayProgress.COMPLETED) {
+    static LocalDateTime nextRun(NomadicMerchantProgress progress, LocalDateTime now,
+            LocalDateTime dailyReset) {
+        if (progress == NomadicMerchantProgress.COMPLETE_UNTIL_RESET) {
             return dailyReset.plusMinutes(RESET_SETTLE_DELAY_MINUTES);
         }
         return now.plusMinutes(5);
@@ -428,7 +428,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
     }
 
     static LocalDateTime unverifiedPurchaseRetry(LocalDateTime now) {
-        return nextRun(DayProgress.RETRY, now, now);
+        return nextRun(NomadicMerchantProgress.UNCONFIRMED, now, now);
     }
 
     private void recordConfirmedResults(int freeResourcesClaimedCount, int vipPointsPurchasedCount,
