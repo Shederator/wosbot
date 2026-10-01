@@ -41,7 +41,7 @@ class BearTransitionReplayTest {
                 BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
                 BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
                 BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
-                BearNavigationPolicy.Screen.WORLD_AT_VERIFIED_BEAR);
+                BearNavigationPolicy.Screen.WORLD_AT_BEAR);
         replay.machine.observe();
 
         assertEquals(BearVerifiedActionExecutor.Outcome.CONFIRMED,

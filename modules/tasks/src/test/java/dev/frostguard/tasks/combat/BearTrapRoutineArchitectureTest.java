@@ -27,8 +27,10 @@ class BearTrapRoutineArchitectureTest {
                 "execution-window decisions must not capture outside the Bear frame stream");
         assertFalse(java.contains("promoteCurrent("),
                 "an inferred screen state must never be promoted into tap authorization");
-        assertEquals(1, occurrences(java, "emuManager.captureScreen("),
-                "the Bear frame stream must be the sole screenshot source");
+        assertEquals(0, occurrences(java, "emuManager.captureScreen("),
+                "Bear must not fall back from its ordered recorder to individual screenshots");
+        assertEquals(1, occurrences(java, "new BearRealtimeFrameSource("),
+                "the live Bear session must own exactly one ordered recorder");
     }
 
     private static int occurrences(String text, String needle) {

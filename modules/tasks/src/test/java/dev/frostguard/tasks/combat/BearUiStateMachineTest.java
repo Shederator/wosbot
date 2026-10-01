@@ -54,4 +54,27 @@ class BearUiStateMachineTest {
         assertEquals(BearVerifiedActionExecutor.Outcome.NOT_CONFIRMED, outcome);
         assertEquals(0, taps.get());
     }
+
+    @Test
+    void chainedTransitionRefreshesASupersededAuthorizationFrame() {
+        Deque<BearNavigationPolicy.Screen> script = new ArrayDeque<>(List.of(
+                BearNavigationPolicy.Screen.WORLD,
+                BearNavigationPolicy.Screen.WORLD,
+                BearNavigationPolicy.Screen.WORLD,
+                BearNavigationPolicy.Screen.ALLIANCE_MENU));
+        AtomicInteger taps = new AtomicInteger();
+        BearFrameStream<BearNavigationPolicy.Screen> frames = new BearFrameStream<>(
+                script::removeFirst, state -> state, () -> false);
+        BearUiStateMachine<BearNavigationPolicy.Screen> machine =
+                new BearUiStateMachine<>(frames, Duration.ofSeconds(1), ignored -> { });
+
+        machine.observe();
+        frames.next();
+        BearVerifiedActionExecutor.Outcome outcome = machine.transition(
+                BearUiAction.OPEN_ALLIANCE,
+                ignored -> taps.incrementAndGet());
+
+        assertEquals(BearVerifiedActionExecutor.Outcome.CONFIRMED, outcome);
+        assertEquals(1, taps.get());
+    }
 }

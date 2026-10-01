@@ -11,6 +11,7 @@ public final class BearSessionExecutionException extends RuntimeException {
         APP_NOT_FOREGROUND,
         RECONNECT_SCREEN,
         VISUAL_UNKNOWN,
+        PERSISTENCE,
         FATAL_CONFIGURATION
     }
 

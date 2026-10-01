@@ -46,6 +46,9 @@ public final class CommonOCRSettings {
             buildConfig("0123456789,./KMkm ", true, 255, 255, 255, TextLayout.SINGLE_LINE);
     public static final OcrSettingsData BEAR_RALLY_COUNTDOWN_SETTINGS =
             buildConfig("0123456789: ", true, 255, 255, 255, TextLayout.SINGLE_LINE);
+    /** Leader names may contain alliance tags and non-Latin glyphs, so do not whitelist glyphs. */
+    public static final OcrSettingsData BEAR_RALLY_LEADER_SETTINGS =
+            OcrSettingsData.builder().textLayout(TextLayout.SINGLE_LINE).build();
 
     public static final OcrSettingsData INTEL_COOLDOWN_SETTINGS =
             buildConfig("0123456789:", true, 255, 255, 255, TextLayout.SINGLE_LINE);

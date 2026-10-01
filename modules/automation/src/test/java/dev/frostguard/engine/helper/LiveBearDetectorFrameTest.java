@@ -1,7 +1,6 @@
 package dev.frostguard.engine.helper;
 
 import dev.frostguard.engine.nav.RallyFlagCoordinates;
-import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.Objects;
@@ -50,9 +49,11 @@ class LiveBearDetectorFrameTest {
         BufferedImage crop = ImageIO.read(Objects.requireNonNull(
                 getClass().getResourceAsStream("/bear/" + name), name));
         BufferedImage frame = new BufferedImage(720, 1280, BufferedImage.TYPE_INT_RGB);
-        Graphics2D graphics = frame.createGraphics();
-        graphics.drawImage(crop, x, y, null);
-        graphics.dispose();
+        for (int cropY = 0; cropY < crop.getHeight(); cropY++) {
+            for (int cropX = 0; cropX < crop.getWidth(); cropX++) {
+                frame.setRGB(x + cropX, y + cropY, crop.getRGB(cropX, cropY));
+            }
+        }
         return frame;
     }
 }

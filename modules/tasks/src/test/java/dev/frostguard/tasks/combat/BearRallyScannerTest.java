@@ -1,77 +1,47 @@
 package dev.frostguard.tasks.combat;
 
 import dev.frostguard.api.domain.ImageSearchResultData;
-import dev.frostguard.api.domain.PointData;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BearRallyScannerTest {
 
     @Test
-    void parsesBearCardsFromOneObservationAndDropsNonBearRows() {
-        ImageSearchResultData bearButton = ImageSearchResultData.hit(620, 500, 96, 40, 40);
-        ImageSearchResultData otherButton = ImageSearchResultData.hit(620, 800, 96, 40, 40);
-        ImageSearchResultData bearIcon = ImageSearchResultData.hit(100, 460, 90, 40, 40);
+    void returnsOnlyBearPlusControlsInStrictTopToBottomOrder() {
+        ImageSearchResultData lowerBearButton = ImageSearchResultData.hit(620, 800, 96, 40, 40);
+        ImageSearchResultData nonBearButton = ImageSearchResultData.hit(620, 500, 96, 40, 40);
+        ImageSearchResultData upperBearButton = ImageSearchResultData.hit(620, 300, 96, 40, 40);
         BearRallyScanner scanner = new BearRallyScanner(
-                () -> List.of(otherButton, bearButton),
-                () -> List.of(bearIcon),
-                (topLeft, bottomRight) -> textFor(topLeft, 480));
+                () -> List.of(lowerBearButton, nonBearButton, upperBearButton),
+                () -> List.of(
+                        ImageSearchResultData.hit(100, 270, 90, 40, 40),
+                        ImageSearchResultData.hit(100, 770, 90, 40, 40)),
+                (topLeft, bottomRight) -> topLeft.getY() < 400 ? " Leader A " : "Leader B");
 
-        List<BearRallyCandidate> candidates = scanner.scanCandidates(
-                Instant.parse("2026-09-17T14:00:00Z"));
+        List<BearRallyScanner.RallyRow> controls = scanner.scanJoinControls();
 
-        assertEquals(1, candidates.size());
-        BearRallyCandidate candidate = candidates.getFirst();
-        assertEquals(4, candidate.currentMembers());
-        assertEquals(15, candidate.maxMembers());
-        assertEquals(420_000, candidate.currentTroops());
-        assertEquals(500_000, candidate.maxTroops());
-        assertEquals(Duration.ofMinutes(4).plusSeconds(20), candidate.countdown());
-        assertTrue(candidate.bearTarget());
+        assertEquals(List.of(270, 770), controls.stream()
+                .map(BearRallyScanner.RallyRow::rowY).toList());
+        assertEquals(List.of("Leader A", "Leader B"), controls.stream()
+                .map(BearRallyScanner.RallyRow::leaderText).toList());
     }
 
     @Test
-    void invalidOrIncompleteOcrFailsClosed() {
-        ImageSearchResultData button = ImageSearchResultData.hit(620, 500, 96, 40, 40);
-        ImageSearchResultData bearIcon = ImageSearchResultData.hit(100, 460, 90, 40, 40);
+    void exposesNonJoinableBearRowsForZeroPlusScrollProof() {
         BearRallyScanner scanner = new BearRallyScanner(
-                () -> List.of(button),
-                () -> List.of(bearIcon),
-                (topLeft, bottomRight) -> "unreadable");
+                List::of,
+                () -> List.of(
+                        ImageSearchResultData.hit(100, 270, 90, 40, 40),
+                        ImageSearchResultData.hit(100, 770, 90, 40, 40)),
+                (topLeft, bottomRight) -> topLeft.getY() < 400 ? "A" : "B");
 
-        assertTrue(scanner.scanCandidates(Instant.now()).isEmpty());
-    }
+        List<BearRallyScanner.RallyRow> rows = scanner.scanRows();
 
-    @Test
-    void reportsOcrFailureInsteadOfCallingAVisibleBearRowDrained() {
-        ImageSearchResultData button = ImageSearchResultData.hit(620, 500, 96, 40, 40);
-        ImageSearchResultData bearIcon = ImageSearchResultData.hit(100, 460, 90, 40, 40);
-        BearRallyScanner scanner = new BearRallyScanner(
-                () -> List.of(button),
-                () -> List.of(bearIcon),
-                (topLeft, bottomRight) -> "unreadable");
-
-        BearRallyScanner.ScanResult result = scanner.scan(Instant.now());
-
-        assertTrue(result.candidates().isEmpty());
-        assertTrue(result.ocrFailure());
-    }
-
-    private static String textFor(PointData topLeft, int anchorY) {
-        if (topLeft.getX() == 626) {
-            return "4/15";
-        }
-        if (topLeft.getX() == 284) {
-            return "420K/500K";
-        }
-        if (topLeft.getX() == 571) {
-            return "04:20";
-        }
-        throw new AssertionError("Unexpected OCR region at " + topLeft + " anchor=" + anchorY);
+        assertEquals(List.of(270, 770), rows.stream()
+                .map(BearRallyScanner.RallyRow::rowY).toList());
+        assertEquals(List.of(false, false), rows.stream()
+                .map(BearRallyScanner.RallyRow::joinable).toList());
     }
 }

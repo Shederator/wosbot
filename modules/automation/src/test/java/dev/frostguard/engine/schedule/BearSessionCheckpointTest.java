@@ -45,4 +45,38 @@ class BearSessionCheckpointTest {
 
         assertEquals(checkpoint, BearSessionCheckpoint.parse(encoded).orElseThrow());
     }
+
+    @Test
+    void observationPreservesExactDeadlineAndCommittedJoinRecoveryPoint() {
+        Instant end = Instant.parse("2026-10-01T10:30:00Z");
+        Instant sent = Instant.parse("2026-10-01T10:05:00Z");
+        Instant deadline = Instant.parse("2026-10-01T10:10:24Z");
+        BearSessionCheckpoint.Checkpoint durable = new BearSessionCheckpoint.Checkpoint(
+                end, "ACTIVE", "FORMATION", "DEPLOY_JOIN", 20, sent, 1, "join",
+                sent, sent, deadline, "PLUS_COMMITTED", 1234L, "[ARK]Leader", 612);
+        BearSessionCheckpoint.Checkpoint observation = new BearSessionCheckpoint.Checkpoint(
+                end, "ACTIVE", "WAR_LIST", "OBSERVE", 21, sent.plusSeconds(1), 0,
+                "ui", sent.plusSeconds(1));
+
+        BearSessionCheckpoint.Checkpoint merged =
+                BearSessionCheckpoint.mergeRecoveryBudget(durable, observation);
+
+        assertEquals(sent, merged.ownRallySentAt());
+        assertEquals(deadline, merged.ownRallyReturnDeadline());
+        assertEquals("PLUS_COMMITTED", merged.joinSubstate());
+        assertEquals(1234L, merged.listRowFingerprint());
+        assertEquals("[ARK]Leader", merged.listLeader());
+        assertEquals(612, merged.listRowY());
+    }
+
+    @Test
+    void readsVersionOneCheckpointWithEmptyTacticalState() {
+        BearSessionCheckpoint.Checkpoint checkpoint = BearSessionCheckpoint.parse(
+                "1|2026-10-01T10:30:00Z|ACTIVE|WORLD|NONE|4|"
+                        + "2026-10-01T10:00:00Z|2|restart|2026-10-01T10:00:01Z")
+                .orElseThrow();
+
+        assertEquals(Instant.EPOCH, checkpoint.ownRallyReturnDeadline());
+        assertEquals("NONE", checkpoint.joinSubstate());
+    }
 }

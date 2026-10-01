@@ -33,12 +33,24 @@ final class BearFrameStream<T> {
     record AwaitResult<T>(Optional<Snapshot<T>> match, Snapshot<T> lastObserved) {
     }
 
+    record Captured<T>(T frame, Instant capturedAt) {
+        Captured {
+            Objects.requireNonNull(frame, "frame");
+            Objects.requireNonNull(capturedAt, "capturedAt");
+        }
+    }
+
+    @FunctionalInterface
+    interface TimestampedSource<T> {
+        Captured<T> get();
+    }
+
     @FunctionalInterface
     interface CaptureRecovery {
         boolean recover(RuntimeException failure, int failedAttempt);
     }
 
-    private final Supplier<T> source;
+    private final TimestampedSource<T> source;
     private final Function<T, BearNavigationPolicy.Screen> classifier;
     private final BooleanSupplier interrupted;
     private final CaptureRecovery recovery;
@@ -61,6 +73,29 @@ final class BearFrameStream<T> {
             CaptureRecovery recovery,
             int captureAttempts,
             Clock clock) {
+        this(() -> new Captured<>(Objects.requireNonNull(source, "source").get(), clock.instant()),
+                classifier, interrupted, recovery, captureAttempts, clock, true);
+    }
+
+    static <T> BearFrameStream<T> fromTimestampedSource(
+            TimestampedSource<T> source,
+            Function<T, BearNavigationPolicy.Screen> classifier,
+            BooleanSupplier interrupted,
+            CaptureRecovery recovery,
+            int captureAttempts,
+            Clock clock) {
+        return new BearFrameStream<>(source, classifier, interrupted, recovery,
+                captureAttempts, clock, true);
+    }
+
+    private BearFrameStream(
+            TimestampedSource<T> source,
+            Function<T, BearNavigationPolicy.Screen> classifier,
+            BooleanSupplier interrupted,
+            CaptureRecovery recovery,
+            int captureAttempts,
+            Clock clock,
+            boolean timestamped) {
         this.source = Objects.requireNonNull(source, "source");
         this.classifier = Objects.requireNonNull(classifier, "classifier");
         this.interrupted = Objects.requireNonNull(interrupted, "interrupted");
@@ -73,14 +108,16 @@ final class BearFrameStream<T> {
     }
 
     Snapshot<T> next() {
-        T frame = capture();
-        latest = new Snapshot<>(++sequence, clock.instant(), frame, classifier.apply(frame));
+        Captured<T> captured = capture();
+        T frame = captured.frame();
+        latest = new Snapshot<>(++sequence, captured.capturedAt(), frame, classifier.apply(frame));
         return latest;
     }
 
     Snapshot<T> nextUnclassified() {
-        T frame = capture();
-        latest = new Snapshot<>(++sequence, clock.instant(), frame, BearNavigationPolicy.Screen.UNKNOWN);
+        Captured<T> captured = capture();
+        latest = new Snapshot<>(++sequence, captured.capturedAt(), captured.frame(),
+                BearNavigationPolicy.Screen.UNKNOWN);
         return latest;
     }
 
@@ -134,7 +171,7 @@ final class BearFrameStream<T> {
         return latest;
     }
 
-    private T capture() {
+    private Captured<T> capture() {
         RuntimeException lastFailure = null;
         for (int attempt = 1; attempt <= captureAttempts; attempt++) {
             if (interrupted.getAsBoolean()) {

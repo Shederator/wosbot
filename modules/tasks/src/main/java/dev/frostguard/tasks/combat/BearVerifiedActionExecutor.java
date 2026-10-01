@@ -6,7 +6,9 @@ import java.util.function.Predicate;
 
 final class BearVerifiedActionExecutor<T> {
 
-    private static final Duration MAXIMUM_AUTHORIZING_FRAME_AGE = Duration.ofSeconds(2);
+    // Inputs must remain close to the sampled game state. A slow classifier is a classifier defect,
+    // not permission to tap from an old image; callers must recover instead of widening this bound.
+    static final Duration MAXIMUM_AUTHORIZING_FRAME_AGE = Duration.ofSeconds(1);
 
     enum Outcome {
         CONFIRMED,

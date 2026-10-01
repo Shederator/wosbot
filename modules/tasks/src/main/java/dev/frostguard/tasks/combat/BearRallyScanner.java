@@ -8,18 +8,12 @@ import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.helper.TemplateSearchHelper;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.CommonOCRSettings;
-import dev.frostguard.vision.convert.CompactGameNumberParser;
-import dev.frostguard.vision.convert.GameTimeUtils;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.ArrayList;
+import java.awt.image.BufferedImage;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
 import java.util.function.Supplier;
-import java.awt.image.BufferedImage;
 
-/** Parses visible Bear rally cards from one immutable frame. */
+/** Finds every visible Bear Rally row and its optional green-plus control from one frame. */
 final class BearRallyScanner {
 
     private static final int MAX_CARDS = 8;
@@ -30,13 +24,10 @@ final class BearRallyScanner {
         String extract(PointData topLeft, PointData bottomRight);
     }
 
-    record ScanResult(List<BearRallyCandidate> candidates, boolean ocrFailure) {
-        ScanResult {
-            candidates = List.copyOf(candidates);
+    record RallyRow(AreaData joinArea, int rowY, long cropFingerprint, String leaderText) {
+        boolean joinable() {
+            return joinArea != null;
         }
-    }
-
-    private record ParseResult(Optional<BearRallyCandidate> candidate, boolean ocrFailure) {
     }
 
     private final Supplier<List<ImageSearchResultData>> greenButtons;
@@ -44,27 +35,16 @@ final class BearRallyScanner {
     private final TextExtractor text;
     private final BufferedImage identityImage;
 
-    BearRallyScanner(TemplateSearchHelper search) {
-        this(search, search.captureFrame());
-    }
-
     BearRallyScanner(TemplateSearchHelper search, RawImageData raw) {
-        this(search, search.frame(raw));
-    }
-
-    private BearRallyScanner(TemplateSearchHelper search, TemplateSearchHelper.Frame frame) {
+        TemplateSearchHelper.Frame frame = search.frame(raw);
         this.greenButtons = () -> frame.locateAllPatterns(
                 TemplatesEnum.BEAR_JOIN_PLUS_ICON, search(80));
         this.bearIcons = () -> frame.locateAllPatterns(
                 TemplatesEnum.BEAR_HUNT_IS_RUNNING, search(80));
         this.text = (topLeft, bottomRight) -> {
             try {
-                var settings = topLeft.getX() == CommonGameAreas.BEAR_RALLY_MEMBERS_X1
-                        ? CommonOCRSettings.BEAR_RALLY_MEMBERS_SETTINGS
-                        : topLeft.getX() == CommonGameAreas.BEAR_RALLY_TROOPS_X1
-                                ? CommonOCRSettings.BEAR_RALLY_CAPACITY_SETTINGS
-                                : CommonOCRSettings.BEAR_RALLY_COUNTDOWN_SETTINGS;
-                return frame.extractText(settings, topLeft, bottomRight);
+                return frame.extractText(
+                        CommonOCRSettings.BEAR_RALLY_LEADER_SETTINGS, topLeft, bottomRight);
             } catch (Exception ignored) {
                 return null;
             }
@@ -82,76 +62,66 @@ final class BearRallyScanner {
         this.identityImage = null;
     }
 
-    List<BearRallyCandidate> scanCandidates(Instant observedAt) {
-        return scan(observedAt).candidates();
-    }
-
-    ScanResult scan(Instant observedAt) {
+    List<RallyRow> scanRows() {
         List<ImageSearchResultData> bears = safe(bearIcons.get());
-        List<BearRallyCandidate> candidates = new ArrayList<>();
-        boolean ocrFailure = false;
         List<ImageSearchResultData> buttons = safe(greenButtons.get()).stream()
+                .filter(BearRallyScanner::usable).toList();
+        return bears.stream()
                 .filter(BearRallyScanner::usable)
                 .sorted(Comparator.comparingInt(hit -> hit.getPoint().getY()))
+                .map(icon -> row(icon, nearestButton(icon, buttons)))
                 .toList();
-        for (ImageSearchResultData button : buttons) {
-            ParseResult parsed = parse(button, bears, observedAt);
-            parsed.candidate().ifPresent(candidates::add);
-            ocrFailure |= parsed.ocrFailure();
-        }
-        return new ScanResult(candidates, ocrFailure);
     }
 
-    private ParseResult parse(
-            ImageSearchResultData button,
-            List<ImageSearchResultData> bears,
-            Instant observedAt) {
-        int rowY = button.getPoint().getY();
-        boolean bear = bears.stream().filter(BearRallyScanner::usable)
-                .anyMatch(icon -> Math.abs(icon.getPoint().getY() - rowY) <= ROW_TOLERANCE);
-        if (!bear) {
-            return new ParseResult(Optional.empty(), false);
-        }
-        int anchorY = button.hasMatchedArea()
-                ? button.getMatchedArea().topLeft().getY()
-                : rowY;
-        String membersText = read(anchorY,
-                CommonGameAreas.BEAR_RALLY_MEMBERS_X1, CommonGameAreas.BEAR_RALLY_MEMBERS_X2,
-                CommonGameAreas.BEAR_RALLY_MEMBERS_DY1, CommonGameAreas.BEAR_RALLY_MEMBERS_DY2);
-        String troopsText = read(anchorY,
-                CommonGameAreas.BEAR_RALLY_TROOPS_X1, CommonGameAreas.BEAR_RALLY_TROOPS_X2,
-                CommonGameAreas.BEAR_RALLY_TROOPS_DY1, CommonGameAreas.BEAR_RALLY_TROOPS_DY2);
-        String countdownText = read(anchorY,
-                CommonGameAreas.BEAR_RALLY_COUNTDOWN_X1, CommonGameAreas.BEAR_RALLY_COUNTDOWN_X2,
-                CommonGameAreas.BEAR_RALLY_COUNTDOWN_DY1, CommonGameAreas.BEAR_RALLY_COUNTDOWN_DY2);
+    List<RallyRow> scanJoinControls() {
+        return scanRows().stream().filter(RallyRow::joinable).toList();
+    }
 
-        long[] members = ratio(membersText);
-        long[] troops = ratio(troopsText);
-        Duration countdown = GameTimeUtils.parseMinutesSeconds(countdownText);
-        if (members == null || troops == null || countdown == null
-                || members[0] > Integer.MAX_VALUE || members[1] > Integer.MAX_VALUE) {
-            return new ParseResult(Optional.empty(), true);
-        }
-        AreaData buttonArea = button.hasMatchedArea()
+    private ImageSearchResultData nearestButton(
+            ImageSearchResultData icon,
+            List<ImageSearchResultData> buttons) {
+        return buttons.stream()
+                .filter(button -> Math.abs(icon.getPoint().getY()
+                        - button.getPoint().getY()) <= ROW_TOLERANCE)
+                .min(Comparator.comparingInt(button -> Math.abs(
+                        icon.getPoint().getY() - button.getPoint().getY())))
+                .orElse(null);
+    }
+
+    private RallyRow row(ImageSearchResultData icon, ImageSearchResultData button) {
+        int anchorY = icon.hasMatchedArea()
+                ? icon.getMatchedArea().topLeft().getY()
+                : icon.getPoint().getY();
+        AreaData joinArea = button == null ? null : button.hasMatchedArea()
                 ? button.getMatchedArea()
                 : new AreaData(button.getPoint(), button.getPoint());
-        BearRallyCandidate candidate = new BearRallyCandidate(
-                buttonArea, rowY, true, BearRallyCandidate.JoinButton.GREEN,
-                (int) members[0], (int) members[1], troops[0], troops[1],
-                countdown, observedAt, visualIdentity(anchorY));
-        return new ParseResult(
-                candidate.accepts(0) ? Optional.of(candidate) : Optional.empty(),
-                false);
+        return new RallyRow(
+                joinArea,
+                icon.getPoint().getY(),
+                visualIdentity(anchorY),
+                normalizeLeader(readLeader(anchorY)));
     }
 
+    private String readLeader(int anchorY) {
+        int y1 = anchorY + CommonGameAreas.BEAR_RALLY_LEADER_DY1;
+        int y2 = anchorY + CommonGameAreas.BEAR_RALLY_LEADER_DY2;
+        if (y1 < 0 || y2 > 1280) {
+            return null;
+        }
+        return text.extract(
+                new PointData(CommonGameAreas.BEAR_RALLY_LEADER_X1, y1),
+                new PointData(CommonGameAreas.BEAR_RALLY_LEADER_X2, y2));
+    }
+
+    /** Hashes the stable target crop; countdowns and animated hero portraits are intentionally out. */
     private long visualIdentity(int anchorY) {
         if (identityImage == null) {
             return 0L;
         }
-        int left = 12;
-        int right = Math.min(identityImage.getWidth() - 1, 190);
-        int top = Math.max(0, anchorY - 6);
-        int bottom = Math.min(identityImage.getHeight() - 1, anchorY + 74);
+        int left = 38;
+        int right = Math.min(identityImage.getWidth() - 1, 225);
+        int top = Math.max(0, anchorY - 102);
+        int bottom = Math.min(identityImage.getHeight() - 1, anchorY + 70);
         long hash = 0xcbf29ce484222325L;
         for (int y = top; y <= bottom; y += 4) {
             for (int x = left; x <= right; x += 4) {
@@ -162,25 +132,8 @@ final class BearRallyScanner {
         return hash;
     }
 
-    private String read(int anchorY, int x1, int x2, int dy1, int dy2) {
-        int y1 = anchorY + dy1;
-        int y2 = anchorY + dy2;
-        if (y1 < 0 || y2 > 1280) {
-            return null;
-        }
-        return text.extract(new PointData(x1, y1), new PointData(x2, y2));
-    }
-
-    private static long[] ratio(String raw) {
-        if (raw == null || !raw.contains("/")) {
-            return null;
-        }
-        String[] parts = raw.replace(" ", "").split("/", 2);
-        long current = CompactGameNumberParser.parse(parts[0]);
-        long maximum = CompactGameNumberParser.parse(parts[1]);
-        return current >= 0 && maximum > 0 && current <= maximum
-                ? new long[] { current, maximum }
-                : null;
+    private static String normalizeLeader(String raw) {
+        return raw == null ? "" : raw.replaceAll("\\s+", " ").trim();
     }
 
     private static boolean usable(ImageSearchResultData hit) {

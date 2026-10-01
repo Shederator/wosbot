@@ -49,6 +49,7 @@ enum BearUiAction {
     OPEN_WAR_LIST(set(Screen.WORLD, Screen.WORLD_AT_BEAR, Screen.WORLD_AT_VERIFIED_BEAR,
                     Screen.WORLD_ACTIVE_BEAR_ICON_READY), set(Screen.WAR_LIST)),
     OPEN_JOIN_FORMATION(set(Screen.WAR_LIST), set(Screen.FORMATION)),
+    SCROLL_RALLY_LIST(set(Screen.WAR_LIST), set(Screen.WAR_LIST)),
     DEPLOY_JOIN(set(Screen.FORMATION),
             set(Screen.WAR_LIST, Screen.MARCH_QUEUE_FULL, Screen.DEPLOY_CONFIRMATION)),
     DISMISS_DEPLOY_DIALOG(set(Screen.DEPLOY_CONFIRMATION, Screen.MARCH_QUEUE_FULL),

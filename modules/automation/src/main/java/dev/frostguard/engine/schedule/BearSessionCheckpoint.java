@@ -10,7 +10,7 @@ import java.util.Optional;
 /** Durable, non-secret recovery position for one protected Bear event session. */
 public final class BearSessionCheckpoint {
 
-    private static final String VERSION = "1";
+    private static final String VERSION = "2";
     private static final String SEPARATOR = "\\|";
 
     private BearSessionCheckpoint() {
@@ -44,7 +44,10 @@ public final class BearSessionCheckpoint {
             return Optional.empty();
         }
         String[] fields = raw.split(SEPARATOR, -1);
-        if (fields.length != 10 || !VERSION.equals(fields[0])) {
+        if ("1".equals(fields[0]) && fields.length == 10) {
+            return parseVersionOne(fields);
+        }
+        if (fields.length != 16 || !VERSION.equals(fields[0])) {
             return Optional.empty();
         }
         try {
@@ -57,7 +60,24 @@ public final class BearSessionCheckpoint {
                     Instant.parse(fields[6]),
                     Integer.parseInt(fields[7]),
                     text(fields[8]),
-                    Instant.parse(fields[9])));
+                    Instant.parse(fields[9]),
+                    Instant.parse(fields[10]),
+                    Instant.parse(fields[11]),
+                    text(fields[12]),
+                    Long.parseLong(fields[13]),
+                    text(fields[14]),
+                    Integer.parseInt(fields[15])));
+        } catch (DateTimeParseException | NumberFormatException ignored) {
+            return Optional.empty();
+        }
+    }
+
+    private static Optional<Checkpoint> parseVersionOne(String[] fields) {
+        try {
+            return Optional.of(new Checkpoint(
+                    Instant.parse(fields[1]), text(fields[2]), text(fields[3]), text(fields[4]),
+                    Long.parseLong(fields[5]), Instant.parse(fields[6]), Integer.parseInt(fields[7]),
+                    text(fields[8]), Instant.parse(fields[9])));
         } catch (DateTimeParseException | NumberFormatException ignored) {
             return Optional.empty();
         }
@@ -113,7 +133,13 @@ public final class BearSessionCheckpoint {
                 observation.frameCapturedAt(),
                 durable.recoveryAttempts(),
                 durable.reason(),
-                observation.updatedAt());
+                observation.updatedAt(),
+                durable.ownRallySentAt(),
+                durable.ownRallyReturnDeadline(),
+                durable.joinSubstate(),
+                durable.listRowFingerprint(),
+                durable.listLeader(),
+                durable.listRowY());
     }
 
     static String serialize(Checkpoint checkpoint) {
@@ -127,7 +153,33 @@ public final class BearSessionCheckpoint {
                 (checkpoint.frameCapturedAt() == null ? Instant.EPOCH : checkpoint.frameCapturedAt()).toString(),
                 Integer.toString(Math.max(0, checkpoint.recoveryAttempts())),
                 safe(checkpoint.reason()),
-                (checkpoint.updatedAt() == null ? Instant.now() : checkpoint.updatedAt()).toString());
+                (checkpoint.updatedAt() == null ? Instant.now() : checkpoint.updatedAt()).toString(),
+                instant(checkpoint.ownRallySentAt()).toString(),
+                instant(checkpoint.ownRallyReturnDeadline()).toString(),
+                safe(checkpoint.joinSubstate()),
+                Long.toString(checkpoint.listRowFingerprint()),
+                safe(checkpoint.listLeader()),
+                Integer.toString(Math.max(0, checkpoint.listRowY())));
+    }
+
+    public static boolean recordTactical(
+            AccountDescriptor profile,
+            Instant eventEnd,
+            Instant ownRallySentAt,
+            Instant ownRallyReturnDeadline,
+            String joinSubstate,
+            long listRowFingerprint,
+            String listLeader,
+            int listRowY,
+            String reason) {
+        Checkpoint current = load(profile).filter(value -> value.eventEnd().equals(eventEnd))
+                .orElse(new Checkpoint(eventEnd, "ACTIVE", "UNOBSERVED", "NONE", 0,
+                        Instant.EPOCH, 0, reason, Instant.now()));
+        return record(profile, new Checkpoint(
+                eventEnd, current.phase(), current.state(), current.action(),
+                current.frameSequence(), current.frameCapturedAt(), current.recoveryAttempts(),
+                reason, Instant.now(), instant(ownRallySentAt), instant(ownRallyReturnDeadline),
+                joinSubstate, listRowFingerprint, listLeader, listRowY));
     }
 
     public static boolean clear(AccountDescriptor profile) {
@@ -151,6 +203,10 @@ public final class BearSessionCheckpoint {
         return value == null || value.isBlank() ? "NONE" : value;
     }
 
+    private static Instant instant(Instant value) {
+        return value == null ? Instant.EPOCH : value;
+    }
+
     public record Checkpoint(
             Instant eventEnd,
             String phase,
@@ -160,6 +216,27 @@ public final class BearSessionCheckpoint {
             Instant frameCapturedAt,
             int recoveryAttempts,
             String reason,
-            Instant updatedAt) {
+            Instant updatedAt,
+            Instant ownRallySentAt,
+            Instant ownRallyReturnDeadline,
+            String joinSubstate,
+            long listRowFingerprint,
+            String listLeader,
+            int listRowY) {
+
+        public Checkpoint(
+                Instant eventEnd,
+                String phase,
+                String state,
+                String action,
+                long frameSequence,
+                Instant frameCapturedAt,
+                int recoveryAttempts,
+                String reason,
+                Instant updatedAt) {
+            this(eventEnd, phase, state, action, frameSequence, frameCapturedAt,
+                    recoveryAttempts, reason, updatedAt, Instant.EPOCH, Instant.EPOCH,
+                    "NONE", 0L, "NONE", 0);
+        }
     }
 }

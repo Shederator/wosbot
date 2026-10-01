@@ -101,7 +101,10 @@ final class BearUiStateMachine<T> {
             Predicate<BearFrameStream.Snapshot<T>> sameTarget,
             int maximumRetries) {
         Objects.requireNonNull(action, "action");
-        if (current == null) {
+        if (current == null
+                || !frames.isCurrent(
+                        current,
+                        BearVerifiedActionExecutor.MAXIMUM_AUTHORIZING_FRAME_AGE)) {
             observe();
         }
         BearVerifiedActionExecutor.Outcome outcome = actions.execute(

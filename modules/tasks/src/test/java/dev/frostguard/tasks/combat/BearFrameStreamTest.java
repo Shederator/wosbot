@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -99,12 +100,47 @@ class BearFrameStreamTest {
                 new BearVerifiedActionExecutor<>(stream, Duration.ofMillis(100));
         BearFrameStream.Snapshot<String> stale = new BearFrameStream.Snapshot<>(
                 1,
-                now.minusSeconds(3),
+                now.minusSeconds(6),
                 "active-icon",
                 BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY);
 
         BearVerifiedActionExecutor.Outcome outcome = executor.tapWithOneVerifiedRetry(
                 stale,
+                taps::incrementAndGet,
+                frame -> frame.screen() == BearNavigationPolicy.Screen.WORLD_AT_BEAR,
+                frame -> frame.screen() == BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY);
+
+        assertEquals(BearVerifiedActionExecutor.Outcome.STALE_AUTHORIZATION, outcome);
+        assertEquals(0, taps.get());
+    }
+
+    @Test
+    void oldFrameCannotBeMadeActionableBySlowClassification() {
+        AtomicInteger taps = new AtomicInteger();
+        Instant now = Instant.parse("2026-10-01T10:00:10Z");
+        Clock clock = Clock.fixed(now, ZoneOffset.UTC);
+        Deque<BearNavigationPolicy.Screen> screens = new ArrayDeque<>(List.of(
+                BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
+                BearNavigationPolicy.Screen.WORLD_AT_BEAR));
+        BearFrameStream<BearNavigationPolicy.Screen> stream = new BearFrameStream<>(
+                screens::removeFirst,
+                screen -> screen,
+                () -> false,
+                (failure, attempt) -> false,
+                1,
+                clock);
+        BearFrameStream.Snapshot<BearNavigationPolicy.Screen> classified = stream.next();
+        BearFrameStream.Snapshot<BearNavigationPolicy.Screen> agedAfterClassification =
+                new BearFrameStream.Snapshot<>(
+                        classified.sequence(),
+                        now.minusSeconds(3),
+                        classified.frame(),
+                        classified.screen());
+        BearVerifiedActionExecutor<BearNavigationPolicy.Screen> executor =
+                new BearVerifiedActionExecutor<>(stream, Duration.ofMillis(100));
+
+        BearVerifiedActionExecutor.Outcome outcome = executor.tapWithOneVerifiedRetry(
+                agedAfterClassification,
                 taps::incrementAndGet,
                 frame -> frame.screen() == BearNavigationPolicy.Screen.WORLD_AT_BEAR,
                 frame -> frame.screen() == BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY);

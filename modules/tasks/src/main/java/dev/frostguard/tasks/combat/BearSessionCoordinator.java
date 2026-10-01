@@ -14,11 +14,9 @@ import java.util.OptionalInt;
  */
 final class BearSessionCoordinator {
 
-    private static final Duration MINIMUM_OWN_RALLY_CUTOFF = Duration.ofMinutes(5).plusSeconds(30);
     private static final Duration FINAL_EXISTING_RALLY_WINDOW = Duration.ofMinutes(5);
     private static final Duration NORMAL_POLL = Duration.ofMillis(250);
     private static final Duration FAILED_RECOVERY_POLL = Duration.ofSeconds(2);
-    private static final Duration RETURN_GUARD = Duration.ofSeconds(2);
     private static final int EXTRA_JOIN_ATTEMPTS = 6;
     private static final int FINAL_EMPTY_LIST_CONFIRMATIONS = 3;
 
@@ -82,7 +80,11 @@ final class BearSessionCoordinator {
         STALE_SCREEN,
         NAVIGATION_FAILURE,
         PAGE_NOT_READY,
-        NO_JOINABLE_RALLY
+        NO_JOINABLE_RALLY,
+        LIST_OBSERVING,
+        LIST_ADVANCED,
+        NO_FORMATION_AVAILABLE,
+        OWN_RALLY_DUE
     }
 
     record OwnRallyObservation(int slot, OwnRallyPhase phase, Duration releaseCountdown) {
@@ -133,6 +135,7 @@ final class BearSessionCoordinator {
     record OwnRallyStartResult(
             OwnRallyStartOutcome outcome,
             int slot,
+            Instant sentAt,
             Duration rallyCountdown,
             Duration oneWayTravel) {
 
@@ -142,14 +145,19 @@ final class BearSessionCoordinator {
             oneWayTravel = oneWayTravel == null ? Duration.ZERO : oneWayTravel;
         }
 
-        static OwnRallyStartResult confirmed(int slot, Duration rallyCountdown, Duration oneWayTravel) {
+        static OwnRallyStartResult confirmed(
+                int slot,
+                Instant sentAt,
+                Duration rallyCountdown,
+                Duration oneWayTravel) {
             return new OwnRallyStartResult(
-                    OwnRallyStartOutcome.CONFIRMED, slot, rallyCountdown, oneWayTravel);
+                    OwnRallyStartOutcome.CONFIRMED, slot, Objects.requireNonNull(sentAt, "sentAt"),
+                    rallyCountdown, oneWayTravel);
         }
 
         static OwnRallyStartResult alreadyActive(int slot) {
             return new OwnRallyStartResult(
-                    OwnRallyStartOutcome.ALREADY_ACTIVE, slot, Duration.ZERO, Duration.ZERO);
+                    OwnRallyStartOutcome.ALREADY_ACTIVE, slot, null, Duration.ZERO, Duration.ZERO);
         }
 
         static OwnRallyStartResult recoverable(OwnRallyStartOutcome outcome) {
@@ -158,7 +166,14 @@ final class BearSessionCoordinator {
                     || outcome == OwnRallyStartOutcome.FATAL) {
                 throw new IllegalArgumentException("outcome is not a recoverable failed start");
             }
-            return new OwnRallyStartResult(outcome, 0, Duration.ZERO, Duration.ZERO);
+            return new OwnRallyStartResult(outcome, 0, null, Duration.ZERO, Duration.ZERO);
+        }
+
+        Instant expectedReturnAt() {
+            if (outcome != OwnRallyStartOutcome.CONFIRMED || sentAt == null) {
+                return null;
+            }
+            return sentAt.plus(rallyCountdown).plus(oneWayTravel.multipliedBy(2));
         }
     }
 
@@ -173,7 +188,7 @@ final class BearSessionCoordinator {
 
         OwnRallyStartResult startOwnRally(int formation);
 
-        JoinOutcome joinNext(int formation);
+        JoinOutcome joinNext(List<Integer> formations, Instant ownReturnDeadline);
 
         boolean recover(State resumeState);
 
@@ -191,8 +206,7 @@ final class BearSessionCoordinator {
 
     private OptionalInt trackedOwnSlot = OptionalInt.empty();
     private boolean mayAdoptExisting = true;
-    private int formationIndex;
-    private Duration ownRallyCutoff = MINIMUM_OWN_RALLY_CUTOFF;
+    private Instant ownReturnDeadline;
     private boolean ownLaunchClosed;
     private boolean finalJoinListDrained;
     private int finalEmptyListConfirmations;
@@ -277,12 +291,7 @@ final class BearSessionCoordinator {
                 }
                 if (start.outcome() == OwnRallyStartOutcome.CONFIRMED) {
                     trackedOwnSlot = OptionalInt.of(start.slot());
-                    Duration observedCycle = start.rallyCountdown()
-                            .plus(start.oneWayTravel().multipliedBy(2))
-                            .plus(RETURN_GUARD);
-                    ownRallyCutoff = observedCycle.compareTo(MINIMUM_OWN_RALLY_CUTOFF) > 0
-                            ? observedCycle
-                            : MINIMUM_OWN_RALLY_CUTOFF;
+                    ownReturnDeadline = start.expectedReturnAt();
                     // Bear owns a separate "Special" march row. It does not consume one of the
                     // ordinary Wilderness slots used by configured join formations.
                     transition(State.OWN_RALLY_ACTIVE);
@@ -307,6 +316,9 @@ final class BearSessionCoordinator {
             if (joinRallies && ownLaunchSatisfied && !finalJoinListDrained && freeSlotsForJoining > 0) {
                 transition(State.FILL_JOIN_SLOTS);
                 JoinPassResult joinPass = fillJoinSlots(freeSlotsForJoining);
+                if (joinPass.ownRallyDue()) {
+                    continue;
+                }
                 if (inFinalExistingRallyWindow()) {
                     if (joinPass.confirmedEmpty()) {
                         finalEmptyListConfirmations = joinPass.progressMade()
@@ -346,6 +358,7 @@ final class BearSessionCoordinator {
             if (observation.phase() == OwnRallyPhase.IDLE
                     && observation.slot() == trackedOwnSlot.getAsInt()) {
                 trackedOwnSlot = OptionalInt.empty();
+                ownReturnDeadline = null;
                 transition(State.OWN_RALLY_REQUIRED);
             } else if (observation.active()) {
                 trackedOwnSlot = OptionalInt.of(observation.slot());
@@ -353,6 +366,16 @@ final class BearSessionCoordinator {
             } else if (observation.phase() == OwnRallyPhase.UNKNOWN) {
                 recover(State.OWN_RALLY_ACTIVE);
             }
+            return;
+        }
+
+        if (mayAdoptExisting && observation.active()) {
+            trackedOwnSlot = OptionalInt.of(observation.slot());
+            if (observation.releaseCountdown() != null
+                    && observation.releaseCountdown().isPositive()) {
+                ownReturnDeadline = driver.now().plus(observation.releaseCountdown());
+            }
+            transition(State.OWN_RALLY_ACTIVE);
             return;
         }
 
@@ -369,40 +392,55 @@ final class BearSessionCoordinator {
 
         while (remaining > 0 && attemptsRemaining-- > 0 && driver.now().isBefore(eventEnd)) {
             if (driver.cancellationRequested()) {
-                return new JoinPassResult(false, progressMade);
+                return new JoinPassResult(false, progressMade, false);
             }
-            int formation = joinFormations.get(formationIndex);
-            JoinOutcome outcome = driver.joinNext(formation);
+            if (ownRallyDue()) {
+                return new JoinPassResult(false, progressMade, true);
+            }
+            JoinOutcome outcome = driver.joinNext(joinFormations, ownReturnDeadline);
             switch (outcome) {
                 case JOINED -> {
                     remaining--;
                     progressMade = true;
-                    advanceFormation();
                 }
-                case FORMATION_UNAVAILABLE -> advanceFormation();
+                case OWN_RALLY_DUE -> {
+                    return new JoinPassResult(false, progressMade, true);
+                }
+                case FORMATION_UNAVAILABLE, NO_FORMATION_AVAILABLE -> {
+                    return new JoinPassResult(false, progressMade, false);
+                }
                 case OCR_MISS, STALE_SCREEN, NAVIGATION_FAILURE, PAGE_NOT_READY -> recover(State.FILL_JOIN_SLOTS);
                 case NO_JOINABLE_RALLY -> {
-                    return new JoinPassResult(true, progressMade);
+                    return new JoinPassResult(true, progressMade, false);
+                }
+                case LIST_OBSERVING, LIST_ADVANCED -> {
+                    // These are verified list-cursor transitions, not failed rally attempts. Keep
+                    // the bounded rally-attempt budget for actual row transactions.
+                    attemptsRemaining++;
                 }
                 case MARCH_QUEUE_FULL -> {
-                    return new JoinPassResult(false, progressMade);
+                    return new JoinPassResult(false, progressMade, false);
                 }
                 case RALLY_FULL, RALLY_DEPARTED, RALLY_GONE, ALREADY_JOINED_OR_MARCHING -> {
                     // Keep the same verified formation and move to the next rally candidate.
                 }
             }
         }
-        return new JoinPassResult(false, progressMade);
+        return new JoinPassResult(false, progressMade, ownRallyDue());
     }
 
-    private record JoinPassResult(boolean confirmedEmpty, boolean progressMade) {}
-
-    private void advanceFormation() {
-        formationIndex = (formationIndex + 1) % joinFormations.size();
+    private record JoinPassResult(boolean confirmedEmpty, boolean progressMade, boolean ownRallyDue) {
     }
 
     private boolean hasTimeForOwnRally() {
-        return !ownLaunchClosed && driver.now().plus(ownRallyCutoff).isBefore(eventEnd);
+        // The definitive cutoff is checked after reading the current one-way travel time on the
+        // formation screen. This coarse gate only avoids beginning a five-minute setup after the
+        // event can no longer contain even the rally countdown itself.
+        return !ownLaunchClosed && !driver.now().plus(Duration.ofMinutes(5)).isAfter(eventEnd);
+    }
+
+    private boolean ownRallyDue() {
+        return ownReturnDeadline != null && !driver.now().isBefore(ownReturnDeadline);
     }
 
     private Duration nextPause(MarchSnapshot snapshot) {
@@ -415,17 +453,17 @@ final class BearSessionCoordinator {
                 && snapshot.ownRally().phase() == OwnRallyPhase.RETURNING
                 && (!joinRallies || snapshot.freeSlots() == 0)
                 && snapshot.ownRally().releaseCountdown() != null
-                && snapshot.ownRally().releaseCountdown().compareTo(RETURN_GUARD) > 0) {
-            requested = snapshot.ownRally().releaseCountdown().minus(RETURN_GUARD);
+                && snapshot.ownRally().releaseCountdown().isPositive()) {
+            requested = snapshot.ownRally().releaseCountdown();
         } else if (snapshot.freeSlots() == 0
                 && snapshot.earliestExactRelease() != null
-                && snapshot.earliestExactRelease().compareTo(RETURN_GUARD) > 0) {
-            requested = snapshot.earliestExactRelease().minus(RETURN_GUARD);
+                && snapshot.earliestExactRelease().isPositive()) {
+            requested = snapshot.earliestExactRelease();
         } else if ((!joinRallies || snapshot.freeSlots() == 0)
                 && snapshot.ownRally().phase() == OwnRallyPhase.PREPARING
                 && snapshot.ownRally().releaseCountdown() != null
-                && snapshot.ownRally().releaseCountdown().compareTo(RETURN_GUARD) > 0) {
-            requested = snapshot.ownRally().releaseCountdown().minus(RETURN_GUARD);
+                && snapshot.ownRally().releaseCountdown().isPositive()) {
+            requested = snapshot.ownRally().releaseCountdown();
         } else if (trackedOwnSlot.isEmpty() && !hasTimeForOwnRally() && !joinRallies) {
             requested = untilEnd;
         }
