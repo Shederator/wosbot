@@ -14,10 +14,10 @@ import dev.frostguard.vision.color.PixelStats;
  * Finds Storehouse reward bubbles as white speech frames, then classifies
  * the interior as crate wood or stamina copper.
  *
- * <p>The live task still uses template search. This detector is the colour
- * comparison path. Search is limited to the on-building bubble band so HUD
- * counters and other city bubbles are ignored. {@link #assess(BufferedImage)}
- * keeps rejected white regions for the overlay tool.</p>
+ * <p>The live task uses this detector. Search is limited to the on-building
+ * bubble band so HUD counters and other city bubbles are ignored.
+ * {@link #assess(BufferedImage)} keeps rejected white regions for the overlay
+ * tool.</p>
  */
 public final class StorehouseBubbleDetector {
 

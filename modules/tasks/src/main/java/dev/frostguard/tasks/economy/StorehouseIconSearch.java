@@ -7,7 +7,7 @@ import dev.frostguard.api.domain.PointData;
 
 /**
  * One way to find Storehouse reward icons on a single frame.
- * The live task uses template search. Colour search stays for comparison.
+ * The live task uses colour search. Template search stays for comparison.
  */
 public interface StorehouseIconSearch {
 

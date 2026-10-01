@@ -1,11 +1,14 @@
 package dev.frostguard.tasks.economy;
 
 import java.awt.Color;
+import java.awt.image.BufferedImage;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 import dev.frostguard.vision.convert.GameTimeUtils;
+import dev.frostguard.vision.convert.ImageConverter;
 import dev.frostguard.vision.convert.RegexNumberParser;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
 import dev.frostguard.api.configs.TemplatesEnum;
@@ -15,11 +18,11 @@ import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.OcrSettingsData;
+import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.service.StaminaService;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
-import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 
@@ -68,10 +71,10 @@ public class StorehouseChestRoutine extends DelayedTask {
     private static final int TIMER_OCR_MAX_ATTEMPTS = 3;
     private static final int MAX_TIMER_SECONDS = 7200; // 2 hours
     private static final int FALLBACK_RESCHEDULE_MINUTES = 5;
-    // Night crate scores about 80 on chest/chest2. Day crate scores about 71 on
-    // those crops and needs chest3 (the daylight bubble). Flask frames stay
-    // below 75 on all three.
+    // Template comparison still uses 75. Live search is the colour bubble.
     static final int CHEST_SEARCH_THRESHOLD = 75;
+    private static final int BUBBLE_SEARCH_ATTEMPTS = 6;
+    private static final long BUBBLE_SEARCH_DELAY_MILLIS = 250L;
     static final int UNREADABLE_WITHOUT_CHEST_HOURS = 1;
     private static final int CLAIM_CLOSE_SETTLE_MILLIS = 800;
     private static final String BUILDING_COUNTDOWN_WHITELIST = "0123456789:d";
@@ -176,7 +179,7 @@ public class StorehouseChestRoutine extends DelayedTask {
         logInfo("Searching for Storehouse chest reward.");
         nextChestTimeFallback = false;
 
-        ImageSearchResultData chest = searchForChest();
+        ImageSearchResultData chest = searchForBubble(StorehouseBubbleDetector.Kind.CHEST);
 
         if (chest.isFound()) {
             logInfo("Chest found. Claiming reward.");
@@ -209,24 +212,31 @@ public class StorehouseChestRoutine extends DelayedTask {
     }
 
     /**
-     * Searches for chest templates with retries.
+     * Polls the white-bubble colour detector. Six captures over about 1.5 s
+     * cover one bob of the icon.
      */
-    private ImageSearchResultData searchForChest() {
-        SearchConfig chestSearch = SearchConfig.builder()
-                .withMaxAttempts(3)
-                .withThreshold(CHEST_SEARCH_THRESHOLD)
-                .withDelay(200L)
-                .build();
-
-        for (TemplatesEnum template : new TemplatesEnum[] {
-                TemplatesEnum.STOREHOUSE_CHEST,
-                TemplatesEnum.STOREHOUSE_CHEST_2,
-                TemplatesEnum.STOREHOUSE_CHEST_3
-        }) {
-            ImageSearchResultData chest = templateSearchHelper.locatePattern(template, chestSearch);
-            if (chest.isFound()) {
-                logDebug("Storehouse chest found");
-                return chest;
+    private ImageSearchResultData searchForBubble(StorehouseBubbleDetector.Kind kind) {
+        for (int attempt = 1; attempt <= BUBBLE_SEARCH_ATTEMPTS; attempt++) {
+            try {
+                RawImageData capture = emuManager.captureScreen(EMULATOR_NUMBER);
+                BufferedImage frame = ImageConverter.toBufferedImage(capture);
+                for (StorehouseBubbleDetector.Candidate candidate : StorehouseBubbleDetector.locate(frame)) {
+                    if (candidate.kind() == kind) {
+                        logDebug("Storehouse " + kind.name().toLowerCase(Locale.ROOT) + " bubble found");
+                        return ImageSearchResultData.hit(
+                                candidate.center().getX(),
+                                candidate.center().getY(),
+                                1.0,
+                                candidate.width(),
+                                candidate.height());
+                    }
+                }
+            } catch (RuntimeException ex) {
+                logDebug("Storehouse bubble capture failed: " + ex.getClass().getSimpleName()
+                        + ": " + ex.getMessage());
+            }
+            if (attempt < BUBBLE_SEARCH_ATTEMPTS) {
+                sleepTask(BUBBLE_SEARCH_DELAY_MILLIS);
             }
         }
         return ImageSearchResultData.miss();
@@ -239,9 +249,7 @@ public class StorehouseChestRoutine extends DelayedTask {
     private void processStaminaReward() {
         logInfo("Searching for Storehouse stamina reward icon (with retries).");
 
-        ImageSearchResultData stamina = templateSearchHelper.locatePattern(
-                TemplatesEnum.STOREHOUSE_STAMINA,
-                SearchConfigConstants.SINGLE_WITH_RETRIES);
+        ImageSearchResultData stamina = searchForBubble(StorehouseBubbleDetector.Kind.STAMINA);
 
         if (!stamina.isFound()) {
             logWarning("Stamina icon not found after retries.");

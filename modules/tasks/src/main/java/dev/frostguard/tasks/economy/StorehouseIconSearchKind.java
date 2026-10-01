@@ -2,7 +2,7 @@ package dev.frostguard.tasks.economy;
 
 import java.util.Locale;
 
-/** Selects a Storehouse icon search. The live task uses {@link #TEMPLATE}. */
+/** Selects a Storehouse icon search. The live task uses {@link #COLOR}. */
 public enum StorehouseIconSearchKind {
     COLOR,
     TEMPLATE,

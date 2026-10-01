@@ -1,8 +1,8 @@
 # Storehouse chest-reward detection
 
 Compares how Frostguard finds the Storehouse crate and stamina can. The live
-task still taps with `StorehouseChestRoutine` (`matchTemplate` on chest,
-chest2, chest3 at 75, then stamina at 90). This tool does not change that.
+task taps with `StorehouseBubbleDetector` (white bubble, then wood vs copper).
+`--search template` and `--search chest3` stay for OpenCV comparison.
 
 ## Run
 
@@ -85,9 +85,8 @@ the crop is the change that actually separates day crate (100) from a can
 (61). Dropping blue or converting to grey does not beat that. `chest` and
 `chest2` are then redundant for these frames.
 
-**Classification overlay: keep colour search as the tool default.** It names
-chest vs can from the same bubble and does not depend on a pose crop.
+**Live: colour search.** The visit must tap a crate or a stamina can. Colour
+names the bubble from the white frame, not a pose crop, so it is the method
+the routine uses. Template modes stay in this tool for comparison.
 
-The live routine is unchanged until a later switch of `searchForChest()` to
-chest3-only (plus stamina at 90). Re-run `--compare` after new lighting or
-animation captures.
+Re-run `--compare` after new lighting or animation captures.

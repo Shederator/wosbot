@@ -21,8 +21,8 @@ When the crate is absent and the pill is unreadable, retry in one hour. A failed
 Storehouse open still retries in five minutes. A visible stamina can is claimed
 on the same visit.
 
-Colour comparison lives in `StorehouseBubbleDetector`: white bubble then crate
-wood vs stamina copper, via `ColorComponents`. The live task still uses
-templates. Overlay and preprocess scores: `./tools/storehouse-detection/detect.sh`.
-The measured OpenCV winner is the `chest3` BGR bubble crop at 75; grey and
-dropped-blue do not recover the wood crops. See the tool README.
+Live search is `StorehouseBubbleDetector`: white bubble then crate wood vs
+stamina copper. Six captures over about 1.5 s cover one bob. Overlay and
+preprocess scores: `./tools/storehouse-detection/detect.sh`. Template
+`chest3` BGR at 75 remains the OpenCV comparison winner; grey and dropped-blue
+do not recover the wood crops. See the tool README.
