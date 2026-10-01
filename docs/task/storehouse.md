@@ -20,3 +20,7 @@ not schedule the next visit.
 When the crate is absent and the pill is unreadable, retry in one hour. A failed
 Storehouse open still retries in five minutes. A visible stamina can is claimed
 on the same visit.
+
+Colour comparison lives in `StorehouseBubbleDetector`: white bubble then crate
+wood vs stamina copper, via `ColorComponents`. The live task still uses
+templates. Overlay both with `./tools/storehouse-detection/detect.sh`.
