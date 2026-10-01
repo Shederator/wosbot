@@ -18,8 +18,7 @@ Take one live emulator screenshot and copy it next to the other local dumps. Sto
 |---|---|
 | Host | Required. `user@hostname`, `user@ip`, or `localhost` / `local`. |
 | Profile | Ask to confirm **Default** unless the user named a profile. |
-| Activity | Optional token for the destination folder (`petadventurechest`, `storehousechest`). |
-| Destination | Optional directory. |
+| Destination | Optional directory. Default: `<repo>/.garbage/emulator-snapshot/`. |
 
 Ask only when Host is missing. Do not invent a host.
 
@@ -113,13 +112,9 @@ On a Unix host, `adb -s SERIAL exec-out screencap -p > dest.png` is also valid. 
 
 ## Destination
 
-UTC stamp `yyyyMMdd'T'HHmmss'Z'`. Filename: `<stamp>-live-adb.png`.
+Default directory: `<repo>/.garbage/emulator-snapshot/`. Use the directory the user names when they give one.
 
-Directory, in order:
-
-1. The directory the user names.
-2. `<repo>/.garbage/<activity>/` when they named an activity.
-3. `<repo>/.garbage/emulator-snapshot/`.
+Default filename: `yyyyMMdd'T'HHmmss'Z'-live-adb.png` (UTC, example `20261001T220058Z-live-adb.png`).
 
 Create the directory. Do not write under `logs/snapshot/` on a live bot workspace (the bot owns that tree). Do not commit the PNG.
 
