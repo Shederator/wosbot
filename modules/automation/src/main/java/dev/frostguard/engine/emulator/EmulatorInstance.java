@@ -218,19 +218,20 @@ public abstract class EmulatorInstance {
 
     public boolean performAdbHealthCheck(String idx) {
         LOG.info("ADB health check for dev {}", idx);
-        if (probe(idx)) return true;
+        if (probeDevice(idx)) return true;
 
         LOG.warn("Failed — restarting bridge");
         try { restartAdb(); Thread.sleep(3000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return false; }
-        if (probe(idx)) return true;
+        if (probeDevice(idx)) return true;
 
         LOG.warn("Still failing — kill-server + restart");
         try { killAdb(); Thread.sleep(2000); restartAdb(); Thread.sleep(3000); }
         catch (InterruptedException e) { Thread.currentThread().interrupt(); return false; }
-        return probe(idx);
+        return probeDevice(idx);
     }
 
-    private boolean probe(String idx) {
+    /** Probes one serial without restarting the process-global ADB server. */
+    public boolean probeDevice(String idx) {
         try {
             invalidateDeviceCache(idx);
             IDevice d = findDevice(idx);
@@ -273,7 +274,10 @@ public abstract class EmulatorInstance {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
-            throw new RuntimeException(captureFailureMessage(idx, serial, buf.size(), e), e);
+            throw ADBConnectionException.forDevice(
+                    serial,
+                    captureFailureMessage(idx, serial, buf.size(), e),
+                    e);
         }
     }
 

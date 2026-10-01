@@ -127,6 +127,9 @@ public enum ConfigurationKeyEnum {
     BEAR_TRAP_JOIN_RALLY_BOOL                   ("false",   Boolean.class,       ConfigCategory.EVENTS),
     BEAR_TRAP_NUMBER_INT                        ("1",       Integer.class,       ConfigCategory.EVENTS),
     BEAR_TRAP_PREPARATION_TIME_INT              ("10",      Integer.class,       ConfigCategory.EVENTS),
+    /** Internal durable scheduler marker; hidden from the operator settings surface. */
+    BEAR_TRAP_RECOVERY_FINALIZER_STRING          ("",        String.class,        ConfigCategory.EVENTS, true),
+    BEAR_TRAP_SESSION_CHECKPOINT_STRING          ("",        String.class,        ConfigCategory.EVENTS, true),
     BEAR_TRAP_RALLY_FLAG_INT                    ("1",       Integer.class,       ConfigCategory.EVENTS),
     BEAR_TRAP_RECALL_TROOPS_BOOL                ("false",   Boolean.class,       ConfigCategory.EVENTS),
     BEAR_TRAP_TIMER_1_ENABLED_BOOL              ("false",   Boolean.class,       ConfigCategory.EVENTS),

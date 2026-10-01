@@ -42,12 +42,7 @@ public final class BearTrapParticipationSchedule {
         }
         LocalDateTime activationUtc = configuredActivation.get();
 
-        Integer configuredPreparation = profile.getConfig(
-                ConfigurationKeyEnum.BEAR_TRAP_PREPARATION_TIME_INT,
-                Integer.class);
-        int preparationMinutes = configuredPreparation != null && configuredPreparation >= 0
-                ? configuredPreparation
-                : DEFAULT_PREPARATION_MINUTES;
+        int preparationMinutes = preparationMinutes(profile);
 
         var window = BearTrapHelper.calculateWindow(
                 activationUtc.toInstant(ZoneOffset.UTC),
@@ -67,6 +62,31 @@ public final class BearTrapParticipationSchedule {
                 LocalDateTime.ofInstant(nextRunInstant, queueZone)));
     }
 
+    /** Returns only the configured event window containing the supplied clock instant. */
+    static Optional<ActiveSession> resolveActiveSession(AccountDescriptor profile, Clock clock) {
+        if (profile == null) {
+            return Optional.empty();
+        }
+
+        int trapNumber = selectedTrapNumber(profile);
+        Optional<LocalDateTime> configuredActivation = configuredActivation(
+                profile, scheduleKey(trapNumber));
+        if (configuredActivation.isEmpty()) {
+            return Optional.empty();
+        }
+
+        var window = BearTrapHelper.calculateWindow(
+                configuredActivation.get().toInstant(ZoneOffset.UTC),
+                preparationMinutes(profile),
+                30,
+                2,
+                clock);
+        if (window.getState() != WindowState.INSIDE) {
+            return Optional.empty();
+        }
+        return Optional.of(new ActiveSession(trapNumber, window.getCurrentWindowEnd()));
+    }
+
     public static ConfigurationKeyEnum scheduleKey(int trapNumber) {
         return trapNumber == 2
                 ? ConfigurationKeyEnum.BEAR_TRAP_TIMER_2_SCHEDULE_DATETIME_STRING
@@ -76,6 +96,15 @@ public final class BearTrapParticipationSchedule {
     private static int selectedTrapNumber(AccountDescriptor profile) {
         Integer configured = profile.getConfig(ConfigurationKeyEnum.BEAR_TRAP_NUMBER_INT, Integer.class);
         return configured != null && configured == 2 ? 2 : DEFAULT_TRAP_NUMBER;
+    }
+
+    private static int preparationMinutes(AccountDescriptor profile) {
+        Integer configured = profile.getConfig(
+                ConfigurationKeyEnum.BEAR_TRAP_PREPARATION_TIME_INT,
+                Integer.class);
+        return configured != null && configured >= 0
+                ? configured
+                : DEFAULT_PREPARATION_MINUTES;
     }
 
     private static Optional<LocalDateTime> configuredActivation(
@@ -104,5 +133,8 @@ public final class BearTrapParticipationSchedule {
             LocalDateTime activationUtc,
             int preparationMinutes,
             LocalDateTime nextRun) {
+    }
+
+    record ActiveSession(int trapNumber, Instant eventEnd) {
     }
 }

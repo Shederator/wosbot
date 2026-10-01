@@ -103,7 +103,10 @@ public final class BearTrapProtectionPolicy {
     }
 
     private static List<ActiveProtection> activeProtections(AccountDescriptor profile, Clock clock) {
-        List<ActiveProtection> result = new ArrayList<>(2);
+        List<ActiveProtection> result = new ArrayList<>(3);
+        BearTrapSessionLease.active(profile.getId(), clock)
+                .ifPresent(lease -> result.add(new ActiveProtection(
+                        "session " + lease.trapNumber(), true, true, lease.eventEnd())));
         BearTrapVisualProtection.releaseAt(profile.getId(), clock)
                 .ifPresent(releaseAt -> result.add(new ActiveProtection("icon", true, false, releaseAt)));
         addIfActive(result, profile, clock, new TrapSettings(

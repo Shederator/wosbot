@@ -35,6 +35,7 @@ class BearTrapProtectionPolicyTest {
     @AfterEach
     void clearVisualProtection() {
         BearTrapVisualProtection.clearForTests();
+        BearTrapSessionLease.clearForTests();
     }
 
     @Test
@@ -166,6 +167,28 @@ class BearTrapProtectionPolicyTest {
         assertEquals(BearTrapProtectionPolicy.BlockReason.ALL_TASKS, decision.reason());
         assertEquals("1, 2", decision.trapNumbers());
         assertEquals(TRAP_2.plusMinutes(30).plusSeconds(5).toInstant(ZoneOffset.UTC),
+                decision.releaseAt());
+    }
+
+    @Test
+    void acquiredSessionLeaseIgnoresLaterTimerMutationAndBlocksAllNormalWork() {
+        AccountDescriptor profile = profileWithTimer1();
+        Clock duringEvent = clockAt(TRAP_1.plusMinutes(1));
+
+        BearTrapSessionLease.Lease lease = BearTrapSessionLease
+                .acquireForBearExecution(profile, duringEvent)
+                .orElseThrow();
+        profile.setConfig(BEAR_TRAP_SCHEDULE_DATETIME_STRING,
+                TRAP_1.plusDays(2).format(CONFIG_DATE_TIME));
+        profile.setConfig(BEAR_TRAP_TIMER_1_PAUSE_ALL_TASKS_BOOL, false);
+
+        var decision = BearTrapProtectionPolicy.evaluateTask(
+                profile, TpDailyTaskEnum.ALLIANCE_CHESTS, duringEvent);
+
+        assertTrue(decision.blocked());
+        assertEquals(BearTrapProtectionPolicy.BlockReason.ALL_TASKS, decision.reason());
+        assertEquals("session 1", decision.trapNumbers());
+        assertEquals(lease.eventEnd().plusSeconds(BearTrapProtectionPolicy.RELEASE_BUFFER_SECONDS),
                 decision.releaseAt());
     }
 

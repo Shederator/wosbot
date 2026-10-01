@@ -171,6 +171,7 @@ public class EmulatorController {
     public boolean isPackageRunning(String i, String pkg) { requireBackend(); return backend.isPackageRunning(i, pkg); }
     public void    restartAdbServer()                     { requireBackend(); backend.restartAdb(); }
     public boolean performAdbHealthCheck(String i)        { requireBackend(); return backend.performAdbHealthCheck(i); }
+    public boolean probeDevice(String i)                  { requireBackend(); return backend.probeDevice(i); }
     public void    invalidateAllCaches(String i)          { requireBackend(); backend.invalidateAllCaches(i); }
     public String  getAdbPath()                           { requireBackend(); return backend.getAdbPath(); }
     public String  getDeviceSerial(String i)              { requireBackend(); return backend.getPublicDeviceSerial(i); }
@@ -198,7 +199,6 @@ public class EmulatorController {
 
     public ImageSearchResultData locatePattern(String idx, RawImageData frame,
             TemplatesEnum t, PointData tl, PointData br, double th) {
-        requireBackend();
         try { OpenCvPatternLocator.setContextLabel(label(idx));
               return OpenCvPatternLocator.locatePattern(frame, regionTpl(t.getTemplate()), tl, br, th);
         } finally { OpenCvPatternLocator.clearContextLabel(); }
@@ -231,13 +231,19 @@ public class EmulatorController {
 
     public ImageSearchResultData locatePatternMono(String idx, TemplatesEnum t,
             PointData tl, PointData br, double th) {
-        requireBackend(); RawImageData frame = captureScreen(idx);
+        return locatePatternMono(idx, captureScreen(idx), t, tl, br, th);
+    }
+    public ImageSearchResultData locatePatternMono(String idx, RawImageData frame, TemplatesEnum t,
+            PointData tl, PointData br, double th) {
         try { OpenCvPatternLocator.setContextLabel(label(idx));
               return OpenCvPatternLocator.locatePatternMono(frame, regionTpl(t.getTemplate()), tl, br, th);
         } finally { OpenCvPatternLocator.clearContextLabel(); }
     }
     public ImageSearchResultData locatePatternMono(String idx, TemplatesEnum t, double th) {
         return locatePatternMono(idx, t, ORIGIN, FULL, th);
+    }
+    public ImageSearchResultData locatePatternMono(String idx, RawImageData frame, TemplatesEnum t, double th) {
+        return locatePatternMono(idx, frame, t, ORIGIN, FULL, th);
     }
 
     public List<ImageSearchResultData> locateAllPatternsMono(String idx, TemplatesEnum t,

@@ -2,7 +2,9 @@ package dev.frostguard.engine.schedule;
 
 import dev.frostguard.api.runtime.WorkspacePaths;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -34,6 +36,7 @@ import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.emulator.QueuePositionListener;
 import dev.frostguard.engine.error.ADBConnectionException;
 import dev.frostguard.engine.error.ActionRequiredContext;
+import dev.frostguard.engine.error.BearSessionExecutionException;
 import dev.frostguard.engine.error.HomeNotFoundException;
 import dev.frostguard.engine.error.ProfileCooldownException;
 import dev.frostguard.engine.error.ProfileInReconnectStateException;
@@ -86,6 +89,11 @@ public class TaskQueue {
     private volatile boolean    idleWakeInitializationForceNow = false;
     private volatile boolean    shuttingDown = false;
     private volatile boolean    stoppedCleanly = false;
+    private Instant bearRecoveryLeaseEnd;
+    private int bearDeviceRebindAttempts;
+    private int bearAppRestartAttempts;
+    private int bearDegradedFailures;
+    private int bearTotalRecoveryAttempts;
 
     public enum StopStatus {
         TERMINATED,
@@ -107,7 +115,7 @@ public class TaskQueue {
     public synchronized void enqueue(DelayedTask task) { taskBacklog.offer(task); }
 
     public synchronized boolean dequeue(TpDailyTaskEnum kind) {
-        DelayedTask ref = DelayedTaskRegistry.create(kind, profile);
+        DelayedTask ref = createTask(kind);
         if (ref == null) { emitWarn("Cannot build prototype for removal: " + kind.getName()); return false; }
         boolean hit = taskBacklog.removeIf(t -> t.equals(ref));
         if (hit) emitInfoTask(ref, "Removed " + kind.getName() + " from queue");
@@ -144,7 +152,7 @@ public class TaskQueue {
     }
 
     public synchronized boolean isTaskQueued(TpDailyTaskEnum kind) {
-        DelayedTask ref = DelayedTaskRegistry.create(kind, profile);
+        DelayedTask ref = createTask(kind);
         return ref != null && taskBacklog.stream().anyMatch(t -> t.equals(ref));
     }
 
@@ -335,6 +343,25 @@ public class TaskQueue {
         shuttingDown = true;
         statusModel.setRunning(false);
         sessionOrigin = null;
+        boolean durableBearHandoff = BearTrapSessionLease.active(profile.getId())
+                .map(lease -> BearRecoveryFinalization.arm(profile, lease.eventEnd())
+                        && BearSessionCheckpoint.record(profile, new BearSessionCheckpoint.Checkpoint(
+                    lease.eventEnd(),
+                    "SCHEDULER",
+                    "QUEUE_STOPPED",
+                    "NONE",
+                    0,
+                    Instant.EPOCH,
+                    0,
+                    "explicit-queue-stop",
+                    Instant.now())))
+                .orElse(true);
+        if (durableBearHandoff) {
+            BearTrapSessionLease.releaseForQueueStop(profile.getId());
+        } else {
+            emitError("Bear queue stop could not persist its finalizer/checkpoint; "
+                    + "the in-memory event lease is being retained");
+        }
         ExecutionContext context = runningContext;
         if (context != null) {
             context.cancel();
@@ -402,7 +429,14 @@ public class TaskQueue {
     // ---- run-now -----------------------------------------------------------
 
     public synchronized void runNow(TpDailyTaskEnum kind, boolean recurring) {
-        DelayedTask ref = DelayedTaskRegistry.create(kind, profile);
+        if (kind == TpDailyTaskEnum.BEAR_TRAP
+                && BearRecoveryFinalization.deadline(profile).isPresent()
+                && BearTrapParticipationSchedule.resolveActiveSession(profile, Clock.systemUTC()).isEmpty()) {
+            emitError("Bear Run Now refused outside an active configured event window; the pending "
+                    + "recovery finalizer was preserved");
+            return;
+        }
+        DelayedTask ref = createTask(kind);
         if (ref == null) { emitWarn("Task not found: " + kind); return; }
         statusModel.setNeedsReconnect(true);
 
@@ -427,6 +461,10 @@ public class TaskQueue {
         st.setScheduled(true); st.setExecuting(false);
         st.setLastExecutionTime(LocalDateTime.now()); st.setNextExecutionTime(ref.getScheduled());
         TaskManagementService.shared().recordTaskState(profile.getId(), st);
+    }
+
+    protected DelayedTask createTask(TpDailyTaskEnum kind) {
+        return DelayedTaskRegistry.create(kind, profile);
     }
 
     // ========================================================================
@@ -665,8 +703,45 @@ public class TaskQueue {
             emitInfo("Skipping task execution during shutdown: " + task.getTaskName());
             return false;
         }
+        if (finalizeBearRecoveryIfDue(task, Instant.now())) {
+            return true;
+        }
         if (deferForBearTrapProtection(task)) {
             return false;
+        }
+        if (task.getTpTask() == TpDailyTaskEnum.BEAR_TRAP) {
+            Optional<BearTrapSessionLease.Lease> acquiredLease =
+                    BearTrapSessionLease.acquireForBearExecution(profile);
+            if (acquiredLease.isEmpty()) {
+                task.setRecurring(true);
+                task.reschedule(LocalDateTime.now().plusSeconds(30));
+                emitErrorTask(task, "Bear execution refused: no configured active session deadline; "
+                        + "retryAt=" + task.getScheduled().format(TS_FMT));
+                enqueue(task);
+                return false;
+            }
+            BearTrapSessionLease.Lease lease = acquiredLease.get();
+            if (!BearSessionCheckpoint.open(profile, lease.eventEnd())) {
+                task.setRecurring(true);
+                task.reschedule(LocalDateTime.now().plusSeconds(30));
+                emitErrorTask(task, "Bear execution refused: durable session checkpoint could not be opened; "
+                        + "retryAt=" + task.getScheduled().format(TS_FMT));
+                enqueue(task);
+                return false;
+            }
+            if (BearRecoveryFinalization.deadline(profile).isPresent()
+                    && !BearRecoveryFinalization.clear(profile)) {
+                task.setRecurring(true);
+                task.reschedule(LocalDateTime.now().plusSeconds(30));
+                emitErrorTask(task, "Bear execution refused: manual recovery handoff could not clear its "
+                        + "finalizer after the new durable checkpoint was opened");
+                enqueue(task);
+                return false;
+            }
+            emitInfoTask(task, "Bear session lease acquired for Timer "
+                    + lease.trapNumber() + " until "
+                    + LocalDateTime.ofInstant(lease.eventEnd(), ZoneId.systemDefault())
+                            .format(TS_FMT));
         }
         if (task.getTpTask() == TpDailyTaskEnum.INITIALIZE
                 && !idleWakeInitializationPending
@@ -690,6 +765,12 @@ public class TaskQueue {
             AnalyticsService.getInstance().trackTaskStarted(task.getTaskName());
             task.setLastExecutionTime(LocalDateTime.now());
             task.run();
+            if (task.getTpTask() == TpDailyTaskEnum.BEAR_TRAP
+                    && (!BearRecoveryFinalization.clear(profile)
+                            || !BearSessionCheckpoint.clear(profile))) {
+                throw new IllegalStateException(
+                        "completed Bear execution but could not clear its durable recovery state");
+            }
             // Keep the initial force flag until Initialize reports success. A profile cooldown
             // persists and re-enqueues Initialize for the requested retry time instead.
             if (task.getTpTask() == TpDailyTaskEnum.INITIALIZE && !task.isRecurring()) {
@@ -832,7 +913,42 @@ public class TaskQueue {
     }
 
     void routeError(DelayedTask task, Exception ex) {
-        if (ex instanceof ProfileCooldownException cooldown) {
+        Optional<BearTrapSessionLease.Lease> activeBearLease =
+                task.getTpTask() == TpDailyTaskEnum.BEAR_TRAP
+                        ? BearTrapSessionLease.active(profile.getId())
+                        : Optional.empty();
+        if (ex instanceof BearSessionExecutionException
+                && activeBearLease.isPresent()) {
+            BearSessionExecutionException bearFailure = (BearSessionExecutionException) ex;
+            BearTrapSessionLease.Lease lease = activeBearLease.orElseThrow();
+            resetBearRecoveryBudgetFor(lease);
+            int plannedAttempts = plannedAttemptsFor(bearFailure.recoveryDirective());
+            if (!BearSessionCheckpoint.record(profile, new BearSessionCheckpoint.Checkpoint(
+                    lease.eventEnd(),
+                    "RECOVERING",
+                    bearFailure.failureKind().name(),
+                    bearFailure.operation(),
+                    0,
+                    Instant.EPOCH,
+                    plannedAttempts,
+                    bearFailure.recoveryDirective().name(),
+                    Instant.now()))) {
+                throw new IllegalStateException(
+                        "Bear recovery refused because its durable recovery point could not be persisted",
+                        bearFailure);
+            }
+            String recoveryResult = applyBearRecoveryDirective(task, bearFailure, lease);
+            emitErrorTask(task, "Bear session entered protected recovery: kind="
+                    + bearFailure.failureKind()
+                    + "; directive=" + bearFailure.recoveryDirective()
+                    + "; device=" + bearFailure.device()
+                    + "; operation=" + bearFailure.operation()
+                    + "; detail=" + ex.getMessage()
+                    + "; recovery=" + recoveryResult
+                    + (task.isRecurring() && task.getScheduled() != null
+                            ? "; retryAt=" + task.getScheduled().format(TS_FMT)
+                            : "; retry=stopped"));
+        } else if (ex instanceof ProfileCooldownException cooldown) {
             pauseForProfileCooldown(task, cooldown);
         } else if (ex instanceof HomeNotFoundException) {
             emitErrorTask(task, "Home not found: " + ex.getMessage());
@@ -846,6 +962,166 @@ public class TaskQueue {
             enqueue(DelayedTaskRegistry.create(TpDailyTaskEnum.INITIALIZE, profile));
         } else {
             routeUnexpectedFailure(task, ex);
+        }
+    }
+
+    private void resetBearRecoveryBudgetFor(BearTrapSessionLease.Lease lease) {
+        if (!Objects.equals(bearRecoveryLeaseEnd, lease.eventEnd())) {
+            bearRecoveryLeaseEnd = lease.eventEnd();
+            int durableAttempts = BearSessionCheckpoint.load(profile)
+                    .filter(checkpoint -> checkpoint.eventEnd().equals(lease.eventEnd()))
+                    .map(BearSessionCheckpoint.Checkpoint::recoveryAttempts)
+                    .orElse(0);
+            bearDeviceRebindAttempts = 0;
+            bearAppRestartAttempts = 0;
+            bearDegradedFailures = 0;
+            bearTotalRecoveryAttempts = durableAttempts;
+        }
+    }
+
+    private int plannedAttemptsFor(BearSessionExecutionException.RecoveryDirective directive) {
+        return directive == BearSessionExecutionException.RecoveryDirective.OPERATOR_ACTION
+                || bearTotalRecoveryAttempts >= 4
+                ? bearTotalRecoveryAttempts
+                : bearTotalRecoveryAttempts + 1;
+    }
+
+    private String applyBearRecoveryDirective(
+            DelayedTask task,
+            BearSessionExecutionException failure,
+            BearTrapSessionLease.Lease lease) {
+        return switch (failure.recoveryDirective()) {
+            case DEGRADED_WAIT -> {
+                if (bearTotalRecoveryAttempts >= 4 || bearDegradedFailures >= 4) {
+                    scheduleBearFinalization(task, lease);
+                    yield "degraded retry budget exhausted; operator action required";
+                }
+                bearDegradedFailures++;
+                bearTotalRecoveryAttempts++;
+                long delaySeconds = Math.min(30L, 2L << Math.min(3, bearDegradedFailures - 1));
+                scheduleBearRetry(task, delaySeconds);
+                yield "bounded degraded wait #" + bearDegradedFailures
+                        + "; totalRecovery=" + bearTotalRecoveryAttempts + "/4";
+            }
+            case REBIND_DEVICE -> {
+                if (bearTotalRecoveryAttempts >= 4 || bearDeviceRebindAttempts >= 2) {
+                    scheduleBearFinalization(task, lease);
+                    yield "per-device rebind budget exhausted; operator action required";
+                }
+                bearDeviceRebindAttempts++;
+                bearTotalRecoveryAttempts++;
+                boolean healthy = probeBearDevice();
+                scheduleBearRetry(task, healthy ? 2 : 8);
+                yield "per-device probe #" + bearDeviceRebindAttempts + " healthy=" + healthy
+                        + "; totalRecovery=" + bearTotalRecoveryAttempts + "/4";
+            }
+            case RESTART_APP -> {
+                if (bearTotalRecoveryAttempts >= 4 || bearAppRestartAttempts >= 2) {
+                    scheduleBearFinalization(task, lease);
+                    yield "app restart budget exhausted; operator action required";
+                }
+                bearAppRestartAttempts++;
+                bearTotalRecoveryAttempts++;
+                boolean foreground = restartBearApp(task);
+                scheduleBearRetry(task, foreground ? 3 : 8);
+                yield "Whiteout restart #" + bearAppRestartAttempts + " foreground=" + foreground
+                        + "; totalRecovery=" + bearTotalRecoveryAttempts + "/4";
+            }
+            case OPERATOR_ACTION -> {
+                scheduleBearFinalization(task, lease);
+                yield "operator action required";
+            }
+        };
+    }
+
+    private void scheduleBearFinalization(
+            DelayedTask task, BearTrapSessionLease.Lease lease) {
+        if (!BearRecoveryFinalization.arm(profile, lease.eventEnd())) {
+            throw new IllegalStateException("Could not persist the Bear recovery finalizer");
+        }
+        task.setRecurring(true);
+        task.reschedule(LocalDateTime.ofInstant(lease.eventEnd(), ZoneId.systemDefault()));
+    }
+
+    boolean finalizeBearRecoveryIfDue(DelayedTask task, Instant now) {
+        Optional<Instant> finalizationAt = BearRecoveryFinalization.deadline(profile);
+        if (task.getTpTask() != TpDailyTaskEnum.BEAR_TRAP
+                || finalizationAt.isEmpty()
+                || now.isBefore(finalizationAt.orElseThrow())) {
+            return false;
+        }
+        boolean profileEnabled = Boolean.TRUE.equals(profile.getEnabled());
+        if (profileEnabled
+                && Boolean.TRUE.equals(profile.getConfig(ConfigurationKeyEnum.GATHER_TASK_BOOL, Boolean.class))) {
+            runNow(TpDailyTaskEnum.GATHER_RESOURCES, true);
+        }
+        if (profileEnabled
+                && Boolean.TRUE.equals(profile.getConfig(ConfigurationKeyEnum.ALLIANCE_AUTOJOIN_BOOL, Boolean.class))) {
+            runNow(TpDailyTaskEnum.ALLIANCE_AUTOJOIN, true);
+        }
+        Optional<BearTrapParticipationSchedule.Plan> nextPlan =
+                BearTrapParticipationSchedule.resolve(
+                        profile,
+                        Clock.fixed(now, ZoneId.systemDefault()),
+                        ZoneId.systemDefault());
+        if (nextPlan.isPresent()) {
+            task.reschedule(nextPlan.get().nextRun());
+            ScheduleService.obtain().persistNextSchedule(
+                    profile, TpDailyTaskEnum.BEAR_TRAP, task.getScheduled(), null);
+            boolean participationEnabled = Boolean.TRUE.equals(profile.getConfig(
+                    ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL,
+                    Boolean.class));
+            task.setRecurring(participationEnabled && profileEnabled);
+            if (participationEnabled && profileEnabled) {
+                enqueue(task);
+            }
+            if (!BearRecoveryFinalization.clear(profile)) {
+                throw new IllegalStateException(
+                        "Bear recovery finalization completed but its durable marker could not be cleared");
+            }
+            if (!BearSessionCheckpoint.clear(profile)) {
+                throw new IllegalStateException(
+                        "Bear recovery finalization completed but its durable checkpoint could not be cleared");
+            }
+            emitInfoTask(task, "Completed scheduler-owned Bear recovery finalization; next run="
+                    + task.getScheduled().format(TS_FMT)
+                    + (!profileEnabled ? "; profile remains disabled"
+                            : participationEnabled ? "" : "; participation remains disabled"));
+        } else {
+            task.setRecurring(false);
+            if (!BearRecoveryFinalization.clear(profile)) {
+                throw new IllegalStateException(
+                        "Bear recovery finalization completed but its durable marker could not be cleared");
+            }
+            if (!BearSessionCheckpoint.clear(profile)) {
+                throw new IllegalStateException(
+                        "Bear recovery finalization completed but its durable checkpoint could not be cleared");
+            }
+            emitErrorTask(task, "Bear recovery finalization restored normal work, but the next "
+                    + "Bear window could not be resolved from configuration");
+        }
+        return true;
+    }
+
+    private static void scheduleBearRetry(DelayedTask task, long delaySeconds) {
+        task.setRecurring(true);
+        task.reschedule(LocalDateTime.now().plusSeconds(delaySeconds));
+    }
+
+    protected boolean probeBearDevice() {
+        deviceBridge.invalidateAllCaches(profile.getEmulatorNumber());
+        return deviceBridge.probeDevice(profile.getEmulatorNumber());
+    }
+
+    protected boolean restartBearApp(DelayedTask task) {
+        try {
+            String gamePackage = EmulatorController.GAME.getPackageName();
+            deviceBridge.forceStopApp(profile.getEmulatorNumber(), gamePackage);
+            deviceBridge.launchApp(profile.getEmulatorNumber(), gamePackage);
+            return deviceBridge.isPackageRunning(profile.getEmulatorNumber(), gamePackage);
+        } catch (RuntimeException restartFailure) {
+            emitWarnTask(task, "Bounded Whiteout restart failed: " + restartFailure.getMessage());
+            return false;
         }
     }
 
@@ -1034,6 +1310,7 @@ public class TaskQueue {
 
     protected void handleIdleTransitions() {
         if (Thread.currentThread().isInterrupted()) return;
+        if (BearTrapSessionLease.active(profile.getId()).isPresent()) return;
         if (statusModel.getLoopState().isExecutedTask() || taskBacklog.isEmpty()) return;
         IdleBehaviorEnum idleBehavior = resolveIdleBehavior();
         if (!idleBehavior.requiresIdleTimeout()) {
