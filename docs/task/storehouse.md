@@ -1,10 +1,11 @@
 # Storehouse Chest
 
-The ready chest is a wooden crate bubble. Night lighting scores the existing
-templates at about 80, so a 90 cut misses a claimable crate. Chest search uses
-threshold 75. Stamina-can and cooldown frames stay below 50 on those templates.
-Stamina search stays at 90 so the top-right shop icon (about 78) is not treated
-as a can.
+The ready chest is a wooden crate bubble. Night lighting scores chest/chest2
+at about 80, so a 90 cut misses a claimable crate. Day lighting on the same
+crate scores those crops at about 71. Chest search uses threshold 75 and a
+third crop (`chest3.png`) of the daylight bubble. Stamina-can and cooldown
+frames stay below 75 on all three chest templates. Stamina search stays at
+90 so the top-right shop icon (about 78) is not treated as a can.
 
 The on-building cooldown is a dark pill. Daylight remaining time is green
 RGB(61, 216, 13). Night cooldown glyphs are near-white. Read green first, then

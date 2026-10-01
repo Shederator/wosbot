@@ -68,7 +68,9 @@ public class StorehouseChestRoutine extends DelayedTask {
     private static final int TIMER_OCR_MAX_ATTEMPTS = 3;
     private static final int MAX_TIMER_SECONDS = 7200; // 2 hours
     private static final int FALLBACK_RESCHEDULE_MINUTES = 5;
-    // Night crate scores about 80; stamina-can and cooldown frames stay below 50.
+    // Night crate scores about 80 on chest/chest2. Day crate scores about 71 on
+    // those crops and needs chest3 (the daylight bubble). Flask frames stay
+    // below 75 on all three.
     static final int CHEST_SEARCH_THRESHOLD = 75;
     static final int UNREADABLE_WITHOUT_CHEST_HOURS = 1;
     private static final int CLAIM_CLOSE_SETTLE_MILLIS = 800;
@@ -216,16 +218,18 @@ public class StorehouseChestRoutine extends DelayedTask {
                 .withDelay(200L)
                 .build();
 
-        ImageSearchResultData chest = templateSearchHelper.locatePattern(
-                TemplatesEnum.STOREHOUSE_CHEST, chestSearch);
-
-        if (chest.isFound()) {
-            logDebug("Storehouse chest found");
-            return chest;
+        for (TemplatesEnum template : new TemplatesEnum[] {
+                TemplatesEnum.STOREHOUSE_CHEST,
+                TemplatesEnum.STOREHOUSE_CHEST_2,
+                TemplatesEnum.STOREHOUSE_CHEST_3
+        }) {
+            ImageSearchResultData chest = templateSearchHelper.locatePattern(template, chestSearch);
+            if (chest.isFound()) {
+                logDebug("Storehouse chest found");
+                return chest;
+            }
         }
-
-        return templateSearchHelper.locatePattern(
-                TemplatesEnum.STOREHOUSE_CHEST_2, chestSearch);
+        return ImageSearchResultData.miss();
     }
 
     /**

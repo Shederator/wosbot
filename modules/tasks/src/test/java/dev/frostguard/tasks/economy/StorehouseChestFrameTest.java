@@ -53,14 +53,8 @@ class StorehouseChestFrameTest {
 
     @Test
     void rejectsBothChestTemplatesOnTheStaminaCan() throws IOException {
-        assertFalse(matches("city-can-visible.png", TemplatesEnum.STOREHOUSE_CHEST,
-                StorehouseChestRoutine.CHEST_SEARCH_THRESHOLD));
-        assertFalse(matches("city-can-visible.png", TemplatesEnum.STOREHOUSE_CHEST_2,
-                StorehouseChestRoutine.CHEST_SEARCH_THRESHOLD));
-        assertFalse(matches("construction-stamina-3d.png", TemplatesEnum.STOREHOUSE_CHEST,
-                StorehouseChestRoutine.CHEST_SEARCH_THRESHOLD));
-        assertFalse(matches("construction-stamina-3d.png", TemplatesEnum.STOREHOUSE_CHEST_2,
-                StorehouseChestRoutine.CHEST_SEARCH_THRESHOLD));
+        assertNoChest("city-can-visible.png");
+        assertNoChest("construction-stamina-3d.png");
     }
 
     @Test
@@ -69,17 +63,27 @@ class StorehouseChestFrameTest {
                 StorehouseChestRoutine.CHEST_SEARCH_THRESHOLD));
         assertTrue(matches("night-crate-ready.png", TemplatesEnum.STOREHOUSE_CHEST_2,
                 StorehouseChestRoutine.CHEST_SEARCH_THRESHOLD));
+        assertTrue(matches("night-crate-ready.png", TemplatesEnum.STOREHOUSE_CHEST_3,
+                StorehouseChestRoutine.CHEST_SEARCH_THRESHOLD));
         assertFalse(matches("night-crate-ready.png", TemplatesEnum.STOREHOUSE_CHEST, STAMINA_SEARCH_THRESHOLD));
         assertFalse(matches("night-crate-ready.png", TemplatesEnum.STOREHOUSE_CHEST_2, STAMINA_SEARCH_THRESHOLD));
         assertFalse(matches("night-crate-ready.png", TemplatesEnum.STOREHOUSE_STAMINA, STAMINA_SEARCH_THRESHOLD));
     }
 
     @Test
+    void detectsTheDayCrateThatMissesTheNightCrops() throws IOException {
+        assertTrue(matches("day-crate-ready.png", TemplatesEnum.STOREHOUSE_CHEST_3,
+                StorehouseChestRoutine.CHEST_SEARCH_THRESHOLD));
+        assertFalse(matches("day-crate-ready.png", TemplatesEnum.STOREHOUSE_CHEST,
+                StorehouseChestRoutine.CHEST_SEARCH_THRESHOLD));
+        assertFalse(matches("day-crate-ready.png", TemplatesEnum.STOREHOUSE_CHEST_2,
+                StorehouseChestRoutine.CHEST_SEARCH_THRESHOLD));
+        assertFalse(matches("day-crate-ready.png", TemplatesEnum.STOREHOUSE_STAMINA, STAMINA_SEARCH_THRESHOLD));
+    }
+
+    @Test
     void rejectsChestAndStaminaOnACooldownPill() throws IOException {
-        assertFalse(matches("cooldown-white-pill.png", TemplatesEnum.STOREHOUSE_CHEST,
-                StorehouseChestRoutine.CHEST_SEARCH_THRESHOLD));
-        assertFalse(matches("cooldown-white-pill.png", TemplatesEnum.STOREHOUSE_CHEST_2,
-                StorehouseChestRoutine.CHEST_SEARCH_THRESHOLD));
+        assertNoChest("cooldown-white-pill.png");
         assertFalse(matches("cooldown-white-pill.png", TemplatesEnum.STOREHOUSE_STAMINA, STAMINA_SEARCH_THRESHOLD));
     }
 
@@ -121,6 +125,15 @@ class StorehouseChestFrameTest {
                 StorehouseChestRoutine.buildingCountdownWhiteSettings());
 
         assertEquals(CONSTRUCTION_COUNTDOWN, GameTimeUtils.parseDuration(clock));
+    }
+
+    private void assertNoChest(String frame) throws IOException {
+        assertFalse(matches(frame, TemplatesEnum.STOREHOUSE_CHEST,
+                StorehouseChestRoutine.CHEST_SEARCH_THRESHOLD), frame);
+        assertFalse(matches(frame, TemplatesEnum.STOREHOUSE_CHEST_2,
+                StorehouseChestRoutine.CHEST_SEARCH_THRESHOLD), frame);
+        assertFalse(matches(frame, TemplatesEnum.STOREHOUSE_CHEST_3,
+                StorehouseChestRoutine.CHEST_SEARCH_THRESHOLD), frame);
     }
 
     private boolean matches(String frame, TemplatesEnum template, double threshold) throws IOException {
