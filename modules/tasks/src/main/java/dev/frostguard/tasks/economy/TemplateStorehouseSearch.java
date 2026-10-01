@@ -21,21 +21,36 @@ public final class TemplateStorehouseSearch implements StorehouseIconSearch {
     private static final PointData LIMIT = new PointData(720, 1280);
     private static final double STAMINA_THRESHOLD = 90;
 
+    private static final TemplatesEnum[] LIVE_CHEST_TEMPLATES = {
+            TemplatesEnum.STOREHOUSE_CHEST,
+            TemplatesEnum.STOREHOUSE_CHEST_2,
+            TemplatesEnum.STOREHOUSE_CHEST_3
+    };
+    private static final TemplatesEnum[] BUBBLE_CHEST_TEMPLATES = {
+            TemplatesEnum.STOREHOUSE_CHEST_3
+    };
+
     private final byte[] encodedPng;
+    private final TemplatesEnum[] chestTemplates;
 
     public TemplateStorehouseSearch(byte[] encodedPng) {
+        this(encodedPng, LIVE_CHEST_TEMPLATES);
+    }
+
+    static TemplateStorehouseSearch bubbleCrop(byte[] encodedPng) {
+        return new TemplateStorehouseSearch(encodedPng, BUBBLE_CHEST_TEMPLATES);
+    }
+
+    private TemplateStorehouseSearch(byte[] encodedPng, TemplatesEnum[] chestTemplates) {
         this.encodedPng = encodedPng;
+        this.chestTemplates = chestTemplates;
     }
 
     @Override
     public List<PointData> find(BufferedImage frame) {
         loadOpenCv();
         List<PointData> points = new ArrayList<>();
-        for (TemplatesEnum template : new TemplatesEnum[] {
-                TemplatesEnum.STOREHOUSE_CHEST,
-                TemplatesEnum.STOREHOUSE_CHEST_2,
-                TemplatesEnum.STOREHOUSE_CHEST_3
-        }) {
+        for (TemplatesEnum template : chestTemplates) {
             ImageSearchResultData hit = OpenCvPatternLocator.locatePattern(
                     encodedPng, template, ORIGIN, LIMIT, StorehouseChestRoutine.CHEST_SEARCH_THRESHOLD);
             if (hit.isFound() && hit.getPoint() != null) {

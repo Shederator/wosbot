@@ -42,8 +42,17 @@ public final class StorehouseDetectionTool {
         if (images.isEmpty()) {
             throw new IllegalArgumentException("No PNG inputs.");
         }
-        if (!arguments.doBenchmark()) {
+        if (!arguments.doBenchmark() && !arguments.compare()) {
             Files.createDirectories(output);
+        }
+        if (arguments.compare()) {
+            try {
+                StorehouseTemplateCompare.print(images);
+            } catch (Exception ex) {
+                System.err.println(ex.getMessage());
+                System.exit(1);
+            }
+            return;
         }
         int failures = 0;
         for (Path image : images) {
@@ -81,18 +90,21 @@ public final class StorehouseDetectionTool {
             throws IOException {
         byte[] encodedPng = Files.readAllBytes(image);
         BufferedImage frame = DetectionToolSupport.readFrame(encodedPng);
-        if (searchKind == StorehouseIconSearchKind.TEMPLATE) {
+        if (searchKind != StorehouseIconSearchKind.COLOR) {
+            String label = searchKind.name().toLowerCase(Locale.ROOT);
             List<PointData> points = searchKind.open(encodedPng).find(frame);
             for (PointData point : points) {
-                System.out.println(image.getFileName() + "  template center=" + point.getX() + "," + point.getY());
+                System.out.println(image.getFileName() + "  " + label + " center=" + point.getX() + "," + point.getY());
             }
             if (points.isEmpty()) {
-                System.out.println(image.getFileName() + "  template found nothing");
+                System.out.println(image.getFileName() + "  " + label + " found nothing");
             }
-            List<Mark> marks = points.stream().map(point -> Mark.point(point, "template")).toList();
+            List<Mark> marks = points.stream().map(point -> Mark.point(point, label)).toList();
             Path destination = output.resolve(outputName(timestamp, image, searchKind));
-            return DetectionToolSupport.writeAnnotation(frame, marks, destination,
-                    "template search, cyan cross = match center, chest 75 / stamina 90");
+            String legend = searchKind == StorehouseIconSearchKind.CHEST3
+                    ? "chest3 BGR crop + stamina 90, cyan cross = match center"
+                    : "live templates chest/chest2/chest3 at 75 then stamina 90";
+            return DetectionToolSupport.writeAnnotation(frame, marks, destination, legend);
         }
         List<Candidate> candidates = StorehouseBubbleDetector.assess(frame);
         for (Candidate candidate : candidates) {
@@ -135,13 +147,16 @@ public final class StorehouseDetectionTool {
         return text.length() <= 48 ? text : text.substring(0, 48);
     }
 
-    private record Arguments(Path output, List<Path> inputs, boolean doBenchmark, int passes,
+    private record Arguments(Path output, List<Path> inputs, boolean doBenchmark, boolean compare, int passes,
             StorehouseIconSearchKind search, boolean help) {
         static final String USAGE = """
-                Usage: detect.sh [--output dir] [--search color|template] [--do-benchmark] [--passes N] <image-or-directory>...
+                Usage: detect.sh [--output dir] [--search color|template|chest3] [--compare] [--do-benchmark] [--passes N] <image-or-directory>...
 
                 Writes timestamp-fixture_name-search-detection_result.png for each PNG.
                 The default search is color. The live task still uses template.
+                chest3 is the chosen OpenCV crop (white bubble + crate, BGR, threshold 75).
+                --compare prints matchTemplate scores for BGR/gray/drop-blue/RG-mean/CLAHE
+                on chest, chest2, chest3, and stamina, and writes no PNG.
                 The default directory is tools/storehouse-detection/target/detections.
                 --do-benchmark reads each image once, runs the selected search --passes times
                 (default 1000), prints the mean time, and writes no PNG.
@@ -152,6 +167,7 @@ public final class StorehouseDetectionTool {
             List<Path> inputs = new ArrayList<>();
             boolean help = args.length == 0;
             boolean doBenchmark = false;
+            boolean compare = false;
             int passes = 1000;
             StorehouseIconSearchKind search = StorehouseIconSearchKind.COLOR;
             for (int index = 0; index < args.length; index++) {
@@ -160,9 +176,11 @@ public final class StorehouseDetectionTool {
                     help = true;
                 } else if ("--search".equals(arg)) {
                     if (index + 1 >= args.length) {
-                        throw new IllegalArgumentException("--search must be color or template");
+                        throw new IllegalArgumentException("--search must be color, template, or chest3");
                     }
                     search = StorehouseIconSearchKind.parse(args[++index]);
+                } else if ("--compare".equals(arg)) {
+                    compare = true;
                 } else if ("--do-benchmark".equals(arg)) {
                     doBenchmark = true;
                 } else if ("--passes".equals(arg)) {
@@ -188,7 +206,7 @@ public final class StorehouseDetectionTool {
                     inputs.add(Path.of(arg));
                 }
             }
-            return new Arguments(output, List.copyOf(inputs), doBenchmark, passes, search, help);
+            return new Arguments(output, List.copyOf(inputs), doBenchmark, compare, passes, search, help);
         }
     }
 }

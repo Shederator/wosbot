@@ -55,6 +55,7 @@ class StorehouseBubbleDetectorTest {
         BufferedImage frame = load("day-crate-ready.png");
         assertEquals(1, StorehouseIconSearchKind.COLOR.open(png).find(frame).size());
         assertFalse(StorehouseIconSearchKind.TEMPLATE.open(png).find(frame).isEmpty());
+        assertFalse(StorehouseIconSearchKind.CHEST3.open(png).find(frame).isEmpty());
     }
 
     private BufferedImage load(String frame) throws IOException {

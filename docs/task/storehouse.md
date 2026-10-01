@@ -23,4 +23,6 @@ on the same visit.
 
 Colour comparison lives in `StorehouseBubbleDetector`: white bubble then crate
 wood vs stamina copper, via `ColorComponents`. The live task still uses
-templates. Overlay both with `./tools/storehouse-detection/detect.sh`.
+templates. Overlay and preprocess scores: `./tools/storehouse-detection/detect.sh`.
+The measured OpenCV winner is the `chest3` BGR bubble crop at 75; grey and
+dropped-blue do not recover the wood crops. See the tool README.
