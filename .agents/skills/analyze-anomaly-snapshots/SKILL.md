@@ -15,7 +15,7 @@ Reuse an existing Frostguard log dump when possible; otherwise copy a live works
 
 ## Existing dumps
 
-Before asking for workspace or host details, look for existing `<repo>/.garbage/logs-*/` directories. If any exist, offer those paths first and ask whether the user wants to use one. If they choose one, skip the transfer and use it as the logs directory for the remaining steps; list its snapshot folders and ask which folder to analyze. Do not read its logs or PNG contents before they choose a snapshot folder. If they decline, or no dump exists, continue with Session preferences and Dump below.
+Before asking for workspace or host details, look for existing `<repo>/.garbage/logs-*/` directories. List the existing dump paths, newest first, and propose analyzing one of them before starting a transfer. Ask which dump to use; when several exist, recommend the newest. If they choose one, skip the transfer and use it as the logs directory for the remaining steps; list its snapshot folders and ask which folder to analyze. Do not read its logs or PNG contents before they choose a snapshot folder. If they decline, or no dump exists, continue with Session preferences and Dump below.
 
 ## Session preferences
 
@@ -65,7 +65,7 @@ The user names one snapshot folder. They may add a problem note. Then follow `.a
 
 | Input | Value |
 |---|---|
-| Logs directory | The dump just created |
+| Logs directory | The selected existing dump or the dump just created |
 | Window | UTC stamps in that folder's PNG names, converted with the `frostguard.log` offset |
 | Routine | Match the folder name to `TaskRegistrations` / display text; ask if several match |
 | Question | The user's problem note, if any |
