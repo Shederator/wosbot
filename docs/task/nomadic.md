@@ -6,7 +6,8 @@ accelerators, teleports, and a VIP if one is ever priced that way). Pass two
 buys remaining VIP product icons with the existing gem sheet taps. Free
 Refresh runs after both passes.
 
-Tapping the price strip does not buy; the tap is the product body.
+The take tap is the price strip. Tapping the product icon opens the item
+description instead of buying.
 
 Gem-price template `gemprice.png` was cropped from a 19-gem VIP card on
 2026-09-30. Search is limited to each slot's price strip so the wallet gem is

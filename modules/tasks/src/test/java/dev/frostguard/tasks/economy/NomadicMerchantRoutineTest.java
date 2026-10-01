@@ -92,15 +92,17 @@ class NomadicMerchantRoutineTest {
     }
 
     @Test
-    void tapsTheProductBodyRatherThanThePriceStrip() {
-        var topTap = NomadicMerchantDecisions.productTap(0);
+    void tapsThePriceStripRatherThanTheProductIcon() {
+        var topTap = NomadicMerchantDecisions.priceTap(0);
         var topPrice = NomadicMerchantDecisions.priceTopLeft(0);
-        var bottomTap = NomadicMerchantDecisions.productTap(5);
+        var bottomTap = NomadicMerchantDecisions.priceTap(5);
         var bottomPrice = NomadicMerchantDecisions.priceTopLeft(5);
 
-        assertTrue(topTap.getY() < topPrice.getY());
-        assertTrue(bottomTap.getY() < bottomPrice.getY());
-        assertTrue(topTap.getY() < 625);
+        assertTrue(topTap.getY() >= topPrice.getY());
+        assertTrue(bottomTap.getY() >= bottomPrice.getY());
+        assertTrue(topTap.getY() < NomadicMerchantDecisions.TOP_SLOT_BOTTOM);
+        assertTrue(bottomTap.getY() < NomadicMerchantDecisions.BOTTOM_SLOT_BOTTOM);
+        assertTrue(topTap.getY() > 625);
         assertTrue(bottomTap.getY() > 720);
     }
 

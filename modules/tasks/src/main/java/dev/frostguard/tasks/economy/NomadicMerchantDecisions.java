@@ -74,11 +74,14 @@ final class NomadicMerchantDecisions {
         return new PointData(slotLeft(slot) + SLOT_WIDTH, slotBottom(slot) - PRICE_HEIGHT);
     }
 
-    /** Centre of the product body. Tapping the price strip does not buy. */
-    static PointData productTap(int slot) {
-        int top = slotTop(slot);
-        int priceTop = slotBottom(slot) - PRICE_HEIGHT;
-        return new PointData(slotLeft(slot) + SLOT_WIDTH / 2, (top + priceTop) / 2);
+    /**
+     * Centre of the price strip. Tapping the product icon opens the item
+     * description instead of buying (20261001T080031.992Z-execution-limit).
+     */
+    static PointData priceTap(int slot) {
+        return new PointData(
+                slotLeft(slot) + SLOT_WIDTH / 2,
+                slotBottom(slot) - PRICE_HEIGHT / 2);
     }
 
     /** First pass: take when the price strip has no gem. */

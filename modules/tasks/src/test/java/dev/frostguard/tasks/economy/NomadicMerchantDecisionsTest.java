@@ -28,14 +28,14 @@ class NomadicMerchantDecisionsTest {
     }
 
     @Test
-    void productTapSitsInTheCardBodyAboveThePriceStrip() {
+    void priceTapSitsInThePriceStrip() {
         for (int slot = 0; slot < NomadicMerchantDecisions.SLOT_COUNT; slot++) {
-            var tap = NomadicMerchantDecisions.productTap(slot);
+            var tap = NomadicMerchantDecisions.priceTap(slot);
             var priceTop = NomadicMerchantDecisions.priceTopLeft(slot);
-            var productBottom = NomadicMerchantDecisions.productBottomRight(slot);
+            var priceBottom = NomadicMerchantDecisions.priceBottomRight(slot);
 
-            assertTrue(tap.getY() < priceTop.getY(), "slot " + slot);
-            assertTrue(tap.getY() <= productBottom.getY(), "slot " + slot);
+            assertTrue(tap.getY() >= priceTop.getY(), "slot " + slot);
+            assertTrue(tap.getY() < priceBottom.getY(), "slot " + slot);
             assertEquals(tap.getX(), NomadicMerchantDecisions.slotLeft(slot)
                     + NomadicMerchantDecisions.SLOT_WIDTH / 2);
         }

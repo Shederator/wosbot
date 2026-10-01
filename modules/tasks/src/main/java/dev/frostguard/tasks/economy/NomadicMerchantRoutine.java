@@ -149,7 +149,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
                 phase = NomadicMerchantPhase.CLAIMING_RESOURCE;
                 logInfo("Found a resource-priced offer in slot " + slot + ". Purchasing it.");
                 RawImageData before = emuManager.captureScreen(EMULATOR_NUMBER);
-                tapNear(NomadicMerchantDecisions.productTap(slot));
+                tapNear(NomadicMerchantDecisions.priceTap(slot));
                 phase = NomadicMerchantPhase.WAITING_CLAIM_ANIMATION;
                 if (!confirmSlotChanged(slot, before)) {
                     skippedResourceOffers.add(slot);
