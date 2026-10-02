@@ -979,6 +979,10 @@ class TaskQueueBearSessionLeaseTest {
             }
         };
 
+        // Production persists the operator's disable before it revokes Bear ownership.
+        AccountDescriptor disabled = reload(profile.getId());
+        disabled.setEnabled(false);
+        assertTrue(ProfileService.obtain().persistAccount(disabled));
         assertTrue(queue.revokeBearOwnership("profile disabled"));
         worker[0].join(10_000);
 

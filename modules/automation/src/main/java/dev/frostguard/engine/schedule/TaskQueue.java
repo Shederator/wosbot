@@ -782,6 +782,11 @@ public class TaskQueue {
         ExecutionContext ctx = new ExecutionContext(task);
         if (task.getTpTask() == TpDailyTaskEnum.BEAR_TRAP) {
             {
+                if (bearRevoked(Instant.now()) && operatorReEnabledBear()) {
+                    // Bear and its profile are on again in storage: the operator resumed the event.
+                    bearRevokedUntil = null;
+                    emitInfoTask(task, "Bear re-enabled during its revoked event; resuming the session");
+                }
                 if (bearRevoked(Instant.now())) {
                     return finalizeRevokedBear(task);
                 }
@@ -827,9 +832,11 @@ public class TaskQueue {
                                 .format(TS_FMT));
                 runningContext = ctx;
                 if (bearRevoked(Instant.now())) {
-                    // A revocation that missed the published context must still stop this run.
+                    // A revocation that missed the published context must still stop this run and
+                    // must not leave the lease this claim just took pinning the device.
                     bearCleanupOwedByRunningTask = true;
                     ctx.cancel();
+                    BearTrapSessionLease.releaseForQueueStop(profile.getId());
                 }
             }
         }
@@ -1178,6 +1185,16 @@ public class TaskQueue {
             return false;
         }
         return finalizeBearRecoveryIfDue(task, now);
+    }
+
+    private boolean operatorReEnabledBear() {
+        return ProfileService.obtain().fetchAllAccounts().stream()
+                .filter(candidate -> profile.getId().equals(candidate.getId()))
+                .findFirst()
+                .filter(persisted -> Boolean.TRUE.equals(persisted.getEnabled())
+                        && Boolean.TRUE.equals(persisted.getConfig(
+                                ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL, Boolean.class)))
+                .isPresent();
     }
 
     private boolean bearRevoked(Instant now) {

@@ -23,7 +23,9 @@ Ownership rules while the event is active:
 - Bear performs no inherited blind navigation; a missing game process is a protected app restart.
 - Disabling Bear participation or the profile is an explicit revocation: a running session is
   cancelled, the lease and device pin are released, and a cleanup-only finalization restores normal
-  work without any Bear input. A profile disabled before restart is not resumed.
+  work without any Bear input. Every later run for that event is cleanup-only, unless the operator
+  re-enables Bear and the profile, which resumes the session. A profile disabled before restart is
+  not resumed.
 
 The bot's own rally uses the Special march. Its exact expected return is:
 
