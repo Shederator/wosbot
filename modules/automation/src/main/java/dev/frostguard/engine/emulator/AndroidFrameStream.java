@@ -2,7 +2,10 @@ package dev.frostguard.engine.emulator;
 
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.vision.video.H264FrameDecoder;
+import dev.frostguard.vision.video.RecordingInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.List;
@@ -23,10 +26,21 @@ public final class AndroidFrameStream implements AutoCloseable {
     private Process process;
     private Thread decoderThread;
     private boolean scriptUploaded;
+    private final OutputStream recording;
+    private volatile String recordingFailure;
 
     public AndroidFrameStream(String adb, String serial) {
+        this(adb, serial, null);
+    }
+
+    /**
+     * @param recording optional sink that receives the exact H.264 bytes decoded for this stream;
+     *                  a sink failure stops the recording but never the live stream
+     */
+    public AndroidFrameStream(String adb, String serial, OutputStream recording) {
         this.adb = Objects.requireNonNull(adb);
         this.serial = Objects.requireNonNull(serial);
+        this.recording = recording;
         if (adb.isBlank() || serial.isBlank()) {
             throw new IllegalArgumentException("ADB path and serial required");
         }
@@ -142,7 +156,8 @@ public final class AndroidFrameStream implements AutoCloseable {
     }
 
     private void decode() {
-        try (var input = process.getInputStream(); var decoder = new H264FrameDecoder(input)) {
+        try (InputStream input = recordedVideo(process.getInputStream());
+             var decoder = new H264FrameDecoder(input)) {
             decoder.start();
             long sequence = 0;
             while (!stopping) {
@@ -158,6 +173,17 @@ public final class AndroidFrameStream implements AutoCloseable {
         } catch (Exception | LinkageError error) {
             if (!stopping) failure = error.getClass().getSimpleName() + ": " + error.getMessage();
         }
+    }
+
+    private InputStream recordedVideo(InputStream video) {
+        if (recording == null) return video;
+        return new RecordingInputStream(video, recording,
+                failure -> recordingFailure = failure.getMessage());
+    }
+
+    /** Why the evidence recording stopped, or {@code null} while it is healthy or disabled. */
+    public String recordingFailure() {
+        return recordingFailure;
     }
 
     public Frame latestAfter(long sequence) {
