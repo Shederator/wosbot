@@ -14,6 +14,8 @@ final class BearVerifiedActionExecutor<T> {
         CONFIRMED,
         NOT_CONFIRMED,
         STALE_AUTHORIZATION,
+        /** The input was refused or illegal from the observed state; nothing was sent. */
+        NOT_AUTHORIZED,
         INTERRUPTED
     }
 
@@ -44,6 +46,8 @@ final class BearVerifiedActionExecutor<T> {
     private final Duration transitionDeadline;
     private final TransitionObserver observer;
     private long consumedSequence;
+    private boolean lastInputSent;
+    private String lastRefusal = "";
 
     BearVerifiedActionExecutor(BearFrameStream<T> stream, Duration transitionDeadline) {
         this(stream, transitionDeadline, ignored -> { });
@@ -96,6 +100,8 @@ final class BearVerifiedActionExecutor<T> {
         if (maximumRetries < 0) {
             throw new IllegalArgumentException("maximumRetries cannot be negative");
         }
+        lastInputSent = false;
+        lastRefusal = "";
         if (stream.interrupted()) {
             trace(action, authorizingFrame, expectedPostcondition, null, 0,
                     "interrupted-before-input", Outcome.INTERRUPTED);
@@ -111,9 +117,10 @@ final class BearVerifiedActionExecutor<T> {
             return Outcome.STALE_AUTHORIZATION;
         }
         if (!legalSource.test(authorizingFrame)) {
+            lastRefusal = "illegal-source-state";
             trace(action, authorizingFrame, expectedPostcondition, authorizingFrame, 0,
-                    "illegal-source-state", Outcome.NOT_CONFIRMED);
-            return Outcome.NOT_CONFIRMED;
+                    "illegal-source-state", Outcome.NOT_AUTHORIZED);
+            return Outcome.NOT_AUTHORIZED;
         }
 
         BearFrameStream.Snapshot<T> authorization = authorizingFrame;
@@ -126,12 +133,25 @@ final class BearVerifiedActionExecutor<T> {
             if (!stream.isCurrent(authorization, MAXIMUM_AUTHORIZING_FRAME_AGE)
                     || authorization.sequence() <= consumedSequence
                     || !legalSource.test(authorization)) {
+                // After an earlier attempt the input may already have taken effect.
+                Outcome invalid = lastInputSent ? Outcome.NOT_CONFIRMED : Outcome.STALE_AUTHORIZATION;
                 trace(action, authorization, expectedPostcondition, authorization, attempt,
-                        "retry-authorization-invalid", Outcome.STALE_AUTHORIZATION);
-                return Outcome.STALE_AUTHORIZATION;
+                        "retry-authorization-invalid", invalid);
+                return invalid;
             }
+            long previouslyConsumed = consumedSequence;
             consumedSequence = authorization.sequence();
-            input.run(authorization);
+            try {
+                input.run(authorization);
+            } catch (BearInputRefusedException refused) {
+                consumedSequence = previouslyConsumed;
+                lastRefusal = refused.getMessage();
+                Outcome outcome = lastInputSent ? Outcome.NOT_CONFIRMED : Outcome.NOT_AUTHORIZED;
+                trace(action, authorization, expectedPostcondition, authorization, attempt,
+                        "input-refused:" + refused.getMessage(), outcome);
+                return outcome;
+            }
+            lastInputSent = true;
             PollResult result = poll(authorization.sequence(), destination);
             if (result.outcome == Outcome.CONFIRMED || result.outcome == Outcome.INTERRUPTED) {
                 trace(action, authorization, expectedPostcondition, result.last, attempt,
@@ -150,6 +170,16 @@ final class BearVerifiedActionExecutor<T> {
             authorization = result.last;
         }
         return Outcome.NOT_CONFIRMED;
+    }
+
+    /** Whether the most recent {@code execute} sent any device input. */
+    boolean lastInputSent() {
+        return lastInputSent;
+    }
+
+    /** Why the most recent {@code execute} refused its input, or an empty string. */
+    String lastRefusal() {
+        return lastRefusal;
     }
 
     private void trace(

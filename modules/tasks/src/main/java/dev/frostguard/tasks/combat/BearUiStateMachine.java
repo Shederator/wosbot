@@ -134,6 +134,15 @@ final class BearUiStateMachine<T> {
         return current;
     }
 
+    /** Whether the last transition sent device input; an unconfirmed input may have taken effect. */
+    boolean lastInputSent() {
+        return actions.lastInputSent();
+    }
+
+    String lastRefusal() {
+        return actions.lastRefusal();
+    }
+
     void phase(Phase next) {
         Objects.requireNonNull(next, "next");
         if (phase != next) {

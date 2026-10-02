@@ -1,6 +1,7 @@
 package dev.frostguard.tasks.combat;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayDeque;
@@ -51,8 +52,57 @@ class BearUiStateMachineTest {
                 BearUiAction.OPEN_ALLIANCE,
                 ignored -> taps.incrementAndGet());
 
-        assertEquals(BearVerifiedActionExecutor.Outcome.NOT_CONFIRMED, outcome);
+        assertEquals(BearVerifiedActionExecutor.Outcome.NOT_AUTHORIZED, outcome,
+                "an illegal source state sends no input");
         assertEquals(0, taps.get());
+        assertFalse(machine.lastInputSent());
+    }
+
+    @Test
+    void refusedInputIsAnEdgeOutcomeThatConsumesNothing() {
+        Deque<BearNavigationPolicy.Screen> script = new ArrayDeque<>(List.of(
+                BearNavigationPolicy.Screen.WORLD,
+                BearNavigationPolicy.Screen.ALLIANCE_MENU));
+        BearFrameStream<BearNavigationPolicy.Screen> frames = new BearFrameStream<>(
+                script::removeFirst, state -> state, () -> false);
+        BearUiStateMachine<BearNavigationPolicy.Screen> machine =
+                new BearUiStateMachine<>(frames, Duration.ofSeconds(1), ignored -> { });
+        AtomicInteger taps = new AtomicInteger();
+
+        machine.observe();
+        BearVerifiedActionExecutor.Outcome refused = machine.transition(
+                BearUiAction.OPEN_ALLIANCE,
+                ignored -> {
+                    throw new BearInputRefusedException("target-missing-in-authorizing-frame");
+                });
+
+        assertEquals(BearVerifiedActionExecutor.Outcome.NOT_AUTHORIZED, refused);
+        assertFalse(machine.lastInputSent());
+        assertEquals("target-missing-in-authorizing-frame", machine.lastRefusal());
+
+        BearVerifiedActionExecutor.Outcome retried = machine.transition(
+                BearUiAction.OPEN_ALLIANCE,
+                ignored -> taps.incrementAndGet());
+        assertEquals(BearVerifiedActionExecutor.Outcome.CONFIRMED, retried,
+                "the unused authorizing frame remains usable");
+        assertEquals(1, taps.get());
+        assertTrue(machine.lastInputSent());
+    }
+
+    @Test
+    void missedPostconditionAfterInputReportsThatInputWasSent() {
+        BearFrameStream<BearNavigationPolicy.Screen> frames = new BearFrameStream<>(
+                () -> BearNavigationPolicy.Screen.WORLD, state -> state, () -> false);
+        BearUiStateMachine<BearNavigationPolicy.Screen> machine =
+                new BearUiStateMachine<>(frames, Duration.ofMillis(150), ignored -> { });
+
+        machine.observe();
+        BearVerifiedActionExecutor.Outcome outcome = machine.transition(
+                BearUiAction.OPEN_ALLIANCE,
+                ignored -> { });
+
+        assertEquals(BearVerifiedActionExecutor.Outcome.NOT_CONFIRMED, outcome);
+        assertTrue(machine.lastInputSent(), "an unconfirmed input may still have taken effect");
     }
 
     @Test
