@@ -685,6 +685,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         private final DeploymentHelper sessionDeploymentHelper;
         private BearFrameStream.Snapshot<RawImageData> lastObservedFrame;
         private int consecutiveRecoveryFailures;
+        private int consecutiveUnknownRecoveries;
         private final BearRallyListTraversal rallyTraversal = new BearRallyListTraversal();
         private boolean rallyListBottomProven;
         private String restoredJoinSubstate = "NONE";
@@ -1517,11 +1518,18 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
             try {
                 ui.phase(BearUiStateMachine.Phase.RECOVERING);
                 BearNavigationPolicy.Screen screen = observeBearScreen();
+                if (screen != BearNavigationPolicy.Screen.UNKNOWN) {
+                    consecutiveUnknownRecoveries = 0;
+                }
                 if (screen == BearNavigationPolicy.Screen.FORMATION
                         || screen == BearNavigationPolicy.Screen.RALLY_TIMER_PANEL
                         || screen == BearNavigationPolicy.Screen.BEAR_RALLY_PANEL
                         || screen == BearNavigationPolicy.Screen.ALLIANCE_MENU
-                        || screen == BearNavigationPolicy.Screen.WAR_LIST) {
+                        || screen == BearNavigationPolicy.Screen.WAR_LIST
+                        || screen == BearNavigationPolicy.Screen.MARCH_SIDEBAR
+                        || screen == BearNavigationPolicy.Screen.SIDEBAR_OTHER
+                        || screen == BearNavigationPolicy.Screen.DEPLOY_CONFIRMATION
+                        || screen == BearNavigationPolicy.Screen.MARCH_QUEUE_FULL) {
                     boolean recovered = backToVerifiedParent(screen);
                     if (recovered) {
                         ui.phase(BearUiStateMachine.Phase.ACTIVE);
@@ -1557,11 +1565,25 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                     }
                     return recovered;
                 }
-                throw protectedFailure(
-                        BearSessionExecutionException.FailureKind.VISUAL_UNKNOWN,
-                        BearSessionExecutionException.RecoveryDirective.DEGRADED_WAIT,
-                        "recover-" + resumeState,
-                        null);
+                // An unclassified frame is often a transient overlay or animation. Give it a
+                // bounded window; repeated unknown screens escalate to a game restart.
+                boolean classified = ui.await(
+                        Duration.ofSeconds(2),
+                        frame -> frame.screen() != BearNavigationPolicy.Screen.UNKNOWN,
+                        "unknown-screen-recovery-" + resumeState).isPresent();
+                if (classified) {
+                    consecutiveUnknownRecoveries = 0;
+                    return false;
+                }
+                if (++consecutiveUnknownRecoveries >= 2) {
+                    consecutiveUnknownRecoveries = 0;
+                    throw protectedFailure(
+                            BearSessionExecutionException.FailureKind.VISUAL_UNKNOWN,
+                            BearSessionExecutionException.RecoveryDirective.RESTART_APP,
+                            "recover-unknown-screen-" + resumeState,
+                            null);
+                }
+                return false;
             } catch (BearSessionExecutionException e) {
                 throw e;
             } catch (StopExecutionException e) {
