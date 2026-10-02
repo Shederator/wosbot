@@ -28,6 +28,7 @@ import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.BearSessionCheckpoint;
 import dev.frostguard.engine.schedule.BearTrapParticipationSchedule;
+import dev.frostguard.engine.schedule.BearTrapSessionLease;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.schedule.TaskQueue;
 import dev.frostguard.engine.nav.CommonGameAreas;
@@ -184,18 +185,25 @@ public BearTrapRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
         activeSessionExit = null;
         hydrateConfiguration();
 
-
-        if (!confirmExecutionWindow()) {
+        Optional<BearEventWindow> window = BearEventWindow.resolve(
+                BearTrapSessionLease.active(profile.getId()),
+                () -> confirmExecutionWindow()
+                        ? Optional.of(computeTrapTiming().window())
+                        : Optional.empty());
+        if (window.isEmpty()) {
             deferToNextWindow();
             return;
         }
-
+        if (window.get().leaseOwned()) {
+            logInfo(routineLogBearTrapLine("Event window taken from the active Bear lease; "
+                    + "schedule edits cannot move it. end=" + window.get().end()));
+        }
 
         TrapTimingShape timing = null;
         LiveBearSessionDriver sessionDriver = null;
         BearSessionExecutionException sessionFailure = null;
         try {
-            timing = computeTrapTiming();
+            timing = TrapTimingShape.from(window.get());
             logTrapTimingFlow(timing);
 
             LocalDateTime now = LocalDateTime.now(ZoneId.of("UTC"));
@@ -330,6 +338,19 @@ private static class TrapTimingShape {
         final LocalDateTime windowStart;
         final LocalDateTime activationTime;
         final LocalDateTime endTime;
+
+        static TrapTimingShape from(BearEventWindow window) {
+            LocalDateTime activation = LocalDateTime.ofInstant(window.activation(), ZoneId.of("UTC"));
+            return new TrapTimingShape(activation, activation,
+                    LocalDateTime.ofInstant(window.end(), ZoneId.of("UTC")));
+        }
+
+        BearEventWindow window() {
+            return new BearEventWindow(
+                    activationTime.atZone(ZoneId.of("UTC")).toInstant(),
+                    endTime.atZone(ZoneId.of("UTC")).toInstant(),
+                    false);
+        }
 
         TrapTimingShape(LocalDateTime windowStart, LocalDateTime activationTime, LocalDateTime endTime) {
             this.windowStart = windowStart;
