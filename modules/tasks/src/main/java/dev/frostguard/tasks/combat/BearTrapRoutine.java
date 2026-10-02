@@ -338,6 +338,22 @@ private boolean observeOnly() {
                 || BearObserveOnlyFallback.active(profile, Instant.now());
     }
 
+/** The device transport for a session; replaced in tests by scripted frames. */
+BearRealtimeFrameSource createRealtimeFrameSource(BearCaptureRecorder capture) {
+        return new BearRealtimeFrameSource(
+                emuManager.getAdbPath(),
+                emuManager.getDeviceSerial(EMULATOR_NUMBER),
+                () -> Thread.currentThread().isInterrupted(),
+                capture == null ? () -> null : capture::nextSegment,
+                () -> emuManager.captureScreen(EMULATOR_NUMBER));
+    }
+
+/** Template matching for the live classifier; replaced in tests by scripted screens. */
+BearFrameClassifier.TemplateMatcher templateMatcher() {
+        return (frame, template, threshold) -> emuManager.locatePattern(
+                EMULATOR_NUMBER, frame, template, threshold).isFound();
+    }
+
 /** Terminal UI verification uses input, so an observe-only session never performs it. */
     boolean verifiesTerminalUi(boolean resumeNormalTasks) {
         return resumeNormalTasks && !observeOnly();
@@ -715,16 +731,13 @@ static List<Integer> decodeJoinFlags(String flagConfig) {
         return new ArrayList<>(flags);
     }
 
-private final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
+final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
 
         private final Instant eventEnd;
         private List<MarchSlotState> lastMarches = List.of();
         private BearSessionCoordinator.State lastState;
         private Instant ownRallyBusyUntil;
-        private final BearFrameClassifier classifier = new BearFrameClassifier(
-                (frame, template, threshold) -> emuManager.locatePattern(
-                        EMULATOR_NUMBER, frame, template, threshold).isFound(),
-                trapNumber);
+        private final BearFrameClassifier classifier = new BearFrameClassifier(templateMatcher(), trapNumber);
         private Instant nextMarchRefreshAt = Instant.MIN;
         private boolean cachedSpecialRallyPreparing;
         private final BearFrameStream<RawImageData> frames;
@@ -748,7 +761,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         private long classificationNanos;
         private Instant classificationStartedAt = Instant.EPOCH;
 
-        private LiveBearSessionDriver(Instant eventEnd, BearCaptureRecorder capture) {
+        LiveBearSessionDriver(Instant eventEnd, BearCaptureRecorder capture) {
             this.eventEnd = eventEnd;
             this.capture = capture;
             BearSessionCheckpoint.Checkpoint checkpoint = BearSessionCheckpoint.load(profile)
@@ -774,12 +787,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                     }
                 }
             }
-            this.realtimeFrames = new BearRealtimeFrameSource(
-                    emuManager.getAdbPath(),
-                    emuManager.getDeviceSerial(EMULATOR_NUMBER),
-                    () -> Thread.currentThread().isInterrupted(),
-                    capture == null ? () -> null : capture::nextSegment,
-                    () -> emuManager.captureScreen(EMULATOR_NUMBER));
+            this.realtimeFrames = createRealtimeFrameSource(capture);
             this.frames = BearFrameStream.fromTimestampedSource(
                     realtimeFrames::next,
                     this::classifyBearScreen,
@@ -912,7 +920,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                     new IllegalStateException("Missing positive live evidence: " + evidence));
         }
 
-        private void cleanup(
+        void cleanup(
                 BearSessionCoordinator.ExitReason exit,
                 boolean resumeNormalTasks) {
             try {

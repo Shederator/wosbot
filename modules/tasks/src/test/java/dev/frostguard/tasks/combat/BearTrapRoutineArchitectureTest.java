@@ -36,7 +36,7 @@ class BearTrapRoutineArchitectureTest {
         // sample inside the ordered realtime source, which still receives a frame sequence.
         assertEquals(1, occurrences(java, "emuManager.captureScreen("),
                 "Bear may only screenshot through the ordered recorder's static-screen sample");
-        assertEquals(1, occurrences(java, "() -> emuManager.captureScreen(EMULATOR_NUMBER))"),
+        assertEquals(1, occurrences(java, "() -> emuManager.captureScreen(EMULATOR_NUMBER));"),
                 "the screenshot must be wired as the realtime source's static-screen sample");
         assertEquals(1, occurrences(java, "new BearRealtimeFrameSource("),
                 "the live Bear session must own exactly one ordered recorder");
