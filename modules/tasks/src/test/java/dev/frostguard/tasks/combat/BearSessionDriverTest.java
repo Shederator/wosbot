@@ -93,6 +93,25 @@ class BearSessionDriverTest {
     }
 
     @Test
+    void aScreenThatBecomesClassifiedDuringTheWaitAlsoResetsTheEscalation() {
+        ScriptedBear bear = new ScriptedBear(UNKNOWN);
+        BearTrapRoutine.LiveBearSessionDriver driver = bear.driver();
+
+        // Distinct goals keep the per-goal strike budget out of this escalation check.
+        assertFalse(driver.recover(BearSessionCoordinator.State.FILL_JOIN_SLOTS));
+        assertEquals(1, bear.backs);
+        bear.becomeAfterNextClassification(WORLD);
+        assertFalse(driver.recover(BearSessionCoordinator.State.WAIT_FOR_NEXT_USEFUL_DEADLINE),
+                "the unknown screen resolved during the bounded wait");
+        assertEquals(1, bear.backs, "a screen that resolves on its own needs no input");
+        bear.visible = UNKNOWN;
+
+        assertFalse(driver.recover(BearSessionCoordinator.State.OWN_RALLY_REQUIRED),
+                "after the screen resolved, a new unknown screen starts with Back, not a restart");
+        assertEquals(2, bear.backs);
+    }
+
+    @Test
     void recoveryStrikesAreCountedPerGoalAndResetOnlyByThatGoal() {
         ScriptedBear bear = new ScriptedBear(WORLD);
         BearTrapRoutine.LiveBearSessionDriver driver = bear.driver();
@@ -114,6 +133,9 @@ class BearSessionDriverTest {
     private static final class ScriptedBear extends BearTrapRoutine {
 
         private volatile Set<TemplatesEnum> visible;
+        private volatile Set<TemplatesEnum> pending;
+        private int classifications;
+        private int switchAfter = Integer.MAX_VALUE;
         private int backs;
         private int inputs;
 
@@ -151,9 +173,22 @@ class BearSessionDriverTest {
             }, () -> false);
         }
 
+        /** The current screen stays for one more frame, then becomes {@code next}. */
+        void becomeAfterNextClassification(Set<TemplatesEnum> next) {
+            pending = next;
+            switchAfter = classifications + 1;
+        }
+
         @Override
         BearFrameClassifier.TemplateMatcher templateMatcher() {
-            return (frame, template, threshold) -> visible.contains(template);
+            return (frame, template, threshold) -> {
+                // Every classification checks the reconnect dialog first.
+                if (template == TemplatesEnum.GAME_HOME_RECONNECT && ++classifications > switchAfter) {
+                    visible = pending;
+                    switchAfter = Integer.MAX_VALUE;
+                }
+                return visible.contains(template);
+            };
         }
 
         @Override

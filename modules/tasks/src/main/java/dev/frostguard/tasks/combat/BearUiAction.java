@@ -7,8 +7,9 @@ import java.util.Set;
 /**
  * Legal UI edges for the Bear session. A production input must name one of these edges and may
  * execute only from a current frame in {@link #sources}; completion requires a newer frame in
- * {@link #destinations}. States that still lack real-frame identity remain represented here so
- * production fails closed instead of falling back to coordinate timing.
+ * {@link #destinations}. Edges whose screens still lack real-frame identity stay declared so
+ * production fails closed instead of falling back to coordinate timing; those without any
+ * confirmable destination never complete.
  */
 enum BearUiAction {
     OPEN_ALLIANCE(set(Screen.WORLD, Screen.WORLD_ACTIVE_BEAR_ICON_READY),
