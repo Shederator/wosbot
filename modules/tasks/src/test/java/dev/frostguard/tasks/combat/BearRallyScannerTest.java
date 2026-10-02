@@ -2,6 +2,7 @@ package dev.frostguard.tasks.combat;
 
 import dev.frostguard.api.domain.ImageSearchResultData;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -26,6 +27,24 @@ class BearRallyScannerTest {
                 .map(BearRallyScanner.RallyRow::rowY).toList());
         assertEquals(List.of("Leader A", "Leader B"), controls.stream()
                 .map(BearRallyScanner.RallyRow::leaderText).toList());
+    }
+
+    @Test
+    void authorizationScanReadsNoTextSoItFitsTheInputBudget() {
+        AtomicInteger ocrCalls = new AtomicInteger();
+        BearRallyScanner scanner = new BearRallyScanner(
+                () -> List.of(ImageSearchResultData.hit(620, 300, 96, 40, 40)),
+                () -> List.of(ImageSearchResultData.hit(100, 270, 90, 40, 40)),
+                (topLeft, bottomRight) -> {
+                    ocrCalls.incrementAndGet();
+                    return "Leader";
+                });
+
+        List<BearRallyScanner.RallyRow> rows = scanner.scanRowsWithoutText();
+
+        assertEquals(0, ocrCalls.get(), "leader OCR is far too slow for an authorizing frame");
+        assertEquals(List.of(270), rows.stream().map(BearRallyScanner.RallyRow::rowY).toList());
+        assertEquals(List.of(true), rows.stream().map(BearRallyScanner.RallyRow::joinable).toList());
     }
 
     @Test

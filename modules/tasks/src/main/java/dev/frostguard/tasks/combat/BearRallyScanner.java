@@ -63,13 +63,25 @@ final class BearRallyScanner {
     }
 
     List<RallyRow> scanRows() {
+        return scan(true);
+    }
+
+    /**
+     * Rows with their visual identity but no leader text. Leader OCR takes far longer than the
+     * input authorization budget, so authorizing frames are matched by fingerprint only.
+     */
+    List<RallyRow> scanRowsWithoutText() {
+        return scan(false);
+    }
+
+    private List<RallyRow> scan(boolean readLeaders) {
         List<ImageSearchResultData> bears = safe(bearIcons.get());
         List<ImageSearchResultData> buttons = safe(greenButtons.get()).stream()
                 .filter(BearRallyScanner::usable).toList();
         return bears.stream()
                 .filter(BearRallyScanner::usable)
                 .sorted(Comparator.comparingInt(hit -> hit.getPoint().getY()))
-                .map(icon -> row(icon, nearestButton(icon, buttons)))
+                .map(icon -> row(icon, nearestButton(icon, buttons), readLeaders))
                 .toList();
     }
 
@@ -88,7 +100,7 @@ final class BearRallyScanner {
                 .orElse(null);
     }
 
-    private RallyRow row(ImageSearchResultData icon, ImageSearchResultData button) {
+    private RallyRow row(ImageSearchResultData icon, ImageSearchResultData button, boolean readLeader) {
         int anchorY = icon.hasMatchedArea()
                 ? icon.getMatchedArea().topLeft().getY()
                 : icon.getPoint().getY();
@@ -99,7 +111,7 @@ final class BearRallyScanner {
                 joinArea,
                 icon.getPoint().getY(),
                 visualIdentity(anchorY),
-                normalizeLeader(readLeader(anchorY)));
+                readLeader ? normalizeLeader(readLeader(anchorY)) : "");
     }
 
     private String readLeader(int anchorY) {

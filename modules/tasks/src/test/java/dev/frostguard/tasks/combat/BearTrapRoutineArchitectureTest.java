@@ -2,6 +2,7 @@ package dev.frostguard.tasks.combat;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -35,6 +36,34 @@ class BearTrapRoutineArchitectureTest {
                 "the screenshot must be wired as the realtime source's static-screen sample");
         assertEquals(1, occurrences(java, "new BearRealtimeFrameSource("),
                 "the live Bear session must own exactly one ordered recorder");
+    }
+
+    @Test
+    void authorizingCallbacksDoNoOcrOrPersistence() throws IOException {
+        String java = Files.readString(
+                Path.of("src/main/java/dev/frostguard/tasks/combat/BearTrapRoutine.java"));
+        for (String action : new String[] {"OPEN_JOIN_FORMATION", "SCROLL_RALLY_LIST", "DEPLOY_OWN_RALLY",
+                "DEPLOY_JOIN"}) {
+            String callback = callbackOf(java, action);
+            // OCR and checkpoint writes take longer than the one-second authorization budget.
+            assertFalse(callback.contains("scanRows()"), action + " callback must not read leader text");
+            assertFalse(callback.contains("requireTacticalCheckpoint"),
+                    action + " callback must not persist before its input");
+            assertFalse(callback.contains("readPreflightScreen"), action + " callback must not run OCR");
+        }
+    }
+
+    private static String callbackOf(String java, String action) {
+        int start = java.indexOf("BearUiAction." + action + ",");
+        assertTrue(start >= 0, action + " transition not found");
+        int open = java.indexOf("authorization -> {", start) + "authorization -> ".length();
+        int depth = 0;
+        for (int index = open; index < java.length(); index++) {
+            char character = java.charAt(index);
+            if (character == '{') depth++;
+            if (character == '}' && --depth == 0) return java.substring(open, index + 1);
+        }
+        throw new AssertionError(action + " callback is not closed");
     }
 
     private static int occurrences(String text, String needle) {
