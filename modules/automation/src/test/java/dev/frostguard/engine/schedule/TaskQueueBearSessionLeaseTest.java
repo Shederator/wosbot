@@ -554,6 +554,37 @@ class TaskQueueBearSessionLeaseTest {
                 "the device stays pinned while ownership is unresolved");
     }
 
+    @Test
+    void operatorRevocationStopsBearReleasesTheDeviceAndQueuesCleanupOnly() {
+        AccountDescriptor profile = configuredActiveProfile("Bear revoked ");
+        RecordingQueue queue = new RecordingQueue(profile);
+        BearTrapSessionLease.Lease lease =
+                BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+        assertTrue(BearSessionCheckpoint.open(profile, lease.eventEnd()));
+        assertTrue(ConfigService.obtain().writeAccountSetting(profile, BEAR_TRAP_EVENT_BOOL, "false"));
+        AccountDescriptor disabled = reload(profile.getId());
+        queue.applyProfileUpdate(disabled);
+
+        assertTrue(queue.revokeBearOwnership("participation disabled"));
+
+        assertTrue(BearTrapSessionLease.active(profile.getId()).isEmpty(), "the event lease is released");
+        assertFalse(queue.hasProtectedBearOwnership(Instant.now()), "the device is no longer pinned");
+        assertTrue(queue.deviceReleaseAllowed());
+        Instant cleanupAt = BearRecoveryFinalization.deadline(reload(profile.getId())).orElseThrow();
+        assertFalse(cleanupAt.isAfter(Instant.now()), "cleanup-only finalization is due now");
+        assertTrue(queue.getNextQueuedTaskTypes(20).contains(TpDailyTaskEnum.BEAR_TRAP),
+                "the finalization run that restores normal work is queued");
+    }
+
+    @Test
+    void revocationWithoutBearOwnershipDoesNothing() {
+        AccountDescriptor profile = configuredActiveProfile("Bear revoke idle ");
+        RecordingQueue queue = new RecordingQueue(profile);
+
+        assertFalse(queue.revokeBearOwnership("participation disabled"));
+        assertTrue(BearRecoveryFinalization.deadline(reload(profile.getId())).isEmpty());
+    }
+
     private static AccountDescriptor reload(Long profileId) {
         return ProfileService.obtain().fetchAllAccounts().stream()
                 .filter(candidate -> profileId.equals(candidate.getId()))

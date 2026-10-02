@@ -223,6 +223,14 @@ public class ScheduleService {
 		notifyQueueState(null, false);
 	}
 
+	/** Explicit operator revocation of an active Bear session, for example a disabled profile. */
+	public void revokeBearOwnership(Long accountId, String reason) {
+		TaskQueue queue = accountId == null ? null : dispatcher.getQueue(accountId);
+		if (queue != null) {
+			queue.revokeBearOwnership(reason);
+		}
+	}
+
 	public void suspendAccountQueue(Long accountId) {
 		changeAccountPause(accountId, true);
 	}
@@ -448,6 +456,10 @@ public class ScheduleService {
 		boolean enabled = Boolean.TRUE.equals(account.getConfig(key, Boolean.class));
 		if (!enabled) {
 			affectedTasks.forEach(type -> evictTask(account.getId(), type));
+			if (affectedTasks.contains(TpDailyTaskEnum.BEAR_TRAP)) {
+				queue.applyProfileUpdate(account);
+				queue.revokeBearOwnership("Bear participation disabled");
+			}
 			return;
 		}
 

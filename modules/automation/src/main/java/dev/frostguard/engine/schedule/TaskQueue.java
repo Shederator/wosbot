@@ -1502,6 +1502,51 @@ public class TaskQueue {
         DeviceReleaseGuard.unregister(profile.getEmulatorNumber(), deviceOwnership);
     }
 
+    /**
+     * Explicit operator revocation (Bear participation or the profile was disabled): stop a
+     * running Bear session now, release the event lease and device pin, and queue a cleanup-only
+     * finalization that restores normal work without any Bear strategy input.
+     *
+     * @return whether Bear owned the profile and was revoked
+     */
+    public boolean revokeBearOwnership(String reason) {
+        boolean leased = BearTrapSessionLease.active(profile.getId()).isPresent();
+        boolean durable = BearRecoveryFinalization.deadline(profile).isPresent()
+                || BearSessionCheckpoint.load(profile).isPresent();
+        if (!leased && !durable) {
+            return false;
+        }
+        ExecutionContext running = runningContext;
+        if (running != null && running.getTask() != null
+                && running.getTask().getTpTask() == TpDailyTaskEnum.BEAR_TRAP) {
+            running.cancel();
+        }
+        BearTrapSessionLease.releaseForQueueStop(profile.getId());
+        if (!BearRecoveryFinalization.arm(profile, Instant.now())) {
+            emitError("Bear ownership revoked (" + reason + ") but its cleanup-only finalizer "
+                    + "could not be persisted");
+            return true;
+        }
+        queueBearCleanupNow();
+        emitWarn("Bear ownership revoked by the operator (" + reason + "); session stopped, device "
+                + "released, cleanup-only finalization queued");
+        return true;
+    }
+
+    private synchronized void queueBearCleanupNow() {
+        DelayedTask ref = createTask(TpDailyTaskEnum.BEAR_TRAP);
+        if (ref == null) {
+            emitError("Bear cleanup-only finalization could not be queued: task not registered");
+            return;
+        }
+        DelayedTask queued = taskBacklog.stream().filter(ref::equals).findFirst().orElse(ref);
+        taskBacklog.remove(queued);
+        queued.setProfile(profile);
+        queued.setRecurring(true);
+        queued.reschedule(LocalDateTime.now());
+        taskBacklog.offer(queued);
+    }
+
     boolean restoreDurableBearOwnershipOnStart() {
         Instant now = Instant.now();
         if (BearTrapSessionLease.active(profile.getId()).isPresent()

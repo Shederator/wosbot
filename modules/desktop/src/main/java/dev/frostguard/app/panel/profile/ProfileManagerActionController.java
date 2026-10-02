@@ -149,7 +149,11 @@ public class ProfileManagerActionController implements ProfileStatusChangeListen
 	}
 
 	public boolean saveProfile(ProfileAux currentProfile) {
-		return iModel.saveProfile(toDescriptor(currentProfile));
+		boolean saved = iModel.saveProfile(toDescriptor(currentProfile));
+		if (saved && !currentProfile.isEnabled()) {
+			runtimeController.revokeBearOwnership(currentProfile.getId());
+		}
+		return saved;
 	}
 
 	public boolean saveProfileSetting(Long profileId, ConfigurationKeyEnum key, String value) {
@@ -235,6 +239,9 @@ public class ProfileManagerActionController implements ProfileStatusChangeListen
 		Set<Long> activeQueueIds();
 
 		void pauseQueue(Long profileId);
+
+		/** Stops an active Bear session of a profile the operator disabled. */
+		void revokeBearOwnership(Long profileId);
 	}
 
 	private static final class ScheduleProfileRuntimeController implements ProfileRuntimeController {
@@ -249,6 +256,11 @@ public class ProfileManagerActionController implements ProfileStatusChangeListen
 		@Override
 		public void pauseQueue(Long profileId) {
 			ScheduleService.obtain().suspendAccountQueue(profileId);
+		}
+
+		@Override
+		public void revokeBearOwnership(Long profileId) {
+			ScheduleService.obtain().revokeBearOwnership(profileId, "profile disabled");
 		}
 	}
 

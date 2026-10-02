@@ -3,8 +3,26 @@
 ## Confirmed event mechanics
 
 One protected scheduler lease owns the full configured 30-minute event. Normal tasks do not run
-until terminal cleanup is verified. Manual Run Now replaces a pending protected retry; disabling a
-profile prevents a new session but does not silently erase an active recovery checkpoint.
+until terminal cleanup is verified. Manual Run Now replaces a pending protected retry.
+
+Ownership rules while the event is active:
+
+- The acquired lease, not the editable schedule, decides activation and end. Editing the schedule
+  during the event cannot defer, move, or end the session.
+- No recovery directive reschedules Bear later than 30 seconds while the event is active. An
+  exhausted budget or an operator-action failure raises an alert and keeps retrying; the armed
+  finalizer restores normal work only after the event end.
+- Durable state is cleared only after the event end. A normal return before the end keeps it and
+  resumes inside the window.
+- An unexpired finalizer or checkpoint is ownership after a restart or crash: the restarted queue
+  queues Bear immediately and the emulator stays pinned.
+- While any profile owns the event on an emulator, automatic release is refused: idle suspension,
+  the session cap, cooldown force-stop, failed idle-wake slot release, character-switch close, and
+  ADB-exhaustion relaunch. User-initiated stop, close, and reboot remain allowed.
+- Bear performs no inherited blind navigation; a missing game process is a protected app restart.
+- Disabling Bear participation or the profile is an explicit revocation: a running session is
+  cancelled, the lease and device pin are released, and a cleanup-only finalization restores normal
+  work without any Bear input. A profile disabled before restart is not resumed.
 
 The bot's own rally uses the Special march. Its exact expected return is:
 
