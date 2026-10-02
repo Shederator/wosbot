@@ -18,6 +18,7 @@ import dev.frostguard.api.runtime.WorkspacePaths;
 import dev.frostguard.api.runtime.WorkspaceSession;
 import dev.frostguard.engine.emulator.AndroidFrameStream;
 import dev.frostguard.engine.error.BearSessionExecutionException;
+import dev.frostguard.engine.error.StopExecutionException;
 import dev.frostguard.vision.match.OpenCvPatternLocator;
 import java.io.IOException;
 import java.time.Instant;
@@ -61,6 +62,21 @@ class BearSessionDriverTest {
         assertThrows(BearSessionExecutionException.class,
                 () -> player.cleanup(BearSessionCoordinator.ExitReason.EVENT_ENDED, true),
                 "a normal session must verify the terminal UI before resuming normal work");
+    }
+
+    @Test
+    void aCancelledObserveOnlySessionStopsInsteadOfHoldingTheWorker() {
+        ScriptedBear bear = new ScriptedBear(WORLD_WITH_BEAR);
+        bear.getProfile().setConfig(ConfigurationKeyEnum.BEAR_TRAP_OBSERVE_ONLY_BOOL, true);
+        BearTrapRoutine.LiveBearSessionDriver driver = bear.driver();
+        bear.cancelled = true;
+
+        long started = System.nanoTime();
+        BearSessionCoordinator.ExitReason exit = driver.observeOnlyUntil(Instant.now().plusSeconds(5));
+
+        assertEquals(BearSessionCoordinator.ExitReason.CANCELLED, exit);
+        assertTrue((System.nanoTime() - started) / 1_000_000L < 3_000,
+                "a revoked observe-only session must not run until the event ends");
     }
 
     @Test
@@ -133,6 +149,7 @@ class BearSessionDriverTest {
     private static final class ScriptedBear extends BearTrapRoutine {
 
         private volatile Set<TemplatesEnum> visible;
+        private volatile boolean cancelled;
         private volatile Set<TemplatesEnum> pending;
         private int classifications;
         private int switchAfter = Integer.MAX_VALUE;
@@ -147,6 +164,13 @@ class BearSessionDriverTest {
 
         BearTrapRoutine.LiveBearSessionDriver driver() {
             return new LiveBearSessionDriver(Instant.now().plusSeconds(1_200), null);
+        }
+
+        @Override
+        protected void checkPreemption() {
+            if (cancelled) {
+                throw new StopExecutionException("operator revoked Bear", StopExecutionException.Reason.USER_CANCELLED);
+            }
         }
 
         @Override

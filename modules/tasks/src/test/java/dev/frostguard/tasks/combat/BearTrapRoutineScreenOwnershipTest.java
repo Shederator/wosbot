@@ -5,19 +5,25 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
+import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
+import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.runtime.WorkspacePaths;
 import dev.frostguard.api.runtime.WorkspaceSession;
 import dev.frostguard.engine.error.BearSessionExecutionException;
 import dev.frostguard.engine.helper.NavigationHelper;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.vision.match.OpenCvPatternLocator;
+import java.awt.image.BufferedImage;
+import javax.imageio.ImageIO;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -98,6 +104,47 @@ class BearTrapRoutineScreenOwnershipTest {
 
         bear.getProfile().setConfig(ConfigurationKeyEnum.BEAR_TRAP_OBSERVE_ONLY_BOOL, true);
         assertTrue(!bear.verifiesTerminalUi(true), "observe-only cleanup must not send input");
+    }
+
+    @Test
+    void theProductionMatcherUsesTheEmulatorMatcherAtTheClassifierThreshold() throws Exception {
+        try {
+            OpenCvPatternLocator.loadNativeLibrary();
+        } catch (UnsatisfiedLinkError alreadyLoaded) {
+            // Another frame test may already have loaded OpenCV in this JVM.
+        }
+        BufferedImage template = ImageIO.read(BearTrapRoutineScreenOwnershipTest.class.getResource(
+                TemplatesEnum.GAME_HOME_WORLD.resourcePath()));
+        BufferedImage screen = new BufferedImage(720, 1280, BufferedImage.TYPE_INT_ARGB);
+        screen.createGraphics().drawImage(template, 300, 900, null);
+        BearFrameClassifier.TemplateMatcher matcher = new RecordingBear(true).templateMatcher();
+
+        assertTrue(matcher.found(rgba(screen), TemplatesEnum.GAME_HOME_WORLD, 90),
+                "the shipped World template is found where it is drawn");
+        BufferedImage noise = new BufferedImage(720, 1280, BufferedImage.TYPE_INT_ARGB);
+        Random random = new Random(7);
+        for (int y = 0; y < noise.getHeight(); y++) {
+            for (int x = 0; x < noise.getWidth(); x++) {
+                noise.setRGB(x, y, 0xFF000000 | random.nextInt(0x1000000));
+            }
+        }
+        assertTrue(!matcher.found(rgba(noise), TemplatesEnum.GAME_HOME_WORLD, 90),
+                "an unrelated frame must not match the World root at the classifier threshold");
+    }
+
+    private static RawImageData rgba(BufferedImage image) {
+        byte[] pixels = new byte[image.getWidth() * image.getHeight() * 4];
+        for (int y = 0; y < image.getHeight(); y++) {
+            for (int x = 0; x < image.getWidth(); x++) {
+                int argb = image.getRGB(x, y);
+                int offset = (y * image.getWidth() + x) * 4;
+                pixels[offset] = (byte) (argb >> 16);
+                pixels[offset + 1] = (byte) (argb >> 8);
+                pixels[offset + 2] = (byte) argb;
+                pixels[offset + 3] = (byte) 255;
+            }
+        }
+        return RawImageData.capture(pixels, image.getWidth(), image.getHeight(), 32);
     }
 
     private static final class RecordingBear extends BearTrapRoutine {
