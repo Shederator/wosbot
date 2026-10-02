@@ -1,12 +1,14 @@
 package dev.frostguard.tasks.events;
 
 import java.time.LocalDateTime;
+import java.time.Clock;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.data.entity.DailyTask;
 import dev.frostguard.data.repository.DailyTaskRepository;
+import dev.frostguard.data.repository.TaskFailureStreakRepository;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
@@ -14,7 +16,7 @@ import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
-import dev.frostguard.api.domain.OcrSettingsData;
+import dev.frostguard.vision.convert.ImageConverter;
 import dev.frostguard.engine.service.TaskManagementService;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
@@ -23,8 +25,7 @@ import dev.frostguard.engine.helper.NavigationHelper.EventMenuOpenResult;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.helper.DeploymentHelper;
 import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
-
-import java.awt.Color;
+import dev.frostguard.tasks.diagnostics.TaskControlSignals;
 
 public class HeroMissionEventRoutine extends DelayedTask {
     private final int refreshStaminaLevel = 180;
@@ -34,7 +35,7 @@ public class HeroMissionEventRoutine extends DelayedTask {
     private int flagNumber = 0;
     private boolean useFlag = false;
     private boolean bearProtectionDeferred = false;
-    private final EventMenuRetryState menuRetry = new EventMenuRetryState();
+    private HeroMissionVisitBudget visitBudget;
 
     public HeroMissionEventRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
         super(profile, tpTask);
@@ -43,6 +44,10 @@ public class HeroMissionEventRoutine extends DelayedTask {
     @Override
     protected void execute() {
         bearProtectionDeferred = false;
+
+        if (deferIfVisitBudgetExhausted()) {
+            return;
+        }
 
         flagNumber = profile.getConfig(ConfigurationKeyEnum.HERO_MISSION_FLAG_INT, Integer.class);
         useFlag = flagNumber > 0;
@@ -72,28 +77,21 @@ public class HeroMissionEventRoutine extends DelayedTask {
         if (!staminaHelper.checkStaminaAndMarchesOrReschedule(minStaminaLevel, refreshStaminaLevel, this))
             return;
 
-        boolean tabWasAbsent = false;
-        int attempt = 0;
-        while (attempt < 2) {
-            EventMenuOpenResult opened = openHeroMenu();
-            if (opened == EventMenuOpenResult.REACHED) {
-                menuRetry.found();
-                logInfo("Successfully navigated to Hero's Mission event.");
-                sleepTask(500);
-                handleHeroMissionEvent();
-                return;
-            }
+        EventMenuOpenResult opened = openHeroMenu();
+        if (opened != EventMenuOpenResult.REACHED) {
+            respondToMenu(opened);
             if (opened == EventMenuOpenResult.TAB_ABSENT) {
-                tabWasAbsent = true;
+                sleepTask(300);
+                pressBack();
             }
-
-            logDebug("Failed to navigate to Hero's Mission event. Attempt " + (attempt + 1) + "/2.");
-            sleepTask(300);
-            pressBack();
-            attempt++;
+            return;
         }
-
-        respondToMenu(tabWasAbsent ? EventMenuOpenResult.TAB_ABSENT : EventMenuOpenResult.PANEL_CLOSED);
+        if (!respondToMenu(opened)) {
+            return;
+        }
+        logInfo("Successfully navigated to Hero's Mission event.");
+        sleepTask(500);
+        handleHeroMissionEvent();
     }
 
     EventMenuOpenResult openHeroMenu() {
@@ -110,42 +108,50 @@ public class HeroMissionEventRoutine extends DelayedTask {
         return opened;
     }
 
-    void respondToMenu(EventMenuOpenResult opened) {
+    boolean respondToMenu(EventMenuOpenResult opened) {
         if (opened == EventMenuOpenResult.REACHED) {
-            menuRetry.found();
-            return;
+            try {
+                visitBudget().succeeded(HeroMissionVisitBudget.FailureKind.NAVIGATION);
+                return true;
+            } catch (RuntimeException failure) {
+                return deferForBudgetFailure(failure);
+            }
         }
-        if (opened == EventMenuOpenResult.PANEL_CLOSED) {
-            LocalDateTime retryAt = EventPeriodVisit.retryAt(LocalDateTime.now());
-            logWarning("Events panel did not open. Retrying at " + retryAt.format(DATETIME_FORMATTER) + "; "
-                    + diagnosticSnapshot("event-panel") + ".");
-            reschedule(retryAt);
-            return;
+        HeroMissionVisitBudget.Decision decision;
+        try {
+            decision = visitBudget().recordFailure(HeroMissionVisitBudget.FailureKind.NAVIGATION);
+        } catch (RuntimeException failure) {
+            return deferForBudgetFailure(failure);
         }
-
-        EventMenuRetryState.Choice choice = menuRetry.choose(LocalDateTime.now(), GameTimeUtils.dailyResetTime());
-        String snapshot = diagnosticSnapshot("event-navigation");
-        if (!choice.resting()) {
-            logWarning("Hero's Mission tab was not in view. One more menu visit at "
-                    + choice.at().format(DATETIME_FORMATTER) + "; " + snapshot + ".");
-        } else {
-            logWarning("Hero's Mission tab was still not in view after the extra menu visit. Next visit at "
-                    + choice.at().format(DATETIME_FORMATTER) + "; event was not completed; " + snapshot + ".");
-        }
-        reschedule(choice.at());
+        String reason = opened == EventMenuOpenResult.PANEL_CLOSED
+                ? "Events panel did not open" : "Hero's Mission tab was not in view";
+        String snapshot = decision.exhausted()
+                ? "; " + diagnosticSnapshot(opened == EventMenuOpenResult.PANEL_CLOSED
+                        ? "event-panel" : "event-navigation")
+                : "";
+        logWarning(reason + "; navigation attempt " + decision.attempt() + "/3; next visit at "
+                + decision.nextVisit().format(DATETIME_FORMATTER) + snapshot + ".");
+        reschedule(decision.nextVisit());
+        return false;
     }
 
     private void handleHeroMissionEvent() {
-        ReaperAvailabilityResult reaperStatus = reapersAvailable();
+        HeroMissionProgressBar.State progress = readProgressBar();
 
-        if (reaperStatus.isOcrError()) {
-            logWarning("OCR error while checking reaper availability. Retrying in 5 minutes.");
-            reschedule(LocalDateTime.now().plusMinutes(5));
+        if (progress == HeroMissionProgressBar.State.UNKNOWN) {
+            respondToProgressFailure();
             return;
         }
 
-        if (!reaperStatus.isAvailable()) {
-            logInfo("No reapers available. Rescheduling task for next reset.");
+        try {
+            visitBudget().succeeded(HeroMissionVisitBudget.FailureKind.PROGRESS);
+        } catch (RuntimeException failure) {
+            deferForBudgetFailure(failure);
+            return;
+        }
+
+        if (progress == HeroMissionProgressBar.State.COMPLETE) {
+            logInfo("Hero's Mission progress bar reaches the final reward; rescheduling for next reset.");
             reschedule(GameTimeUtils.dailyResetTime());
             return;
         }
@@ -192,6 +198,56 @@ public class HeroMissionEventRoutine extends DelayedTask {
 
     String diagnosticSnapshot(String control) {
         return TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "heromission", control);
+    }
+
+    HeroMissionVisitBudget visitBudget() {
+        if (visitBudget == null) {
+            visitBudget = new HeroMissionVisitBudget(
+                    TaskFailureStreakRepository.getRepository(), profile.getId(), Clock.systemDefaultZone());
+        }
+        return visitBudget;
+    }
+
+    private boolean deferIfVisitBudgetExhausted() {
+        try {
+            for (HeroMissionVisitBudget.FailureKind kind : HeroMissionVisitBudget.FailureKind.values()) {
+                if (visitBudget().exhausted(kind)) {
+                    LocalDateTime reset = visitBudget().nextResetAt();
+                    logWarning("Hero's Mission " + kind + " visit budget exhausted; next visit after reset at "
+                            + reset.format(DATETIME_FORMATTER) + ".");
+                    reschedule(reset);
+                    return true;
+                }
+            }
+            return false;
+        } catch (RuntimeException failure) {
+            deferForBudgetFailure(failure);
+            return true;
+        }
+    }
+
+    private boolean deferForBudgetFailure(RuntimeException failure) {
+        TaskControlSignals.rethrowControlSignal(failure);
+        LocalDateTime reset = GameTimeUtils.dailyResetTime();
+        logError("Hero's Mission visit counter could not be persisted ("
+                + failure.getClass().getSimpleName() + "); next visit after reset at "
+                + reset.format(DATETIME_FORMATTER) + ".", failure);
+        reschedule(reset);
+        return false;
+    }
+
+    void respondToProgressFailure() {
+        HeroMissionVisitBudget.Decision decision;
+        try {
+            decision = visitBudget().recordFailure(HeroMissionVisitBudget.FailureKind.PROGRESS);
+        } catch (RuntimeException failure) {
+            deferForBudgetFailure(failure);
+            return;
+        }
+        String snapshot = decision.exhausted() ? "; " + diagnosticSnapshot("progress-bar-unknown") : "";
+        logWarning("Hero's Mission progress bar was unreadable; progress attempt " + decision.attempt()
+                + "/3; next visit at " + decision.nextVisit().format(DATETIME_FORMATTER) + snapshot + ".");
+        reschedule(decision.nextVisit());
     }
 
     void scheduleMissingControlRetry(String control) {
@@ -340,34 +396,11 @@ public class HeroMissionEventRoutine extends DelayedTask {
 
     }
 
-    private ReaperAvailabilityResult reapersAvailable() {
-        OcrSettingsData settingsRallied = OcrSettingsData.assembler()
-
-                .stripBackground(true)
-                .setTextColor(new Color(254, 254, 254)) // White text
-                .charWhitelist("0123456789") // Only allow digits
-                .build();
-
-        // Limited mode: Check how many reapers have been rallied
-        Integer reapersRallied = readNumberValue(
-                new PointData(68, 1062),
-                new PointData(125, 1093),
-                settingsRallied);
-
-        if (reapersRallied == null) {
-            logWarning("Failed to parse reapers rallied count via OCR: '" + reapersRallied + "'");
-            sleepTask(500);
-            return ReaperAvailabilityResult.OCR_ERROR_RALLIED_COUNT;
-        }
-
-        logInfo("Reapers rallied until now: " + reapersRallied);
-        sleepTask(500);
-
-        if (reapersRallied < 10) {
-            return ReaperAvailabilityResult.AVAILABLE;
-        } else {
-            return ReaperAvailabilityResult.UNAVAILABLE;
-        }
+    private HeroMissionProgressBar.State readProgressBar() {
+        var frame = ImageConverter.toBufferedImage(emuManager.captureScreen(EMULATOR_NUMBER));
+        HeroMissionProgressBar.State state = HeroMissionProgressBar.read(frame);
+        logInfo("Hero's Mission progress bar state: " + state + ".");
+        return state;
     }
 
     @Override
@@ -378,40 +411,6 @@ public class HeroMissionEventRoutine extends DelayedTask {
     @Override
     protected boolean consumesStamina() {
         return true;
-    }
-
-    /**
-     * Represents the result of checking reaper availability
-     */
-    public enum ReaperAvailabilityResult {
-        /**
-         * Reapers are available (< 10 rallied)
-         */
-        AVAILABLE,
-
-        /**
-         * No reapers available (>= 10 rallied)
-         */
-        UNAVAILABLE,
-
-        /**
-         * Failed to read the OCR value for reapers rallied count
-         */
-        OCR_ERROR_RALLIED_COUNT;
-
-        /**
-         * Convenience method to check if reapers are available
-         */
-        public boolean isAvailable() {
-            return this == AVAILABLE;
-        }
-
-        /**
-         * Convenience method to check if result is an OCR error
-         */
-        public boolean isOcrError() {
-            return this == OCR_ERROR_RALLIED_COUNT;
-        }
     }
 
 }

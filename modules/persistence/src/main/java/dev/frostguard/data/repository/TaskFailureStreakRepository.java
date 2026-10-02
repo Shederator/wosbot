@@ -6,7 +6,9 @@ import dev.frostguard.data.entity.TaskFailureStreak;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 public class TaskFailureStreakRepository {
 
@@ -33,6 +35,12 @@ public class TaskFailureStreakRepository {
 
     public TaskFailureStreakData recordFailure(
             long profileId, String taskKey, String signature, LocalDateTime failedAt) {
+        return recordFailureSince(profileId, taskKey, signature, failedAt, null);
+    }
+
+    public TaskFailureStreakData recordFailureSince(
+            long profileId, String taskKey, String signature, LocalDateTime failedAt,
+            LocalDateTime resetBoundary) {
         return store.withinTransaction(entityManager -> {
             List<String> matches = entityManager.createQuery(
                             "SELECT s.id FROM TaskFailureStreak s "
@@ -47,11 +55,21 @@ public class TaskFailureStreakRepository {
                 entityManager.persist(streak);
             } else {
                 streak = entityManager.find(TaskFailureStreak.class, matches.getFirst());
-                streak.record(signature, failedAt);
+                streak.record(signature, failedAt, resetBoundary);
             }
             entityManager.flush();
             return streak.toData();
         });
+    }
+
+    public Optional<TaskFailureStreakData> find(long profileId, String taskKey) {
+        return store.executeQuery(
+                        "SELECT s FROM TaskFailureStreak s WHERE s.profileId = :profileId AND s.taskKey = :taskKey",
+                        TaskFailureStreak.class,
+                        Map.of("profileId", profileId, "taskKey", taskKey))
+                .stream()
+                .findFirst()
+                .map(TaskFailureStreak::toData);
     }
 
     public boolean clear(long profileId, String taskKey) {
