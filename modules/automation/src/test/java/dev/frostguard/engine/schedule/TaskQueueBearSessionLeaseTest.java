@@ -637,6 +637,24 @@ class TaskQueueBearSessionLeaseTest {
         return (LocalDateTime) origin.get(queue);
     }
 
+    @Test
+    void expiredSessionWithoutALeaseFinalizesInsteadOfRetryingForever() {
+        AccountDescriptor profile = new AccountDescriptor(
+                null, "Bear expired cleanup " + UUID.randomUUID(), "0", true, 100L, 30L);
+        assertTrue(ProfileService.obtain().createAccount(profile));
+        assertTrue(ConfigService.obtain().writeAccountSetting(profile, BEAR_TRAP_EVENT_BOOL, "true"));
+        Instant endedAt = Instant.now().minusSeconds(120);
+        assertTrue(BearSessionCheckpoint.open(profile, endedAt));
+        RecordingQueue queue = new RecordingQueue(reload(profile.getId()));
+        RecordingBearTask bear = new RecordingBearTask(reload(profile.getId()));
+
+        assertTrue(queue.executeTask(bear), "an ended session must finalize, not be refused");
+
+        assertEquals(0, bear.executionCount, "finalization performs no Bear strategy input");
+        assertTrue(BearSessionCheckpoint.load(reload(profile.getId())).isEmpty());
+        assertTrue(BearRecoveryFinalization.deadline(reload(profile.getId())).isEmpty());
+    }
+
     private static AccountDescriptor reload(Long profileId) {
         return ProfileService.obtain().fetchAllAccounts().stream()
                 .filter(candidate -> profileId.equals(candidate.getId()))

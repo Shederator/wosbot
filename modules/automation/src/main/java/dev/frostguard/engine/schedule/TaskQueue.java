@@ -733,6 +733,9 @@ public class TaskQueue {
         if (task.getTpTask() == TpDailyTaskEnum.BEAR_TRAP) {
             Optional<BearTrapSessionLease.Lease> acquiredLease =
                     BearTrapSessionLease.acquireForBearExecution(profile);
+            if (acquiredLease.isEmpty() && finalizeEndedBearSession(task)) {
+                return true;
+            }
             if (acquiredLease.isEmpty()) {
                 task.setRecurring(true);
                 task.reschedule(LocalDateTime.now().plusSeconds(30));
@@ -1080,6 +1083,25 @@ public class TaskQueue {
     private static long bearInWindowRetrySeconds(BearTrapSessionLease.Lease lease) {
         long untilEnd = Duration.between(Instant.now(), lease.eventEnd()).getSeconds();
         return Math.max(1L, Math.min(BEAR_IN_WINDOW_RETRY_CAP_SECONDS, untilEnd));
+    }
+
+    /**
+     * A session whose event already ended has no lease to acquire. Hand it to the finalizer
+     * instead of refusing every retry until the next window.
+     */
+    private boolean finalizeEndedBearSession(DelayedTask task) {
+        Instant now = Instant.now();
+        Optional<Instant> endedAt = BearSessionCheckpoint.load(profile)
+                .map(BearSessionCheckpoint.Checkpoint::eventEnd)
+                .filter(end -> !now.isBefore(end));
+        if (endedAt.isEmpty() || BearRecoveryFinalization.deadline(profile).isPresent()) {
+            return false;
+        }
+        if (!BearRecoveryFinalization.arm(profile, endedAt.get())) {
+            emitErrorTask(task, "Ended Bear session could not arm its finalizer");
+            return false;
+        }
+        return finalizeBearRecoveryIfDue(task, now);
     }
 
     boolean finalizeBearRecoveryIfDue(DelayedTask task, Instant now) {
