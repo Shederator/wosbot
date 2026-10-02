@@ -182,6 +182,12 @@ public abstract class EmulatorInstance {
         // Phase 2: emulator restart
         if (Thread.currentThread().isInterrupted())
             throw new ADBConnectionException("Interrupted before recovery for " + tag);
+        if (DeviceReleaseGuard.isProtected(idx)) {
+            // The protected owner has its own bounded device recovery; relaunching here would
+            // close the emulator underneath it.
+            throw new ADBConnectionException("Exhausted retries for " + tag + " on " + idx
+                    + "; emulator relaunch refused while the device is protected");
+        }
         LOG.warn("Recovering emulator for {} on dev {}", tag, idx);
         try { closeEmulator(idx); sleep(5000); launchEmulator(idx); sleep(15000); }
         catch (Exception e) { throw new ADBConnectionException("Recovery failed for " + tag, e); }

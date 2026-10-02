@@ -10,6 +10,7 @@ import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.OcrSettingsData;
+import dev.frostguard.engine.emulator.DeviceReleaseGuard;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.nav.CommonGameAreas;
@@ -94,6 +95,10 @@ public class CharacterSwitchHelper {
             cancelSwitch();
         }
         // Changed by pernerch | Date: 2026-07-02 | Why: close emulator only as final fallback after repeated switch failure.
+        if (DeviceReleaseGuard.isProtected(dev)) {
+            log.error("Character not found after 3 passes — emulator kept open for an active Bear event");
+            return false;
+        }
         log.error("Character not found after 3 passes — closing emulator");
         emu.closeEmulator(dev); return false;
     }

@@ -16,6 +16,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +33,7 @@ import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.ProfileStatusData;
 import dev.frostguard.api.domain.TaskQueueStatusData;
 import dev.frostguard.api.domain.TaskStateData;
+import dev.frostguard.engine.emulator.DeviceReleaseGuard;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.emulator.QueuePositionListener;
 import dev.frostguard.engine.error.ADBConnectionException;
@@ -85,6 +87,7 @@ public class TaskQueue {
     private volatile AccountDescriptor profile;
     private volatile ExecutionContext   runningContext;
     private volatile LocalDateTime      sessionOrigin;
+    private final BooleanSupplier deviceOwnership = () -> hasProtectedBearOwnership(Instant.now());
     private volatile String             profileCooldownStatus;
     // Changed by pernerch | Date: 2026-07-04 | Why: ensure first startup cycle runs Initialize regardless of idle heuristics.
     private volatile boolean    forceInitialInitialize = true;
@@ -339,12 +342,14 @@ public class TaskQueue {
         idleWakeInitializationPending = false;
         idleWakeInitializationForceNow = false;
         statusModel.setRunning(true);
+        registerDeviceProtection();
         restoreDurableBearOwnershipOnStart();
         executor.start(this::mainLoop, "TaskQueue-" + profile.getName());
     }
 
     public void requestStop() {
         shuttingDown = true;
+        unregisterDeviceProtection();
         statusModel.setRunning(false);
         sessionOrigin = null;
         boolean durableBearHandoff = BearTrapSessionLease.active(profile.getId())
@@ -583,7 +588,7 @@ public class TaskQueue {
             statusModel.setIdleTimeExceeded(false);
         } else if (!statusModel.isPaused()) {
             deferFailedIdleWakeInitialize(initialize);
-            if (!requiresSlotAcquisition(sessionOrigin)) {
+            if (!requiresSlotAcquisition(sessionOrigin) && deviceReleaseAllowed()) {
                 try {
                     releaseActiveSlotLease();
                 } catch (RuntimeException ex) {
@@ -1186,8 +1191,12 @@ public class TaskQueue {
         profileCooldownStatus = (immediatelyActionRequired ? "ACTION REQUIRED - " : "COOLDOWN - ")
                 + cooldown.getMessage() + " - retry " + retryAt.format(TS_FMT);
 
-        boolean gameStopped = stopBlockedGameProcess(task);
-        boolean slotReleased = releaseBlockedProfileSlot(task);
+        boolean releaseAllowed = deviceReleaseAllowed();
+        if (!releaseAllowed) {
+            emitWarnTask(task, "Cooldown kept the game and emulator slot: Bear owns the device");
+        }
+        boolean gameStopped = releaseAllowed && stopBlockedGameProcess(task);
+        boolean slotReleased = releaseAllowed && releaseBlockedProfileSlot(task);
         emitInfoTask(task, "Cooldown resources settled: gameStopped=" + gameStopped
                 + ", slotReleased=" + slotReleased
                 + ", retryAt=" + retryAt.format(TS_FMT));
@@ -1440,7 +1449,7 @@ public class TaskQueue {
     }
 
     private void suspendDevice(LocalDateTime until, boolean freeSlot) {
-        if (hasProtectedBearOwnership(Instant.now())) {
+        if (!deviceReleaseAllowed()) {
             emitWarn("Refused device suspension while Bear owns the active event window");
             statusModel.setIdleTimeExceeded(false);
             return;
@@ -1473,6 +1482,23 @@ public class TaskQueue {
                 .isPresent();
     }
 
+    /**
+     * Whether automatic paths may close, background, or hand over this profile's emulator. Any
+     * profile sharing the emulator can veto it while it owns an active Bear event.
+     */
+    boolean deviceReleaseAllowed() {
+        return !hasProtectedBearOwnership(Instant.now())
+                && !DeviceReleaseGuard.isProtected(profile.getEmulatorNumber());
+    }
+
+    void registerDeviceProtection() {
+        DeviceReleaseGuard.register(profile.getEmulatorNumber(), deviceOwnership);
+    }
+
+    void unregisterDeviceProtection() {
+        DeviceReleaseGuard.unregister(profile.getEmulatorNumber(), deviceOwnership);
+    }
+
     boolean restoreDurableBearOwnershipOnStart() {
         Instant now = Instant.now();
         if (BearTrapSessionLease.active(profile.getId()).isPresent()
@@ -1484,8 +1510,9 @@ public class TaskQueue {
         return true;
     }
 
-    private boolean enforceSessionCap() {
+    boolean enforceSessionCap() {
         if (runningContext != null || sessionOrigin == null) return false;
+        if (!deviceReleaseAllowed()) return false;
         if (!resolveIdleBehavior().requiresIdleTimeout()) return false;
         Map<String,String> cfg = ConfigService.obtain().loadGlobalSettings();
         boolean on = Boolean.parseBoolean(Optional.ofNullable(cfg)

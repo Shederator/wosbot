@@ -6,10 +6,13 @@ import static dev.frostguard.api.configs.ConfigurationKeyEnum.BEAR_TRAP_PREPARAT
 import static dev.frostguard.api.configs.ConfigurationKeyEnum.BEAR_TRAP_SCHEDULE_DATETIME_STRING;
 import static dev.frostguard.api.configs.ConfigurationKeyEnum.GATHER_TASK_BOOL;
 import static dev.frostguard.api.configs.ConfigurationKeyEnum.ALLIANCE_AUTOJOIN_BOOL;
+import static dev.frostguard.api.configs.ConfigurationKeyEnum.PROFILE_MAX_ACTIVE_TIME_ENABLED_BOOL;
+import static dev.frostguard.api.configs.ConfigurationKeyEnum.PROFILE_MAX_ACTIVE_TIME_MINUTES_INT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.lang.reflect.Field;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -440,6 +443,46 @@ class TaskQueueBearSessionLeaseTest {
         assertTrue(bear.isRecurring());
         assertFalse(bear.getScheduled().isAfter(LocalDateTime.now().plusSeconds(31)),
                 "Bear must retry inside the window, not at " + bear.getScheduled());
+    }
+
+    @Test
+    void protectedBearRefusesTheSessionCapInsteadOfForcingIdle() throws Exception {
+        AccountDescriptor profile = configuredActiveProfile("Bear session cap ");
+        configuredActiveProfile("Bear session cap sibling ");
+        assertTrue(ConfigService.obtain().writeGlobalSetting(PROFILE_MAX_ACTIVE_TIME_ENABLED_BOOL, "true"));
+        assertTrue(ConfigService.obtain().writeGlobalSetting(PROFILE_MAX_ACTIVE_TIME_MINUTES_INT, "1"));
+        try {
+            RecordingQueue queue = new RecordingQueue(profile);
+            BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+            Field origin = TaskQueue.class.getDeclaredField("sessionOrigin");
+            origin.setAccessible(true);
+            origin.set(queue, LocalDateTime.now().minusMinutes(10));
+
+            assertFalse(queue.enforceSessionCap(), "the cap must not force idle during Bear ownership");
+            assertFalse(queue.deviceReleaseAllowed());
+        } finally {
+            ConfigService.obtain().writeGlobalSetting(PROFILE_MAX_ACTIVE_TIME_ENABLED_BOOL,
+                    PROFILE_MAX_ACTIVE_TIME_ENABLED_BOOL.getDefaultValue());
+        }
+    }
+
+    @Test
+    void siblingQueueOnTheSameEmulatorCannotReleaseTheBearDevice() {
+        AccountDescriptor bearProfile = configuredActiveProfile("Bear device owner ");
+        AccountDescriptor sibling = new AccountDescriptor(
+                null, "Bear device sibling " + UUID.randomUUID(), "0", true, 100L, 30L);
+        assertTrue(ProfileService.obtain().createAccount(sibling));
+        RecordingQueue bearQueue = new RecordingQueue(bearProfile);
+        RecordingQueue siblingQueue = new RecordingQueue(sibling);
+        BearTrapSessionLease.acquireForBearExecution(bearProfile).orElseThrow();
+        bearQueue.registerDeviceProtection();
+        try {
+            assertFalse(siblingQueue.deviceReleaseAllowed(),
+                    "a sibling profile must not close or background the emulator Bear owns");
+        } finally {
+            bearQueue.unregisterDeviceProtection();
+        }
+        assertTrue(siblingQueue.deviceReleaseAllowed());
     }
 
     private static AccountDescriptor reload(Long profileId) {
