@@ -33,6 +33,11 @@ budget and must be measured on the supported setup.
 - The War-list close-cross search area (`CommonGameAreas.BEAR_WAR_LIST_CLOSE_SEARCH_AREA`).
 - Template thresholds and full-frame search cost: live classification measured 1.5–3.3 s, longer
   than the one-second authorization budget.
+- Join and scroll authorization re-locate a row by an exact crop fingerprint taken from a different
+  frame. Lossy H.264 frames and static-screen screenshots may never match exactly, which would refuse
+  every join; this needs replay of real War-list frames.
+- Labelled replay: put `<name>.h264` with a `<name>.labels` file (one expected screen per frame) under
+  `modules/tasks/src/test/resources/bear/recordings/`; `BearRecordingReplayTest` then checks them.
 
 ## Evidence already represented by production classifiers
 

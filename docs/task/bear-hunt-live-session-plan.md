@@ -10,8 +10,9 @@ Ownership rules while the event is active:
 - The acquired lease, not the editable schedule, decides activation and end. Editing the schedule
   during the event cannot defer, move, or end the session.
 - No recovery directive reschedules Bear later than 30 seconds while the event is active. An
-  exhausted budget or an operator-action failure raises an alert and keeps retrying; the armed
-  finalizer restores normal work only after the event end.
+  exhausted budget or an operator-action failure raises an alert and switches the rest of that event
+  to observe-only: the profile stays owned and recorded but sends no input. The armed finalizer
+  restores normal work and clears the switch only after the event end.
 - Durable state is cleared only after the event end. A normal return before the end keeps it and
   resumes inside the window.
 - An unexpired finalizer or checkpoint is ownership after a restart or crash: the restarted queue
@@ -94,3 +95,17 @@ These tests do not establish template/OCR accuracy. The exact remaining real-fra
 maintained in `bear-hunt-frame-evidence.md`. The work is not live-ready until those fixtures exist,
 the focused and reactor suites pass, an adversarial review finds no Bear input outside the state
 machine, and a real event validates the entire 30-minute session.
+
+Deliberate departures from the 2026-10-02 fix plan:
+
+- An unclassified screen is never answered with Back: input from an unknown state breaks the
+  transition contract. After a bounded wait, two consecutive unknown recoveries restart the game.
+- Missing templates fail the build through `TemplateResourceAvailabilityTest`, not application
+  startup, because seven non-Bear templates are already missing upstream.
+- Slot starvation is solved by sibling profiles yielding the slot to the Bear owner rather than by a
+  slot-priority change in `EmulatorController`.
+- March reads stay scheduled on the known return time: each read opens the sidebar, and the
+  event-end placeholder that made the cache stale is gone.
+- The capture journal records production classifications and timings only. The removed
+  fast-revalidation heuristic is not logged; frame-to-frame differences can be computed offline from
+  the recorded segments.
