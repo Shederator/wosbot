@@ -1,11 +1,14 @@
 package dev.frostguard.tasks.events;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.AfterAll;
@@ -86,6 +89,28 @@ class EventStripMenuVisitTest {
     }
 
     @Test
+    void completedHeroMissionClaimsFinalRewardBeforeSchedulingResetWithoutRallying() {
+        HeroProbe probe = new HeroProbe();
+        probe.progress = HeroMissionProgressBar.State.COMPLETE;
+
+        probe.handleOnce();
+
+        assertEquals(List.of("claim", "schedule"), probe.actionOrder);
+        assertEquals(probe.rest(), probe.scheduledAt());
+        assertFalse(probe.actionOrder.contains("rally"));
+    }
+
+    @Test
+    void inProgressHeroMissionClaimsRewardsThenRallies() {
+        HeroProbe probe = new HeroProbe();
+        probe.progress = HeroMissionProgressBar.State.IN_PROGRESS;
+
+        probe.handleOnce();
+
+        assertEquals(List.of("claim", "rally"), probe.actionOrder);
+    }
+
+    @Test
     void tundraTruckRetriesAMissingTabOnceThenUsesItsRestTime() {
         assertOneExtraVisitThenReset(new TundraProbe());
     }
@@ -126,6 +151,8 @@ class EventStripMenuVisitTest {
         private LocalDateTime scheduledAt;
         private String warning;
         private int menuOpenCount;
+        private HeroMissionProgressBar.State progress = HeroMissionProgressBar.State.IN_PROGRESS;
+        private final List<String> actionOrder = new ArrayList<>();
         private final HeroMissionVisitBudget budget = new HeroMissionVisitBudget(
                 new MemoryStreakRepository(), 1L, java.time.Clock.systemDefaultZone());
 
@@ -150,6 +177,26 @@ class EventStripMenuVisitTest {
 
         private void launchOnce() {
             execute();
+        }
+
+        private void handleOnce() {
+            handleHeroMissionEvent();
+        }
+
+        @Override
+        HeroMissionProgressBar.State readProgressBar() {
+            return progress;
+        }
+
+        @Override
+        void claimAllRewards() {
+            actionOrder.add("claim");
+        }
+
+        @Override
+        boolean rallyReaper() {
+            actionOrder.add("rally");
+            return true;
         }
 
         @Override
@@ -185,6 +232,7 @@ class EventStripMenuVisitTest {
 
         @Override
         public void reschedule(LocalDateTime rescheduledTime) {
+            actionOrder.add("schedule");
             scheduledAt = rescheduledTime;
         }
 

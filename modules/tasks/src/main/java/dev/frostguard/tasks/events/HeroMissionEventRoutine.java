@@ -135,7 +135,7 @@ public class HeroMissionEventRoutine extends DelayedTask {
         return false;
     }
 
-    private void handleHeroMissionEvent() {
+    void handleHeroMissionEvent() {
         HeroMissionProgressBar.State progress = readProgressBar();
 
         if (progress == HeroMissionProgressBar.State.UNKNOWN) {
@@ -150,13 +150,13 @@ public class HeroMissionEventRoutine extends DelayedTask {
             return;
         }
 
+        claimAllRewards();
         if (progress == HeroMissionProgressBar.State.COMPLETE) {
             logInfo("Hero's Mission progress bar reaches the final reward; rescheduling for next reset.");
             reschedule(GameTimeUtils.dailyResetTime());
             return;
         }
 
-        claimAllRewards();
         rallyReaper();
     }
 
@@ -369,7 +369,7 @@ public class HeroMissionEventRoutine extends DelayedTask {
         return true;
     }
 
-    private void claimAllRewards() {
+    void claimAllRewards() {
         List<ImageSearchResultData> chests = templateSearchHelper.locateAllPatterns(
                 TemplatesEnum.HERO_MISSION_EVENT_CHEST,
                 SearchConfig.builder()
@@ -396,7 +396,7 @@ public class HeroMissionEventRoutine extends DelayedTask {
 
     }
 
-    private HeroMissionProgressBar.State readProgressBar() {
+    HeroMissionProgressBar.State readProgressBar() {
         var frame = ImageConverter.toBufferedImage(emuManager.captureScreen(EMULATOR_NUMBER));
         HeroMissionProgressBar.State state = HeroMissionProgressBar.read(frame);
         logInfo("Hero's Mission progress bar state: " + state + ".");

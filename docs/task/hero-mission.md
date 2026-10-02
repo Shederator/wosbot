@@ -14,3 +14,5 @@ Navigation and unknown progress each have a three-visit budget per profile.
 The last failure timestamp is stored in UTC and compared with the game's 00:00
 UTC daily reset, including after a bot restart. An unreadable bar does not prove
 that the event is complete or that a rally was sent.
+Claim reachable reward chests before scheduling the next reset, including when
+the progress bar has reached the final reward.
