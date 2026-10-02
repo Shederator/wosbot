@@ -686,6 +686,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         private BearFrameStream.Snapshot<RawImageData> lastObservedFrame;
         private int consecutiveRecoveryFailures;
         private int consecutiveUnknownRecoveries;
+        private boolean alliedRallyIndicatorAbsent;
         private final BearRallyListTraversal rallyTraversal = new BearRallyListTraversal();
         private boolean rallyListBottomProven;
         private String restoredJoinSubstate = "NONE";
@@ -1241,8 +1242,13 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                 if (!recoverPersistedJoinTransaction()) {
                     return BearSessionCoordinator.JoinOutcome.STALE_SCREEN;
                 }
+                alliedRallyIndicatorAbsent = false;
                 if (!openWarList()) {
-                    return BearSessionCoordinator.JoinOutcome.PAGE_NOT_READY;
+                    // No war indicator on World means no allied rally to join, not a failure
+                    // that needs recovery.
+                    return alliedRallyIndicatorAbsent
+                            ? BearSessionCoordinator.JoinOutcome.NO_JOINABLE_RALLY
+                            : BearSessionCoordinator.JoinOutcome.PAGE_NOT_READY;
                 }
 
                 BearFrameStream.Snapshot<RawImageData> scanFrame = ui.observe();
@@ -1924,6 +1930,8 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                                         authorization, RALLY_INDICATOR, 80, "rally-indicator"));
                         if (opened != BearVerifiedActionExecutor.Outcome.CONFIRMED) {
                             warListKnown = false;
+                            alliedRallyIndicatorAbsent = !ui.lastInputSent()
+                                    && ui.lastRefusal().startsWith("rally-indicator-missing");
                             return false;
                         }
                         warListKnown = true;

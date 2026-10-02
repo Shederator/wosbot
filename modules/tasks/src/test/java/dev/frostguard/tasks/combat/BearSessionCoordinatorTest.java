@@ -480,6 +480,18 @@ class BearSessionCoordinatorTest {
                 "the retry waits out the backoff: " + firstSuccess);
     }
 
+    @Test
+    void anEventWithoutAlliedRalliesIsNotTreatedAsAJoinFailure() {
+        ScriptedDriver driver = new ScriptedDriver();
+        driver.freeSlots = 2;
+        BearSessionCoordinator coordinator = coordinator(driver, Duration.ofMinutes(10), false, true);
+
+        assertEquals(BearSessionCoordinator.ExitReason.EVENT_ENDED, coordinator.run());
+
+        assertFalse(driver.joinFormationLists.isEmpty());
+        assertEquals(0, driver.recoveries, "no allied rally must not spend the recovery budget");
+    }
+
     private static BearSessionCoordinator coordinator(
             ScriptedDriver driver, Duration duration, boolean ownRallies, boolean joins) {
         return new BearSessionCoordinator(
