@@ -637,6 +637,10 @@ public class TaskQueue {
         return false;
     }
 
+    /** Test seam between releasing the lease and arming the cleanup; production does nothing. */
+    protected void afterBearOwnershipReleased() {
+    }
+
     /** Test seam inside the atomic Bear claim; production does nothing here. */
     protected void afterBearLeaseAcquired() {
     }
@@ -1630,25 +1634,26 @@ public class TaskQueue {
      *
      * @return whether Bear owned the profile and was revoked
      */
-    public boolean revokeBearOwnership(String reason) {
+    public synchronized boolean revokeBearOwnership(String reason) {
         boolean leased = BearTrapSessionLease.active(profile.getId()).isPresent();
         boolean durable = BearRecoveryFinalization.deadline(profile).isPresent()
                 || BearSessionCheckpoint.load(profile).isPresent();
         if (!leased && !durable) {
             return false;
         }
-        boolean bearRunning;
-        synchronized (this) {
-            ExecutionContext running = runningContext;
-            bearRunning = running != null && running.getTask() != null
-                    && running.getTask().getTpTask() == TpDailyTaskEnum.BEAR_TRAP;
-            if (bearRunning) {
-                // The running task carries the cleanup when it returns.
-                bearCleanupOwedByRunningTask = true;
-                running.cancel();
-            }
+        // The whole revocation holds the queue monitor, like the worker's lease claim: a worker
+        // either published its running context first (and is cancelled here) or claims after
+        // this returns and finds the due cleanup finalizer.
+        ExecutionContext running = runningContext;
+        boolean bearRunning = running != null && running.getTask() != null
+                && running.getTask().getTpTask() == TpDailyTaskEnum.BEAR_TRAP;
+        if (bearRunning) {
+            // The running task carries the cleanup when it returns.
+            bearCleanupOwedByRunningTask = true;
+            running.cancel();
         }
         BearTrapSessionLease.releaseForQueueStop(profile.getId());
+        afterBearOwnershipReleased();
         if (!BearRecoveryFinalization.arm(profile, Instant.now())) {
             emitError("Bear ownership revoked (" + reason + ") but its cleanup-only finalizer "
                     + "could not be persisted");

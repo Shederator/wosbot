@@ -943,6 +943,35 @@ class TaskQueueBearSessionLeaseTest {
         }
     }
 
+    @Test
+    void aRevocationThatTakesTheLockFirstStopsAWorkerBetweenItsChecks() throws Exception {
+        AccountDescriptor profile = configuredActiveProfile("Bear revoke first ");
+        RecordingQueue queue = new RecordingQueue(profile);
+        BearTrapSessionLease.Lease lease =
+                BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+        assertTrue(BearSessionCheckpoint.open(profile, lease.eventEnd()));
+        RecordingBearTask bear = new RecordingBearTask(profile);
+        Thread[] worker = new Thread[1];
+        queue.afterOwnershipReleased = () -> {
+            // The worker passes the pre-lock finalizer check before the revocation arms it.
+            worker[0] = new Thread(() -> queue.executeTask(bear));
+            worker[0].start();
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        };
+
+        assertTrue(queue.revokeBearOwnership("profile disabled"));
+        worker[0].join(10_000);
+
+        assertEquals(0, bear.executionCount,
+                "a worker racing a revocation must run the cleanup, not a full session");
+        assertTrue(BearRecoveryFinalization.deadline(reload(profile.getId())).isEmpty(),
+                "the due cleanup finalization ran");
+    }
+
     private static AccountDescriptor reload(Long profileId) {
         return ProfileService.obtain().fetchAllAccounts().stream()
                 .filter(candidate -> profileId.equals(candidate.getId()))
@@ -1072,6 +1101,7 @@ class TaskQueueBearSessionLeaseTest {
         private Function<AccountDescriptor, DelayedTask> bearFactory =
                 RecordingBearTask::new;
         private Runnable afterLease = () -> { };
+        private Runnable afterOwnershipReleased = () -> { };
         private int gameStops;
         private int slotReleases;
 
@@ -1095,6 +1125,11 @@ class TaskQueueBearSessionLeaseTest {
         @Override
         protected void afterBearLeaseAcquired() {
             afterLease.run();
+        }
+
+        @Override
+        protected void afterBearOwnershipReleased() {
+            afterOwnershipReleased.run();
         }
 
         @Override
