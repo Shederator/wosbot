@@ -534,6 +534,26 @@ class TaskQueueBearSessionLeaseTest {
         assertEquals(1, afterStop.recoveryAttempts(), "stopping must not reset the recovery budget");
     }
 
+    @Test
+    void restoreReportsFailureWhenBearCouldNotBeQueued() {
+        AccountDescriptor profile = configuredActiveProfile("Bear restore refused ");
+        BearTrapSessionLease.Lease lease =
+                BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+        assertTrue(BearSessionCheckpoint.open(profile, lease.eventEnd()));
+        BearTrapSessionLease.releaseForQueueStop(profile.getId());
+        TaskQueue unregistered = new TaskQueue(reload(profile.getId())) {
+            @Override
+            protected DelayedTask createTask(TpDailyTaskEnum kind) {
+                return null;
+            }
+        };
+
+        assertFalse(unregistered.restoreDurableBearOwnershipOnStart(),
+                "restore must not claim ownership was resumed when Bear is not queued");
+        assertTrue(unregistered.hasProtectedBearOwnership(Instant.now()),
+                "the device stays pinned while ownership is unresolved");
+    }
+
     private static AccountDescriptor reload(Long profileId) {
         return ProfileService.obtain().fetchAllAccounts().stream()
                 .filter(candidate -> profileId.equals(candidate.getId()))

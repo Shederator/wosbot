@@ -1509,6 +1509,17 @@ public class TaskQueue {
             return false;
         }
         runNow(TpDailyTaskEnum.BEAR_TRAP, true);
+        boolean queued;
+        synchronized (this) {
+            queued = taskBacklog.stream().anyMatch(task -> task.getTpTask() == TpDailyTaskEnum.BEAR_TRAP
+                    && task.isRecurring()
+                    && task.getDelay(TimeUnit.MILLISECONDS) <= 0);
+        }
+        if (!queued) {
+            emitError("Active Bear ownership was found after restart, but Bear could not be queued; "
+                    + "the device stays pinned until the event ends");
+            return false;
+        }
         emitInfo("Restored active Bear ownership from durable recovery; device is pinned open");
         return true;
     }
