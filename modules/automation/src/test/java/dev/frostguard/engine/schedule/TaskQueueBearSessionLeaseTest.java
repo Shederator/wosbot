@@ -13,6 +13,16 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Field;
+import dev.frostguard.api.configs.ConfigurationKeyEnum;
+import dev.frostguard.engine.service.ScheduleService;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadInfo;
+import java.lang.management.ThreadMXBean;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -54,7 +64,7 @@ class TaskQueueBearSessionLeaseTest {
     @Test
     void bearFailureCannotDispatchNormalTaskAfterRoutineAdvancesMutableTimer() {
         AccountDescriptor profile = new AccountDescriptor(
-                null, "Bear lease " + UUID.randomUUID(), "0", false, 100L, 30L);
+                null, "Bear lease " + UUID.randomUUID(), "0", true, 100L, 30L);
         assertTrue(ProfileService.obtain().createAccount(profile));
         LocalDateTime activationUtc = LocalDateTime.now(ZoneOffset.UTC).withSecond(0).withNano(0);
         assertTrue(ConfigService.obtain().writeAccountSetting(profile, BEAR_TRAP_EVENT_BOOL, "true"));
@@ -878,6 +888,12 @@ class TaskQueueBearSessionLeaseTest {
 
         assertTrue(BearTrapSessionLease.acquireForBearExecution(reload(profile.getId())).isEmpty(),
                 "disabled participation must not regain the event lease from its checkpoint");
+
+        assertTrue(ConfigService.obtain().writeAccountSetting(profile, BEAR_TRAP_EVENT_BOOL, "true"));
+        AccountDescriptor disabledProfile = reload(profile.getId());
+        disabledProfile.setEnabled(false);
+        assertTrue(BearTrapSessionLease.acquireForBearExecution(disabledProfile).isEmpty(),
+                "a disabled profile must not regain the event lease after a restart");
     }
 
     @Test
@@ -968,8 +984,148 @@ class TaskQueueBearSessionLeaseTest {
 
         assertEquals(0, bear.executionCount,
                 "a worker racing a revocation must run the cleanup, not a full session");
+        RecordingBearTask later = new RecordingBearTask(profile);
+        assertTrue(queue.executeTask(later));
+        assertEquals(0, later.executionCount, "every later run for the revoked event is cleanup-only");
         assertTrue(BearRecoveryFinalization.deadline(reload(profile.getId())).isEmpty(),
-                "the due cleanup finalization ran");
+                "the cleanup finalization ran");
+    }
+
+    @Test
+    void revocationDoesNotDeadlockWithAConcurrentProfileSettingWrite() throws Exception {
+        AccountDescriptor profile = configuredActiveProfile("Bear deadlock revoke ");
+        RecordingQueue queue = new RecordingQueue(profile);
+        BearTrapSessionLease.Lease lease =
+                BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+        assertTrue(BearSessionCheckpoint.open(profile, lease.eventEnd()));
+        CountDownLatch writerHoldsTheSettingLock = new CountDownLatch(1);
+        ProfileService.obtain().registerDataObserver(changed -> {
+            if (Thread.currentThread().getName().equals("bear-deadlock-writer")) {
+                writerHoldsTheSettingLock.countDown();
+            }
+        });
+        queue.afterOwnershipReleased = () -> {
+            Thread writer = new Thread(() -> ConfigService.obtain().writeAccountSetting(
+                    profile.getId(), ConfigurationKeyEnum.BEAR_TRAP_OBSERVE_ONLY_BOOL, "false"),
+                    "bear-deadlock-writer");
+            writer.setDaemon(true);
+            writer.start();
+            try {
+                writerHoldsTheSettingLock.await(5, TimeUnit.SECONDS);
+                Thread.sleep(300);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        };
+        withQueueRegistered(queue, profile, () -> {
+            Thread revoker = new Thread(() -> queue.revokeBearOwnership("profile disabled"),
+                    "bear-deadlock-revoker");
+            revoker.setDaemon(true);
+            revoker.start();
+            revoker.join(5_000);
+
+            assertEquals("none", deadlockedThreads(),
+                    "revocation and a concurrent profile-setting write must not deadlock");
+        });
+    }
+
+    @Test
+    void theLeaseClaimDoesNotDeadlockWithAnOperatorSettingWrite() throws Exception {
+        AccountDescriptor profile = configuredActiveProfile("Bear deadlock claim ");
+        RecordingQueue queue = new RecordingQueue(profile);
+        CountDownLatch operatorHoldsTheSettingLock = new CountDownLatch(1);
+        ProfileService.obtain().registerDataObserver(changed -> {
+            if (Thread.currentThread().getName().equals("bear-deadlock-operator")) {
+                operatorHoldsTheSettingLock.countDown();
+                try {
+                    Thread.sleep(700);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        });
+        withQueueRegistered(queue, profile, () -> {
+            Thread operator = new Thread(() -> ConfigService.obtain().writeAccountSetting(
+                    profile.getId(), ConfigurationKeyEnum.BEAR_TRAP_OBSERVE_ONLY_BOOL, "false"),
+                    "bear-deadlock-operator");
+            operator.setDaemon(true);
+            operator.start();
+            assertTrue(operatorHoldsTheSettingLock.await(5, TimeUnit.SECONDS));
+            Thread worker = new Thread(() -> queue.executeTask(new RecordingBearTask(profile)),
+                    "bear-deadlock-worker");
+            worker.setDaemon(true);
+            worker.start();
+            worker.join(5_000);
+            operator.join(1_000);
+
+            assertEquals("none", deadlockedThreads(),
+                    "the lease claim and an operator setting write must not deadlock");
+        });
+    }
+
+    @Test
+    void aProfileDisabledMidTickDoesNotRegainItsBearSession() {
+        AccountDescriptor profile = configuredActiveProfile("Bear disabled mid tick ");
+        RecordingQueue queue = new RecordingQueue(profile);
+        List<RecordingBearTask> created = new ArrayList<>();
+        queue.bearFactory = owner -> {
+            RecordingBearTask task = new RecordingBearTask(owner);
+            created.add(task);
+            return task;
+        };
+        BearTrapSessionLease.Lease lease =
+                BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+        assertTrue(BearSessionCheckpoint.open(profile, lease.eventEnd()));
+        AccountDescriptor disabled = reload(profile.getId());
+        disabled.setEnabled(false);
+        assertTrue(ProfileService.obtain().persistAccount(disabled));
+        // The worker still holds the profile it loaded at the start of its tick.
+        assertTrue(queue.revokeBearOwnership("profile disabled"));
+        RecordingBearTask bear = new RecordingBearTask(profile);
+
+        queue.executeTask(bear);
+        for (int tick = 0; tick < 3; tick++) {
+            queue.runSchedulerTick();
+        }
+
+        int runs = bear.executionCount + created.stream().mapToInt(task -> task.executionCount).sum();
+        assertEquals(0, runs, "a disabled profile must not regain a Bear session");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void withQueueRegistered(TaskQueue queue, AccountDescriptor profile, ThrowingAction action)
+            throws Exception {
+        Field dispatcherField = ScheduleService.class.getDeclaredField("dispatcher");
+        dispatcherField.setAccessible(true);
+        TaskDispatcher dispatcher = (TaskDispatcher) dispatcherField.get(ScheduleService.obtain());
+        Field queuesField = TaskDispatcher.class.getDeclaredField("managedQueues");
+        queuesField.setAccessible(true);
+        Map<Long, TaskQueue> queues = (Map<Long, TaskQueue>) queuesField.get(dispatcher);
+        queues.put(profile.getId(), queue);
+        try {
+            action.run();
+        } finally {
+            queues.remove(profile.getId(), queue);
+        }
+    }
+
+    @FunctionalInterface
+    private interface ThrowingAction {
+        void run() throws Exception;
+    }
+
+    private static String deadlockedThreads() {
+        ThreadMXBean threads = ManagementFactory.getThreadMXBean();
+        long[] ids = threads.findDeadlockedThreads();
+        if (ids == null) {
+            return "none";
+        }
+        StringBuilder cycle = new StringBuilder();
+        for (ThreadInfo info : threads.getThreadInfo(ids, true, true)) {
+            cycle.append(info.getThreadName()).append(" waits ").append(info.getLockName())
+                    .append(" held by ").append(info.getLockOwnerName()).append("; ");
+        }
+        return cycle.toString();
     }
 
     private static AccountDescriptor reload(Long profileId) {

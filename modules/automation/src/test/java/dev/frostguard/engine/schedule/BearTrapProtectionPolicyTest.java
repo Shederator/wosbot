@@ -194,6 +194,9 @@ class BearTrapProtectionPolicyTest {
 
     private static AccountDescriptor profileWithTimer1() {
         AccountDescriptor profile = new AccountDescriptor(1L);
+        // A Bear session lease exists only for an enabled profile that participates.
+        profile.setEnabled(true);
+        profile.setConfig(BEAR_TRAP_EVENT_BOOL, true);
         profile.setConfig(BEAR_TRAP_TIMER_1_ENABLED_BOOL, true);
         profile.setConfig(BEAR_TRAP_TIMER_1_BLOCK_RALLIES_BOOL, true);
         profile.setConfig(BEAR_TRAP_TIMER_1_PAUSE_ALL_TASKS_BOOL, false);

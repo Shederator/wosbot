@@ -88,6 +88,8 @@ public class TaskQueue {
     private volatile ExecutionContext   runningContext;
     private volatile LocalDateTime      sessionOrigin;
     private volatile boolean bearCleanupOwedByRunningTask;
+    /** End of the event an operator revoked; every Bear run for that event is cleanup-only. */
+    private volatile Instant bearRevokedUntil;
     private final BooleanSupplier deviceOwnership = () -> hasProtectedBearOwnership(Instant.now());
     private volatile String             profileCooldownStatus;
     // Changed by pernerch | Date: 2026-07-04 | Why: ensure first startup cycle runs Initialize regardless of idle heuristics.
@@ -779,9 +781,10 @@ public class TaskQueue {
         BearTrapSessionLease.Lease bearLease = null;
         ExecutionContext ctx = new ExecutionContext(task);
         if (task.getTpTask() == TpDailyTaskEnum.BEAR_TRAP) {
-            // Claiming the lease and publishing the running context are atomic with revocation:
-            // a revoke either lands first (and its due finalizer runs here) or cancels this run.
-            synchronized (this) {
+            {
+                if (bearRevoked(Instant.now())) {
+                    return finalizeRevokedBear(task);
+                }
                 if (finalizeBearRecoveryIfDue(task, Instant.now())) {
                     return true;
                 }
@@ -823,6 +826,11 @@ public class TaskQueue {
                         + LocalDateTime.ofInstant(lease.eventEnd(), ZoneId.systemDefault())
                                 .format(TS_FMT));
                 runningContext = ctx;
+                if (bearRevoked(Instant.now())) {
+                    // A revocation that missed the published context must still stop this run.
+                    bearCleanupOwedByRunningTask = true;
+                    ctx.cancel();
+                }
             }
         }
         if (task.getTpTask() == TpDailyTaskEnum.INITIALIZE
@@ -1172,6 +1180,25 @@ public class TaskQueue {
         return finalizeBearRecoveryIfDue(task, now);
     }
 
+    private boolean bearRevoked(Instant now) {
+        Instant until = bearRevokedUntil;
+        return until != null && now.isBefore(until);
+    }
+
+    /** A revoked Bear run performs only its cleanup finalization, even if the finalizer was lost. */
+    private boolean finalizeRevokedBear(DelayedTask task) {
+        Instant now = Instant.now();
+        if (BearRecoveryFinalization.deadline(profile).filter(deadline -> !now.isBefore(deadline)).isEmpty()
+                && !BearRecoveryFinalization.arm(profile, now)) {
+            emitErrorTask(task, "Revoked Bear cleanup could not arm its finalizer; retrying");
+            task.setRecurring(true);
+            task.reschedule(LocalDateTime.now().plusSeconds(30));
+            enqueue(task);
+            return false;
+        }
+        return finalizeBearRecoveryIfDue(task, now);
+    }
+
     boolean finalizeBearRecoveryIfDue(DelayedTask task, Instant now) {
         Optional<Instant> finalizationAt = BearRecoveryFinalization.deadline(profile);
         if (task.getTpTask() != TpDailyTaskEnum.BEAR_TRAP
@@ -1179,27 +1206,36 @@ public class TaskQueue {
                 || now.isBefore(finalizationAt.orElseThrow())) {
             return false;
         }
-        boolean profileEnabled = Boolean.TRUE.equals(profile.getEnabled());
+        // Decide what to restore from persisted state: the queue's copy may predate an operator
+        // disabling the profile or Bear participation.
+        AccountDescriptor persisted = ProfileService.obtain().fetchAllAccounts().stream()
+                .filter(candidate -> profile.getId().equals(candidate.getId()))
+                .findFirst()
+                .orElse(profile);
+        // Either copy reporting the profile or participation disabled wins.
+        boolean profileEnabled = Boolean.TRUE.equals(persisted.getEnabled())
+                && Boolean.TRUE.equals(profile.getEnabled());
         if (profileEnabled
-                && Boolean.TRUE.equals(profile.getConfig(ConfigurationKeyEnum.GATHER_TASK_BOOL, Boolean.class))) {
+                && Boolean.TRUE.equals(persisted.getConfig(ConfigurationKeyEnum.GATHER_TASK_BOOL, Boolean.class))) {
             runNow(TpDailyTaskEnum.GATHER_RESOURCES, true);
         }
         if (profileEnabled
-                && Boolean.TRUE.equals(profile.getConfig(ConfigurationKeyEnum.ALLIANCE_AUTOJOIN_BOOL, Boolean.class))) {
+                && Boolean.TRUE.equals(persisted.getConfig(ConfigurationKeyEnum.ALLIANCE_AUTOJOIN_BOOL, Boolean.class))) {
             runNow(TpDailyTaskEnum.ALLIANCE_AUTOJOIN, true);
         }
         Optional<BearTrapParticipationSchedule.Plan> nextPlan =
                 BearTrapParticipationSchedule.resolve(
-                        profile,
+                        persisted,
                         Clock.fixed(now, ZoneId.systemDefault()),
                         ZoneId.systemDefault());
         if (nextPlan.isPresent()) {
             task.reschedule(nextPlan.get().nextRun());
             ScheduleService.obtain().persistNextSchedule(
                     profile, TpDailyTaskEnum.BEAR_TRAP, task.getScheduled(), null);
-            boolean participationEnabled = Boolean.TRUE.equals(profile.getConfig(
-                    ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL,
-                    Boolean.class));
+            boolean participationEnabled = Boolean.TRUE.equals(persisted.getConfig(
+                    ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL, Boolean.class))
+                    && Boolean.TRUE.equals(profile.getConfig(
+                            ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL, Boolean.class));
             task.setRecurring(participationEnabled && profileEnabled);
             if (participationEnabled && profileEnabled) {
                 enqueue(task);
@@ -1634,16 +1670,23 @@ public class TaskQueue {
      *
      * @return whether Bear owned the profile and was revoked
      */
-    public synchronized boolean revokeBearOwnership(String reason) {
+    public boolean revokeBearOwnership(String reason) {
         boolean leased = BearTrapSessionLease.active(profile.getId()).isPresent();
         boolean durable = BearRecoveryFinalization.deadline(profile).isPresent()
                 || BearSessionCheckpoint.load(profile).isPresent();
         if (!leased && !durable) {
             return false;
         }
-        // The whole revocation holds the queue monitor, like the worker's lease claim: a worker
-        // either published its running context first (and is cancelled here) or claims after
-        // this returns and finds the due cleanup finalizer.
+        // Lock-free handshake with the worker's lease claim (no ConfigService write may happen
+        // under the queue monitor; ConfigService calls back into the queue under its own lock):
+        // revocation publishes this flag before reading the running context, and the worker
+        // publishes its running context before reading the flag, so at least one side sees the
+        // other and cancels the session before any input.
+        bearRevokedUntil = BearTrapSessionLease.active(profile.getId())
+                .map(BearTrapSessionLease.Lease::eventEnd)
+                .or(() -> BearSessionCheckpoint.load(profile).map(BearSessionCheckpoint.Checkpoint::eventEnd))
+                .filter(end -> end.isAfter(Instant.now()))
+                .orElse(Instant.now().plusSeconds(BEAR_IN_WINDOW_RETRY_CAP_SECONDS));
         ExecutionContext running = runningContext;
         boolean bearRunning = running != null && running.getTask() != null
                 && running.getTask().getTpTask() == TpDailyTaskEnum.BEAR_TRAP;

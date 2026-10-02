@@ -32,6 +32,12 @@ public final class BearTrapSessionLease {
         if (profile == null || profile.getId() == null) {
             return Optional.empty();
         }
+        if (!Boolean.TRUE.equals(profile.getEnabled())
+                || !Boolean.TRUE.equals(profile.getConfig(ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL, Boolean.class))) {
+            // A disabled profile or revoked participation must not regain the event from its
+            // schedule or checkpoint; its due cleanup finalization runs without a lease.
+            return Optional.empty();
+        }
 
         Optional<BearTrapParticipationSchedule.ActiveSession> activeSession =
                 BearTrapParticipationSchedule.resolveActiveSession(profile, clock);
@@ -39,11 +45,6 @@ public final class BearTrapSessionLease {
             Optional<Lease> current = active(profile.getId(), clock);
             if (current.isPresent()) {
                 return current;
-            }
-            if (!Boolean.TRUE.equals(profile.getConfig(ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL, Boolean.class))) {
-                // Revoked participation must not regain the event from its checkpoint; its due
-                // cleanup finalization runs without a lease.
-                return Optional.empty();
             }
             return BearSessionCheckpoint.load(profile)
                     .filter(checkpoint -> isAlive(checkpoint.eventEnd(), clock.instant()))
