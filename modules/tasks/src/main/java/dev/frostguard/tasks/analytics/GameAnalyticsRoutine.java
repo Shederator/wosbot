@@ -51,7 +51,7 @@ public final class GameAnalyticsRoutine extends DelayedTask {
                         "Capturing startup and ranking traffic...", null, null));
                 if (DeviceReleaseGuard.isProtected(EMULATOR_NUMBER)) {
                     throw new IllegalStateException(
-                            "Power analytics deferred: this emulator is owned by an active Bear event");
+                            "Power analytics refused while an active Bear event owns this emulator; retry after the event");
                 }
                 startCapture();
                 emuManager.forceStopApp(EMULATOR_NUMBER, EmulatorController.GAME.getPackageName());

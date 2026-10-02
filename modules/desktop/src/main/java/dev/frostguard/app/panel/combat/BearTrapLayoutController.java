@@ -158,7 +158,8 @@ public class BearTrapLayoutController extends AbstractProfileController {
                 List.copyOf(checkComboBoxJoinFlag.getCheckModel().getCheckedItems()))
                 .refusal()
                 .orElse(null);
-        labelFormationConflict.setText(refusal == null ? "" : refusal + ". Bear will not start.");
+        labelFormationConflict.setText(refusal == null ? "" : refusal
+                + ". Bear will only observe the event, without input.");
         labelFormationConflict.setVisible(refusal != null);
         labelFormationConflict.setManaged(refusal != null);
     }

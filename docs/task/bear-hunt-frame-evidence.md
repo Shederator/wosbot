@@ -36,6 +36,8 @@ budget and must be measured on the supported setup.
 - Join and scroll authorization re-locate a row by an exact crop fingerprint taken from a different
   frame. Lossy H.264 frames and static-screen screenshots may never match exactly, which would refuse
   every join; this needs replay of real War-list frames.
+- Classifier equivalence on real footage: the extraction is verbatim, but the only replayed clip is
+  synthetic; a recorded event segment is needed to replay real screens.
 - Labelled replay: put `<name>.h264` with a `<name>.labels` file (one expected screen per frame) under
   `modules/tasks/src/test/resources/bear/recordings/`; `BearRecordingReplayTest` then checks them.
 

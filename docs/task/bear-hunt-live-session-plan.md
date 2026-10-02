@@ -96,16 +96,20 @@ maintained in `bear-hunt-frame-evidence.md`. The work is not live-ready until th
 the focused and reactor suites pass, an adversarial review finds no Bear input outside the state
 machine, and a real event validates the entire 30-minute session.
 
-Deliberate departures from the 2026-10-02 fix plan:
+Departures from the 2026-10-02 fix plan, approved by the operator on 2026-10-02:
 
-- An unclassified screen is never answered with Back: input from an unknown state breaks the
-  transition contract. After a bounded wait, two consecutive unknown recoveries restart the game.
+- An unclassified screen that survives a bounded wait gets exactly one Back; the next unknown
+  recovery restarts the game. This is the only input sent without a classified source state.
 - Missing templates fail the build through `TemplateResourceAvailabilityTest`, not application
   startup, because seven non-Bear templates are already missing upstream.
 - Slot starvation is solved by sibling profiles yielding the slot to the Bear owner rather than by a
   slot-priority change in `EmulatorController`.
 - March reads stay scheduled on the known return time: each read opens the sidebar, and the
   event-end placeholder that made the cache stale is gone.
-- The capture journal records production classifications and timings only. The removed
-  fast-revalidation heuristic is not logged; frame-to-frame differences can be computed offline from
-  the recorded segments.
+- A formation conflict is shown in Bear settings and refused at session start (which then observes
+  the event), not also when the schedule is computed.
+
+Not done, by design: the capture journal does not log the removed fast-revalidation heuristic, and
+the at-Bear World states (`WORLD_AT_BEAR`, `WORLD_AT_VERIFIED_BEAR`) and `TRANSITIONING` remain
+only as evidence-gated targets of the preparation and centring edges; the live classifier never
+emits them.
