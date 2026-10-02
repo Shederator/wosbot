@@ -23,6 +23,14 @@ import java.util.List;
 
 public class JourneyofLightRoutine extends DelayedTask {
 
+    private static final PointData EVENT_STATUS_TOP_LEFT = new PointData(35, 275);
+    private static final PointData EVENT_STATUS_BOTTOM_RIGHT = new PointData(685, 405);
+    private static final PointData EVENT_QUEUES_TOP_LEFT = new PointData(200, 1025);
+    private static final PointData EVENT_QUEUES_BOTTOM_RIGHT = new PointData(690, 1100);
+    private static final int EVENT_STATUS_ATTEMPTS = 3;
+    private static final long EVENT_STATUS_RETRY_DELAY_MS = 250L;
+    private int consecutiveNavigationFailures;
+
     private ResilientOcrExecutor<LocalDateTime> textHelper;
 
     public JourneyofLightRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
@@ -59,12 +67,13 @@ public class JourneyofLightRoutine extends DelayedTask {
         }
 
         // Check if the event has ended
-        Boolean eventEnded = eventHasEnded();
-        if (eventEnded == null) {
-            scheduleNavigationRetry("event status OCR was unreadable", "event-status");
+        JourneyOfLightEventStatus eventStatus = readEventStatus();
+        if (eventStatus == JourneyOfLightEventStatus.UNKNOWN) {
+            scheduleNavigationRetry("event status OCR remained unknown after retries", "event-status");
             return;
         }
-        if (eventEnded) {
+        consecutiveNavigationFailures = 0;
+        if (eventStatus == JourneyOfLightEventStatus.ENDED) {
             logInfo("Journey of Light event has ended. Rescheduling to next reset.");
             reschedule(GameTimeUtils.dailyResetTime());
             return;
@@ -155,24 +164,53 @@ public class JourneyofLightRoutine extends DelayedTask {
         return false;
     }
 
-    private Boolean eventHasEnded() {
-        String result = stringHelper.attemptRecognition(
-                new PointData(50, 300),
-                new PointData(400, 400),
-                1,
-                300L,
-                null,
-                s -> !s.isEmpty(),
-                s -> s);
-        if (result == null) return null;
-        return result.contains("collect");
+    private JourneyOfLightEventStatus readEventStatus() {
+        String statusText = readNonBlankText(EVENT_STATUS_TOP_LEFT, EVENT_STATUS_BOTTOM_RIGHT);
+        JourneyOfLightEventStatus status = JourneyOfLightEventStatus.classify(statusText, null);
+        if (status == JourneyOfLightEventStatus.ENDED) {
+            return status;
+        }
+
+        String queueText = readNonBlankText(EVENT_QUEUES_TOP_LEFT, EVENT_QUEUES_BOTTOM_RIGHT);
+        return JourneyOfLightEventStatus.classify(statusText, queueText);
+    }
+
+    private String readNonBlankText(PointData topLeft, PointData bottomRight) {
+        for (int attempt = 0; attempt < EVENT_STATUS_ATTEMPTS; attempt++) {
+            String text = stringHelper.attemptRecognition(
+                    topLeft,
+                    bottomRight,
+                    1,
+                    EVENT_STATUS_RETRY_DELAY_MS,
+                    null,
+                    value -> value != null && !value.isBlank(),
+                    String::trim);
+            if (text != null && !text.isBlank()) {
+                return text;
+            }
+            if (attempt + 1 < EVENT_STATUS_ATTEMPTS) {
+                sleepTask(EVENT_STATUS_RETRY_DELAY_MS);
+            }
+        }
+        return "";
     }
 
     private void scheduleNavigationRetry(String reason, String type) {
-        LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+        consecutiveNavigationFailures++;
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime retryAt = JourneyOfLightRetryPolicy.retryAt(
+                now, GameTimeUtils.dailyResetTime(), consecutiveNavigationFailures);
         String snapshot = TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "journeyoflight", type);
-        logWarning("Journey of Light state is unknown: " + reason + "; retrying at "
-                + retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+        if (consecutiveNavigationFailures >= JourneyOfLightRetryPolicy.MAX_CONSECUTIVE_FAILURES) {
+            logWarning("Journey of Light state is unknown after " + consecutiveNavigationFailures
+                    + " consecutive failures: " + reason + "; retrying at next reset "
+                    + retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+            consecutiveNavigationFailures = 0;
+        } else {
+            logWarning("Journey of Light state is unknown after " + consecutiveNavigationFailures
+                    + " consecutive failure(s): " + reason + "; retrying at "
+                    + retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+        }
         reschedule(retryAt);
     }
 
