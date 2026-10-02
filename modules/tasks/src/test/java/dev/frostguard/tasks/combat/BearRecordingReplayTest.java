@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import dev.frostguard.api.runtime.WorkspacePaths;
+import dev.frostguard.api.runtime.WorkspaceSession;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
@@ -19,11 +21,18 @@ import org.bytedeco.ffmpeg.global.avcodec;
 import org.bytedeco.ffmpeg.global.avutil;
 import org.bytedeco.javacv.FFmpegFrameRecorder;
 import org.bytedeco.javacv.Java2DFrameConverter;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 class BearRecordingReplayTest {
 
     private static final String RECORDINGS = "/bear/recordings";
+
+    @BeforeAll
+    static void initializeTestWorkspace() {
+        // The production matcher labels searches through the profile store.
+        WorkspaceSession.initializeLayout(WorkspacePaths.current());
+    }
 
     @Test
     void replaysEveryRecordedFrameThroughTheProductionClassifier() throws Exception {
