@@ -313,6 +313,41 @@ class TaskQueueBearRevocationRaceTest {
         assertFalse(BearTrapSessionLease.active(profile.getId()).isPresent());
     }
 
+    @Test
+    void aFailedFinalizationKeepsBearQueuedForAnotherAttempt() throws Exception {
+        AccountDescriptor profile = configuredActiveProfile("Bear failed finalization ");
+        RaceQueue queue = new RaceQueue(profile);
+        queue.failGatherRestoreOnce = true;
+        assertTrue(BearRecoveryFinalization.arm(profile, Instant.now()));
+        CountingBearTask bear = new CountingBearTask(profile);
+
+        withQueueRegistered(queue, profile, () -> queue.executeTask(bear));
+
+        assertTrue(queue.isTaskQueued(TpDailyTaskEnum.BEAR_TRAP),
+                "a transient finalization failure must leave Bear queued to retry it");
+        assertTrue(BearRecoveryFinalization.deadline(reload(profile.getId())).isPresent(),
+                "the unfinished finalization stays durable");
+        assertEquals(0, bear.inputs);
+    }
+
+    @Test
+    void selectingAnUnconfiguredTrapKeepsTheOwnedEventsBearQueued() throws Exception {
+        AccountDescriptor profile = configuredActiveProfile("Bear unconfigured trap ");
+        RaceQueue queue = new RaceQueue(profile);
+        BearTrapSessionLease.Lease lease = BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+        assertTrue(BearSessionCheckpoint.open(profile, lease.eventEnd()));
+
+        withQueueRegistered(queue, profile, () -> {
+            queue.runNow(TpDailyTaskEnum.BEAR_TRAP, true);
+            assertTrue(queue.isTaskQueued(TpDailyTaskEnum.BEAR_TRAP));
+            // Trap 2 has no configured timer, so its schedule resolves to nothing.
+            assertTrue(ConfigService.obtain().writeAccountSetting(profile.getId(), BEAR_TRAP_NUMBER_INT, "2"));
+
+            assertTrue(queue.isTaskQueued(TpDailyTaskEnum.BEAR_TRAP),
+                    "an owned event keeps its Bear retry when the trap selection has no timer");
+        });
+    }
+
     /** Production persists the operator's disable before it revokes Bear ownership. */
     private static void persistDisabled(AccountDescriptor profile) {
         AccountDescriptor disabled = reload(profile.getId());
@@ -423,6 +458,7 @@ class TaskQueueBearRevocationRaceTest {
         private final AtomicInteger sleeps = new AtomicInteger();
         private int gatherRestores;
         private int bearRunNows;
+        private boolean failGatherRestoreOnce;
         private volatile boolean storageFails;
 
         private RaceQueue(AccountDescriptor profile) {
@@ -467,6 +503,10 @@ class TaskQueueBearRevocationRaceTest {
         public synchronized void runNow(TpDailyTaskEnum kind, boolean recurring) {
             if (kind == TpDailyTaskEnum.GATHER_RESOURCES) {
                 gatherRestores++;
+                if (failGatherRestoreOnce) {
+                    failGatherRestoreOnce = false;
+                    throw new IllegalStateException("gathering could not be restored");
+                }
             } else if (kind == TpDailyTaskEnum.BEAR_TRAP) {
                 bearRunNows++;
                 super.runNow(kind, recurring);

@@ -140,6 +140,11 @@ public class TaskQueue {
         taskBacklog.offer(task);
     }
 
+    /** Whether Bear currently owns this profile's event (lease, checkpoint, or finalizer). */
+    public boolean bearOwnsProfile() {
+        return hasProtectedBearOwnership(Instant.now());
+    }
+
     synchronized Optional<LocalDateTime> bearScheduledAt() {
         return taskBacklog.stream()
                 .filter(task -> task.getTpTask() == TpDailyTaskEnum.BEAR_TRAP)
@@ -768,6 +773,26 @@ public class TaskQueue {
     // ---- task dispatch -----------------------------------------------------
 
     boolean executeTask(DelayedTask task) {
+        try {
+            return executeDequeuedTask(task);
+        } catch (RuntimeException failure) {
+            if (task.getTpTask() != TpDailyTaskEnum.BEAR_TRAP) {
+                throw failure;
+            }
+            // Bear was already taken off the queue: a failure before its run (finalization,
+            // restore, or claim) must not lose it while its durable state still needs it.
+            task.setRecurring(true);
+            task.reschedule(LocalDateTime.now().plusSeconds(BEAR_IN_WINDOW_RETRY_CAP_SECONDS));
+            if (!isTaskQueued(TpDailyTaskEnum.BEAR_TRAP)) {
+                enqueue(task);
+            }
+            emitErrorTask(task, "Bear could not start its run (" + failure.getMessage() + "); retryAt="
+                    + task.getScheduled().format(TS_FMT));
+            return false;
+        }
+    }
+
+    private boolean executeDequeuedTask(DelayedTask task) {
         if (shuttingDown) {
             emitInfo("Skipping task execution during shutdown: " + task.getTaskName());
             return false;

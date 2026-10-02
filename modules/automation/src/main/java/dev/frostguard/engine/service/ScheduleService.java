@@ -390,6 +390,12 @@ public class ScheduleService {
 							+ (queueUpdated ? "" : " (persisted for the next queue load)"));
 		}, () -> {
 			TaskQueue queue = dispatcher.getQueue(accountId);
+			if (queue != null && queue.bearOwnsProfile()) {
+				// The event in progress keeps its lease and retry; the new selection applies after it.
+				log(TpMessageSeverityEnum.WARNING, "Bear Trap Event", account.getName(),
+						"Selected trap has no configured timer; the Bear event in progress keeps running");
+				return;
+			}
 			boolean removed = queue != null && queue.dequeue(TpDailyTaskEnum.BEAR_TRAP);
 			TaskStateData previous = TaskManagementService.shared().lookupTaskState(
 					accountId,
