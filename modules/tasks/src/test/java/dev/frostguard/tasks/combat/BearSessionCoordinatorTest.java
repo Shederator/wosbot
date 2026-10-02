@@ -1,6 +1,7 @@
 package dev.frostguard.tasks.combat;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
@@ -440,6 +441,43 @@ class BearSessionCoordinatorTest {
                 List.of(100, 300, 200), List.of(302), 20).orElseThrow());
         assertTrue(BearSessionCoordinator.selectJoinCandidateRow(
                 List.of(100, 300), List.of(200), 20).isEmpty());
+    }
+
+    @Test
+    void repeatedOwnRallyFailuresBackOffWhileJoiningContinues() {
+        ScriptedDriver driver = new ScriptedDriver();
+        driver.freeSlots = 1;
+        for (int failure = 0; failure < 500; failure++) {
+            driver.startResults.add(BearSessionCoordinator.OwnRallyStartResult.recoverable(
+                    BearSessionCoordinator.OwnRallyStartOutcome.NAVIGATION_FAILURE));
+        }
+        BearSessionCoordinator coordinator = coordinator(driver, Duration.ofMinutes(30), true, true);
+
+        assertEquals(BearSessionCoordinator.ExitReason.EVENT_ENDED, coordinator.run());
+
+        int backoffWindows = (int) (Duration.ofMinutes(30).toSeconds()
+                / BearSessionCoordinator.OWN_RALLY_FAILURE_BACKOFF.toSeconds()) + 1;
+        assertTrue(driver.startCalls <= BearSessionCoordinator.OWN_RALLY_FAILURE_LIMIT * backoffWindows,
+                "own-rally attempts must back off after repeated failures: " + driver.startCalls);
+        assertTrue(driver.joinFormationLists.size() > driver.startCalls,
+                "joining must keep running while own rallies back off");
+    }
+
+    @Test
+    void ownRalliesResumeAfterTheBackoffOnceTheyCanSucceed() {
+        ScriptedDriver driver = new ScriptedDriver();
+        for (int failure = 0; failure < BearSessionCoordinator.OWN_RALLY_FAILURE_LIMIT; failure++) {
+            driver.startResults.add(BearSessionCoordinator.OwnRallyStartResult.recoverable(
+                    BearSessionCoordinator.OwnRallyStartOutcome.NAVIGATION_FAILURE));
+        }
+        BearSessionCoordinator coordinator = coordinator(driver, Duration.ofMinutes(12), true, false);
+
+        assertEquals(BearSessionCoordinator.ExitReason.EVENT_ENDED, coordinator.run());
+
+        assertFalse(driver.ownRallyStarts.isEmpty(), "own rallies must resume after the backoff");
+        Instant firstSuccess = driver.ownRallyStarts.get(0);
+        assertTrue(!firstSuccess.isBefore(Instant.EPOCH.plus(BearSessionCoordinator.OWN_RALLY_FAILURE_BACKOFF)),
+                "the retry waits out the backoff: " + firstSuccess);
     }
 
     private static BearSessionCoordinator coordinator(
