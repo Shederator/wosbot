@@ -3,16 +3,6 @@ package dev.frostguard.tasks.combat;
 /** Small fail-closed transition table for the time-critical Bear screens. */
 final class BearNavigationPolicy {
 
-    record Evidence(
-            boolean formation,
-            boolean bearRallyPanel,
-            boolean rallyTimerPanel,
-            boolean worldRoot,
-            boolean bearAnchorFresh,
-            boolean warListKnown,
-            boolean joinButton,
-            boolean allianceMenu) {}
-
     enum Screen {
         WORLD_AT_VERIFIED_BEAR,
         WORLD_AT_BEAR,
@@ -74,28 +64,6 @@ final class BearNavigationPolicy {
     }
 
     private BearNavigationPolicy() {}
-
-    static Screen classify(Evidence evidence) {
-        if (evidence.formation()) {
-            return Screen.FORMATION;
-        }
-        if (evidence.bearRallyPanel()) {
-            return Screen.BEAR_RALLY_PANEL;
-        }
-        if (evidence.rallyTimerPanel()) {
-            return Screen.RALLY_TIMER_PANEL;
-        }
-        if (evidence.warListKnown() || evidence.joinButton()) {
-            return Screen.WAR_LIST;
-        }
-        if (evidence.worldRoot()) {
-            return evidence.bearAnchorFresh() ? Screen.WORLD_AT_VERIFIED_BEAR : Screen.WORLD;
-        }
-        if (evidence.allianceMenu()) {
-            return Screen.ALLIANCE_MENU;
-        }
-        return Screen.UNKNOWN;
-    }
 
     static Action next(Screen screen, Goal goal) {
         if (goal == Goal.OWN_RALLY) {

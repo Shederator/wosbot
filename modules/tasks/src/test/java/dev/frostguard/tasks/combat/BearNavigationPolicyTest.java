@@ -63,26 +63,6 @@ class BearNavigationPolicyTest {
     }
 
     @Test
-    void classifiesWorldFromTheRootAnchorWithoutRequiringTheWarIndicator() {
-        assertEquals(BearNavigationPolicy.Screen.WORLD,
-                BearNavigationPolicy.classify(new BearNavigationPolicy.Evidence(
-                        false, false, false, true, false, false, false, false)));
-        assertEquals(BearNavigationPolicy.Screen.WORLD_AT_VERIFIED_BEAR,
-                BearNavigationPolicy.classify(new BearNavigationPolicy.Evidence(
-                        false, false, false, true, true, false, false, false)));
-    }
-
-    @Test
-    void knownWarListWinsOverTheWorldVisibleBehindItsOverlay() {
-        assertEquals(BearNavigationPolicy.Screen.WAR_LIST,
-                BearNavigationPolicy.classify(new BearNavigationPolicy.Evidence(
-                        false, false, false, true, false, true, false, false)));
-        assertEquals(BearNavigationPolicy.Screen.WAR_LIST,
-                BearNavigationPolicy.classify(new BearNavigationPolicy.Evidence(
-                        false, false, false, true, false, false, true, false)));
-    }
-
-    @Test
     void reusesTheVerifiedBearAnchorInsteadOfReopeningAlliance() {
         assertEquals(BearNavigationPolicy.Action.TAP_BEAR_ANCHOR,
                 BearNavigationPolicy.next(
