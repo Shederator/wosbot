@@ -379,6 +379,48 @@ private void requireInputAllowed(String input) {
     }
 
 @Override
+    public boolean tapInside(ImageSearchResultData result, int count, int delayMs) {
+        requireInputAllowed("tap");
+        return super.tapInside(result, count, delayMs);
+    }
+
+@Override
+    public void tapInside(AreaData area, int count, int delayMs) {
+        requireInputAllowed("tap");
+        super.tapInside(area, count, delayMs);
+    }
+
+@Override
+    public void tapInside(PointData corner1, PointData corner2, int count, int delayMs) {
+        requireInputAllowed("tap");
+        super.tapInside(corner1, corner2, count, delayMs);
+    }
+
+@Override
+    public void tapNear(PointData point) {
+        requireInputAllowed("tap");
+        super.tapNear(point);
+    }
+
+@Override
+    public void tapNear(PointData point, int radius) {
+        requireInputAllowed("tap");
+        super.tapNear(point, radius);
+    }
+
+@Override
+    public void tapNear(PointData point, int radius, int count, int delayMs) {
+        requireInputAllowed("tap");
+        super.tapNear(point, radius, count, delayMs);
+    }
+
+@Override
+    public void swipe(PointData start, PointData end, int durationMs) {
+        requireInputAllowed("swipe");
+        super.swipe(start, end, durationMs);
+    }
+
+@Override
     public void pressBack() {
         requireInputAllowed("back");
         super.pressBack();

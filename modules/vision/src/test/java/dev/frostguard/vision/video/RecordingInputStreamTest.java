@@ -61,6 +61,24 @@ class RecordingInputStreamTest {
         assertNotNull(reported.get(), "the recording failure is reported once");
     }
 
+    @Test
+    void closingTheLiveStreamFlushesAndClosesTheRecording() throws Exception {
+        boolean[] closed = {false};
+        ByteArrayOutputStream sink = new ByteArrayOutputStream() {
+            @Override
+            public void close() throws IOException {
+                closed[0] = true;
+                super.close();
+            }
+        };
+        try (var recorded = new RecordingInputStream(new ByteArrayInputStream(new byte[] {1, 2}), sink,
+                ignored -> { })) {
+            recorded.readAllBytes();
+        }
+
+        assertTrue(closed[0], "a buffered segment sink must be closed with the stream");
+    }
+
     private static int countFrames(H264FrameDecoder decoder) throws Exception {
         int frames = 0;
         while (decoder.nextFrame() != null) {

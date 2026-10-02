@@ -59,6 +59,13 @@ class BearTrapRoutineScreenOwnershipTest {
                 () -> bear.tapInside(new AreaData(new PointData(1, 1), new PointData(2, 2))),
                 () -> bear.tapInside(new ImageSearchResultData(true, new PointData(5, 5), 99.0)),
                 () -> bear.swipe(new PointData(1, 1), new PointData(1, 200)),
+                () -> bear.swipe(new PointData(1, 1), new PointData(1, 200), 300),
+                () -> bear.tapInside(new PointData(10, 10), new PointData(10, 10), 2, 50),
+                () -> bear.tapInside(new AreaData(new PointData(1, 1), new PointData(2, 2)), 2, 50),
+                () -> bear.tapInside(new ImageSearchResultData(true, new PointData(5, 5), 99.0), 2, 50),
+                () -> bear.tapNear(new PointData(5, 5)),
+                () -> bear.tapNear(new PointData(5, 5), 3),
+                () -> bear.tapNear(new PointData(5, 5), 3, 2, 50),
                 bear::pressBack);
         for (Runnable input : inputs) {
             IllegalStateException refused = assertThrows(IllegalStateException.class, input::run);
