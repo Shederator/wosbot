@@ -60,8 +60,8 @@ class BearTrapRoutineArchitectureTest {
     @Test
     void productionClassifierEmitsOnlyDeclaredStates() throws IOException {
         String java = Files.readString(
-                Path.of("src/main/java/dev/frostguard/tasks/combat/BearTrapRoutine.java"));
-        int start = java.indexOf("private BearNavigationPolicy.Screen classifyBearScreenUntimed(");
+                Path.of("src/main/java/dev/frostguard/tasks/combat/BearFrameClassifier.java"));
+        int start = java.indexOf("private BearNavigationPolicy.Screen classifyUntimed(");
         int end = java.indexOf("return screen;", start);
         Matcher assigned = Pattern
                 .compile("Screen\\.([A-Z_]+)")

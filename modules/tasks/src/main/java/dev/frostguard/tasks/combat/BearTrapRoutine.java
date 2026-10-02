@@ -37,12 +37,10 @@ import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.schedule.TaskQueue;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.RallyFlagCoordinates;
-import dev.frostguard.engine.nav.SidebarFrameClassifier;
 import dev.frostguard.engine.nav.SidebarSection;
 import dev.frostguard.engine.service.ConfigService;
 import dev.frostguard.engine.service.ProfileService;
 import dev.frostguard.vision.convert.ImageConverter;
-import dev.frostguard.vision.detection.CloseCrossDetector;
 import java.io.IOException;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
@@ -676,7 +674,10 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         private List<MarchSlotState> lastMarches = List.of();
         private BearSessionCoordinator.State lastState;
         private Instant ownRallyBusyUntil;
-        private boolean warListKnown;
+        private final BearFrameClassifier classifier = new BearFrameClassifier(
+                (frame, template, threshold) -> emuManager.locatePattern(
+                        EMULATOR_NUMBER, frame, template, threshold).isFound(),
+                trapNumber);
         private Instant nextMarchRefreshAt = Instant.MIN;
         private boolean cachedSpecialRallyPreparing;
         private final BearFrameStream<RawImageData> frames;
@@ -1429,7 +1430,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                     return BearSessionCoordinator.JoinOutcome.RALLY_FULL;
                 }
 
-                warListKnown = true;
+                classifier.rememberWarList(true);
                 if (ui.current() != null
                         && ui.current().screen() == BearNavigationPolicy.Screen.WAR_LIST) {
                     rallyTraversal.completed(selectedRow);
@@ -1472,7 +1473,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
             // dialog that dismisses directly to an empty close-only list remains classifiable.
             if (BearJoinCheckpointSemantics.provesWarListProvenance(
                     restoredJoinSubstate, screen)) {
-                warListKnown = true;
+                classifier.rememberWarList(true);
             }
             if (screen == BearNavigationPolicy.Screen.DEPLOY_CONFIRMATION
                     || screen == BearNavigationPolicy.Screen.MARCH_QUEUE_FULL) {
@@ -1847,7 +1848,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                         screen, BearNavigationPolicy.Goal.WORLD_READY);
                 switch (action) {
                     case READY -> {
-                        warListKnown = false;
+                        classifier.rememberWarList(false);
                         return true;
                     }
                     case BACK_ONCE -> {
@@ -1925,18 +1926,18 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                         return true;
                     }
                     case TAP_WAR -> {
-                        warListKnown = true;
+                        classifier.rememberWarList(true);
                         BearVerifiedActionExecutor.Outcome opened = ui.transition(
                                 BearUiAction.OPEN_WAR_LIST,
                                 authorization -> tapTemplateFrom(
                                         authorization, RALLY_INDICATOR, 80, "rally-indicator"));
                         if (opened != BearVerifiedActionExecutor.Outcome.CONFIRMED) {
-                            warListKnown = false;
+                            classifier.rememberWarList(false);
                             alliedRallyIndicatorAbsent = !ui.lastInputSent()
                                     && ui.lastRefusal().startsWith("rally-indicator-missing");
                             return false;
                         }
-                        warListKnown = true;
+                        classifier.rememberWarList(true);
                         if (preserveRestoredListFrontier) {
                             preserveRestoredListFrontier = false;
                         } else {
@@ -2225,7 +2226,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                         if (action == BearUiAction.DISMISS_DEPLOY_DIALOG) {
                             pressBack();
                         } else if (source == BearNavigationPolicy.Screen.WAR_LIST) {
-                            AreaData close = warListClose(authorization.frame())
+                            AreaData close = BearFrameClassifier.warListClose(authorization.frame())
                                     .orElseThrow(() -> new BearInputRefusedException(
                                             "close-war-rally-list-missing-in-authorizing-frame"));
                             requireFreshAuthorization(authorization, "close-war-rally-list");
@@ -2240,7 +2241,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                     0);
             if (source == BearNavigationPolicy.Screen.WAR_LIST
                     && outcome == BearVerifiedActionExecutor.Outcome.CONFIRMED) {
-                warListKnown = false;
+                classifier.rememberWarList(false);
             }
             return outcome == BearVerifiedActionExecutor.Outcome.CONFIRMED;
         }
@@ -2260,11 +2261,12 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
 
         private boolean returnToWarListFromFormation() {
             BearNavigationPolicy.Screen screen = observeBearScreen();
-            warListKnown = screen == BearNavigationPolicy.Screen.FORMATION
+            boolean backOnList = screen == BearNavigationPolicy.Screen.FORMATION
                     && backToVerifiedParent(screen)
                     && ui.current() != null
                     && ui.current().screen() == BearNavigationPolicy.Screen.WAR_LIST;
-            return warListKnown;
+            classifier.rememberWarList(backOnList);
+            return backOnList;
         }
 
         private boolean dismissDeployConfirmationAndLeaveFormation() {
@@ -2288,91 +2290,12 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         }
 
         private BearNavigationPolicy.Screen classifyBearScreen(RawImageData frame) {
-            classificationTemplateNanos.clear();
             classificationStartedAt = Instant.now();
-            long started = System.nanoTime();
-            try {
-                return classifyBearScreenUntimed(frame);
-            } finally {
-                classificationNanos = System.nanoTime() - started;
-            }
-        }
-
-        private BearNavigationPolicy.Screen classifyBearScreenUntimed(RawImageData frame) {
-            BearNavigationPolicy.Screen screen;
-            if (found(frame, GAME_HOME_RECONNECT, 85)) {
-                screen = BearNavigationPolicy.Screen.RECONNECT;
-            } else if (found(frame, GAME_START_WELCOME_BACK_TITLE, 85)
-                    || found(frame, GAME_START_DOWNLOAD_NOW, 85)
-                    || found(frame, GAME_START_MANDATORY_UPDATE_TITLE, 85)) {
-                screen = BearNavigationPolicy.Screen.APP_LOADING;
-            } else if (found(frame, RALLY_MARCH_QUEUE_FULL, 85)) {
-                screen = BearNavigationPolicy.Screen.MARCH_QUEUE_FULL;
-            } else if (found(frame, DEPLOY_CONFIRMATION_DIALOG, 90)
-                    || found(frame, TROOPS_ALREADY_MARCHING, 90)) {
-                screen = BearNavigationPolicy.Screen.DEPLOY_CONFIRMATION;
-            } else if (found(frame, BEAR_DEPLOY_BUTTON, 90)) {
-                screen = BearNavigationPolicy.Screen.FORMATION;
-            } else if (found(frame, RALLY_HOLD_BUTTON, 90)) {
-                screen = BearNavigationPolicy.Screen.RALLY_TIMER_PANEL;
-            } else if (found(frame, BEAR_RALLY_BUTTON, 80)) {
-                screen = BearNavigationPolicy.Screen.BEAR_RALLY_PANEL;
-            } else {
-                boolean joinButtonVisible = found(frame, BEAR_JOIN_PLUS_ICON, 80);
-                boolean warCloseVisible = warListClose(frame).isPresent();
-                if (BearWarListIdentity.isVisible(
-                        warListKnown, warCloseVisible, joinButtonVisible ? 1 : 0)) {
-                    screen = BearNavigationPolicy.Screen.WAR_LIST;
-                } else if (found(frame, ALLIANCE_TERRITORY_BUTTON, 80)) {
-                    screen = BearNavigationPolicy.Screen.ALLIANCE_MENU;
-                } else if (BearSpecialBuildingsScreenClassifier.isGoButtonReady(
-                        ImageConverter.toBufferedImage(frame), trapNumber)) {
-                    screen = BearNavigationPolicy.Screen.SPECIAL_BUILDINGS;
-                } else if (found(frame, PETS_SKILL_USE, 85)) {
-                    screen = BearNavigationPolicy.Screen.PET_QUICK_USE;
-                } else if (found(frame, PETS_INFO_SKILLS, 85)) {
-                    screen = BearNavigationPolicy.Screen.PETS_OVERVIEW;
-                } else {
-                    Optional<SidebarSection> sidebar = SidebarFrameClassifier.selectedSection(
-                            ImageConverter.toBufferedImage(frame));
-                    if (sidebar.orElse(null) == SidebarSection.WILDERNESS) {
-                        screen = BearNavigationPolicy.Screen.MARCH_SIDEBAR;
-                    } else if (sidebar.isPresent()) {
-                        screen = BearNavigationPolicy.Screen.SIDEBAR_OTHER;
-                    } else if (found(frame, GAME_HOME_WORLD, 90)) {
-                        screen = found(frame, BEAR_HUNT_IS_RUNNING, 90)
-                                ? BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY
-                                : BearNavigationPolicy.Screen.WORLD;
-                    } else {
-                        screen = BearNavigationPolicy.Screen.UNKNOWN;
-                    }
-                }
-            }
-            if (screen == BearNavigationPolicy.Screen.WAR_LIST) {
-                warListKnown = true;
-            } else if (screen != BearNavigationPolicy.Screen.FORMATION
-                    && screen != BearNavigationPolicy.Screen.DEPLOY_CONFIRMATION
-                    && screen != BearNavigationPolicy.Screen.MARCH_QUEUE_FULL) {
-                warListKnown = false;
-            }
-            return screen;
-        }
-
-        private Optional<AreaData> warListClose(RawImageData frame) {
-            return CloseCrossDetector.locate(frame, CommonGameAreas.BEAR_WAR_LIST_CLOSE_SEARCH_AREA)
-                    .stream()
-                    .findFirst()
-                    .map(CloseCrossDetector.Detection::bounds);
-        }
-
-        private boolean found(RawImageData frame, TemplatesEnum template, int threshold) {
-            long started = System.nanoTime();
-            try {
-                return emuManager.locatePattern(
-                        EMULATOR_NUMBER, frame, template, threshold).isFound();
-            } finally {
-                classificationTemplateNanos.merge(template.name(), System.nanoTime() - started, Long::sum);
-            }
+            BearFrameClassifier.Classification classification = classifier.classify(frame);
+            classificationNanos = classification.totalNanos();
+            classificationTemplateNanos.clear();
+            classificationTemplateNanos.putAll(classification.templateNanos());
+            return classification.screen();
         }
 
         /**
