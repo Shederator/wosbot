@@ -119,8 +119,9 @@ class TaskQueueBearSessionLeaseTest {
         queue.routeError(bear, failure(
                 BearSessionExecutionException.FailureKind.FATAL_CONFIGURATION,
                 BearSessionExecutionException.RecoveryDirective.OPERATOR_ACTION));
-        assertTrue(bear.isRecurring(), "a cleanup-only event-end execution must remain queued");
-        assertTrue(bear.getScheduled().isAfter(LocalDateTime.now().plusMinutes(20)));
+        assertTrue(bear.isRecurring(), "operator action must not drop the active event");
+        assertFalse(bear.getScheduled().isAfter(LocalDateTime.now().plusSeconds(31)),
+                "operator action alerts but keeps retrying inside the window");
         assertEquals(0, queue.gatherRestores);
         assertEquals(0, queue.autojoinRestores);
 
@@ -135,7 +136,7 @@ class TaskQueueBearSessionLeaseTest {
     }
 
     @Test
-    void degradedRecoveryExhaustionQueuesOnlyTheEventEndFinalizer() {
+    void degradedRecoveryExhaustionKeepsRetryingAndArmsTheEventEndFinalizer() {
         AccountDescriptor profile = configuredActiveProfile("Bear degraded budget ");
         RecordingQueue queue = new RecordingQueue(profile);
         RecordingBearTask bear = new RecordingBearTask(profile);
@@ -150,10 +151,10 @@ class TaskQueueBearSessionLeaseTest {
         }
 
         assertTrue(bear.isRecurring());
-        LocalDateTime expectedEventEnd =
-                LocalDateTime.ofInstant(lease.eventEnd(), ZoneId.systemDefault());
-        assertTrue(Duration.between(expectedEventEnd, bear.getScheduled()).abs().toMillis() < 1_000,
-                "cleanup-only execution must stay at the immutable event deadline");
+        assertFalse(bear.getScheduled().isAfter(LocalDateTime.now().plusSeconds(31)),
+                "an exhausted budget limits the retry rate inside the window");
+        assertEquals(lease.eventEnd(), BearRecoveryFinalization.deadline(profile).orElseThrow(),
+                "the finalizer still owns cleanup after the immutable event deadline");
         assertEquals(0, queue.gatherRestores);
         assertEquals(0, queue.autojoinRestores);
     }
@@ -402,6 +403,43 @@ class TaskQueueBearSessionLeaseTest {
         BearTrapSessionLease.Lease restored =
                 BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
         assertEquals(original.eventEnd(), restored.eventEnd());
+    }
+
+    @Test
+    void noRecoveryDirectiveParksBearLaterInsideTheActiveWindow() {
+        for (BearSessionExecutionException.RecoveryDirective directive
+                : BearSessionExecutionException.RecoveryDirective.values()) {
+            AccountDescriptor profile = configuredActiveProfile("Bear in-window " + directive + " ");
+            RecordingQueue queue = new RecordingQueue(profile);
+            RecordingBearTask bear = new RecordingBearTask(profile);
+            BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+
+            for (int attempt = 1; attempt <= 6; attempt++) {
+                queue.routeError(bear, failure(
+                        BearSessionExecutionException.FailureKind.CAPTURE_TRANSIENT, directive));
+
+                assertTrue(bear.isRecurring(), directive + " attempt " + attempt + " dropped Bear");
+                assertFalse(bear.getScheduled().isAfter(LocalDateTime.now().plusSeconds(31)),
+                        directive + " attempt " + attempt + " parked Bear at " + bear.getScheduled());
+            }
+            assertEquals(0, queue.gatherRestores, "normal work must stay paused during the window");
+        }
+    }
+
+    @Test
+    void normalReturnBeforeTheEventEndKeepsDurableOwnership() {
+        AccountDescriptor profile = configuredActiveProfile("Bear early return ");
+        RecordingQueue queue = new RecordingQueue(profile);
+        ReschedulingSuccessfulBearTask bear = new ReschedulingSuccessfulBearTask(profile);
+
+        assertTrue(queue.executeTask(bear));
+
+        assertEquals(1, bear.executionCount);
+        assertTrue(BearSessionCheckpoint.load(reload(profile.getId())).isPresent(),
+                "an event that has not ended must keep its durable checkpoint");
+        assertTrue(bear.isRecurring());
+        assertFalse(bear.getScheduled().isAfter(LocalDateTime.now().plusSeconds(31)),
+                "Bear must retry inside the window, not at " + bear.getScheduled());
     }
 
     private static AccountDescriptor reload(Long profileId) {

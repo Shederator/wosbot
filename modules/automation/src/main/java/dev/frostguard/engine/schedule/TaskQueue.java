@@ -66,6 +66,9 @@ public class TaskQueue {
     private static final Logger logger = LoggerFactory.getLogger(TaskQueue.class);
     private static final String APP_LAUNCHER_PROPERTY = "frostguard.launcher";
     private static final long   TICK_INTERVAL_MS = 999L;
+    /** Longest a Bear retry may wait while its event window is still active. */
+    static final long BEAR_IN_WINDOW_RETRY_CAP_SECONDS = 30L;
+
     protected static final DateTimeFormatter TS_FMT =
             DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss");
 
@@ -710,6 +713,7 @@ public class TaskQueue {
         if (deferForBearTrapProtection(task)) {
             return false;
         }
+        BearTrapSessionLease.Lease bearLease = null;
         if (task.getTpTask() == TpDailyTaskEnum.BEAR_TRAP) {
             Optional<BearTrapSessionLease.Lease> acquiredLease =
                     BearTrapSessionLease.acquireForBearExecution(profile);
@@ -722,6 +726,7 @@ public class TaskQueue {
                 return false;
             }
             BearTrapSessionLease.Lease lease = acquiredLease.get();
+            bearLease = lease;
             if (!BearSessionCheckpoint.open(profile, lease.eventEnd())) {
                 task.setRecurring(true);
                 task.reschedule(LocalDateTime.now().plusSeconds(30));
@@ -766,7 +771,13 @@ public class TaskQueue {
             AnalyticsService.getInstance().trackTaskStarted(task.getTaskName());
             task.setLastExecutionTime(LocalDateTime.now());
             task.run();
-            if (task.getTpTask() == TpDailyTaskEnum.BEAR_TRAP
+            if (bearLease != null && Instant.now().isBefore(bearLease.eventEnd())) {
+                // A normal return before the event end is not a completed event. Keep the
+                // durable ownership and resume inside the window.
+                scheduleBearRetry(task, bearInWindowRetrySeconds(bearLease));
+                emitWarnTask(task, "Bear returned before its event end; durable ownership kept; "
+                        + "retryAt=" + task.getScheduled().format(TS_FMT));
+            } else if (bearLease != null
                     && (!BearRecoveryFinalization.clear(profile)
                             || !BearSessionCheckpoint.clear(profile))) {
                 throw new IllegalStateException(
@@ -995,7 +1006,7 @@ public class TaskQueue {
             case DEGRADED_WAIT -> {
                 if (bearTotalRecoveryAttempts >= 4 || bearDegradedFailures >= 4) {
                     scheduleBearFinalization(task, lease);
-                    yield "degraded retry budget exhausted; operator action required";
+                    yield "degraded retry budget exhausted; operator action required; retrying inside the window";
                 }
                 bearDegradedFailures++;
                 bearTotalRecoveryAttempts++;
@@ -1007,7 +1018,7 @@ public class TaskQueue {
             case REBIND_DEVICE -> {
                 if (bearTotalRecoveryAttempts >= 4 || bearDeviceRebindAttempts >= 2) {
                     scheduleBearFinalization(task, lease);
-                    yield "per-device rebind budget exhausted; operator action required";
+                    yield "per-device rebind budget exhausted; operator action required; retrying inside the window";
                 }
                 bearDeviceRebindAttempts++;
                 bearTotalRecoveryAttempts++;
@@ -1019,7 +1030,7 @@ public class TaskQueue {
             case RESTART_APP -> {
                 if (bearTotalRecoveryAttempts >= 4 || bearAppRestartAttempts >= 2) {
                     scheduleBearFinalization(task, lease);
-                    yield "app restart budget exhausted; operator action required";
+                    yield "app restart budget exhausted; operator action required; retrying inside the window";
                 }
                 bearAppRestartAttempts++;
                 bearTotalRecoveryAttempts++;
@@ -1040,8 +1051,19 @@ public class TaskQueue {
         if (!BearRecoveryFinalization.arm(profile, lease.eventEnd())) {
             throw new IllegalStateException("Could not persist the Bear recovery finalizer");
         }
+        if (Instant.now().isBefore(lease.eventEnd())) {
+            // An exhausted budget limits the retry rate; it must not surrender the event. The
+            // armed finalizer keeps the device pinned and restores normal work after the end.
+            scheduleBearRetry(task, bearInWindowRetrySeconds(lease));
+            return;
+        }
         task.setRecurring(true);
         task.reschedule(LocalDateTime.ofInstant(lease.eventEnd(), ZoneId.systemDefault()));
+    }
+
+    private static long bearInWindowRetrySeconds(BearTrapSessionLease.Lease lease) {
+        long untilEnd = Duration.between(Instant.now(), lease.eventEnd()).getSeconds();
+        return Math.max(1L, Math.min(BEAR_IN_WINDOW_RETRY_CAP_SECONDS, untilEnd));
     }
 
     boolean finalizeBearRecoveryIfDue(DelayedTask task, Instant now) {
