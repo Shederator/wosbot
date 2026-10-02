@@ -7,8 +7,10 @@ import dev.frostguard.app.panel.profile.ProfileAux;
 import dev.frostguard.app.shared.AbstractProfileController;
 import dev.frostguard.app.shared.UtcDateTimeEditor;
 import dev.frostguard.app.shared.UtcDateTimeValue;
+import dev.frostguard.engine.schedule.BearFlagConfiguration;
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.BooleanExpression;
+import javafx.collections.ListChangeListener;
 import javafx.fxml.FXML;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
@@ -76,6 +78,9 @@ public class BearTrapLayoutController extends AbstractProfileController {
     private Label labelSelectedTimerWarning;
 
     @FXML
+    private Label labelFormationConflict;
+
+    @FXML
     private Label labelTimerRecommendation;
 
     @FXML
@@ -141,6 +146,21 @@ public class BearTrapLayoutController extends AbstractProfileController {
         comboBoxMappings.put(comboBoxTrapNumber, ConfigurationKeyEnum.BEAR_TRAP_NUMBER_INT);
         comboBoxMappings.put(comboBoxRallyFlag, ConfigurationKeyEnum.BEAR_TRAP_RALLY_FLAG_INT);
         checkComboBoxMappings.put(checkComboBoxJoinFlag, ConfigurationKeyEnum.BEAR_TRAP_JOIN_FLAG_INT);
+    }
+
+    /** Shows the same refusal the Bear session would raise, before the event starts. */
+    private void refreshFormationConflict() {
+        Integer ownFlag = comboBoxRallyFlag.getValue();
+        String refusal = BearFlagConfiguration.validate(
+                checkBoxCallRally.isSelected(),
+                ownFlag == null ? -1 : ownFlag,
+                checkBoxEnableJoin.isSelected(),
+                List.copyOf(checkComboBoxJoinFlag.getCheckModel().getCheckedItems()))
+                .refusal()
+                .orElse(null);
+        labelFormationConflict.setText(refusal == null ? "" : refusal + ". Bear will not start.");
+        labelFormationConflict.setVisible(refusal != null);
+        labelFormationConflict.setManaged(refusal != null);
     }
 
     private void populateFlagControls() {
@@ -308,6 +328,12 @@ public class BearTrapLayoutController extends AbstractProfileController {
 
         bindManagedVisibility(comboBoxRallyFlag, checkBoxCallRally.selectedProperty());
         bindManagedVisibility(checkComboBoxJoinFlag, checkBoxEnableJoin.selectedProperty());
+        comboBoxRallyFlag.valueProperty().addListener((observable, previous, current) -> refreshFormationConflict());
+        checkComboBoxJoinFlag.getCheckModel().getCheckedItems()
+                .addListener((ListChangeListener<Integer>) change -> refreshFormationConflict());
+        checkBoxCallRally.selectedProperty().addListener((observable, previous, current) -> refreshFormationConflict());
+        checkBoxEnableJoin.selectedProperty().addListener((observable, previous, current) -> refreshFormationConflict());
+        refreshFormationConflict();
     }
 
     private void bindTimerState(TimerBinding timer) {

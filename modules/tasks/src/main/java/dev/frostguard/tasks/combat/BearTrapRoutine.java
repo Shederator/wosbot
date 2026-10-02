@@ -30,6 +30,7 @@ import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.BearSessionCheckpoint;
 import dev.frostguard.engine.schedule.BearTrapParticipationSchedule;
+import dev.frostguard.engine.schedule.BearFlagConfiguration;
 import dev.frostguard.engine.schedule.BearTrapSessionLease;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.schedule.TaskQueue;
@@ -121,7 +122,6 @@ private static final int DEFAULT_PREPARATION_TIME_MINUTES_MS = 10;
 
 private static final int DEFAULT_OWN_RALLY_FLAG_VALUE = 1;
 
-private static final int DEFAULT_JOIN_RALLY_FLAG_VALUE = 1;
 
 private static final long FRESH_TRANSITION_TIMEOUT_MS = 1500;
 
@@ -155,6 +155,8 @@ private boolean recallTroops;
 
 // Changed by pernerch | Date: 2026-07-02 | Why: detect shared-emulator profiles to avoid rally contention across accounts.
 private boolean sharedEmulator;
+
+private String flagRefusal;
 
 private int trapNumber;
 
@@ -192,6 +194,14 @@ public BearTrapRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
         if (window.get().leaseOwned()) {
             logInfo(routineLogBearTrapLine("Event window taken from the active Bear lease; "
                     + "schedule edits cannot move it. end=" + window.get().end()));
+        }
+        if (flagRefusal != null && !observeOnly()) {
+            logError(routineLogBearTrapLine("Bear configuration refused: " + flagRefusal));
+            throw protectedFailure(
+                    BearSessionExecutionException.FailureKind.FATAL_CONFIGURATION,
+                    BearSessionExecutionException.RecoveryDirective.OPERATOR_ACTION,
+                    "bear-formation-configuration",
+                    new IllegalStateException(flagRefusal));
         }
 
         TrapTimingShape timing = null;
@@ -544,19 +554,15 @@ private void hydrateConfiguration() {
         this.ownRallyFlag = resolveConfigInt(BEAR_TRAP_RALLY_FLAG_INT, DEFAULT_OWN_RALLY_FLAG_VALUE);
 
 
-        this.joinFlags = decodeJoinFlags();
-        if (callOwnRally && joinFlags.removeIf(flag -> flag == ownRallyFlag)) {
-            logWarning(routineLogBearTrapLine(
-                    "Formation #" + ownRallyFlag
-                            + " is reserved for the configured own rally and will not be used to join."));
-        }
-        if (joinRally && joinFlags.isEmpty()) {
-            logWarning(routineLogBearTrapLine(
-                    "Rally joining disabled for this run because no configured join formation remains available."));
-            joinRally = false;
-        }
-        // Changed by pernerch | Date: 2026-07-02 | Why: resolve shared-emulator state at hydration for deterministic active-phase behavior.
+        BearFlagConfiguration.Validation flags = BearFlagConfiguration.validate(
+                callOwnRally, ownRallyFlag, joinRally, decodeJoinFlags());
+        this.joinFlags = new ArrayList<>(flags.joinFlags());
+        this.flagRefusal = flags.refusal().orElse(null);
         this.sharedEmulator = isSharedEmulatorProfile();
+        if (joinRally && sharedEmulator) {
+            logWarning(routineLogBearTrapLine("Rally joining is disabled: another enabled profile "
+                    + "shares this emulator"));
+        }
 
 
         logDebug(routineLogBearTrapLine(String.format(
@@ -656,11 +662,6 @@ static List<Integer> decodeJoinFlags(String flagConfig) {
                     // Ignore corrupt persisted values; the effective configuration is logged by the caller.
                 }
             }
-        }
-
-
-        if (flags.isEmpty()) {
-            flags.add(DEFAULT_JOIN_RALLY_FLAG_VALUE);
         }
 
 
