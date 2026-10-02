@@ -80,6 +80,20 @@ class BearSessionDriverTest {
     }
 
     @Test
+    void aCancelledPreparationWaitStopsInsteadOfSpinningUntilActivation() {
+        ScriptedBear bear = new ScriptedBear(WORLD);
+        BearTrapRoutine.LiveBearSessionDriver driver = bear.driver();
+        bear.cancelled = true;
+
+        long started = System.nanoTime();
+        StopExecutionException stop = assertThrows(StopExecutionException.class,
+                () -> driver.waitForActivation(Instant.now().plusSeconds(5)));
+        assertTrue(stop.isCancellation());
+        assertTrue((System.nanoTime() - started) / 1_000_000L < 3_000,
+                "a cancelled session must not wait for activation");
+    }
+
+    @Test
     void anUnknownScreenGetsOneBackThenARestart() {
         ScriptedBear bear = new ScriptedBear(UNKNOWN);
         BearTrapRoutine.LiveBearSessionDriver driver = bear.driver();

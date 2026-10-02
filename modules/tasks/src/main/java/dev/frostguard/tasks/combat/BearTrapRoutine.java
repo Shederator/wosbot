@@ -870,8 +870,18 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                         "Preparation step unavailable; waiting safely for Bear activation: "
                                 + preparationUnavailable.operation()));
             }
+            waitForActivation(activation);
+            beginActivePhase();
+        }
+
+        /** Samples frames until activation, leaving early only for a reconnect screen. */
+        void waitForActivation(Instant activation) {
             ui.phase(BearUiStateMachine.Phase.WAITING_FOR_ACTIVATION);
             while (now().isBefore(activation)) {
+                if (cancellationRequested()) {
+                    throw new StopExecutionException("Bear cancelled while waiting for activation",
+                            StopExecutionException.Reason.USER_CANCELLED);
+                }
                 Duration remaining = Duration.between(now(), activation);
                 Duration sampleWindow = remaining.compareTo(Duration.ofSeconds(1)) > 0
                         ? Duration.ofSeconds(1) : remaining;
@@ -884,7 +894,6 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                                     null);
                         });
             }
-            beginActivePhase();
         }
 
         private void prepareFrameDriven() {
