@@ -483,7 +483,18 @@ public class TaskQueue {
     private void mainLoop() {
         acquireSlot();
         while (statusModel.isRunning() && !shuttingDown) {
+            runSchedulerTickSafely();
+        }
+    }
+
+    /** A failure in one tick (routing, finalization, persistence) must not end the worker. */
+    void runSchedulerTickSafely() {
+        try {
             runSchedulerTick();
+        } catch (RuntimeException tickFailure) {
+            emitError("Scheduler tick failed; the queue keeps running: " + tickFailure.getMessage());
+            logger.error("Scheduler tick failed for profile {}", profile.getName(), tickFailure);
+            sleepSchedulerTick(TICK_INTERVAL_MS);
         }
     }
 

@@ -585,6 +585,28 @@ class TaskQueueBearSessionLeaseTest {
         assertTrue(BearRecoveryFinalization.deadline(reload(profile.getId())).isEmpty());
     }
 
+    @Test
+    void schedulerTickFailureDoesNotKillTheQueueWorker() {
+        AccountDescriptor profile = configuredActiveProfile("Bear worker survives ");
+        int[] ticks = {0};
+        TaskQueue queue = new TaskQueue(profile) {
+            @Override
+            void runSchedulerTick() {
+                ticks[0]++;
+                throw new IllegalStateException("could not clear durable Bear state");
+            }
+
+            @Override
+            protected void sleepSchedulerTick(long millis) {
+            }
+        };
+
+        queue.runSchedulerTickSafely();
+        queue.runSchedulerTickSafely();
+
+        assertEquals(2, ticks[0], "the worker must keep ticking after a routing failure");
+    }
+
     private static AccountDescriptor reload(Long profileId) {
         return ProfileService.obtain().fetchAllAccounts().stream()
                 .filter(candidate -> profileId.equals(candidate.getId()))
