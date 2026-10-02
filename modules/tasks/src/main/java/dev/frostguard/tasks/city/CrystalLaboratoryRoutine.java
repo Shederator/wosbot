@@ -539,7 +539,7 @@ boolean hasMonday() {
 
     String retainDiagnosticSnapshot(String type) {
         try {
-            DiagnosticSnapshotStore store = DiagnosticSnapshotStore.forCurrentWorkspace();
+            DiagnosticSnapshotStore store = diagnosticSnapshotStore();
             if (!store.isEnabled()) {
                 return "snapshot=disabled";
             }
@@ -556,5 +556,9 @@ boolean hasMonday() {
                     "Diagnostic snapshot unavailable; reason=" + failure.getClass().getSimpleName()));
             return "snapshot=unavailable";
         }
+    }
+
+    DiagnosticSnapshotStore diagnosticSnapshotStore() {
+        return DiagnosticSnapshotStore.forCurrentWorkspace();
     }
 }

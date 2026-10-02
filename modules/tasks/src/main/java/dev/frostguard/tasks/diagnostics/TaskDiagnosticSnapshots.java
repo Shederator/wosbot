@@ -18,8 +18,12 @@ public final class TaskDiagnosticSnapshots {
     }
 
     static String capture(Supplier<RawImageData> takeFrame, String activity, String type) {
+        return capture(takeFrame, activity, type, DiagnosticSnapshotStore.forCurrentWorkspace());
+    }
+
+    static String capture(Supplier<RawImageData> takeFrame, String activity, String type,
+            DiagnosticSnapshotStore store) {
         try {
-            DiagnosticSnapshotStore store = DiagnosticSnapshotStore.forCurrentWorkspace();
             if (!store.isEnabled()) {
                 return "snapshot=disabled";
             }

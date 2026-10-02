@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.Queue;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
@@ -22,9 +24,13 @@ import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.runtime.WorkspacePaths;
+import dev.frostguard.engine.diagnostics.DiagnosticSnapshotStore;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
 
 class CrystalLaboratoryRoutineTest {
+
+    @TempDir
+    Path snapshotWorkspace;
 
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 9, 12, 9, 0);
     private static final LocalDateTime DAILY_RESET = LocalDateTime.of(2026, 9, 13, 0, 0);
@@ -142,13 +148,13 @@ class CrystalLaboratoryRoutineTest {
         RawImageData frame = RawImageData.capture(new byte[2 * 2 * 4], 2, 2, 32);
         assertFalse(frame.isValid());
 
-        String retained = new RetentionRoutine(frame).retainDiagnosticSnapshot("bit-depth");
+        String retained = new RetentionRoutine(frame, snapshotWorkspace).retainDiagnosticSnapshot("bit-depth");
         assertFalse(retained.contains("no-valid-frame"), retained);
         assertTrue(retained.startsWith("snapshot="), retained);
 
-        assertTrue(new RetentionRoutine(null).retainDiagnosticSnapshot("bit-depth")
+        assertTrue(new RetentionRoutine(null, snapshotWorkspace).retainDiagnosticSnapshot("bit-depth")
                 .contains("no-valid-frame"));
-        assertTrue(new RetentionRoutine(RawImageData.capture(new byte[1], 2, 2, 32))
+        assertTrue(new RetentionRoutine(RawImageData.capture(new byte[1], 2, 2, 32), snapshotWorkspace)
                 .retainDiagnosticSnapshot("bit-depth")
                 .contains("no-valid-frame"));
     }
@@ -236,11 +242,18 @@ class CrystalLaboratoryRoutineTest {
 
     private static final class RetentionRoutine extends CrystalLaboratoryRoutine {
         private final RawImageData frame;
+        private final Path workspace;
 
-        private RetentionRoutine(RawImageData frame) {
+        private RetentionRoutine(RawImageData frame, Path workspace) {
             super(new AccountDescriptor(1L, "Test", "1", true, 1L, 30L),
                     TpDailyTaskEnum.CRYSTAL_LABORATORY);
             this.frame = frame;
+            this.workspace = workspace;
+        }
+
+        @Override
+        DiagnosticSnapshotStore diagnosticSnapshotStore() {
+            return new DiagnosticSnapshotStore(workspace);
         }
 
         @Override
