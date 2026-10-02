@@ -2,9 +2,14 @@ package dev.frostguard.tasks.combat;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.api.domain.AreaData;
+import dev.frostguard.api.domain.ImageSearchResultData;
+import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.runtime.WorkspacePaths;
 import dev.frostguard.api.runtime.WorkspaceSession;
 import dev.frostguard.engine.error.BearSessionExecutionException;
@@ -42,6 +47,24 @@ class BearTrapRoutineScreenOwnershipTest {
         assertEquals(BearSessionExecutionException.RecoveryDirective.RESTART_APP,
                 failure.recoveryDirective());
         assertEquals(List.of(), bear.navigation);
+    }
+
+    @Test
+    void observeOnlyRefusesEveryDeviceInput() {
+        RecordingBear bear = new RecordingBear(true);
+        bear.getProfile().setConfig(ConfigurationKeyEnum.BEAR_TRAP_OBSERVE_ONLY_BOOL, true);
+
+        List<Runnable> inputs = List.of(
+                () -> bear.tapInside(new PointData(10, 10), new PointData(10, 10)),
+                () -> bear.tapInside(new AreaData(new PointData(1, 1), new PointData(2, 2))),
+                () -> bear.tapInside(new ImageSearchResultData(true, new PointData(5, 5), 99.0)),
+                () -> bear.swipe(new PointData(1, 1), new PointData(1, 200)),
+                bear::pressBack);
+        for (Runnable input : inputs) {
+            IllegalStateException refused = assertThrows(IllegalStateException.class, input::run);
+            assertTrue(refused.getMessage().contains("observe-only"),
+                    "input must be refused by observe-only, not fail later: " + refused.getMessage());
+        }
     }
 
     private static final class RecordingBear extends BearTrapRoutine {

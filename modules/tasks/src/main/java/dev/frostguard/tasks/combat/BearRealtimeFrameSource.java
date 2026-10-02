@@ -3,11 +3,13 @@ package dev.frostguard.tasks.combat;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.emulator.AndroidFrameStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 
 /**
  * Long-lived Bear transport over Android's H.264 screenrecord stream.
@@ -47,7 +49,13 @@ final class BearRealtimeFrameSource implements AutoCloseable {
     private boolean closed;
 
     BearRealtimeFrameSource(String adb, String serial, BooleanSupplier interrupted) {
-        this(() -> adapt(new AndroidFrameStream(adb, serial)), interrupted);
+        this(adb, serial, interrupted, () -> null);
+    }
+
+    /** Each bounded recorder renewal asks {@code segments} for its own evidence sink. */
+    BearRealtimeFrameSource(String adb, String serial, BooleanSupplier interrupted,
+            Supplier<OutputStream> segments) {
+        this(() -> adapt(new AndroidFrameStream(adb, serial, segments.get())), interrupted);
     }
 
     BearRealtimeFrameSource(StreamFactory factory, BooleanSupplier interrupted) {

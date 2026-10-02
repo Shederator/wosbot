@@ -58,6 +58,9 @@ public class BearTrapLayoutController extends AbstractProfileController {
     private CheckBox checkBoxRecallTroops;
 
     @FXML
+    private CheckBox checkBoxObserveOnly;
+
+    @FXML
     private ComboBox<Integer> comboBoxTrapNumber;
 
     @FXML
@@ -128,6 +131,7 @@ public class BearTrapLayoutController extends AbstractProfileController {
         checkBoxMappings.put(checkBoxEnableBearTrap, ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL);
         checkBoxMappings.put(checkBoxActivePets, ConfigurationKeyEnum.BEAR_TRAP_ACTIVE_PETS_BOOL);
         checkBoxMappings.put(checkBoxRecallTroops, ConfigurationKeyEnum.BEAR_TRAP_RECALL_TROOPS_BOOL);
+        checkBoxMappings.put(checkBoxObserveOnly, ConfigurationKeyEnum.BEAR_TRAP_OBSERVE_ONLY_BOOL);
         checkBoxMappings.put(checkBoxCallRally, ConfigurationKeyEnum.BEAR_TRAP_CALL_RALLY_BOOL);
         checkBoxMappings.put(checkBoxEnableJoin, ConfigurationKeyEnum.BEAR_TRAP_JOIN_RALLY_BOOL);
 
@@ -292,6 +296,7 @@ public class BearTrapLayoutController extends AbstractProfileController {
         BooleanExpression disabledUntilEnabled = checkBoxEnableBearTrap.selectedProperty().not();
         checkBoxActivePets.disableProperty().bind(disabledUntilEnabled);
         checkBoxRecallTroops.disableProperty().bind(disabledUntilEnabled);
+        checkBoxObserveOnly.disableProperty().bind(disabledUntilEnabled);
         comboBoxTrapNumber.disableProperty().bind(
                 disabledUntilEnabled.or(Bindings.isEmpty(comboBoxTrapNumber.getItems())));
         comboBoxParticipationTrigger.disableProperty().bind(disabledUntilEnabled);

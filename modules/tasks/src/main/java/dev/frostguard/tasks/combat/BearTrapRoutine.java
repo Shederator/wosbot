@@ -13,6 +13,8 @@ import dev.frostguard.api.domain.MarchMovementPhase;
 import dev.frostguard.api.domain.MarchSlotAvailability;
 import dev.frostguard.api.domain.MarchSlotState;
 import dev.frostguard.api.domain.RawImageData;
+import dev.frostguard.api.runtime.WorkspacePaths;
+import dev.frostguard.engine.diagnostics.DiagnosticSnapshotStore;
 import dev.frostguard.engine.error.ADBConnectionException;
 import dev.frostguard.engine.error.BearSessionExecutionException;
 import dev.frostguard.engine.error.StopExecutionException;
@@ -39,6 +41,7 @@ import dev.frostguard.engine.service.ConfigService;
 import dev.frostguard.engine.service.ProfileService;
 import dev.frostguard.vision.convert.ImageConverter;
 import dev.frostguard.vision.detection.CloseCrossDetector;
+import java.io.IOException;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
@@ -207,24 +210,29 @@ public BearTrapRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
             logTrapTimingFlow(timing);
 
             LocalDateTime now = LocalDateTime.now(ZoneId.of("UTC"));
-            sessionDriver = new LiveBearSessionDriver(
-                    timing.endTime.atZone(ZoneId.of("UTC")).toInstant());
-
-            if (now.isBefore(timing.activationTime)) {
-                sessionDriver.prepareUntil(
-                        timing.activationTime.atZone(ZoneId.of("UTC")).toInstant());
+            Instant eventEndInstant = timing.endTime.atZone(ZoneId.of("UTC")).toInstant();
+            if (observeOnly()) {
+                sessionDriver = new LiveBearSessionDriver(eventEndInstant, openCaptureRecorder(eventEndInstant));
+                activeSessionExit = sessionDriver.observeOnlyUntil(eventEndInstant);
             } else {
-                logInfo(routineLogBearTrapLine("Trap is already ACTIVE (preparation time passed)"));
-                sessionDriver.beginActivePhase();
-            }
+                sessionDriver = new LiveBearSessionDriver(eventEndInstant, null);
 
-            now = LocalDateTime.now(ZoneId.of("UTC"));
+                if (now.isBefore(timing.activationTime)) {
+                    sessionDriver.prepareUntil(
+                            timing.activationTime.atZone(ZoneId.of("UTC")).toInstant());
+                } else {
+                    logInfo(routineLogBearTrapLine("Trap is already ACTIVE (preparation time passed)"));
+                    sessionDriver.beginActivePhase();
+                }
 
-            if (now.isBefore(timing.endTime)) {
-                activeSessionExit = performTrapActivePhase(timing.endTime, sessionDriver);
-            } else {
-                logInfo(routineLogBearTrapLine("Trap already ended for this window"));
-                activeSessionExit = BearSessionCoordinator.ExitReason.EVENT_ENDED;
+                now = LocalDateTime.now(ZoneId.of("UTC"));
+
+                if (now.isBefore(timing.endTime)) {
+                    activeSessionExit = performTrapActivePhase(timing.endTime, sessionDriver);
+                } else {
+                    logInfo(routineLogBearTrapLine("Trap already ended for this window"));
+                    activeSessionExit = BearSessionCoordinator.ExitReason.EVENT_ENDED;
+                }
             }
         } catch (BearSessionExecutionException e) {
             activeSessionExit = BearSessionCoordinator.ExitReason.UNRECOVERABLE_FAILURE;
@@ -322,6 +330,56 @@ private BearSessionExecutionException protectedFailure(
 @Override
     protected LaunchPoint getRequiredStartLocation() {
         return LaunchPoint.WORLD;
+    }
+
+private boolean observeOnly() {
+        return Boolean.TRUE.equals(profile.getConfig(BEAR_TRAP_OBSERVE_ONLY_BOOL, Boolean.class));
+    }
+
+private BearCaptureRecorder openCaptureRecorder(Instant eventEnd) {
+        try {
+            return BearCaptureRecorder.open(WorkspacePaths.current().logs(), eventEnd);
+        } catch (IOException failure) {
+            logWarning(routineLogBearTrapLine("Bear capture could not be opened; observing without recording: "
+                    + failure.getMessage()));
+            return null;
+        }
+    }
+
+private void requireInputAllowed(String input) {
+        if (observeOnly()) {
+            throw new IllegalStateException("Bear observe-only session refused device input: " + input);
+        }
+    }
+
+@Override
+    public boolean tapInside(ImageSearchResultData result) {
+        requireInputAllowed("tap");
+        return super.tapInside(result);
+    }
+
+@Override
+    public void tapInside(AreaData area) {
+        requireInputAllowed("tap");
+        super.tapInside(area);
+    }
+
+@Override
+    public void tapInside(PointData corner1, PointData corner2) {
+        requireInputAllowed("tap");
+        super.tapInside(corner1, corner2);
+    }
+
+@Override
+    public void swipe(PointData start, PointData end) {
+        requireInputAllowed("swipe");
+        super.swipe(start, end);
+    }
+
+@Override
+    public void pressBack() {
+        requireInputAllowed("back");
+        super.pressBack();
     }
 
 @Override
@@ -641,9 +699,14 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         private boolean preserveRestoredListFrontier;
         private final BearFormationAvailabilityGate formationGate =
                 new BearFormationAvailabilityGate();
+        private final BearCaptureRecorder capture;
+        private final Map<String, Long> classificationTemplateNanos = new HashMap<>();
+        private long classificationNanos;
+        private Instant classificationStartedAt = Instant.EPOCH;
 
-        private LiveBearSessionDriver(Instant eventEnd) {
+        private LiveBearSessionDriver(Instant eventEnd, BearCaptureRecorder capture) {
             this.eventEnd = eventEnd;
+            this.capture = capture;
             BearSessionCheckpoint.Checkpoint checkpoint = BearSessionCheckpoint.load(profile)
                     .filter(saved -> saved.eventEnd().equals(eventEnd))
                     .orElse(null);
@@ -670,7 +733,8 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
             this.realtimeFrames = new BearRealtimeFrameSource(
                     emuManager.getAdbPath(),
                     emuManager.getDeviceSerial(EMULATOR_NUMBER),
-                    () -> Thread.currentThread().isInterrupted());
+                    () -> Thread.currentThread().isInterrupted(),
+                    capture == null ? () -> null : capture::nextSegment);
             this.frames = BearFrameStream.fromTimestampedSource(
                     realtimeFrames::next,
                     this::classifyBearScreen,
@@ -809,7 +873,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
             try {
                 try {
                     ui.phase(BearUiStateMachine.Phase.CLEANING_UP);
-                    if (resumeNormalTasks && !verifyTerminalUiCleanup()) {
+                    if (resumeNormalTasks && capture == null && !verifyTerminalUiCleanup()) {
                         throw protectedFailure(
                                 BearSessionExecutionException.FailureKind.VISUAL_UNKNOWN,
                                 BearSessionExecutionException.RecoveryDirective.OPERATOR_ACTION,
@@ -835,6 +899,9 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                 }
             } finally {
                 realtimeFrames.close();
+                if (capture != null) {
+                    capture.close();
+                }
             }
         }
 
@@ -2198,6 +2265,17 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         }
 
         private BearNavigationPolicy.Screen classifyBearScreen(RawImageData frame) {
+            classificationTemplateNanos.clear();
+            classificationStartedAt = Instant.now();
+            long started = System.nanoTime();
+            try {
+                return classifyBearScreenUntimed(frame);
+            } finally {
+                classificationNanos = System.nanoTime() - started;
+            }
+        }
+
+        private BearNavigationPolicy.Screen classifyBearScreenUntimed(RawImageData frame) {
             BearNavigationPolicy.Screen screen;
             if (found(frame, GAME_HOME_RECONNECT, 85)) {
                 screen = BearNavigationPolicy.Screen.RECONNECT;
@@ -2265,8 +2343,45 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         }
 
         private boolean found(RawImageData frame, TemplatesEnum template, int threshold) {
-            return emuManager.locatePattern(
-                    EMULATOR_NUMBER, frame, template, threshold).isFound();
+            long started = System.nanoTime();
+            try {
+                return emuManager.locatePattern(
+                        EMULATOR_NUMBER, frame, template, threshold).isFound();
+            } finally {
+                classificationTemplateNanos.merge(template.name(), System.nanoTime() - started, Long::sum);
+            }
+        }
+
+        /**
+         * Evidence-only session: owns the event window and records every ordered frame with its
+         * classification and timing, but sends no input. It exists to collect the real frames and
+         * latency data that templates, areas, and Bear centring still lack.
+         */
+        BearSessionCoordinator.ExitReason observeOnlyUntil(Instant end) {
+            logWarning(routineLogBearTrapLine("Observe-only Bear session: no input will be sent; recording to "
+                    + (capture == null ? "nowhere (capture unavailable)" : capture.directory())));
+            DiagnosticSnapshotStore snapshots = DiagnosticSnapshotStore.forCurrentWorkspace();
+            BearNavigationPolicy.Screen previous = null;
+            while (now().isBefore(end)) {
+                if (cancellationRequested()) {
+                    return BearSessionCoordinator.ExitReason.CANCELLED;
+                }
+                ui.phase(now().isBefore(end.minus(BearEventWindow.EVENT_DURATION))
+                        ? BearUiStateMachine.Phase.WAITING_FOR_ACTIVATION
+                        : BearUiStateMachine.Phase.ACTIVE);
+                BearFrameStream.Snapshot<RawImageData> frame = ui.observe();
+                if (capture != null) {
+                    Duration transportAge = Duration.between(frame.capturedAt(), classificationStartedAt);
+                    capture.observed(frame.sequence(), frame.capturedAt(),
+                            transportAge.isNegative() ? Duration.ZERO : transportAge,
+                            frame.screen(), classificationNanos, Map.copyOf(classificationTemplateNanos));
+                }
+                if (frame.screen() != previous) {
+                    snapshots.write(frame.frame(), "bear-observe", frame.screen().name(), frame.capturedAt());
+                    previous = frame.screen();
+                }
+            }
+            return BearSessionCoordinator.ExitReason.EVENT_ENDED;
         }
 
         private boolean recoverCapture(RuntimeException failure, int failedAttempt) {

@@ -117,6 +117,9 @@
                             <CheckBox fx:id="checkBoxRecallTroops" maxWidth="Infinity"
                                       mnemonicParsing="false"
                                       text="Recall gathering troops before Bear Trap" />
+                            <CheckBox fx:id="checkBoxObserveOnly" maxWidth="Infinity"
+                                      mnemonicParsing="false"
+                                      text="Observe only: record the event, send no input" />
                         </VBox>
                     </VBox>
 
