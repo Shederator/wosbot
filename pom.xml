@@ -327,6 +327,18 @@
 		</dependencies>
 	</dependencyManagement>
 
+	<profiles>
+		<profile>
+			<id>video-native-windows</id>
+			<activation>
+				<os><family>Windows</family></os>
+			</activation>
+			<properties>
+				<video.native.platform>windows-x86_64</video.native.platform>
+			</properties>
+		</profile>
+	</profiles>
+
 	<!-- ──────────────────────────────────────────────
 	     Centralised plugin version pinning
 	     ────────────────────────────────────────────── -->

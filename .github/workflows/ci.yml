@@ -54,7 +54,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            tesseract-ocr libtesseract-dev libleptonica-dev xvfb
+            tesseract-ocr libtesseract-dev libleptonica-dev libpulse0 xvfb
 
       - name: Build and test Maven reactor
         run: |
