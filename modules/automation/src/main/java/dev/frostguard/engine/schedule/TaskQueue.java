@@ -354,7 +354,7 @@ public class TaskQueue {
         sessionOrigin = null;
         boolean durableBearHandoff = BearTrapSessionLease.active(profile.getId())
                 .map(lease -> BearRecoveryFinalization.arm(profile, lease.eventEnd())
-                        && BearSessionCheckpoint.record(profile, new BearSessionCheckpoint.Checkpoint(
+                        && BearSessionCheckpoint.recordScheduler(profile, new BearSessionCheckpoint.Checkpoint(
                     lease.eventEnd(),
                     "SCHEDULER",
                     "QUEUE_STOPPED",
@@ -363,7 +363,7 @@ public class TaskQueue {
                     Instant.EPOCH,
                     0,
                     "explicit-queue-stop",
-                    Instant.now())))
+                    Instant.now()), true))
                 .orElse(true);
         if (durableBearHandoff) {
             BearTrapSessionLease.releaseForQueueStop(profile.getId());
@@ -940,7 +940,7 @@ public class TaskQueue {
             BearTrapSessionLease.Lease lease = activeBearLease.orElseThrow();
             resetBearRecoveryBudgetFor(lease);
             int plannedAttempts = plannedAttemptsFor(bearFailure.recoveryDirective());
-            if (!BearSessionCheckpoint.record(profile, new BearSessionCheckpoint.Checkpoint(
+            if (!BearSessionCheckpoint.recordScheduler(profile, new BearSessionCheckpoint.Checkpoint(
                     lease.eventEnd(),
                     "RECOVERING",
                     bearFailure.failureKind().name(),
@@ -949,7 +949,7 @@ public class TaskQueue {
                     Instant.EPOCH,
                     plannedAttempts,
                     bearFailure.recoveryDirective().name(),
-                    Instant.now()))) {
+                    Instant.now()), false)) {
                 throw new IllegalStateException(
                         "Bear recovery refused because its durable recovery point could not be persisted",
                         bearFailure);

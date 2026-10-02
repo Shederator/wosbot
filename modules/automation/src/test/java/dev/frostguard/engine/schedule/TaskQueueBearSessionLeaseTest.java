@@ -503,6 +503,37 @@ class TaskQueueBearSessionLeaseTest {
         assertTrue(restarted.getNextQueuedTaskTypes(20).contains(TpDailyTaskEnum.BEAR_TRAP));
     }
 
+    @Test
+    void queueStopAndErrorRoutingKeepTacticalRecoveryState() {
+        AccountDescriptor profile = configuredActiveProfile("Bear tactical merge ");
+        RecordingQueue queue = new RecordingQueue(profile);
+        RecordingBearTask bear = new RecordingBearTask(profile);
+        BearTrapSessionLease.Lease lease =
+                BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+        Instant sentAt = Instant.now().minusSeconds(40);
+        Instant returnDeadline = sentAt.plusSeconds(420);
+        assertTrue(BearSessionCheckpoint.recordTactical(profile, lease.eventEnd(), sentAt,
+                returnDeadline, "PLUS_COMMITTED", 77L, "Leader", 512, "test-tactical"));
+
+        queue.routeError(bear, failure(
+                BearSessionExecutionException.FailureKind.CAPTURE_TRANSIENT,
+                BearSessionExecutionException.RecoveryDirective.DEGRADED_WAIT));
+        BearSessionCheckpoint.Checkpoint afterError =
+                BearSessionCheckpoint.load(reload(profile.getId())).orElseThrow();
+        assertEquals(returnDeadline, afterError.ownRallyReturnDeadline());
+        assertEquals("PLUS_COMMITTED", afterError.joinSubstate());
+        assertEquals(1, afterError.recoveryAttempts());
+
+        queue.requestStop();
+        BearSessionCheckpoint.Checkpoint afterStop =
+                BearSessionCheckpoint.load(reload(profile.getId())).orElseThrow();
+        assertEquals(sentAt, afterStop.ownRallySentAt());
+        assertEquals(returnDeadline, afterStop.ownRallyReturnDeadline());
+        assertEquals("PLUS_COMMITTED", afterStop.joinSubstate());
+        assertEquals(77L, afterStop.listRowFingerprint());
+        assertEquals(1, afterStop.recoveryAttempts(), "stopping must not reset the recovery budget");
+    }
+
     private static AccountDescriptor reload(Long profileId) {
         return ProfileService.obtain().fetchAllAccounts().stream()
                 .filter(candidate -> profileId.equals(candidate.getId()))

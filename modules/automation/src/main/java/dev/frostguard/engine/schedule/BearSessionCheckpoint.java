@@ -120,6 +120,40 @@ public final class BearSessionCheckpoint {
         return record(profile, merged);
     }
 
+    /**
+     * Records a scheduler transition (error routing, queue stop) without erasing the tactical
+     * own-rally and join state that recovery needs to avoid repeating an ambiguous input.
+     */
+    public static boolean recordScheduler(
+            AccountDescriptor profile, Checkpoint transition, boolean keepDurableBudget) {
+        if (profile == null || transition == null || transition.eventEnd() == null) {
+            return false;
+        }
+        return record(profile, mergeTactical(load(profile).orElse(null), transition, keepDurableBudget));
+    }
+
+    static Checkpoint mergeTactical(Checkpoint durable, Checkpoint transition, boolean keepDurableBudget) {
+        if (durable == null || !durable.eventEnd().equals(transition.eventEnd())) {
+            return transition;
+        }
+        return new Checkpoint(
+                transition.eventEnd(),
+                transition.phase(),
+                transition.state(),
+                transition.action(),
+                transition.frameSequence(),
+                transition.frameCapturedAt(),
+                keepDurableBudget ? durable.recoveryAttempts() : transition.recoveryAttempts(),
+                transition.reason(),
+                transition.updatedAt(),
+                durable.ownRallySentAt(),
+                durable.ownRallyReturnDeadline(),
+                durable.joinSubstate(),
+                durable.listRowFingerprint(),
+                durable.listLeader(),
+                durable.listRowY());
+    }
+
     static Checkpoint mergeRecoveryBudget(Checkpoint durable, Checkpoint observation) {
         if (durable == null || !durable.eventEnd().equals(observation.eventEnd())) {
             return observation;
