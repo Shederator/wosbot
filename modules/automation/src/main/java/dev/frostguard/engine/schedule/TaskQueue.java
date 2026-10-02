@@ -87,6 +87,7 @@ public class TaskQueue {
     private volatile AccountDescriptor profile;
     private volatile ExecutionContext   runningContext;
     private volatile LocalDateTime      sessionOrigin;
+    private volatile boolean bearCleanupOwedByRunningTask;
     private final BooleanSupplier deviceOwnership = () -> hasProtectedBearOwnership(Instant.now());
     private volatile String             profileCooldownStatus;
     // Changed by pernerch | Date: 2026-07-04 | Why: ensure first startup cycle runs Initialize regardless of idle heuristics.
@@ -599,15 +600,21 @@ public class TaskQueue {
             statusModel.setIdleTimeExceeded(false);
         } else if (!statusModel.isPaused()) {
             deferFailedIdleWakeInitialize(initialize);
-            if (!requiresSlotAcquisition(sessionOrigin) && !hasProtectedBearOwnership(Instant.now())) {
-                try {
-                    releaseActiveSlotLease();
-                } catch (RuntimeException ex) {
-                    emitWarn("Could not release slot after failed idle wake Initialize: " + ex.getMessage());
-                }
-            }
+            releaseSlotAfterFailedIdleWake();
         }
         return false;
+    }
+
+    /** A failed idle-wake Initialize frees the slot, unless this profile owns an active Bear event. */
+    void releaseSlotAfterFailedIdleWake() {
+        if (requiresSlotAcquisition(sessionOrigin) || hasProtectedBearOwnership(Instant.now())) {
+            return;
+        }
+        try {
+            releaseActiveSlotLease();
+        } catch (RuntimeException ex) {
+            emitWarn("Could not release slot after failed idle wake Initialize: " + ex.getMessage());
+        }
     }
 
     private synchronized boolean hasDeferredIdleWakeInitialize() {
@@ -839,6 +846,10 @@ public class TaskQueue {
             synchronized (this) { if (runningContext != null) runningContext.clear(); runningContext = null; }
             if (!shuttingDown) {
                 handleReschedule(task, priorSchedule);
+                if (task.getTpTask() == TpDailyTaskEnum.BEAR_TRAP && bearCleanupOwedByRunningTask) {
+                    bearCleanupOwedByRunningTask = false;
+                    queueBearCleanupNow();
+                }
                 recordPostExecution(task, st);
             }
         }
@@ -1582,8 +1593,12 @@ public class TaskQueue {
             return false;
         }
         ExecutionContext running = runningContext;
-        if (running != null && running.getTask() != null
-                && running.getTask().getTpTask() == TpDailyTaskEnum.BEAR_TRAP) {
+        boolean bearRunning = running != null && running.getTask() != null
+                && running.getTask().getTpTask() == TpDailyTaskEnum.BEAR_TRAP;
+        if (bearRunning) {
+            // The running task carries the cleanup when it returns; queueing a second one here
+            // would duplicate Bear in the backlog.
+            bearCleanupOwedByRunningTask = true;
             running.cancel();
         }
         BearTrapSessionLease.releaseForQueueStop(profile.getId());
@@ -1592,7 +1607,9 @@ public class TaskQueue {
                     + "could not be persisted");
             return true;
         }
-        queueBearCleanupNow();
+        if (!bearRunning) {
+            queueBearCleanupNow();
+        }
         emitWarn("Bear ownership revoked by the operator (" + reason + "); session stopped, device "
                 + "released, cleanup-only finalization queued");
         return true;

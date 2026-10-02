@@ -20,6 +20,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
+import java.util.function.Function;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -31,6 +32,7 @@ import dev.frostguard.api.runtime.WorkspacePaths;
 import dev.frostguard.api.runtime.WorkspaceSession;
 import dev.frostguard.data.repository.DailyTaskRepository;
 import dev.frostguard.engine.error.BearSessionExecutionException;
+import dev.frostguard.engine.error.ProfileCooldownException;
 import dev.frostguard.engine.service.ConfigService;
 import dev.frostguard.engine.service.ProfileService;
 
@@ -695,6 +697,116 @@ class TaskQueueBearSessionLeaseTest {
         assertTrue(BearObserveOnlyFallback.active(reload(profile.getId()), Instant.now()));
     }
 
+    @Test
+    void cooldownDuringBearOwnershipNeitherStopsTheGameNorFreesTheSlot() throws Exception {
+        AccountDescriptor profile = configuredActiveProfile("Bear cooldown ");
+        RecordingQueue queue = new RecordingQueue(profile);
+        BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+        queue.markSlotAcquired();
+
+        queue.routeError(new RecordingNormalTask(profile), new ProfileCooldownException(
+                "simulated startup cooldown", LocalDateTime.now().plusMinutes(5)));
+
+        assertEquals(0, queue.gameStops, "the game Bear plays must not be force-stopped");
+        assertEquals(0, queue.slotReleases, "the Bear profile keeps its emulator slot");
+        assertFalse(TaskQueue.requiresSlotAcquisition(sessionOrigin(queue)));
+    }
+
+    @Test
+    void cooldownWithoutBearOwnershipStillReleasesItsResources() {
+        AccountDescriptor profile = configuredActiveProfile("Bear cooldown idle ");
+        assertTrue(ConfigService.obtain().writeAccountSetting(profile, BEAR_TRAP_EVENT_BOOL, "false"));
+        RecordingQueue queue = new RecordingQueue(reload(profile.getId()));
+
+        queue.routeError(new RecordingNormalTask(profile), new ProfileCooldownException(
+                "simulated startup cooldown", LocalDateTime.now().plusMinutes(5)));
+
+        assertEquals(1, queue.gameStops);
+        assertEquals(1, queue.slotReleases);
+    }
+
+    @Test
+    void failedIdleWakeKeepsTheSlotOnlyWhileBearOwnsTheEvent() throws Exception {
+        AccountDescriptor owner = configuredActiveProfile("Bear idle wake owner ");
+        RecordingQueue protectedQueue = new RecordingQueue(owner);
+        BearTrapSessionLease.acquireForBearExecution(owner).orElseThrow();
+        protectedQueue.markSlotAcquired();
+        protectedQueue.releaseSlotAfterFailedIdleWake();
+        assertFalse(TaskQueue.requiresSlotAcquisition(sessionOrigin(protectedQueue)));
+
+        AccountDescriptor plain = configuredActiveProfile("Bear idle wake plain ");
+        assertTrue(ConfigService.obtain().writeAccountSetting(plain, BEAR_TRAP_EVENT_BOOL, "false"));
+        RecordingQueue plainQueue = new RecordingQueue(reload(plain.getId()));
+        plainQueue.markSlotAcquired();
+        plainQueue.releaseSlotAfterFailedIdleWake();
+        assertTrue(TaskQueue.requiresSlotAcquisition(sessionOrigin(plainQueue)));
+    }
+
+    @Test
+    void protectedQueueUnderAnIdleBreachKeepsItsSlotAndDevice() throws Exception {
+        AccountDescriptor profile = configuredActiveProfile("Bear idle breach ");
+        BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+        TaskQueue queue = new TaskQueue(profile) {
+            @Override
+            protected void acquireSlot() {
+                markSlotAcquired();
+            }
+        };
+        queue.markSlotAcquired();
+        queue.enqueue(new RecordingNormalTask(profile));
+        queue.statusModel.setDelayUntil(LocalDateTime.now().plusHours(2));
+
+        queue.handleIdleTransitions();
+
+        assertFalse(TaskQueue.requiresSlotAcquisition(sessionOrigin(queue)),
+                "idle handling must not release the Bear profile's slot");
+        assertFalse(queue.statusModel.isIdleTimeExceeded(), "Bear ownership skips idle handling");
+    }
+
+    @Test
+    void revocationCancelsTheRunningBearSession() {
+        AccountDescriptor profile = configuredActiveProfile("Bear revoke running ");
+        RecordingQueue queue = new RecordingQueue(profile);
+        // Production creates and runs the same BearTrapRoutine class; mirror that equality.
+        queue.bearFactory = owner -> new RevokingBearTask(owner, queue);
+        RevokingBearTask bear = new RevokingBearTask(profile, queue);
+
+        queue.executeTask(bear);
+
+        assertTrue(bear.cancelledAfterRevocation, "the running Bear session must be cancelled");
+        assertEquals(1, queue.getNextQueuedTaskTypes(20).stream()
+                        .filter(type -> type == TpDailyTaskEnum.BEAR_TRAP).count(),
+                "exactly one Bear task carries the cleanup-only finalization");
+        assertFalse(BearRecoveryFinalization.deadline(reload(profile.getId())).orElseThrow()
+                .isAfter(Instant.now()), "the cleanup finalization is due now");
+    }
+
+    private static final class RevokingBearTask extends DelayedTask {
+
+        private final TaskQueue queue;
+        private boolean cancelledAfterRevocation;
+
+        private RevokingBearTask(AccountDescriptor profile, TaskQueue queue) {
+            super(profile, TpDailyTaskEnum.BEAR_TRAP);
+            this.queue = queue;
+            reschedule(LocalDateTime.now().minusSeconds(1));
+        }
+
+        @Override
+        public void run() {
+            queue.revokeBearOwnership("profile disabled");
+            try {
+                checkPreemption();
+            } catch (RuntimeException cancelled) {
+                cancelledAfterRevocation = true;
+            }
+        }
+
+        @Override
+        protected void execute() {
+        }
+    }
+
     private static AccountDescriptor reload(Long profileId) {
         return ProfileService.obtain().fetchAllAccounts().stream()
                 .filter(candidate -> profileId.equals(candidate.getId()))
@@ -821,6 +933,10 @@ class TaskQueueBearSessionLeaseTest {
         private int appRestarts;
         private int gatherRestores;
         private int autojoinRestores;
+        private Function<AccountDescriptor, DelayedTask> bearFactory =
+                RecordingBearTask::new;
+        private int gameStops;
+        private int slotReleases;
 
         private RecordingQueue(AccountDescriptor profile) {
             super(profile);
@@ -837,6 +953,18 @@ class TaskQueueBearSessionLeaseTest {
 
         @Override
         protected void sleepSchedulerTick(long millis) {
+        }
+
+        @Override
+        protected boolean stopBlockedGameProcess(DelayedTask task) {
+            gameStops++;
+            return true;
+        }
+
+        @Override
+        protected boolean releaseBlockedProfileSlot(DelayedTask task) {
+            slotReleases++;
+            return true;
         }
 
         @Override
@@ -865,7 +993,7 @@ class TaskQueueBearSessionLeaseTest {
         @Override
         protected DelayedTask createTask(TpDailyTaskEnum kind) {
             if (kind == TpDailyTaskEnum.BEAR_TRAP) {
-                return new RecordingBearTask(getProfile());
+                return bearFactory.apply(getProfile());
             }
             return super.createTask(kind);
         }
