@@ -3,11 +3,13 @@ package dev.frostguard.app.bootstrap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import dev.frostguard.app.SessionBuildIdentity;
 import dev.frostguard.api.runtime.WorkspacePaths;
 import dev.frostguard.api.runtime.WorkspaceSession;
 import dev.frostguard.api.runtime.WorkspaceSession.WorkspaceInUseException;
 import dev.frostguard.engine.service.AnalyticsService;
 import dev.frostguard.tasks.TaskRegistrations;
+import dev.frostguard.vision.logging.ProfileContextLogger;
 
 public class Main {
     private static volatile WorkspaceSession workspace;
@@ -29,6 +31,7 @@ public class Main {
         }
 
         configureLoggingNoise();
+        ProfileContextLogger.configureSessionBuildLines(SessionBuildIdentity.forWorkspace(paths));
         Logger logger = LoggerFactory.getLogger(Main.class);
         try {
             if (options.nativeSmokeTest()) {
