@@ -2,11 +2,14 @@ package dev.frostguard.tasks.economy;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -15,6 +18,7 @@ import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.runtime.WorkspacePaths;
+import dev.frostguard.engine.error.ADBConnectionException;
 
 class NomadicMerchantRoutineTest {
 
@@ -47,6 +51,22 @@ class NomadicMerchantRoutineTest {
         assertEquals(NomadicMerchantProgress.UNCONFIRMED, routine.progress());
         assertEquals(2, routine.navigationAttempts);
         assertEquals(NomadicMerchantPhase.FINISHED, routine.phase());
+    }
+
+    @Test
+    void retriesAfterResourceScanFailureWithoutRecordingCompletion() {
+        ADBConnectionException expectedFailure = new ADBConnectionException("synthetic capture failure");
+        FailingResourceScanRoutine routine = new FailingResourceScanRoutine(expectedFailure);
+        LocalDateTime before = LocalDateTime.now();
+
+        ADBConnectionException failure = assertThrows(ADBConnectionException.class, routine::execute);
+
+        assertSame(expectedFailure, failure);
+        assertEquals(NomadicMerchantProgress.UNCONFIRMED, routine.progress());
+        assertEquals(NomadicMerchantPhase.FINISHED, routine.phase());
+        assertTrue(routine.scheduledTime().isAfter(before.plusMinutes(4)));
+        assertTrue(routine.scheduledTime().isBefore(LocalDateTime.now().plusMinutes(6)));
+        assertEquals(1, routine.visitResults().freeResourcesClaimedCount());
     }
 
     @Test
@@ -134,6 +154,38 @@ class NomadicMerchantRoutineTest {
 
         private LocalDateTime scheduledTime() {
             return scheduledTime;
+        }
+    }
+
+    private static final class FailingResourceScanRoutine extends NomadicMerchantRoutine {
+        private final ADBConnectionException failure;
+        private VisitResults visitResults;
+
+        private FailingResourceScanRoutine(ADBConnectionException failure) {
+            super(new AccountDescriptor(1L, "Test", "1", true, 1L, 30L),
+                    TpDailyTaskEnum.NOMADIC_MERCHANT);
+            this.failure = failure;
+        }
+
+        @Override
+        boolean navigateToNomadicMerchantShop() {
+            return true;
+        }
+
+        @Override
+        void claimResourceOffers(List<Integer> skippedResourceOffers, long executionDeadlineMs,
+                VisitResults visitResults) {
+            this.visitResults = visitResults;
+            visitResults.recordFreeResourceClaim();
+            throw failure;
+        }
+
+        private LocalDateTime scheduledTime() {
+            return scheduledTime;
+        }
+
+        private VisitResults visitResults() {
+            return visitResults;
         }
     }
 }

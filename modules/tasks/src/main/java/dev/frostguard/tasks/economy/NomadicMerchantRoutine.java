@@ -72,13 +72,14 @@ public class NomadicMerchantRoutine extends DelayedTask {
         retryReason = null;
         logInfo("Resuming Nomadic Merchant from " + progress + ".");
 
-        int freeResourcesClaimedCount = 0;
         int vipPointsPurchasedCount = 0;
         int dailyRefreshUsedCount = 0;
         List<Integer> skippedResourceOffers = new ArrayList<>();
+        VisitResults visitResults = new VisitResults();
         long executionDeadlineMs = System.currentTimeMillis() + MAX_TASK_EXECUTION_MS;
         boolean unconfirmed = false;
         boolean complete = false;
+        RuntimeException visitFailure = null;
 
         try {
             if (!navigateToNomadicMerchantShop()) {
@@ -87,8 +88,8 @@ public class NomadicMerchantRoutine extends DelayedTask {
             } else {
                 while (!unconfirmed && !complete
                         && System.currentTimeMillis() < executionDeadlineMs) {
-                    int claimed = claimResourceOffers(skippedResourceOffers, executionDeadlineMs);
-                    freeResourcesClaimedCount += claimed;
+                    phase = NomadicMerchantPhase.SEARCHING_RESOURCES;
+                    claimResourceOffers(skippedResourceOffers, executionDeadlineMs, visitResults);
                     if (retrySnapshotType != null
                             || System.currentTimeMillis() >= executionDeadlineMs) {
                         break;
@@ -121,15 +122,18 @@ public class NomadicMerchantRoutine extends DelayedTask {
                             "Nomadic Merchant task reached execution limit. Ending current cycle with partial results");
                 }
             }
+        } catch (RuntimeException failure) {
+            visitFailure = failure;
+            throw failure;
         } finally {
-            finishVisit(freeResourcesClaimedCount, vipPointsPurchasedCount, dailyRefreshUsedCount);
+            finishVisit(visitResults.freeResourcesClaimedCount(), vipPointsPurchasedCount, dailyRefreshUsedCount,
+                    complete, visitFailure);
         }
     }
 
-    private int claimResourceOffers(List<Integer> skippedResourceOffers, long executionDeadlineMs) {
-        int claimed = 0;
+    void claimResourceOffers(List<Integer> skippedResourceOffers, long executionDeadlineMs,
+            VisitResults visitResults) {
         boolean foundTake = true;
-        phase = NomadicMerchantPhase.SEARCHING_RESOURCES;
         logInfo("Searching for cards priced in natural resources.");
 
         while (foundTake && System.currentTimeMillis() < executionDeadlineMs) {
@@ -157,13 +161,24 @@ public class NomadicMerchantRoutine extends DelayedTask {
                     foundTake = true;
                     break;
                 }
-                claimed++;
+                visitResults.recordFreeResourceClaim();
                 foundTake = true;
                 logInfo("Resource action dispatched. Rescanning the full shop for replacement items.");
                 break;
             }
         }
-        return claimed;
+    }
+
+    static final class VisitResults {
+        private int freeResourcesClaimedCount;
+
+        void recordFreeResourceClaim() {
+            freeResourcesClaimedCount++;
+        }
+
+        int freeResourcesClaimedCount() {
+            return freeResourcesClaimedCount;
+        }
     }
 
     /** @return 1 when a VIP card was bought, 0 when none was present */
@@ -252,21 +267,25 @@ public class NomadicMerchantRoutine extends DelayedTask {
     }
 
     private void finishVisit(int freeResourcesClaimedCount, int vipPointsPurchasedCount,
-            int dailyRefreshUsedCount) {
+            int dailyRefreshUsedCount, boolean complete, RuntimeException visitFailure) {
         NomadicMerchantPhase failedDuring = phase;
-        if (retrySnapshotType != null) {
-            progress = NomadicMerchantProgress.UNCONFIRMED;
-        } else if (failedDuring != NomadicMerchantPhase.OPENING) {
-            progress = NomadicMerchantProgress.COMPLETE_UNTIL_RESET;
-        }
+        progress = complete && retrySnapshotType == null && visitFailure == null
+                ? NomadicMerchantProgress.COMPLETE_UNTIL_RESET
+                : NomadicMerchantProgress.UNCONFIRMED;
         phase = NomadicMerchantPhase.FINISHED;
-        recordConfirmedResults(freeResourcesClaimedCount, vipPointsPurchasedCount, dailyRefreshUsedCount);
-        String stats = resultSummary(freeResourcesClaimedCount, vipPointsPurchasedCount, dailyRefreshUsedCount);
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime next = progress == NomadicMerchantProgress.COMPLETE_UNTIL_RESET
                 ? nextRun(progress, now, GameTimeUtils.dailyResetTime())
                 : nextRun(progress, now, now);
-        if (retrySnapshotType != null) {
+        reschedule(next);
+        recordConfirmedResults(freeResourcesClaimedCount, vipPointsPurchasedCount, dailyRefreshUsedCount);
+        String stats = resultSummary(freeResourcesClaimedCount, vipPointsPurchasedCount, dailyRefreshUsedCount);
+        if (visitFailure != null) {
+            logWarning("Nomadic Merchant visit interrupted by " + visitFailure.getClass().getSimpleName()
+                    + " during " + failedDuring + ". Progress " + progress
+                    + "; confirmed results kept; " + stats
+                    + "; next check at " + next.format(DATETIME_FORMATTER) + ".");
+        } else if (retrySnapshotType != null) {
             String snapshot = TaskDiagnosticSnapshots.capture(
                     emuManager, EMULATOR_NUMBER, "nomadicmerchant", retrySnapshotType);
             logWarning(retryReason + ". Progress " + progress + " after " + failedDuring
@@ -276,7 +295,6 @@ public class NomadicMerchantRoutine extends DelayedTask {
             logInfo(stats + ". Progress " + progress + " after " + failedDuring
                     + ". Next check at " + next.format(DATETIME_FORMATTER) + ".");
         }
-        reschedule(next);
     }
 
     static LocalDateTime nextRun(NomadicMerchantProgress progress, LocalDateTime now,
