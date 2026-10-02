@@ -37,6 +37,7 @@ import dev.frostguard.engine.nav.SidebarSection;
 import dev.frostguard.engine.service.ConfigService;
 import dev.frostguard.engine.service.ProfileService;
 import dev.frostguard.vision.convert.ImageConverter;
+import dev.frostguard.vision.detection.CloseCrossDetector;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
@@ -2093,8 +2094,14 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                         if (action == BearUiAction.DISMISS_DEPLOY_DIALOG) {
                             pressBack();
                         } else if (source == BearNavigationPolicy.Screen.WAR_LIST) {
-                            tapTemplateFrom(authorization, BEAR_WAR_LIST_CLOSE, 85,
-                                    "close-war-rally-list");
+                            AreaData close = warListClose(authorization.frame())
+                                    .orElseThrow(() -> protectedFailure(
+                                            BearSessionExecutionException.FailureKind.VISUAL_UNKNOWN,
+                                            BearSessionExecutionException.RecoveryDirective.DEGRADED_WAIT,
+                                            "close-war-rally-list-missing-in-authorizing-frame",
+                                            null));
+                            requireFreshAuthorization(authorization, "close-war-rally-list");
+                            tapInside(close);
                         } else {
                             tapInside(new PointData(50, 50), new PointData(50, 50));
                         }
@@ -2173,7 +2180,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                 screen = BearNavigationPolicy.Screen.BEAR_RALLY_PANEL;
             } else {
                 boolean joinButtonVisible = found(frame, BEAR_JOIN_PLUS_ICON, 80);
-                boolean warCloseVisible = found(frame, BEAR_WAR_LIST_CLOSE, 85);
+                boolean warCloseVisible = warListClose(frame).isPresent();
                 if (BearWarListIdentity.isVisible(
                         warListKnown, warCloseVisible, joinButtonVisible ? 1 : 0)) {
                     screen = BearNavigationPolicy.Screen.WAR_LIST;
@@ -2210,6 +2217,13 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                 warListKnown = false;
             }
             return screen;
+        }
+
+        private Optional<AreaData> warListClose(RawImageData frame) {
+            return CloseCrossDetector.locate(frame, CommonGameAreas.BEAR_WAR_LIST_CLOSE_SEARCH_AREA)
+                    .stream()
+                    .findFirst()
+                    .map(CloseCrossDetector.Detection::bounds);
         }
 
         private boolean found(RawImageData frame, TemplatesEnum template, int threshold) {

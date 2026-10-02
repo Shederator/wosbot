@@ -214,6 +214,10 @@ public final class CommonGameAreas {
             region(110, 592, 152, 634), region(375, 592, 417, 634)
     };
 
+    // Close cross of the Alliance War rally list. Provisional: no saved real War-list frame yet,
+    // so this is the upper-right header band shared with other closeable overlays.
+    public static final AreaData BEAR_WAR_LIST_CLOSE_SEARCH_AREA = region(540, 0, 719, 240);
+
     // Polar Terror search panel: the level number sits in the pill right of the slider, not on the
     // slider bar itself.
     public static final AreaData POLAR_LEVEL_DISPLAY = region(565, 1030, 665, 1078);
