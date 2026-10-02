@@ -26,7 +26,8 @@ Ownership rules while the event is active:
   work without any Bear input. Every later run for that event is cleanup-only, unless the operator
   re-enables Bear and the profile, which resumes the session. A Bear claim re-reads the stored
   profile after it publishes its run, so a disable that lands while nothing is owned yet still stops
-  the claim before any input. A profile disabled before restart is not resumed.
+  the claim before any input. A profile re-enabled after its revoked event ended gets Bear
+  planned for the next event. A profile disabled before restart is not resumed.
 
 The bot's own rally uses the Special march. Its exact expected return is:
 

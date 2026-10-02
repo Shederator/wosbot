@@ -23,6 +23,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -256,6 +257,62 @@ class TaskQueueBearRevocationRaceTest {
         });
     }
 
+    @Test
+    void reEnablingTheProfileAfterItsRevokedEventEndedPlansItsNextEvent() throws Exception {
+        // The revoked event is over: no revocation, lease or finalizer remains, and the cleanup
+        // dropped Bear from the queue because the profile was disabled at the time.
+        AccountDescriptor profile = configuredProfile("Bear re-enabled after event ",
+                LocalDateTime.now(ZoneOffset.UTC).minusHours(2));
+        RaceQueue queue = new RaceQueue(profile);
+        LocalDateTime resumedAt = LocalDateTime.now();
+
+        withQueueRegistered(queue, profile, () -> ScheduleService.obtain().resumeBearOwnership(profile.getId()));
+
+        assertTrue(queue.bearScheduledAt().isPresent(), "re-enabling the profile must put Bear back on its schedule");
+        assertTrue(queue.bearScheduledAt().orElseThrow().isAfter(resumedAt.plusMinutes(1)),
+                "outside an event Bear waits for its next event instead of running now: "
+                        + queue.bearScheduledAt().orElseThrow());
+    }
+
+    @Test
+    void reEnablingBeforeTheCleanupRanLetsTheQueuedRunResume() throws Exception {
+        AccountDescriptor profile = configuredActiveProfile("Bear re-enabled before cleanup ");
+        RaceQueue queue = new RaceQueue(profile);
+        BearTrapSessionLease.Lease lease = BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+        assertTrue(BearSessionCheckpoint.open(profile, lease.eventEnd()));
+        CountingBearTask.inputsAcrossTasks.set(0);
+
+        withQueueRegistered(queue, profile, () -> {
+            persistDisabled(profile);
+            assertTrue(queue.revokeBearOwnership("profile disabled"));
+            AccountDescriptor enabled = reload(profile.getId());
+            enabled.setEnabled(true);
+            assertTrue(ProfileService.obtain().persistAccount(enabled));
+
+            assertTrue(queue.resumeRevokedBear());
+            assertEquals(0, queue.bearRunNows,
+                    "the queued cleanup run already resumes the session; a second Run Now is refused");
+            for (int tick = 0; tick < 10; tick++) {
+                queue.runSchedulerTick();
+            }
+
+            assertTrue(CountingBearTask.inputsAcrossTasks.get() >= 1, "the queued run resumed the session");
+        });
+    }
+
+    @Test
+    void aClaimThatCannotReadTheStoredProfileStopsBeforeInput() throws Exception {
+        AccountDescriptor profile = configuredActiveProfile("Bear unreadable storage ");
+        RaceQueue queue = new RaceQueue(profile);
+        queue.storageFails = true;
+        CountingBearTask bear = new CountingBearTask(profile);
+
+        withQueueRegistered(queue, profile, () -> queue.executeTask(bear));
+
+        assertEquals(0, bear.inputs, "a claim that cannot confirm the profile is still enabled must not play");
+        assertFalse(BearTrapSessionLease.active(profile.getId()).isPresent());
+    }
+
     /** Production persists the operator's disable before it revokes Bear ownership. */
     private static void persistDisabled(AccountDescriptor profile) {
         AccountDescriptor disabled = reload(profile.getId());
@@ -301,9 +358,13 @@ class TaskQueueBearRevocationRaceTest {
     }
 
     private static AccountDescriptor configuredActiveProfile(String prefix) {
+        return configuredProfile(prefix, LocalDateTime.now(ZoneOffset.UTC));
+    }
+
+    private static AccountDescriptor configuredProfile(String prefix, LocalDateTime activation) {
         AccountDescriptor profile = new AccountDescriptor(null, prefix + UUID.randomUUID(), "0", true, 100L, 30L);
         assertTrue(ProfileService.obtain().createAccount(profile));
-        LocalDateTime activationUtc = LocalDateTime.now(ZoneOffset.UTC).withSecond(0).withNano(0);
+        LocalDateTime activationUtc = activation.withSecond(0).withNano(0);
         assertTrue(ConfigService.obtain().writeAccountSetting(profile, BEAR_TRAP_EVENT_BOOL, "true"));
         assertTrue(ConfigService.obtain().writeAccountSetting(profile, BEAR_TRAP_NUMBER_INT, "1"));
         assertTrue(ConfigService.obtain().writeAccountSetting(profile, BEAR_TRAP_PREPARATION_TIME_INT, "10"));
@@ -361,6 +422,8 @@ class TaskQueueBearRevocationRaceTest {
         private final AtomicInteger finalizations = new AtomicInteger();
         private final AtomicInteger sleeps = new AtomicInteger();
         private int gatherRestores;
+        private int bearRunNows;
+        private volatile boolean storageFails;
 
         private RaceQueue(AccountDescriptor profile) {
             super(profile);
@@ -405,8 +468,17 @@ class TaskQueueBearRevocationRaceTest {
             if (kind == TpDailyTaskEnum.GATHER_RESOURCES) {
                 gatherRestores++;
             } else if (kind == TpDailyTaskEnum.BEAR_TRAP) {
+                bearRunNows++;
                 super.runNow(kind, recurring);
             }
+        }
+
+        @Override
+        Optional<AccountDescriptor> storedProfile() {
+            if (storageFails) {
+                throw new IllegalStateException("profile storage unavailable");
+            }
+            return super.storedProfile();
         }
 
         @Override

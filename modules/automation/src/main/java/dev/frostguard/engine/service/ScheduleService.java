@@ -234,9 +234,17 @@ public class ScheduleService {
 	/** The operator re-enabled a profile; a Bear event revoked by its disable may resume. */
 	public void resumeBearOwnership(Long accountId) {
 		TaskQueue queue = accountId == null ? null : dispatcher.getQueue(accountId);
-		if (queue != null) {
-			queue.resumeRevokedBear();
+		if (queue == null || queue.resumeRevokedBear()) {
+			return;
 		}
+		// Outside the revoked event the disable's cleanup dropped Bear from the queue; plan its next
+		// event the way re-enabling participation does.
+		ProfileService.obtain().fetchAllAccounts().stream()
+				.filter(account -> accountId.equals(account.getId()))
+				.findFirst()
+				.filter(account -> Boolean.TRUE.equals(account.getEnabled()))
+				.ifPresent(account -> reconcileConfigDrivenTasks(account,
+						ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL, List.of(TpDailyTaskEnum.BEAR_TRAP)));
 	}
 
 	public void suspendAccountQueue(Long accountId) {

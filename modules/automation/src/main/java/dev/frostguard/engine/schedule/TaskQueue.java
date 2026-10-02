@@ -1198,9 +1198,7 @@ public class TaskQueue {
     /** Whether storage has the profile and its Bear participation enabled; unreadable storage says no. */
     private boolean persistedBearOwnershipAllowed() {
         try {
-            return ProfileService.obtain().fetchAllAccounts().stream()
-                    .filter(candidate -> profile.getId().equals(candidate.getId()))
-                    .findFirst()
+            return storedProfile()
                     .filter(persisted -> Boolean.TRUE.equals(persisted.getEnabled())
                             && Boolean.TRUE.equals(persisted.getConfig(
                                     ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL, Boolean.class)))
@@ -1212,16 +1210,28 @@ public class TaskQueue {
         }
     }
 
+    /** The persisted copy of this queue's profile, which an operator disable writes first. */
+    Optional<AccountDescriptor> storedProfile() {
+        return ProfileService.obtain().fetchAllAccounts().stream()
+                .filter(candidate -> profile.getId().equals(candidate.getId()))
+                .findFirst();
+    }
+
     /**
-     * The operator re-enabled the profile during an event its disable revoked: queue Bear so its
-     * next claim resumes the session. Re-enabling participation reaches the claim through the
-     * configuration reconcile instead.
+     * The operator re-enabled the profile during an event its disable revoked: make sure a Bear run
+     * is queued so its claim resumes the session. Re-enabling participation reaches the claim
+     * through the configuration reconcile instead.
      *
      * @return whether a revoked Bear event was handed back to the scheduler
      */
     public boolean resumeRevokedBear() {
         if (!bearRevoked(Instant.now()) || !persistedBearOwnershipAllowed()) {
             return false;
+        }
+        if (isTaskQueued(TpDailyTaskEnum.BEAR_TRAP) || isExecutingTask(TpDailyTaskEnum.BEAR_TRAP)) {
+            // The revocation's cleanup run is still pending; its claim sees the re-enable.
+            emitInfo("Profile re-enabled during its revoked Bear event; the pending Bear run resumes it");
+            return true;
         }
         runNow(TpDailyTaskEnum.BEAR_TRAP, true);
         emitInfo("Profile re-enabled during its revoked Bear event; Bear queued to resume");
