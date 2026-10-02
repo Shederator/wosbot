@@ -46,6 +46,7 @@ import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -729,7 +730,8 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         private final MarchHelper sessionMarchHelper;
         private final DeploymentHelper sessionDeploymentHelper;
         private BearFrameStream.Snapshot<RawImageData> lastObservedFrame;
-        private int consecutiveRecoveryFailures;
+        private final Map<BearSessionCoordinator.State, Integer> consecutiveRecoveryFailures =
+                new EnumMap<>(BearSessionCoordinator.State.class);
         private int consecutiveUnknownRecoveries;
         private boolean alliedRallyIndicatorAbsent;
         private final BearRallyListTraversal rallyTraversal = new BearRallyListTraversal();
@@ -1551,11 +1553,12 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         public boolean recover(BearSessionCoordinator.State resumeState) {
             boolean recovered = recoverOnce(resumeState);
             if (recovered) {
-                consecutiveRecoveryFailures = 0;
+                consecutiveRecoveryFailures.remove(resumeState);
                 return true;
             }
-            consecutiveRecoveryFailures++;
-            if (consecutiveRecoveryFailures >= 3) {
+            // Strikes are per goal: recovering for a join must not hide a goal that keeps failing.
+            if (consecutiveRecoveryFailures.merge(resumeState, 1, Integer::sum) >= 3) {
+                consecutiveRecoveryFailures.remove(resumeState);
                 throw protectedFailure(
                         BearSessionExecutionException.FailureKind.VISUAL_UNKNOWN,
                         BearSessionExecutionException.RecoveryDirective.DEGRADED_WAIT,
