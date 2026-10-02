@@ -7,6 +7,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
 class BearTrapRoutineArchitectureTest {
@@ -51,6 +55,23 @@ class BearTrapRoutineArchitectureTest {
                     action + " callback must not persist before its input");
             assertFalse(callback.contains("readPreflightScreen"), action + " callback must not run OCR");
         }
+    }
+
+    @Test
+    void productionClassifierEmitsOnlyDeclaredStates() throws IOException {
+        String java = Files.readString(
+                Path.of("src/main/java/dev/frostguard/tasks/combat/BearTrapRoutine.java"));
+        int start = java.indexOf("private BearNavigationPolicy.Screen classifyBearScreenUntimed(");
+        int end = java.indexOf("return screen;", start);
+        Matcher assigned = Pattern
+                .compile("Screen\\.([A-Z_]+)")
+                .matcher(java.substring(start, end));
+        Set<String> emitted = new TreeSet<>();
+        while (assigned.find()) emitted.add(assigned.group(1));
+        Set<String> declared = new TreeSet<>();
+        BearProductionScreens.EMITTED.forEach(screen -> declared.add(screen.name()));
+        // WAR_LIST, FORMATION, and the confirmation dialogs also appear in identity checks.
+        assertEquals(declared, emitted);
     }
 
     private static String callbackOf(String java, String action) {

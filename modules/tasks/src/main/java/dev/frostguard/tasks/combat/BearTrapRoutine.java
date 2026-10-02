@@ -1849,16 +1849,8 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                         return true;
                     }
                     case TAP_BEAR_ANCHOR -> {
-                        BearVerifiedActionExecutor.Outcome outcome = ui.transition(
-                                BearUiAction.OPEN_BEAR_PANEL,
-                                authorization -> tapInside(BEAR_CENTER_POINT_VALUE, BEAR_CENTER_POINT_VALUE),
-                                frame -> frame.screen() == BearNavigationPolicy.Screen.WORLD_AT_BEAR
-                                        || frame.screen() == BearNavigationPolicy.Screen.WORLD_AT_VERIFIED_BEAR,
-                                1);
-                        if (outcome == BearVerifiedActionExecutor.Outcome.CONFIRMED) {
-                            warListKnown = false;
-                            return true;
-                        }
+                        // At-Bear World states have no production classification yet.
+                        return false;
                     }
                     case TAP_ACTIVE_BEAR_ICON -> {
                         BearVerifiedActionExecutor.Outcome opened = ui.transition(

@@ -11,7 +11,8 @@ import java.util.Set;
  * production fails closed instead of falling back to coordinate timing.
  */
 enum BearUiAction {
-    OPEN_ALLIANCE(set(Screen.WORLD, Screen.WORLD_AT_BEAR, Screen.WORLD_AT_VERIFIED_BEAR),
+    OPEN_ALLIANCE(set(Screen.WORLD, Screen.WORLD_AT_BEAR, Screen.WORLD_AT_VERIFIED_BEAR,
+                    Screen.WORLD_ACTIVE_BEAR_ICON_READY),
             set(Screen.ALLIANCE_MENU)),
     OPEN_ALLIANCE_WAR(set(Screen.ALLIANCE_MENU), set(Screen.ALLIANCE_WAR)),
     OPEN_AUTOJOIN(set(Screen.ALLIANCE_WAR), set(Screen.AUTOJOIN_PANEL)),
@@ -20,7 +21,8 @@ enum BearUiAction {
     OPEN_SPECIAL_BUILDINGS(set(Screen.ALLIANCE_TERRITORY), set(Screen.SPECIAL_BUILDINGS)),
     GO_TO_CONFIGURED_TRAP(set(Screen.SPECIAL_BUILDINGS),
             set(Screen.WORLD_AT_BEAR, Screen.WORLD_AT_VERIFIED_BEAR)),
-    OPEN_PETS(set(Screen.WORLD, Screen.WORLD_AT_BEAR, Screen.WORLD_AT_VERIFIED_BEAR),
+    OPEN_PETS(set(Screen.WORLD, Screen.WORLD_AT_BEAR, Screen.WORLD_AT_VERIFIED_BEAR,
+                    Screen.WORLD_ACTIVE_BEAR_ICON_READY),
             set(Screen.PETS_OVERVIEW)),
     SELECT_RAZORBACK(set(Screen.PETS_OVERVIEW), set(Screen.PET_RAZORBACK)),
     OPEN_PET_QUICK_USE(set(Screen.PET_RAZORBACK), set(Screen.PET_QUICK_USE)),
@@ -37,15 +39,13 @@ enum BearUiAction {
     CONFIRM_RECALL(set(Screen.RECALL_CONFIRMATION), set(Screen.MARCH_SIDEBAR)),
     OPEN_ACTIVE_BEAR(set(Screen.WORLD_ACTIVE_BEAR_ICON_READY),
             set(Screen.WORLD_AT_BEAR, Screen.WORLD_AT_VERIFIED_BEAR)),
-    OPEN_BEAR_PANEL(set(Screen.WORLD_AT_BEAR, Screen.WORLD_AT_VERIFIED_BEAR),
-            set(Screen.BEAR_RALLY_PANEL)),
     OPEN_RALLY_TIMER(set(Screen.BEAR_RALLY_PANEL), set(Screen.RALLY_TIMER_PANEL)),
     SELECT_RALLY_TIME(set(Screen.RALLY_TIMER_PANEL), set(Screen.RALLY_TIMER_PANEL)),
     CONFIRM_RALLY_TIMER(set(Screen.RALLY_TIMER_PANEL), set(Screen.FORMATION)),
     SELECT_FORMATION(set(Screen.FORMATION), set(Screen.FORMATION)),
     DEPLOY_OWN_RALLY(set(Screen.FORMATION),
-            set(Screen.WORLD, Screen.WORLD_AT_BEAR, Screen.WAR_LIST,
-                    Screen.MARCH_QUEUE_FULL, Screen.DEPLOY_CONFIRMATION)),
+            set(Screen.WORLD, Screen.WORLD_AT_BEAR, Screen.WORLD_ACTIVE_BEAR_ICON_READY,
+                    Screen.WAR_LIST, Screen.MARCH_QUEUE_FULL, Screen.DEPLOY_CONFIRMATION)),
     OPEN_WAR_LIST(set(Screen.WORLD, Screen.WORLD_AT_BEAR, Screen.WORLD_AT_VERIFIED_BEAR,
                     Screen.WORLD_ACTIVE_BEAR_ICON_READY), set(Screen.WAR_LIST)),
     OPEN_JOIN_FORMATION(set(Screen.WAR_LIST), set(Screen.FORMATION)),
@@ -99,7 +99,7 @@ enum BearUiAction {
                     || destination == Screen.RALLY_TIMER_PANEL;
             case RALLY_TIMER_PANEL -> destination == Screen.BEAR_RALLY_PANEL;
             case BEAR_RALLY_PANEL -> world(destination);
-            case ALLIANCE_MENU -> destination == Screen.WORLD;
+            case ALLIANCE_MENU -> world(destination);
             case ALLIANCE_WAR -> destination == Screen.ALLIANCE_MENU;
             case AUTOJOIN_PANEL -> destination == Screen.ALLIANCE_WAR;
             case PETS_OVERVIEW, MARCH_SIDEBAR, SIDEBAR_OTHER -> world(destination);
