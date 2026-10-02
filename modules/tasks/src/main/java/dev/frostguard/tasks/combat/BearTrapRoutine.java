@@ -734,7 +734,8 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                     emuManager.getAdbPath(),
                     emuManager.getDeviceSerial(EMULATOR_NUMBER),
                     () -> Thread.currentThread().isInterrupted(),
-                    capture == null ? () -> null : capture::nextSegment);
+                    capture == null ? () -> null : capture::nextSegment,
+                    () -> emuManager.captureScreen(EMULATOR_NUMBER));
             this.frames = BearFrameStream.fromTimestampedSource(
                     realtimeFrames::next,
                     this::classifyBearScreen,

@@ -33,6 +33,30 @@ class BearRealtimeFrameSourceTest {
     }
 
     @Test
+    void staticScreenIsSampledByAFreshScreenshotInsteadOfRestartingTheRecorder() {
+        RawImageData streamed = RawImageData.capture(new byte[] {1, 1, 1, 1}, 1, 1, 4);
+        RawImageData screenshot = RawImageData.capture(new byte[] {2, 2, 2, 2}, 1, 1, 4);
+        FakeHandle stalled = new FakeHandle(
+                new AndroidFrameStream.Frame(streamed, 1, System.nanoTime()), null);
+        AtomicInteger factories = new AtomicInteger();
+        BearRealtimeFrameSource source = new BearRealtimeFrameSource(() -> {
+            factories.incrementAndGet();
+            return stalled;
+        }, () -> false, () -> screenshot);
+
+        assertSame(streamed, source.next().frame());
+        long started = System.nanoTime();
+        BearFrameStream.Captured<RawImageData> unchanged = source.next();
+        long elapsedMs = (System.nanoTime() - started) / 1_000_000L;
+
+        assertSame(screenshot, unchanged.frame(), "an unchanged screen is still current");
+        assertTrue(elapsedMs < 1_000, "a static screen must not wait for the recorder deadline");
+        assertTrue(!stalled.closed.get() && factories.get() == 1,
+                "a healthy recorder on a static screen must not be restarted");
+        source.close();
+    }
+
+    @Test
     void cancellationStopsBeforeStartingTransport() {
         AtomicInteger factories = new AtomicInteger();
         BearRealtimeFrameSource source = new BearRealtimeFrameSource(() -> {

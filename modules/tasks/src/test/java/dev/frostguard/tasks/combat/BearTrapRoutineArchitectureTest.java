@@ -27,8 +27,12 @@ class BearTrapRoutineArchitectureTest {
                 "execution-window decisions must not capture outside the Bear frame stream");
         assertFalse(java.contains("promoteCurrent("),
                 "an inferred screen state must never be promoted into tap authorization");
-        assertEquals(0, occurrences(java, "emuManager.captureScreen("),
-                "Bear must not fall back from its ordered recorder to individual screenshots");
+        // The recorder is silent on a static screen; its only screenshot is the static-screen
+        // sample inside the ordered realtime source, which still receives a frame sequence.
+        assertEquals(1, occurrences(java, "emuManager.captureScreen("),
+                "Bear may only screenshot through the ordered recorder's static-screen sample");
+        assertEquals(1, occurrences(java, "() -> emuManager.captureScreen(EMULATOR_NUMBER))"),
+                "the screenshot must be wired as the realtime source's static-screen sample");
         assertEquals(1, occurrences(java, "new BearRealtimeFrameSource("),
                 "the live Bear session must own exactly one ordered recorder");
     }

@@ -24,6 +24,11 @@ final class BearRealtimeFrameSource implements AutoCloseable {
     private static final Duration FRAME_DEADLINE = Duration.ofSeconds(5);
     private static final Duration POLL_INTERVAL = Duration.ofMillis(10);
     private static final int MAX_CONSECUTIVE_RESTARTS_WITHOUT_FRAME = 2;
+    /**
+     * Android's recorder only emits a frame when the display changes, so a healthy stream is
+     * silent on a static screen. After this wait a direct screenshot samples the current screen.
+     */
+    static final Duration STATIC_SCREEN_WAIT = Duration.ofMillis(300);
 
     interface StreamHandle extends AutoCloseable {
         void start() throws IOException;
@@ -43,29 +48,37 @@ final class BearRealtimeFrameSource implements AutoCloseable {
 
     private final StreamFactory factory;
     private final BooleanSupplier interrupted;
+    private final Supplier<RawImageData> staticScreenSample;
     private StreamHandle stream;
     private long transportSequence;
     private int consecutiveRestartsWithoutFrame;
     private boolean closed;
 
-    BearRealtimeFrameSource(String adb, String serial, BooleanSupplier interrupted) {
-        this(adb, serial, interrupted, () -> null);
-    }
-
-    /** Each bounded recorder renewal asks {@code segments} for its own evidence sink. */
+    /**
+     * @param segments           each bounded recorder renewal asks for its own evidence sink
+     * @param staticScreenSample direct screenshot used while a healthy recorder is silent
+     */
     BearRealtimeFrameSource(String adb, String serial, BooleanSupplier interrupted,
-            Supplier<OutputStream> segments) {
-        this(() -> adapt(new AndroidFrameStream(adb, serial, segments.get())), interrupted);
+            Supplier<OutputStream> segments, Supplier<RawImageData> staticScreenSample) {
+        this(() -> adapt(new AndroidFrameStream(adb, serial, segments.get())), interrupted,
+                staticScreenSample);
     }
 
     BearRealtimeFrameSource(StreamFactory factory, BooleanSupplier interrupted) {
+        this(factory, interrupted, null);
+    }
+
+    BearRealtimeFrameSource(StreamFactory factory, BooleanSupplier interrupted,
+            Supplier<RawImageData> staticScreenSample) {
         this.factory = Objects.requireNonNull(factory, "factory");
         this.interrupted = Objects.requireNonNull(interrupted, "interrupted");
+        this.staticScreenSample = staticScreenSample;
     }
 
     BearFrameStream.Captured<RawImageData> next() {
         ensureOpen();
         long deadline = System.nanoTime() + FRAME_DEADLINE.toNanos();
+        long staticAfter = System.nanoTime() + STATIC_SCREEN_WAIT.toNanos();
         while (true) {
             requireNotInterrupted();
             ensureStarted();
@@ -87,12 +100,31 @@ final class BearRealtimeFrameSource implements AutoCloseable {
                 deadline = System.nanoTime() + FRAME_DEADLINE.toNanos();
                 continue;
             }
+            if (System.nanoTime() >= staticAfter && transportSequence > 0) {
+                BearFrameStream.Captured<RawImageData> sampled = sampleStaticScreen();
+                if (sampled != null) {
+                    consecutiveRestartsWithoutFrame = 0;
+                    return sampled;
+                }
+            }
             if (System.nanoTime() >= deadline) {
                 restart("no fresh decoded frame within " + FRAME_DEADLINE);
                 deadline = System.nanoTime() + FRAME_DEADLINE.toNanos();
                 continue;
             }
             LockSupport.parkNanos(POLL_INTERVAL.toNanos());
+        }
+    }
+
+    private BearFrameStream.Captured<RawImageData> sampleStaticScreen() {
+        if (staticScreenSample == null) return null;
+        // Stamp before the request: the screenshot is at least this fresh.
+        Instant requestedAt = Instant.now();
+        try {
+            RawImageData screen = staticScreenSample.get();
+            return screen == null ? null : new BearFrameStream.Captured<>(screen, requestedAt);
+        } catch (RuntimeException failure) {
+            return null;
         }
     }
 
