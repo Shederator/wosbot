@@ -169,6 +169,93 @@ class TaskQueueBearRevocationRaceTest {
                 "the cleanup finalization cleared the session checkpoint");
     }
 
+    @Test
+    void aDisableDuringTheEventsFirstClaimSendsNoInputAndLeavesNoLease() throws Exception {
+        AccountDescriptor profile = configuredActiveProfile("Bear first claim disable ");
+        RaceQueue queue = new RaceQueue(profile);
+        CountDownLatch workerPassedChecks = new CountDownLatch(1);
+        CountDownLatch revoked = new CountDownLatch(1);
+        AtomicInteger workerFinalizeChecks = new AtomicInteger();
+        queue.onFinalize = () -> {
+            if (Thread.currentThread().getName().equals("bear-first-claim")
+                    && workerFinalizeChecks.incrementAndGet() == 2) {
+                workerPassedChecks.countDown();
+                await(revoked);
+            }
+        };
+        CountingBearTask bear = new CountingBearTask(profile);
+
+        withQueueRegistered(queue, profile, () -> {
+            Thread worker = new Thread(() -> queue.executeTask(bear), "bear-first-claim");
+            worker.start();
+            await(workerPassedChecks);
+            // Nothing is owned yet, so the revocation itself finds nothing to stop.
+            persistDisabled(profile);
+            queue.revokeBearOwnership("profile disabled");
+            revoked.countDown();
+            worker.join(10_000);
+            CountingBearTask cleanup = new CountingBearTask(reload(profile.getId()));
+            queue.executeTask(cleanup);
+
+            assertEquals(0, bear.inputs + cleanup.inputs, "a profile disabled before its claim must send no Bear input");
+            assertFalse(BearTrapSessionLease.active(profile.getId()).isPresent(),
+                    "the first claim must not keep a lease for a disabled profile");
+            assertTrue(queue.deviceReleaseAllowed(), "the device must not stay pinned");
+            assertTrue(BearSessionCheckpoint.load(reload(profile.getId())).isEmpty(),
+                    "the cleanup finalization cleared the checkpoint the claim opened");
+        });
+    }
+
+    @Test
+    void aRevokedRunKeepsCleaningUpWhileParticipationIsStillOffInStorage() throws Exception {
+        AccountDescriptor profile = configuredActiveProfile("Bear participation still off ");
+        // The queue's copy still says the profile participates; storage says it does not.
+        RaceQueue queue = new RaceQueue(profile);
+        BearTrapSessionLease.Lease lease = BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+        assertTrue(BearSessionCheckpoint.open(profile, lease.eventEnd()));
+        assertTrue(ConfigService.obtain().writeAccountSetting(profile.getId(), BEAR_TRAP_EVENT_BOOL, "false"));
+        assertTrue(queue.revokeBearOwnership("Bear participation disabled"));
+        assertTrue(BearRecoveryFinalization.clear(profile));
+        CountingBearTask bear = new CountingBearTask(profile);
+
+        withQueueRegistered(queue, profile, () -> queue.executeTask(bear));
+
+        assertEquals(0, bear.inputs, "participation is still off in storage, so the revoked event stays revoked");
+        assertFalse(BearTrapSessionLease.active(profile.getId()).isPresent());
+    }
+
+    @Test
+    void reEnablingTheProfileResumesBearWithoutAnotherSchedulingAction() throws Exception {
+        AccountDescriptor profile = configuredActiveProfile("Bear profile re-enabled ");
+        RaceQueue queue = new RaceQueue(profile);
+        BearTrapSessionLease.Lease lease = BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+        assertTrue(BearSessionCheckpoint.open(profile, lease.eventEnd()));
+        CountingBearTask.inputsAcrossTasks.set(0);
+
+        withQueueRegistered(queue, profile, () -> {
+            persistDisabled(profile);
+            assertTrue(queue.revokeBearOwnership("profile disabled"));
+            for (int tick = 0; tick < 3; tick++) {
+                queue.runSchedulerTick();
+            }
+            assertEquals(0, CountingBearTask.inputsAcrossTasks.get(), "the revoked event only cleaned up");
+            // Production re-enable: persist the profile, then hand the queue the operator's resume.
+            AccountDescriptor enabled = reload(profile.getId());
+            enabled.setEnabled(true);
+            assertTrue(ProfileService.obtain().persistAccount(enabled));
+            ScheduleService.obtain().resumeBearOwnership(profile.getId());
+            int finalizationsBefore = queue.finalizations.get();
+
+            for (int tick = 0; tick < 10; tick++) {
+                queue.runSchedulerTick();
+            }
+
+            assertTrue(CountingBearTask.inputsAcrossTasks.get() >= 1,
+                    "re-enabling the profile inside the event resumes the Bear session");
+            assertTrue(queue.finalizations.get() - finalizationsBefore <= 1, "no cleanup loop after re-enable");
+        });
+    }
+
     /** Production persists the operator's disable before it revokes Bear ownership. */
     private static void persistDisabled(AccountDescriptor profile) {
         AccountDescriptor disabled = reload(profile.getId());

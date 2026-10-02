@@ -45,6 +45,8 @@ class ProfileManagerActionControllerTest {
 		assertTrue(controller.saveProfile(profile(2L, "Second", true)));
 
 		assertEquals(List.of(1L), runtime.revokedBearProfileIds);
+		assertEquals(List.of(2L), runtime.resumedBearProfileIds,
+				"saving an enabled profile hands a revoked Bear event back to the queue");
 	}
 
 	@Test
@@ -106,6 +108,7 @@ class ProfileManagerActionControllerTest {
 		private final Set<Long> activeProfileIds;
 		private final List<Long> pausedProfileIds = new ArrayList<>();
 		private final List<Long> revokedBearProfileIds = new ArrayList<>();
+		private final List<Long> resumedBearProfileIds = new ArrayList<>();
 
 		private StubRuntimeController(Set<Long> activeProfileIds) {
 			this.activeProfileIds = new HashSet<>(activeProfileIds);
@@ -125,6 +128,11 @@ class ProfileManagerActionControllerTest {
 		@Override
 		public void revokeBearOwnership(Long profileId) {
 			revokedBearProfileIds.add(profileId);
+		}
+
+		@Override
+		public void resumeBearOwnership(Long profileId) {
+			resumedBearProfileIds.add(profileId);
 		}
 	}
 

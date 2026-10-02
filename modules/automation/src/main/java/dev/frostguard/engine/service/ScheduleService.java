@@ -231,6 +231,14 @@ public class ScheduleService {
 		}
 	}
 
+	/** The operator re-enabled a profile; a Bear event revoked by its disable may resume. */
+	public void resumeBearOwnership(Long accountId) {
+		TaskQueue queue = accountId == null ? null : dispatcher.getQueue(accountId);
+		if (queue != null) {
+			queue.resumeRevokedBear();
+		}
+	}
+
 	public void suspendAccountQueue(Long accountId) {
 		changeAccountPause(accountId, true);
 	}

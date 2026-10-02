@@ -782,7 +782,7 @@ public class TaskQueue {
         ExecutionContext ctx = new ExecutionContext(task);
         if (task.getTpTask() == TpDailyTaskEnum.BEAR_TRAP) {
             {
-                if (bearRevoked(Instant.now()) && operatorReEnabledBear()) {
+                if (bearRevoked(Instant.now()) && persistedBearOwnershipAllowed()) {
                     // Bear and its profile are on again in storage: the operator resumed the event.
                     bearRevokedUntil = null;
                     emitInfoTask(task, "Bear re-enabled during its revoked event; resuming the session");
@@ -831,6 +831,14 @@ public class TaskQueue {
                         + LocalDateTime.ofInstant(lease.eventEnd(), ZoneId.systemDefault())
                                 .format(TS_FMT));
                 runningContext = ctx;
+                if (!bearRevoked(Instant.now()) && !persistedBearOwnershipAllowed()) {
+                    // A disable persisted before this claim while nothing was owned yet, so its
+                    // revocation had nothing to stop: every disable is stored before it revokes,
+                    // so a claim that missed the revocation still finds the disable in storage.
+                    bearRevokedUntil = lease.eventEnd();
+                    emitWarnTask(task, "Bear claim found the profile or Bear participation disabled in "
+                            + "storage; stopping before any input");
+                }
                 if (bearRevoked(Instant.now())) {
                     // A revocation that missed the published context must still stop this run and
                     // must not leave the lease this claim just took pinning the device.
@@ -1187,14 +1195,37 @@ public class TaskQueue {
         return finalizeBearRecoveryIfDue(task, now);
     }
 
-    private boolean operatorReEnabledBear() {
-        return ProfileService.obtain().fetchAllAccounts().stream()
-                .filter(candidate -> profile.getId().equals(candidate.getId()))
-                .findFirst()
-                .filter(persisted -> Boolean.TRUE.equals(persisted.getEnabled())
-                        && Boolean.TRUE.equals(persisted.getConfig(
-                                ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL, Boolean.class)))
-                .isPresent();
+    /** Whether storage has the profile and its Bear participation enabled; unreadable storage says no. */
+    private boolean persistedBearOwnershipAllowed() {
+        try {
+            return ProfileService.obtain().fetchAllAccounts().stream()
+                    .filter(candidate -> profile.getId().equals(candidate.getId()))
+                    .findFirst()
+                    .filter(persisted -> Boolean.TRUE.equals(persisted.getEnabled())
+                            && Boolean.TRUE.equals(persisted.getConfig(
+                                    ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL, Boolean.class)))
+                    .isPresent();
+        } catch (RuntimeException unreadable) {
+            emitError("Bear could not read the stored profile to confirm it is still enabled: "
+                    + unreadable.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * The operator re-enabled the profile during an event its disable revoked: queue Bear so its
+     * next claim resumes the session. Re-enabling participation reaches the claim through the
+     * configuration reconcile instead.
+     *
+     * @return whether a revoked Bear event was handed back to the scheduler
+     */
+    public boolean resumeRevokedBear() {
+        if (!bearRevoked(Instant.now()) || !persistedBearOwnershipAllowed()) {
+            return false;
+        }
+        runNow(TpDailyTaskEnum.BEAR_TRAP, true);
+        emitInfo("Profile re-enabled during its revoked Bear event; Bear queued to resume");
+        return true;
     }
 
     private boolean bearRevoked(Instant now) {
