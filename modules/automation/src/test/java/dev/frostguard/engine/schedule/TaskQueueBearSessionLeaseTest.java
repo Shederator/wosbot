@@ -485,6 +485,24 @@ class TaskQueueBearSessionLeaseTest {
         assertTrue(siblingQueue.deviceReleaseAllowed());
     }
 
+    @Test
+    void crashLeavingOnlyTheCheckpointStillPinsAndRestoresBear() {
+        AccountDescriptor profile = configuredActiveProfile("Bear crash checkpoint ");
+        BearTrapSessionLease.Lease lease =
+                BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+        assertTrue(BearSessionCheckpoint.open(profile, lease.eventEnd()));
+        // A crash skips requestStop: no finalizer is armed and the in-memory lease is gone.
+        BearTrapSessionLease.releaseForQueueStop(profile.getId());
+        AccountDescriptor reloaded = reload(profile.getId());
+        assertTrue(BearRecoveryFinalization.deadline(reloaded).isEmpty());
+
+        RecordingQueue restarted = new RecordingQueue(reloaded);
+
+        assertTrue(restarted.hasProtectedBearOwnership(Instant.now()));
+        assertTrue(restarted.restoreDurableBearOwnershipOnStart());
+        assertTrue(restarted.getNextQueuedTaskTypes(20).contains(TpDailyTaskEnum.BEAR_TRAP));
+    }
+
     private static AccountDescriptor reload(Long profileId) {
         return ProfileService.obtain().fetchAllAccounts().stream()
                 .filter(candidate -> profileId.equals(candidate.getId()))

@@ -1477,7 +1477,10 @@ public class TaskQueue {
                         ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL, Boolean.class))) {
             return false;
         }
+        // A crash skips requestStop and leaves only the checkpoint, so it also proves ownership.
         return BearRecoveryFinalization.deadline(profile)
+                .or(() -> BearSessionCheckpoint.load(profile)
+                        .map(BearSessionCheckpoint.Checkpoint::eventEnd))
                 .filter(now::isBefore)
                 .isPresent();
     }
