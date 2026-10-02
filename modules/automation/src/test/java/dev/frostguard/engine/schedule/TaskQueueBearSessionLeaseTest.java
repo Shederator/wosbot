@@ -607,6 +607,36 @@ class TaskQueueBearSessionLeaseTest {
         assertEquals(2, ticks[0], "the worker must keep ticking after a routing failure");
     }
 
+    @Test
+    void siblingYieldsItsSlotToTheBearOwnerInsteadOfHoldingIt() throws Exception {
+        AccountDescriptor bearProfile = configuredActiveProfile("Bear slot owner ");
+        AccountDescriptor sibling = new AccountDescriptor(
+                null, "Bear slot sibling " + UUID.randomUUID(), "0", true, 100L, 30L);
+        assertTrue(ProfileService.obtain().createAccount(sibling));
+        RecordingQueue bearQueue = new RecordingQueue(bearProfile);
+        RecordingQueue siblingQueue = new RecordingQueue(sibling);
+        BearTrapSessionLease.acquireForBearExecution(bearProfile).orElseThrow();
+        bearQueue.registerDeviceProtection();
+        try {
+            bearQueue.markSlotAcquired();
+            siblingQueue.markSlotAcquired();
+
+            assertFalse(bearQueue.yieldSlotToProtectedOwner(), "the owner keeps its own slot");
+            assertTrue(siblingQueue.yieldSlotToProtectedOwner(),
+                    "a sibling must not hold the slot the Bear owner is waiting for");
+            assertTrue(TaskQueue.requiresSlotAcquisition(sessionOrigin(siblingQueue)));
+            assertFalse(TaskQueue.requiresSlotAcquisition(sessionOrigin(bearQueue)));
+        } finally {
+            bearQueue.unregisterDeviceProtection();
+        }
+    }
+
+    private static LocalDateTime sessionOrigin(TaskQueue queue) throws Exception {
+        Field origin = TaskQueue.class.getDeclaredField("sessionOrigin");
+        origin.setAccessible(true);
+        return (LocalDateTime) origin.get(queue);
+    }
+
     private static AccountDescriptor reload(Long profileId) {
         return ProfileService.obtain().fetchAllAccounts().stream()
                 .filter(candidate -> profileId.equals(candidate.getId()))

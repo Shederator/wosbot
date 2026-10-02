@@ -599,7 +599,7 @@ public class TaskQueue {
             statusModel.setIdleTimeExceeded(false);
         } else if (!statusModel.isPaused()) {
             deferFailedIdleWakeInitialize(initialize);
-            if (!requiresSlotAcquisition(sessionOrigin) && deviceReleaseAllowed()) {
+            if (!requiresSlotAcquisition(sessionOrigin) && !hasProtectedBearOwnership(Instant.now())) {
                 try {
                     releaseActiveSlotLease();
                 } catch (RuntimeException ex) {
@@ -1207,7 +1207,8 @@ public class TaskQueue {
             emitWarnTask(task, "Cooldown kept the game and emulator slot: Bear owns the device");
         }
         boolean gameStopped = releaseAllowed && stopBlockedGameProcess(task);
-        boolean slotReleased = releaseAllowed && releaseBlockedProfileSlot(task);
+        boolean slotReleased = !hasProtectedBearOwnership(Instant.now())
+                && releaseBlockedProfileSlot(task);
         emitInfoTask(task, "Cooldown resources settled: gameStopped=" + gameStopped
                 + ", slotReleased=" + slotReleased
                 + ", retryAt=" + retryAt.format(TS_FMT));
@@ -1354,6 +1355,7 @@ public class TaskQueue {
     protected void handleIdleTransitions() {
         if (Thread.currentThread().isInterrupted()) return;
         if (hasProtectedBearOwnership(Instant.now())) return;
+        if (yieldSlotToProtectedOwner()) return;
         if (statusModel.getLoopState().isExecutedTask() || taskBacklog.isEmpty()) return;
         IdleBehaviorEnum idleBehavior = resolveIdleBehavior();
         if (!idleBehavior.requiresIdleTimeout()) {
@@ -1460,9 +1462,17 @@ public class TaskQueue {
     }
 
     private void suspendDevice(LocalDateTime until, boolean freeSlot) {
-        if (!deviceReleaseAllowed()) {
+        if (hasProtectedBearOwnership(Instant.now())) {
             emitWarn("Refused device suspension while Bear owns the active event window");
             statusModel.setIdleTimeExceeded(false);
+            return;
+        }
+        if (!deviceReleaseAllowed()) {
+            // Another profile owns the event on this emulator: free the slot for it, but never
+            // close or background the emulator underneath it.
+            if (freeSlot && !requiresSlotAcquisition(sessionOrigin)) releaseActiveSlotLease();
+            emitInfo("Idle without suspending the emulator: another profile owns its Bear event");
+            broadcastStatus("Idle till " + DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(until));
             return;
         }
         IdleBehaviorEnum policy = resolveIdleBehavior();
@@ -1497,12 +1507,26 @@ public class TaskQueue {
     }
 
     /**
-     * Whether automatic paths may close, background, or hand over this profile's emulator. Any
-     * profile sharing the emulator can veto it while it owns an active Bear event.
+     * Whether automatic paths may close, background, or force-stop this profile's emulator. Any
+     * profile sharing the emulator vetoes it while it owns an active Bear event; a non-owner may
+     * still free its slot.
      */
     boolean deviceReleaseAllowed() {
         return !hasProtectedBearOwnership(Instant.now())
                 && !DeviceReleaseGuard.isProtected(profile.getEmulatorNumber());
+    }
+
+    /**
+     * A profile that shares an emulator with an active Bear owner must not hold the slot the owner
+     * needs. It frees the slot without touching the emulator and waits to reacquire it.
+     */
+    boolean yieldSlotToProtectedOwner() {
+        if (runningContext != null || requiresSlotAcquisition(sessionOrigin)) return false;
+        if (hasProtectedBearOwnership(Instant.now())) return false;
+        if (!DeviceReleaseGuard.isProtected(profile.getEmulatorNumber())) return false;
+        releaseActiveSlotLease();
+        emitInfo("Yielded the emulator slot to the profile that owns the active Bear event");
+        return true;
     }
 
     void registerDeviceProtection() {
@@ -1582,7 +1606,7 @@ public class TaskQueue {
 
     boolean enforceSessionCap() {
         if (runningContext != null || sessionOrigin == null) return false;
-        if (!deviceReleaseAllowed()) return false;
+        if (hasProtectedBearOwnership(Instant.now())) return false;
         if (!resolveIdleBehavior().requiresIdleTimeout()) return false;
         Map<String,String> cfg = ConfigService.obtain().loadGlobalSettings();
         boolean on = Boolean.parseBoolean(Optional.ofNullable(cfg)
