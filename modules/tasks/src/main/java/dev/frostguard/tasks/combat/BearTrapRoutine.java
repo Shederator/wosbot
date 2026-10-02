@@ -31,6 +31,7 @@ import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.BearSessionCheckpoint;
 import dev.frostguard.engine.schedule.BearTrapParticipationSchedule;
 import dev.frostguard.engine.schedule.BearFlagConfiguration;
+import dev.frostguard.engine.schedule.BearObserveOnlyFallback;
 import dev.frostguard.engine.schedule.BearTrapSessionLease;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.schedule.TaskQueue;
@@ -335,7 +336,8 @@ private BearSessionExecutionException protectedFailure(
     }
 
 private boolean observeOnly() {
-        return Boolean.TRUE.equals(profile.getConfig(BEAR_TRAP_OBSERVE_ONLY_BOOL, Boolean.class));
+        return Boolean.TRUE.equals(profile.getConfig(BEAR_TRAP_OBSERVE_ONLY_BOOL, Boolean.class))
+                || BearObserveOnlyFallback.active(profile, Instant.now());
     }
 
 private BearCaptureRecorder openCaptureRecorder(Instant eventEnd) {

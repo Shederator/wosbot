@@ -655,6 +655,46 @@ class TaskQueueBearSessionLeaseTest {
         assertTrue(BearRecoveryFinalization.deadline(reload(profile.getId())).isEmpty());
     }
 
+    @Test
+    void exhaustedRecoveryKeepsOwnershipButSwitchesTheRestOfTheEventToObserveOnly() {
+        AccountDescriptor profile = configuredActiveProfile("Bear observe fallback ");
+        RecordingQueue queue = new RecordingQueue(profile);
+        RecordingBearTask bear = new RecordingBearTask(profile);
+        BearTrapSessionLease.Lease lease =
+                BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+        BearSessionExecutionException captureFailure = failure(
+                BearSessionExecutionException.FailureKind.CAPTURE_TRANSIENT,
+                BearSessionExecutionException.RecoveryDirective.DEGRADED_WAIT);
+
+        for (int attempt = 1; attempt <= 4; attempt++) {
+            queue.routeError(bear, captureFailure);
+            assertFalse(BearObserveOnlyFallback.active(reload(profile.getId()), Instant.now()),
+                    "a recovery inside the budget keeps full input (attempt " + attempt + ")");
+        }
+        queue.routeError(bear, captureFailure);
+
+        assertTrue(BearObserveOnlyFallback.active(reload(profile.getId()), Instant.now()),
+                "after the budget the rest of the event is observed, not played blind");
+        assertFalse(BearObserveOnlyFallback.active(reload(profile.getId()), lease.eventEnd()),
+                "the fallback ends with the event");
+        assertTrue(queue.finalizeBearRecoveryIfDue(bear, lease.eventEnd().plusSeconds(1)));
+        assertTrue(BearObserveOnlyFallback.until(reload(profile.getId())).isEmpty(),
+                "finalization clears the fallback");
+    }
+
+    @Test
+    void operatorActionInsideTheWindowSwitchesToObserveOnly() {
+        AccountDescriptor profile = configuredActiveProfile("Bear observe operator ");
+        RecordingQueue queue = new RecordingQueue(profile);
+        BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+
+        queue.routeError(new RecordingBearTask(profile), failure(
+                BearSessionExecutionException.FailureKind.FATAL_CONFIGURATION,
+                BearSessionExecutionException.RecoveryDirective.OPERATOR_ACTION));
+
+        assertTrue(BearObserveOnlyFallback.active(reload(profile.getId()), Instant.now()));
+    }
+
     private static AccountDescriptor reload(Long profileId) {
         return ProfileService.obtain().fetchAllAccounts().stream()
                 .filter(candidate -> profileId.equals(candidate.getId()))

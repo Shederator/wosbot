@@ -798,7 +798,8 @@ public class TaskQueue {
                         + "retryAt=" + task.getScheduled().format(TS_FMT));
             } else if (bearLease != null
                     && (!BearRecoveryFinalization.clear(profile)
-                            || !BearSessionCheckpoint.clear(profile))) {
+                            || !BearSessionCheckpoint.clear(profile)
+                            || !BearObserveOnlyFallback.clear(profile))) {
                 throw new IllegalStateException(
                         "completed Bear execution but could not clear its durable recovery state");
             }
@@ -1072,7 +1073,14 @@ public class TaskQueue {
         }
         if (Instant.now().isBefore(lease.eventEnd())) {
             // An exhausted budget limits the retry rate; it must not surrender the event. The
-            // armed finalizer keeps the device pinned and restores normal work after the end.
+            // rest of the event is observed without input, and the armed finalizer keeps the
+            // device pinned and restores normal work after the end.
+            if (BearObserveOnlyFallback.arm(profile, lease.eventEnd())) {
+                emitErrorTask(task, "Bear switched to observe-only for the rest of this event; "
+                        + "operator attention required");
+            } else {
+                emitErrorTask(task, "Bear observe-only fallback could not be persisted");
+            }
             scheduleBearRetry(task, bearInWindowRetrySeconds(lease));
             return;
         }
@@ -1140,7 +1148,7 @@ public class TaskQueue {
                 throw new IllegalStateException(
                         "Bear recovery finalization completed but its durable marker could not be cleared");
             }
-            if (!BearSessionCheckpoint.clear(profile)) {
+            if (!BearSessionCheckpoint.clear(profile) || !BearObserveOnlyFallback.clear(profile)) {
                 throw new IllegalStateException(
                         "Bear recovery finalization completed but its durable checkpoint could not be cleared");
             }
@@ -1154,7 +1162,7 @@ public class TaskQueue {
                 throw new IllegalStateException(
                         "Bear recovery finalization completed but its durable marker could not be cleared");
             }
-            if (!BearSessionCheckpoint.clear(profile)) {
+            if (!BearSessionCheckpoint.clear(profile) || !BearObserveOnlyFallback.clear(profile)) {
                 throw new IllegalStateException(
                         "Bear recovery finalization completed but its durable checkpoint could not be cleared");
             }
