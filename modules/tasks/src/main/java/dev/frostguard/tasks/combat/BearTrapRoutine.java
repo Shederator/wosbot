@@ -325,6 +325,23 @@ private BearSessionExecutionException protectedFailure(
     }
 
 @Override
+    protected void enterStartScreen(boolean profileSwitchedOnEmulator) {
+        // Every Bear screen transition goes through BearUiStateMachine. The shared blind
+        // navigation and its Initialize hand-off would bypass protected recovery.
+        if (!gameProcessRunning()) {
+            throw protectedFailure(
+                    BearSessionExecutionException.FailureKind.APP_NOT_FOREGROUND,
+                    BearSessionExecutionException.RecoveryDirective.RESTART_APP,
+                    "game-process-missing",
+                    null);
+        }
+    }
+
+@Override
+    protected void leaveScreen() {
+    }
+
+@Override
     public boolean consumesStamina() {
         return false;
     }
