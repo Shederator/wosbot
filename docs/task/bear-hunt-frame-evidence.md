@@ -5,6 +5,35 @@ the bounded Android H.264 recorder authorizes one legal edge, and a later frame 
 tests validate ordering, transition legality, retry bounds, and interruption semantics. They are
 state replays; they do **not** validate the accuracy of templates against the game UI.
 
+## Collecting evidence with observe-only
+
+Enable **Observe only** in the profile's Bear settings for an event. The session owns the event
+window like a normal Bear run but refuses every device input. It writes, under the workspace's
+`logs/bear-capture/event-<end>/`:
+
+- `segment-NNN.h264`: the raw recorder output, one file per 120-second recorder renewal. Replay it
+  with `H264FrameDecoder`; it contains only frames emitted on display changes.
+- `frames.jsonl`: one line per ordered frame with capture time, transport age, the production
+  classification, total classification time, and time per template.
+
+State changes are also saved as `logs/snapshot/*bear-observe*` PNGs. Redact account details before
+committing any of it as a fixture (`tools/privacy-redactor`).
+
+`BearCaptureLiveDeviceTest` is an opt-in wire check of the capture path against a real device with
+no input (`FROSTGUARD_LIVE_ADB`, `FROSTGUARD_LIVE_ADB_SERIAL`). On an idle emulator it showed that the
+recorder is silent on a static screen; the source now samples such screens with one `screencap`,
+which took about 0.55 s per frame on that emulator. That cost counts against the one-second input
+budget and must be measured on the supported setup.
+
+## Still evidence-gated in production
+
+- Centring on the Bear after the active-Bear icon tap (`OPEN_ACTIVE_BEAR` has no production
+  postcondition), so own rallies cannot be created yet.
+- Every preparation edge listed in `BearUiActionTest.EVIDENCE_GATED`.
+- The War-list close-cross search area (`CommonGameAreas.BEAR_WAR_LIST_CLOSE_SEARCH_AREA`).
+- Template thresholds and full-frame search cost: live classification measured 1.5–3.3 s, longer
+  than the one-second authorization budget.
+
 ## Evidence already represented by production classifiers
 
 - World root and the active Bear indicator
