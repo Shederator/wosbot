@@ -15,6 +15,7 @@ import dev.frostguard.api.runtime.WorkspaceSession;
 import dev.frostguard.engine.error.BearSessionExecutionException;
 import dev.frostguard.engine.helper.NavigationHelper;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeAll;
@@ -72,6 +73,31 @@ class BearTrapRoutineScreenOwnershipTest {
             assertTrue(refused.getMessage().contains("observe-only"),
                     "input must be refused by observe-only, not fail later: " + refused.getMessage());
         }
+    }
+
+    @Test
+    void theSchedulersObserveOnlyFallbackAlsoRefusesInput() {
+        RecordingBear bear = new RecordingBear(true);
+        bear.getProfile().setConfig(ConfigurationKeyEnum.BEAR_TRAP_OBSERVE_FALLBACK_STRING,
+                Instant.now().plusSeconds(600).toString());
+
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> bear.tapInside(new PointData(10, 10), new PointData(10, 10)));
+        assertTrue(refused.getMessage().contains("observe-only"), refused.getMessage());
+
+        bear.getProfile().setConfig(ConfigurationKeyEnum.BEAR_TRAP_OBSERVE_FALLBACK_STRING,
+                Instant.now().minusSeconds(1).toString());
+        assertTrue(bear.verifiesTerminalUi(true), "an expired fallback restores normal cleanup");
+    }
+
+    @Test
+    void observeOnlyCleanupNeverVerifiesTheUiWithInput() {
+        RecordingBear bear = new RecordingBear(true);
+        assertTrue(bear.verifiesTerminalUi(true));
+        assertTrue(!bear.verifiesTerminalUi(false));
+
+        bear.getProfile().setConfig(ConfigurationKeyEnum.BEAR_TRAP_OBSERVE_ONLY_BOOL, true);
+        assertTrue(!bear.verifiesTerminalUi(true), "observe-only cleanup must not send input");
     }
 
     private static final class RecordingBear extends BearTrapRoutine {

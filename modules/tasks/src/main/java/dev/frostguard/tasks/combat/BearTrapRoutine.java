@@ -46,7 +46,6 @@ import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -337,6 +336,11 @@ private BearSessionExecutionException protectedFailure(
 private boolean observeOnly() {
         return Boolean.TRUE.equals(profile.getConfig(BEAR_TRAP_OBSERVE_ONLY_BOOL, Boolean.class))
                 || BearObserveOnlyFallback.active(profile, Instant.now());
+    }
+
+/** Terminal UI verification uses input, so an observe-only session never performs it. */
+    boolean verifiesTerminalUi(boolean resumeNormalTasks) {
+        return resumeNormalTasks && !observeOnly();
     }
 
 private BearCaptureRecorder openCaptureRecorder(Instant eventEnd) {
@@ -730,9 +734,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         private final MarchHelper sessionMarchHelper;
         private final DeploymentHelper sessionDeploymentHelper;
         private BearFrameStream.Snapshot<RawImageData> lastObservedFrame;
-        private final Map<BearSessionCoordinator.State, Integer> consecutiveRecoveryFailures =
-                new EnumMap<>(BearSessionCoordinator.State.class);
-        private int consecutiveUnknownRecoveries;
+        private final BearRecoveryStrikes recoveryStrikes = new BearRecoveryStrikes(3);
         private boolean alliedRallyIndicatorAbsent;
         private final BearRallyListTraversal rallyTraversal = new BearRallyListTraversal();
         private boolean rallyListBottomProven;
@@ -916,7 +918,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
             try {
                 try {
                     ui.phase(BearUiStateMachine.Phase.CLEANING_UP);
-                    if (resumeNormalTasks && !observeOnly() && !verifyTerminalUiCleanup()) {
+                    if (verifiesTerminalUi(resumeNormalTasks) && !verifyTerminalUiCleanup()) {
                         throw protectedFailure(
                                 BearSessionExecutionException.FailureKind.VISUAL_UNKNOWN,
                                 BearSessionExecutionException.RecoveryDirective.OPERATOR_ACTION,
@@ -1553,12 +1555,10 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
         public boolean recover(BearSessionCoordinator.State resumeState) {
             boolean recovered = recoverOnce(resumeState);
             if (recovered) {
-                consecutiveRecoveryFailures.remove(resumeState);
+                recoveryStrikes.recovered(resumeState);
                 return true;
             }
-            // Strikes are per goal: recovering for a join must not hide a goal that keeps failing.
-            if (consecutiveRecoveryFailures.merge(resumeState, 1, Integer::sum) >= 3) {
-                consecutiveRecoveryFailures.remove(resumeState);
+            if (recoveryStrikes.failed(resumeState)) {
                 throw protectedFailure(
                         BearSessionExecutionException.FailureKind.VISUAL_UNKNOWN,
                         BearSessionExecutionException.RecoveryDirective.DEGRADED_WAIT,
@@ -1573,7 +1573,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                 ui.phase(BearUiStateMachine.Phase.RECOVERING);
                 BearNavigationPolicy.Screen screen = observeBearScreen();
                 if (screen != BearNavigationPolicy.Screen.UNKNOWN) {
-                    consecutiveUnknownRecoveries = 0;
+                    recoveryStrikes.classifiedScreen();
                 }
                 if (screen == BearNavigationPolicy.Screen.FORMATION
                         || screen == BearNavigationPolicy.Screen.RALLY_TIMER_PANEL
@@ -1620,24 +1620,28 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
                     return recovered;
                 }
                 // An unclassified frame is often a transient overlay or animation. Give it a
-                // bounded window; repeated unknown screens escalate to a game restart.
+                // bounded window, then one Back, then a game restart.
                 boolean classified = ui.await(
                         Duration.ofSeconds(2),
                         frame -> frame.screen() != BearNavigationPolicy.Screen.UNKNOWN,
                         "unknown-screen-recovery-" + resumeState).isPresent();
                 if (classified) {
-                    consecutiveUnknownRecoveries = 0;
+                    recoveryStrikes.classifiedScreen();
                     return false;
                 }
-                if (++consecutiveUnknownRecoveries >= 2) {
-                    consecutiveUnknownRecoveries = 0;
-                    throw protectedFailure(
-                            BearSessionExecutionException.FailureKind.VISUAL_UNKNOWN,
-                            BearSessionExecutionException.RecoveryDirective.RESTART_APP,
-                            "recover-unknown-screen-" + resumeState,
-                            null);
+                if (recoveryStrikes.unknownScreen() == BearRecoveryStrikes.UnknownStep.PRESS_BACK_ONCE) {
+                    // Operator-approved exception to the transition contract: one bounded Back
+                    // from an unclassified screen before escalating to a restart.
+                    logWarning(routineLogBearTrapLine("Unclassified screen during " + resumeState
+                            + " recovery; sending one bounded Back"));
+                    pressBack();
+                    return false;
                 }
-                return false;
+                throw protectedFailure(
+                        BearSessionExecutionException.FailureKind.VISUAL_UNKNOWN,
+                        BearSessionExecutionException.RecoveryDirective.RESTART_APP,
+                        "recover-unknown-screen-" + resumeState,
+                        null);
             } catch (BearSessionExecutionException e) {
                 throw e;
             } catch (StopExecutionException e) {
