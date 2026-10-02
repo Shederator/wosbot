@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 
 /**
@@ -38,6 +39,11 @@ public final class BearTrapSessionLease {
             Optional<Lease> current = active(profile.getId(), clock);
             if (current.isPresent()) {
                 return current;
+            }
+            if (!Boolean.TRUE.equals(profile.getConfig(ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL, Boolean.class))) {
+                // Revoked participation must not regain the event from its checkpoint; its due
+                // cleanup finalization runs without a lease.
+                return Optional.empty();
             }
             return BearSessionCheckpoint.load(profile)
                     .filter(checkpoint -> isAlive(checkpoint.eventEnd(), clock.instant()))

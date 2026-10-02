@@ -827,6 +827,122 @@ class TaskQueueBearSessionLeaseTest {
         }
     }
 
+    @Test
+    void aScheduleRealignDuringTheEventCannotMoveBearLater() {
+        AccountDescriptor profile = configuredActiveProfile("Bear realign ");
+        RecordingQueue queue = new RecordingQueue(profile);
+        BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+        RecordingBearTask retry = new RecordingBearTask(profile);
+        retry.reschedule(LocalDateTime.now().plusSeconds(20));
+        queue.enqueue(retry);
+
+        assertFalse(queue.scheduleOrRescheduleQueuedTask(
+                TpDailyTaskEnum.BEAR_TRAP, profile, LocalDateTime.now().plusDays(2)));
+
+        assertTrue(queue.bearScheduledAt().orElseThrow().isBefore(LocalDateTime.now().plusSeconds(31)),
+                "an edited schedule must not move the in-window retry out of the event");
+    }
+
+    @Test
+    void aRevocationThatLandsBeforeTheLeaseIsTakenStillWins() {
+        AccountDescriptor profile = configuredActiveProfile("Bear revoke before lease ");
+        RecordingQueue queue = new RecordingQueue(profile);
+        BearTrapSessionLease.Lease lease =
+                BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+        assertTrue(BearSessionCheckpoint.open(profile, lease.eventEnd()));
+        assertTrue(queue.revokeBearOwnership("profile disabled"));
+        RecordingBearTask bear = new RecordingBearTask(reload(profile.getId()));
+
+        // The worker can still be running with the profile it loaded before the revocation.
+        assertTrue(queue.executeTask(bear));
+
+        assertEquals(0, bear.executionCount, "a due cleanup finalization must not become a full session");
+        assertTrue(BearRecoveryFinalization.deadline(reload(profile.getId())).isEmpty(),
+                "the finalization ran instead of being erased");
+    }
+
+    @Test
+    void revokedParticipationCannotRegainTheEventLease() {
+        AccountDescriptor profile = configuredActiveProfile("Bear checkpoint disabled ");
+        BearTrapSessionLease.Lease lease =
+                BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+        assertTrue(BearSessionCheckpoint.open(profile, lease.eventEnd()));
+        BearTrapSessionLease.releaseForQueueStop(profile.getId());
+        // Only the durable checkpoint still proves the event once the schedule was edited away.
+        assertTrue(ConfigService.obtain().writeAccountSetting(
+                profile, BEAR_TRAP_SCHEDULE_DATETIME_STRING, "01-01-2035 00:00"));
+        assertTrue(BearTrapSessionLease.acquireForBearExecution(reload(profile.getId())).isPresent(),
+                "with participation on, the checkpoint restores the lease");
+        BearTrapSessionLease.releaseForQueueStop(profile.getId());
+        assertTrue(ConfigService.obtain().writeAccountSetting(profile, BEAR_TRAP_EVENT_BOOL, "false"));
+
+        assertTrue(BearTrapSessionLease.acquireForBearExecution(reload(profile.getId())).isEmpty(),
+                "disabled participation must not regain the event lease from its checkpoint");
+    }
+
+    @Test
+    void aDisabledProfileIsNotProtectedByItsDurableRecovery() {
+        AccountDescriptor profile = configuredActiveProfile("Bear protection disabled ");
+        BearTrapSessionLease.Lease lease =
+                BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+        assertTrue(BearRecoveryFinalization.arm(profile, lease.eventEnd()));
+        BearTrapSessionLease.releaseForQueueStop(profile.getId());
+        AccountDescriptor disabled = reload(profile.getId());
+        disabled.setEnabled(false);
+
+        assertFalse(new RecordingQueue(disabled).hasProtectedBearOwnership(Instant.now()));
+        assertTrue(new RecordingQueue(reload(profile.getId())).hasProtectedBearOwnership(Instant.now()));
+    }
+
+    @Test
+    void aRevocationDuringTheLeaseClaimWaitsAndThenCancelsTheSession() throws Exception {
+        AccountDescriptor profile = configuredActiveProfile("Bear revoke race ");
+        RecordingQueue queue = new RecordingQueue(profile);
+        CancellationObservingBearTask bear = new CancellationObservingBearTask(profile);
+        Thread[] revoker = new Thread[1];
+        queue.afterLease = () -> {
+            revoker[0] = new Thread(() -> queue.revokeBearOwnership("profile disabled"));
+            revoker[0].start();
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        };
+
+        queue.executeTask(bear);
+        revoker[0].join(5_000);
+
+        assertTrue(bear.cancelled,
+                "a revocation racing the lease claim must cancel the session, not be lost");
+    }
+
+    private static final class CancellationObservingBearTask extends DelayedTask {
+
+        private boolean cancelled;
+
+        private CancellationObservingBearTask(AccountDescriptor profile) {
+            super(profile, TpDailyTaskEnum.BEAR_TRAP);
+            reschedule(LocalDateTime.now().minusSeconds(1));
+        }
+
+        @Override
+        public void run() {
+            try {
+                Thread.sleep(500);
+                checkPreemption();
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            } catch (RuntimeException cancellation) {
+                cancelled = true;
+            }
+        }
+
+        @Override
+        protected void execute() {
+        }
+    }
+
     private static AccountDescriptor reload(Long profileId) {
         return ProfileService.obtain().fetchAllAccounts().stream()
                 .filter(candidate -> profileId.equals(candidate.getId()))
@@ -955,6 +1071,7 @@ class TaskQueueBearSessionLeaseTest {
         private int autojoinRestores;
         private Function<AccountDescriptor, DelayedTask> bearFactory =
                 RecordingBearTask::new;
+        private Runnable afterLease = () -> { };
         private int gameStops;
         private int slotReleases;
 
@@ -973,6 +1090,11 @@ class TaskQueueBearSessionLeaseTest {
 
         @Override
         protected void sleepSchedulerTick(long millis) {
+        }
+
+        @Override
+        protected void afterBearLeaseAcquired() {
+            afterLease.run();
         }
 
         @Override

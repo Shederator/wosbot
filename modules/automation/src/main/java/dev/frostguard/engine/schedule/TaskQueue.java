@@ -226,6 +226,14 @@ public class TaskQueue {
         if (kind == null || updatedProfile == null || nextRun == null) {
             return false;
         }
+        if (kind == TpDailyTaskEnum.BEAR_TRAP && hasProtectedBearOwnership(Instant.now())) {
+            Optional<LocalDateTime> queued = bearScheduledAt();
+            if (queued.isEmpty() || nextRun.isAfter(queued.get())) {
+                // The active event owns Bear's schedule; an edit applies after it ends.
+                emitInfo("Bear schedule edit deferred: the active event keeps its in-window retry");
+                return false;
+            }
+        }
         DelayedTask ref = DelayedTaskRegistry.create(kind, updatedProfile);
         if (ref == null) {
             return false;
@@ -629,6 +637,10 @@ public class TaskQueue {
         return false;
     }
 
+    /** Test seam inside the atomic Bear claim; production does nothing here. */
+    protected void afterBearLeaseAcquired() {
+    }
+
     /** A failed idle-wake Initialize frees the slot, unless this profile owns an active Bear event. */
     void releaseSlotAfterFailedIdleWake() {
         if (requiresSlotAcquisition(sessionOrigin) || hasProtectedBearOwnership(Instant.now())) {
@@ -761,43 +773,53 @@ public class TaskQueue {
             return false;
         }
         BearTrapSessionLease.Lease bearLease = null;
+        ExecutionContext ctx = new ExecutionContext(task);
         if (task.getTpTask() == TpDailyTaskEnum.BEAR_TRAP) {
-            Optional<BearTrapSessionLease.Lease> acquiredLease =
-                    BearTrapSessionLease.acquireForBearExecution(profile);
-            if (acquiredLease.isEmpty() && finalizeEndedBearSession(task)) {
-                return true;
+            // Claiming the lease and publishing the running context are atomic with revocation:
+            // a revoke either lands first (and its due finalizer runs here) or cancels this run.
+            synchronized (this) {
+                if (finalizeBearRecoveryIfDue(task, Instant.now())) {
+                    return true;
+                }
+                Optional<BearTrapSessionLease.Lease> acquiredLease =
+                        BearTrapSessionLease.acquireForBearExecution(profile);
+                if (acquiredLease.isEmpty() && finalizeEndedBearSession(task)) {
+                    return true;
+                }
+                if (acquiredLease.isEmpty()) {
+                    task.setRecurring(true);
+                    task.reschedule(LocalDateTime.now().plusSeconds(30));
+                    emitErrorTask(task, "Bear execution refused: no configured active session deadline; "
+                            + "retryAt=" + task.getScheduled().format(TS_FMT));
+                    enqueue(task);
+                    return false;
+                }
+                BearTrapSessionLease.Lease lease = acquiredLease.get();
+                bearLease = lease;
+                if (!BearSessionCheckpoint.open(profile, lease.eventEnd())) {
+                    task.setRecurring(true);
+                    task.reschedule(LocalDateTime.now().plusSeconds(30));
+                    emitErrorTask(task, "Bear execution refused: durable session checkpoint could not be opened; "
+                            + "retryAt=" + task.getScheduled().format(TS_FMT));
+                    enqueue(task);
+                    return false;
+                }
+                if (BearRecoveryFinalization.deadline(profile).isPresent()
+                        && !BearRecoveryFinalization.clear(profile)) {
+                    task.setRecurring(true);
+                    task.reschedule(LocalDateTime.now().plusSeconds(30));
+                    emitErrorTask(task, "Bear execution refused: manual recovery handoff could not clear its "
+                            + "finalizer after the new durable checkpoint was opened");
+                    enqueue(task);
+                    return false;
+                }
+                afterBearLeaseAcquired();
+                emitInfoTask(task, "Bear session lease acquired for Timer "
+                        + lease.trapNumber() + " until "
+                        + LocalDateTime.ofInstant(lease.eventEnd(), ZoneId.systemDefault())
+                                .format(TS_FMT));
+                runningContext = ctx;
             }
-            if (acquiredLease.isEmpty()) {
-                task.setRecurring(true);
-                task.reschedule(LocalDateTime.now().plusSeconds(30));
-                emitErrorTask(task, "Bear execution refused: no configured active session deadline; "
-                        + "retryAt=" + task.getScheduled().format(TS_FMT));
-                enqueue(task);
-                return false;
-            }
-            BearTrapSessionLease.Lease lease = acquiredLease.get();
-            bearLease = lease;
-            if (!BearSessionCheckpoint.open(profile, lease.eventEnd())) {
-                task.setRecurring(true);
-                task.reschedule(LocalDateTime.now().plusSeconds(30));
-                emitErrorTask(task, "Bear execution refused: durable session checkpoint could not be opened; "
-                        + "retryAt=" + task.getScheduled().format(TS_FMT));
-                enqueue(task);
-                return false;
-            }
-            if (BearRecoveryFinalization.deadline(profile).isPresent()
-                    && !BearRecoveryFinalization.clear(profile)) {
-                task.setRecurring(true);
-                task.reschedule(LocalDateTime.now().plusSeconds(30));
-                emitErrorTask(task, "Bear execution refused: manual recovery handoff could not clear its "
-                        + "finalizer after the new durable checkpoint was opened");
-                enqueue(task);
-                return false;
-            }
-            emitInfoTask(task, "Bear session lease acquired for Timer "
-                    + lease.trapNumber() + " until "
-                    + LocalDateTime.ofInstant(lease.eventEnd(), ZoneId.systemDefault())
-                            .format(TS_FMT));
         }
         if (task.getTpTask() == TpDailyTaskEnum.INITIALIZE
                 && !idleWakeInitializationPending
@@ -808,7 +830,6 @@ public class TaskQueue {
         TaskStateData st = recordPreExecution(task);
         long t0 = System.currentTimeMillis();
         boolean ok;
-        ExecutionContext ctx = new ExecutionContext(task);
         synchronized (this) {
             runningContext = ctx;
             if (shuttingDown) {
