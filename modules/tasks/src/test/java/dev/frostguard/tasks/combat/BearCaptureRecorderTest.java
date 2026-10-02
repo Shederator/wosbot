@@ -37,6 +37,29 @@ class BearCaptureRecorderTest {
     }
 
     @Test
+    void aLaterRunInTheSameEventNeverOverwritesEarlierEvidence(@TempDir Path logs) throws Exception {
+        Path first;
+        try (BearCaptureRecorder recorder = BearCaptureRecorder.open(logs, EVENT_END)) {
+            first = recorder.directory();
+            try (OutputStream segment = recorder.nextSegment()) {
+                segment.write(new byte[] {1, 2, 3});
+            }
+            recorder.observed(1, EVENT_END, Duration.ZERO, BearNavigationPolicy.Screen.WORLD, 0L, Map.of());
+        }
+        Path second;
+        try (BearCaptureRecorder retry = BearCaptureRecorder.open(logs, EVENT_END)) {
+            second = retry.directory();
+            try (OutputStream segment = retry.nextSegment()) {
+                segment.write(new byte[] {9});
+            }
+        }
+
+        assertTrue(!first.equals(second), "each run records into its own directory");
+        assertArrayEquals(new byte[] {1, 2, 3}, Files.readAllBytes(first.resolve("segment-001.h264")));
+        assertEquals(1, Files.readAllLines(first.resolve("frames.jsonl")).size());
+    }
+
+    @Test
     void journalKeepsObservationOrderAsJsonLines(@TempDir Path logs) throws Exception {
         Path journal;
         try (BearCaptureRecorder recorder = BearCaptureRecorder.open(logs, EVENT_END)) {

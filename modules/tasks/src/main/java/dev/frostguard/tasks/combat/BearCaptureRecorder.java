@@ -5,6 +5,7 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -46,7 +47,7 @@ final class BearCaptureRecorder implements AutoCloseable {
 
     private BearCaptureRecorder(Path directory, int journalCapacity, Runnable beforeEachWrite)
             throws IOException {
-        this.directory = Files.createDirectories(directory);
+        this.directory = directory;
         this.journal = new ArrayBlockingQueue<>(journalCapacity);
         this.beforeEachWrite = beforeEachWrite;
         BufferedWriter writer = Files.newBufferedWriter(directory.resolve("frames.jsonl"), StandardCharsets.UTF_8);
@@ -61,8 +62,22 @@ final class BearCaptureRecorder implements AutoCloseable {
 
     static BearCaptureRecorder open(Path logsRoot, Instant eventEnd, int journalCapacity,
             Runnable beforeEachWrite) throws IOException {
-        Path session = logsRoot.resolve("bear-capture").resolve("event-" + SESSION_NAME.format(eventEnd));
-        return new BearCaptureRecorder(session, journalCapacity, beforeEachWrite);
+        Path event = Files.createDirectories(
+                logsRoot.resolve("bear-capture").resolve("event-" + SESSION_NAME.format(eventEnd)));
+        return new BearCaptureRecorder(claimRunDirectory(event), journalCapacity, beforeEachWrite);
+    }
+
+    /** A retry or restart in the same event records beside earlier runs, never over them. */
+    private static Path claimRunDirectory(Path event) throws IOException {
+        for (int run = 1; run < 10_000; run++) {
+            Path candidate = event.resolve(String.format("run-%03d", run));
+            try {
+                return Files.createDirectory(candidate);
+            } catch (FileAlreadyExistsException taken) {
+                // Earlier run in this event; try the next number.
+            }
+        }
+        throw new IOException("No free Bear capture run directory in " + event);
     }
 
     Path directory() {

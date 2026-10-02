@@ -869,7 +869,7 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
             try {
                 try {
                     ui.phase(BearUiStateMachine.Phase.CLEANING_UP);
-                    if (resumeNormalTasks && capture == null && !verifyTerminalUiCleanup()) {
+                    if (resumeNormalTasks && !observeOnly() && !verifyTerminalUiCleanup()) {
                         throw protectedFailure(
                                 BearSessionExecutionException.FailureKind.VISUAL_UNKNOWN,
                                 BearSessionExecutionException.RecoveryDirective.OPERATOR_ACTION,
