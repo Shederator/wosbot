@@ -48,26 +48,9 @@ class BearNavigationPolicyTest {
     void partialAllianceRenderWaitsForAnotherFrameInsteadOfRestartingTheRoute() {
         assertEquals(BearNavigationPolicy.Action.WAIT_FOR_FRAME,
                 BearNavigationPolicy.next(
-                        BearNavigationPolicy.Screen.TRANSITIONING,
+                        BearNavigationPolicy.Screen.APP_LOADING,
                         BearNavigationPolicy.Goal.PREPARED_AT_BEAR,
                         BearNavigationPolicy.Phase.PREPARING));
-    }
-
-    @Test
-    void alreadyAtBearContinuesWithoutEitherNavigationRoute() {
-        assertEquals(BearNavigationPolicy.Action.TAP_BEAR_ANCHOR,
-                BearNavigationPolicy.next(
-                        BearNavigationPolicy.Screen.WORLD_AT_BEAR,
-                        BearNavigationPolicy.Goal.OWN_RALLY,
-                        BearNavigationPolicy.Phase.ACTIVE));
-    }
-
-    @Test
-    void reusesTheVerifiedBearAnchorInsteadOfReopeningAlliance() {
-        assertEquals(BearNavigationPolicy.Action.TAP_BEAR_ANCHOR,
-                BearNavigationPolicy.next(
-                        BearNavigationPolicy.Screen.WORLD_AT_VERIFIED_BEAR,
-                        BearNavigationPolicy.Goal.OWN_RALLY));
     }
 
     @Test
@@ -98,7 +81,7 @@ class BearNavigationPolicyTest {
     void opensWarDirectlyFromEitherVerifiedWorldState() {
         assertEquals(BearNavigationPolicy.Action.TAP_WAR,
                 BearNavigationPolicy.next(
-                        BearNavigationPolicy.Screen.WORLD_AT_VERIFIED_BEAR,
+                        BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
                         BearNavigationPolicy.Goal.WAR_LIST));
         assertEquals(BearNavigationPolicy.Action.TAP_WAR,
                 BearNavigationPolicy.next(
@@ -114,7 +97,7 @@ class BearNavigationPolicyTest {
                         BearNavigationPolicy.Goal.FRESH_WAR_LIST));
         assertEquals(BearNavigationPolicy.Action.TAP_WAR,
                 BearNavigationPolicy.next(
-                        BearNavigationPolicy.Screen.WORLD_AT_BEAR,
+                        BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
                         BearNavigationPolicy.Goal.FRESH_WAR_LIST));
     }
 

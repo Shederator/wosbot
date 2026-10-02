@@ -18,7 +18,7 @@ class BearUiStateMachineTest {
     void legalTransitionRequiresNewerDestinationFrameAndEmitsProvenance() {
         Deque<BearNavigationPolicy.Screen> script = new ArrayDeque<>(List.of(
                 BearNavigationPolicy.Screen.WORLD,
-                BearNavigationPolicy.Screen.TRANSITIONING,
+                BearNavigationPolicy.Screen.UNKNOWN,
                 BearNavigationPolicy.Screen.ALLIANCE_MENU));
         List<String> diagnostics = new ArrayList<>();
         AtomicInteger taps = new AtomicInteger();

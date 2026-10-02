@@ -75,7 +75,7 @@ class BearFrameStreamTest {
         AtomicInteger captures = new AtomicInteger();
         BearFrameStream<String> stream = new BearFrameStream<>(
                 () -> "frame-" + captures.incrementAndGet(),
-                ignored -> BearNavigationPolicy.Screen.TRANSITIONING,
+                ignored -> BearNavigationPolicy.Screen.APP_LOADING,
                 () -> false);
 
         stream.awaitAfter(0, Duration.ofMillis(130), ignored -> false);
@@ -107,7 +107,7 @@ class BearFrameStreamTest {
         BearVerifiedActionExecutor.Outcome outcome = executor.tapWithOneVerifiedRetry(
                 stale,
                 taps::incrementAndGet,
-                frame -> frame.screen() == BearNavigationPolicy.Screen.WORLD_AT_BEAR,
+                frame -> frame.screen() == BearNavigationPolicy.Screen.WAR_LIST,
                 frame -> frame.screen() == BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY);
 
         assertEquals(BearVerifiedActionExecutor.Outcome.STALE_AUTHORIZATION, outcome);
@@ -121,7 +121,7 @@ class BearFrameStreamTest {
         Clock clock = Clock.fixed(now, ZoneOffset.UTC);
         Deque<BearNavigationPolicy.Screen> screens = new ArrayDeque<>(List.of(
                 BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
-                BearNavigationPolicy.Screen.WORLD_AT_BEAR));
+                BearNavigationPolicy.Screen.WAR_LIST));
         BearFrameStream<BearNavigationPolicy.Screen> stream = new BearFrameStream<>(
                 screens::removeFirst,
                 screen -> screen,
@@ -142,7 +142,7 @@ class BearFrameStreamTest {
         BearVerifiedActionExecutor.Outcome outcome = executor.tapWithOneVerifiedRetry(
                 agedAfterClassification,
                 taps::incrementAndGet,
-                frame -> frame.screen() == BearNavigationPolicy.Screen.WORLD_AT_BEAR,
+                frame -> frame.screen() == BearNavigationPolicy.Screen.WAR_LIST,
                 frame -> frame.screen() == BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY);
 
         assertEquals(BearVerifiedActionExecutor.Outcome.STALE_AUTHORIZATION, outcome);
@@ -152,7 +152,7 @@ class BearFrameStreamTest {
     @Test
     void everyObservationHasASequenceAndPostconditionsUseALaterFrame() {
         Deque<BearNavigationPolicy.Screen> frames = new ArrayDeque<>();
-        frames.add(BearNavigationPolicy.Screen.TRANSITIONING);
+        frames.add(BearNavigationPolicy.Screen.APP_LOADING);
         frames.add(BearNavigationPolicy.Screen.ALLIANCE_MENU);
         BearFrameStream<BearNavigationPolicy.Screen> stream = new BearFrameStream<>(
                 frames::removeFirst,
@@ -190,7 +190,7 @@ class BearFrameStreamTest {
         BearVerifiedActionExecutor.Outcome outcome = executor.tapWithOneVerifiedRetry(
                 source,
                 taps::incrementAndGet,
-                frame -> frame.screen() == BearNavigationPolicy.Screen.WORLD_AT_BEAR,
+                frame -> frame.screen() == BearNavigationPolicy.Screen.WAR_LIST,
                 frame -> frame.screen() == BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY);
 
         assertEquals(BearVerifiedActionExecutor.Outcome.INTERRUPTED, outcome);
@@ -201,9 +201,9 @@ class BearFrameStreamTest {
     void laterDestinationWithinDeadlineDoesNotCauseASecondTap() {
         Deque<BearNavigationPolicy.Screen> frames = new ArrayDeque<>();
         frames.add(BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY);
-        frames.add(BearNavigationPolicy.Screen.TRANSITIONING);
+        frames.add(BearNavigationPolicy.Screen.APP_LOADING);
         frames.add(BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY);
-        frames.add(BearNavigationPolicy.Screen.WORLD_AT_BEAR);
+        frames.add(BearNavigationPolicy.Screen.WAR_LIST);
         AtomicInteger taps = new AtomicInteger();
         BearFrameStream<BearNavigationPolicy.Screen> stream = new BearFrameStream<>(
                 frames::removeFirst,
@@ -216,7 +216,7 @@ class BearFrameStreamTest {
         BearVerifiedActionExecutor.Outcome outcome = executor.tapWithOneVerifiedRetry(
                 source,
                 taps::incrementAndGet,
-                frame -> frame.screen() == BearNavigationPolicy.Screen.WORLD_AT_BEAR,
+                frame -> frame.screen() == BearNavigationPolicy.Screen.WAR_LIST,
                 frame -> frame.screen() == BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY);
 
         assertEquals(BearVerifiedActionExecutor.Outcome.CONFIRMED, outcome);
@@ -238,7 +238,7 @@ class BearFrameStreamTest {
         BearVerifiedActionExecutor.Outcome outcome = executor.tapWithOneVerifiedRetry(
                 superseded,
                 taps::incrementAndGet,
-                frame -> frame.screen() == BearNavigationPolicy.Screen.WORLD_AT_BEAR,
+                frame -> frame.screen() == BearNavigationPolicy.Screen.WAR_LIST,
                 frame -> true);
 
         assertEquals(BearVerifiedActionExecutor.Outcome.STALE_AUTHORIZATION, outcome);

@@ -109,7 +109,8 @@ Departures from the 2026-10-02 fix plan, approved by the operator on 2026-10-02:
 - A formation conflict is shown in Bear settings and refused at session start (which then observes
   the event), not also when the schedule is computed.
 
-Not done, by design: the capture journal does not log the removed fast-revalidation heuristic, and
-the at-Bear World states (`WORLD_AT_BEAR`, `WORLD_AT_VERIFIED_BEAR`) and `TRANSITIONING` remain
-only as evidence-gated targets of the preparation and centring edges; the live classifier never
-emits them.
+Not done, by design: the capture journal does not log the removed fast-revalidation heuristic.
+
+The at-Bear World states and the transitional screen were deleted (operator decision 2026-10-02):
+the live classifier never produced them. The configured-trap Go and active-Bear centring edges now
+have no confirmable destination and fail closed until real recordings define one.

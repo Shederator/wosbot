@@ -962,14 +962,11 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
             for (int attempt = 0; attempt < 4; attempt++) {
                 BearNavigationPolicy.Screen screen = observeBearScreen();
                 if (screen == BearNavigationPolicy.Screen.WORLD
-                        || screen == BearNavigationPolicy.Screen.WORLD_AT_BEAR
-                        || screen == BearNavigationPolicy.Screen.WORLD_AT_VERIFIED_BEAR
                         || screen == BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY) {
                     return true;
                 }
                 if (screen == BearNavigationPolicy.Screen.RECONNECT
-                        || screen == BearNavigationPolicy.Screen.APP_LOADING
-                        || screen == BearNavigationPolicy.Screen.TRANSITIONING) {
+                        || screen == BearNavigationPolicy.Screen.APP_LOADING) {
                     ui.await(Duration.ofSeconds(1), frame -> frame.screen() != screen,
                             "terminal-cleanup-wait");
                     continue;
@@ -1545,8 +1542,6 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
             }
             if (screen != BearNavigationPolicy.Screen.WAR_LIST
                     && screen != BearNavigationPolicy.Screen.WORLD
-                    && screen != BearNavigationPolicy.Screen.WORLD_AT_BEAR
-                    && screen != BearNavigationPolicy.Screen.WORLD_AT_VERIFIED_BEAR
                     && screen != BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY) {
                 return false;
             }
@@ -1606,12 +1601,10 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                                 "recover-" + resumeState,
                                 null);
                     }
-                    if (screen == BearNavigationPolicy.Screen.APP_LOADING
-                            || screen == BearNavigationPolicy.Screen.TRANSITIONING) {
+                    if (screen == BearNavigationPolicy.Screen.APP_LOADING) {
                         boolean recovered = ui.await(
                                 Duration.ofSeconds(2),
                                 frame -> frame.screen() != BearNavigationPolicy.Screen.APP_LOADING
-                                        && frame.screen() != BearNavigationPolicy.Screen.TRANSITIONING
                                         && frame.screen() != BearNavigationPolicy.Screen.UNKNOWN,
                                 "bounded-recovery-" + resumeState)
                                 .filter(frame -> validRecoveryDestination(resumeState, frame.screen()))
@@ -1704,8 +1697,6 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
             BearNavigationPolicy.Screen screen = observeBearScreen();
             if (screen != BearNavigationPolicy.Screen.MARCH_SIDEBAR) {
                 if (screen != BearNavigationPolicy.Screen.WORLD
-                        && screen != BearNavigationPolicy.Screen.WORLD_AT_BEAR
-                        && screen != BearNavigationPolicy.Screen.WORLD_AT_VERIFIED_BEAR
                         && screen != BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY) {
                     return new MarchHelper.MarchQueueSnapshot(List.of(), false);
                 }
@@ -1838,8 +1829,6 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                     + Duration.ofMillis(POST_DEPLOY_CONFIRMATION_TIMEOUT_MS).toNanos();
             BearNavigationPolicy.Screen postDeploy = observeBearScreen();
             if (postDeploy != BearNavigationPolicy.Screen.WORLD
-                    && postDeploy != BearNavigationPolicy.Screen.WORLD_AT_BEAR
-                    && postDeploy != BearNavigationPolicy.Screen.WORLD_AT_VERIFIED_BEAR
                     && postDeploy != BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY) {
                 logWarning(routineLogBearTrapLine(
                         "Own rally deployment left no stable World frame for confirmation"));
@@ -1937,10 +1926,6 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                     case READY -> {
                         return true;
                     }
-                    case TAP_BEAR_ANCHOR -> {
-                        // At-Bear World states have no production classification yet.
-                        return false;
-                    }
                     case TAP_ACTIVE_BEAR_ICON -> {
                         BearVerifiedActionExecutor.Outcome opened = ui.transition(
                                 BearUiAction.OPEN_ACTIVE_BEAR,
@@ -2013,7 +1998,6 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                             WAIT_FOR_FRAME -> {
                         return false;
                     }
-                    case TAP_BEAR_ANCHOR -> throw new IllegalStateException("Unexpected War navigation action");
                 }
             }
             return false;
@@ -2412,13 +2396,9 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                 case LOCATE_BEAR, OWN_RALLY_REQUIRED, OWN_RALLY_STARTING,
                         OWN_RALLY_ACTIVE, RECOVER_TO_KNOWN_SCREEN ->
                         screen == BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY
-                                || screen == BearNavigationPolicy.Screen.WORLD_AT_BEAR
-                                || screen == BearNavigationPolicy.Screen.WORLD_AT_VERIFIED_BEAR
                                 || screen == BearNavigationPolicy.Screen.BEAR_RALLY_PANEL;
                 case FILL_JOIN_SLOTS, WAIT_FOR_NEXT_USEFUL_DEADLINE ->
                         screen == BearNavigationPolicy.Screen.WORLD
-                                || screen == BearNavigationPolicy.Screen.WORLD_AT_BEAR
-                                || screen == BearNavigationPolicy.Screen.WORLD_AT_VERIFIED_BEAR
                                 || screen == BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY
                                 || screen == BearNavigationPolicy.Screen.WAR_LIST;
                 case FINISHED, CANCELLED -> false;

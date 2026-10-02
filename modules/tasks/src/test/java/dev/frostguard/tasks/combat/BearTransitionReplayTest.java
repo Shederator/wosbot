@@ -14,20 +14,24 @@ import org.junit.jupiter.api.Test;
 class BearTransitionReplayTest {
 
     @Test
-    void preparationRouteUsesOnlyLegalNewerFrameEdgesIncludingTrapTwo() {
+    void preparationRouteFailsClosedAtTheUnverifiedConfiguredTrapGo() {
         Replay replay = new Replay(
                 BearNavigationPolicy.Screen.WORLD,
                 BearNavigationPolicy.Screen.ALLIANCE_MENU,
                 BearNavigationPolicy.Screen.ALLIANCE_TERRITORY,
                 BearNavigationPolicy.Screen.SPECIAL_BUILDINGS,
-                BearNavigationPolicy.Screen.WORLD_AT_VERIFIED_BEAR);
+                BearNavigationPolicy.Screen.WORLD,
+                BearNavigationPolicy.Screen.WORLD,
+                BearNavigationPolicy.Screen.WORLD,
+                BearNavigationPolicy.Screen.WORLD);
 
         assertEquals(BearNavigationPolicy.Screen.WORLD, replay.machine.observe().screen());
         replay.confirm(BearUiAction.OPEN_ALLIANCE);
         replay.confirm(BearUiAction.OPEN_TERRITORY);
         replay.confirm(BearUiAction.OPEN_SPECIAL_BUILDINGS);
-        replay.confirm(BearUiAction.GO_TO_CONFIGURED_TRAP);
-        assertEquals(4, replay.inputs.get());
+        assertEquals(BearVerifiedActionExecutor.Outcome.NOT_CONFIRMED, replay.machine.transition(
+                        BearUiAction.GO_TO_CONFIGURED_TRAP, ignored -> replay.inputs.incrementAndGet()),
+                "arrival at the configured trap has no real-frame identity yet");
     }
 
     @Test
@@ -38,15 +42,25 @@ class BearTransitionReplayTest {
                 BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
                 BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
                 BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
-                BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
-                BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
-                BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
-                BearNavigationPolicy.Screen.WORLD_AT_BEAR);
+                BearNavigationPolicy.Screen.WAR_LIST);
         replay.machine.observe();
 
         assertEquals(BearVerifiedActionExecutor.Outcome.CONFIRMED,
-                replay.machine.transition(BearUiAction.OPEN_ACTIVE_BEAR, ignored -> replay.inputs.incrementAndGet()));
+                replay.machine.transition(BearUiAction.OPEN_WAR_LIST, ignored -> replay.inputs.incrementAndGet()));
         assertEquals(1, replay.inputs.get(), "slow rendering must not cause a second tap");
+    }
+
+    @Test
+    void activeBearCentringFailsClosedUntilItHasARealPostcondition() {
+        Replay replay = new Replay(
+                BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
+                BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
+                BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
+                BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY);
+        replay.machine.observe();
+
+        assertEquals(BearVerifiedActionExecutor.Outcome.NOT_CONFIRMED,
+                replay.machine.transition(BearUiAction.OPEN_ACTIVE_BEAR, ignored -> replay.inputs.incrementAndGet()));
     }
 
     @Test

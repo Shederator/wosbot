@@ -64,7 +64,7 @@ class BearUiActionTest {
     void everyBackSourceAcceptsOnlyItsOwnVerifiedParents() {
         Map<Screen, Set<Screen>> parents = new EnumMap<>(Screen.class);
         Set<Screen> world = EnumSet.of(
-                Screen.WORLD, Screen.WORLD_AT_BEAR, Screen.WORLD_AT_VERIFIED_BEAR,
+                Screen.WORLD,
                 Screen.WORLD_ACTIVE_BEAR_ICON_READY);
         parents.put(Screen.WAR_LIST, world);
         parents.put(Screen.FORMATION, EnumSet.of(
