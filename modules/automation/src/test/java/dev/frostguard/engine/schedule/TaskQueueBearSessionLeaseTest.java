@@ -779,6 +779,26 @@ class TaskQueueBearSessionLeaseTest {
                 "exactly one Bear task carries the cleanup-only finalization");
         assertFalse(BearRecoveryFinalization.deadline(reload(profile.getId())).orElseThrow()
                 .isAfter(Instant.now()), "the cleanup finalization is due now");
+        assertTrue(queue.bearScheduledAt().orElseThrow().isBefore(LocalDateTime.now().plusSeconds(2)),
+                "the queued cleanup runs now, not after an in-window retry delay");
+    }
+
+    @Test
+    void theBacklogNeverHoldsTwoBearTasksAndTheEarliestWins() {
+        AccountDescriptor profile = configuredActiveProfile("Bear single task ");
+        RecordingQueue queue = new RecordingQueue(profile);
+        RecordingBearTask later = new RecordingBearTask(profile);
+        later.reschedule(LocalDateTime.now().plusMinutes(10));
+        RecordingBearTask sooner = new RecordingBearTask(profile);
+        sooner.reschedule(LocalDateTime.now().plusSeconds(5));
+
+        queue.enqueue(later);
+        queue.enqueue(sooner);
+        queue.enqueue(later);
+
+        assertEquals(1, queue.getNextQueuedTaskTypes(20).stream()
+                .filter(type -> type == TpDailyTaskEnum.BEAR_TRAP).count());
+        assertTrue(queue.bearScheduledAt().orElseThrow().isBefore(LocalDateTime.now().plusSeconds(10)));
     }
 
     private static final class RevokingBearTask extends DelayedTask {

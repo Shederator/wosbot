@@ -119,7 +119,31 @@ public class TaskQueue {
 
     // ---- queue manipulation ------------------------------------------------
 
-    public synchronized void enqueue(DelayedTask task) { taskBacklog.offer(task); }
+    public synchronized void enqueue(DelayedTask task) { offerToBacklog(task); }
+
+    /**
+     * Bear owns its profile through a single task: a revocation, a restore, and a returning session
+     * may all requeue it, and the earliest schedule must win instead of running Bear twice.
+     */
+    private synchronized void offerToBacklog(DelayedTask task) {
+        if (task.getTpTask() == TpDailyTaskEnum.BEAR_TRAP) {
+            DelayedTask existing = taskBacklog.stream()
+                    .filter(queued -> queued.getTpTask() == TpDailyTaskEnum.BEAR_TRAP)
+                    .min(Comparator.comparing(DelayedTask::getScheduled))
+                    .orElse(null);
+            if (existing == task) return;
+            if (existing != null && !existing.getScheduled().isAfter(task.getScheduled())) return;
+            taskBacklog.removeIf(queued -> queued.getTpTask() == TpDailyTaskEnum.BEAR_TRAP);
+        }
+        taskBacklog.offer(task);
+    }
+
+    synchronized Optional<LocalDateTime> bearScheduledAt() {
+        return taskBacklog.stream()
+                .filter(task -> task.getTpTask() == TpDailyTaskEnum.BEAR_TRAP)
+                .map(DelayedTask::getScheduled)
+                .min(LocalDateTime::compareTo);
+    }
 
     public synchronized boolean dequeue(TpDailyTaskEnum kind) {
         DelayedTask ref = createTask(kind);
@@ -213,7 +237,7 @@ public class TaskQueue {
             }
             ref.reschedule(nextRun);
             ref.setRecurring(true);
-            taskBacklog.offer(ref);
+            offerToBacklog(ref);
             emitInfoTask(ref, "Enqueued with aligned schedule " + nextRun.format(TS_FMT));
             return true;
         }
@@ -221,7 +245,7 @@ public class TaskQueue {
         taskBacklog.remove(existing);
         existing.setProfile(updatedProfile);
         existing.reschedule(nextRun);
-        taskBacklog.offer(existing);
+        offerToBacklog(existing);
         emitInfoTask(existing, "Schedule realigned to " + nextRun.format(TS_FMT));
         return true;
     }
@@ -457,12 +481,12 @@ public class TaskQueue {
             present.clearStaminaDeferral();
             present.reschedule(LocalDateTime.now());
             present.setRecurring(recurring);
-            taskBacklog.offer(present);
+            offerToBacklog(present);
             emitInfoTask(present, "Rescheduled " + kind + " to NOW");
         } else {
             ref.reschedule(LocalDateTime.now());
             ref.setRecurring(recurring);
-            taskBacklog.offer(ref);
+            offerToBacklog(ref);
             emitInfoTask(ref, "Enqueued " + kind + " for immediate execution");
         }
 
@@ -1389,8 +1413,8 @@ public class TaskQueue {
     private synchronized void pushDailyMissionsToNow() {
         DelayedTask ref = DelayedTaskRegistry.create(TpDailyTaskEnum.DAILY_MISSIONS, profile);
         DelayedTask existing = taskBacklog.stream().filter(ref::equals).findFirst().orElse(null);
-        if (existing != null) { taskBacklog.remove(existing); existing.reschedule(LocalDateTime.now()); existing.setRecurring(true); taskBacklog.offer(existing); }
-        else { ref.reschedule(LocalDateTime.now()); ref.setRecurring(false); taskBacklog.offer(ref); }
+        if (existing != null) { taskBacklog.remove(existing); existing.reschedule(LocalDateTime.now()); existing.setRecurring(true); offerToBacklog(existing); }
+        else { ref.reschedule(LocalDateTime.now()); ref.setRecurring(false); offerToBacklog(ref); }
     }
 
     protected void handleIdleTransitions() {
@@ -1592,14 +1616,16 @@ public class TaskQueue {
         if (!leased && !durable) {
             return false;
         }
-        ExecutionContext running = runningContext;
-        boolean bearRunning = running != null && running.getTask() != null
-                && running.getTask().getTpTask() == TpDailyTaskEnum.BEAR_TRAP;
-        if (bearRunning) {
-            // The running task carries the cleanup when it returns; queueing a second one here
-            // would duplicate Bear in the backlog.
-            bearCleanupOwedByRunningTask = true;
-            running.cancel();
+        boolean bearRunning;
+        synchronized (this) {
+            ExecutionContext running = runningContext;
+            bearRunning = running != null && running.getTask() != null
+                    && running.getTask().getTpTask() == TpDailyTaskEnum.BEAR_TRAP;
+            if (bearRunning) {
+                // The running task carries the cleanup when it returns.
+                bearCleanupOwedByRunningTask = true;
+                running.cancel();
+            }
         }
         BearTrapSessionLease.releaseForQueueStop(profile.getId());
         if (!BearRecoveryFinalization.arm(profile, Instant.now())) {
@@ -1626,7 +1652,7 @@ public class TaskQueue {
         queued.setProfile(profile);
         queued.setRecurring(true);
         queued.reschedule(LocalDateTime.now());
-        taskBacklog.offer(queued);
+        offerToBacklog(queued);
     }
 
     boolean restoreDurableBearOwnershipOnStart() {
