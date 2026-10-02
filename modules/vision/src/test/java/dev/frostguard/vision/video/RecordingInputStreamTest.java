@@ -62,6 +62,29 @@ class RecordingInputStreamTest {
     }
 
     @Test
+    void aRecordingSinkThatFailsIsClosedAtOnceAndOnlyOnce() throws Exception {
+        int[] closes = {0};
+        OutputStream full = new OutputStream() {
+            @Override
+            public void write(int b) throws IOException {
+                throw new IOException("disk full");
+            }
+
+            @Override
+            public void close() {
+                closes[0]++;
+            }
+        };
+        try (var recorded = new RecordingInputStream(new ByteArrayInputStream(new byte[] {1, 2, 3}), full,
+                ignored -> { })) {
+            recorded.read(new byte[3], 0, 3);
+            assertEquals(1, closes[0], "a failed segment file must be released when the write fails");
+        }
+
+        assertEquals(1, closes[0], "closing the live stream must not close the failed sink again");
+    }
+
+    @Test
     void closingTheLiveStreamFlushesAndClosesTheRecording() throws Exception {
         boolean[] closed = {false};
         ByteArrayOutputStream sink = new ByteArrayOutputStream() {

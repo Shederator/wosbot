@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -57,6 +58,44 @@ class BearRealtimeFrameSourceTest {
     }
 
     @Test
+    void eachFrameNamesTheSegmentAndDecodedFrameItCameFrom() {
+        RawImageData first = RawImageData.capture(new byte[] {1, 1, 1, 1}, 1, 1, 4);
+        RawImageData renewed = RawImageData.capture(new byte[] {2, 2, 2, 2}, 1, 1, 4);
+        RawImageData screenshot = RawImageData.capture(new byte[] {3, 3, 3, 3}, 1, 1, 4);
+        FakeHandle segmentOne = new FakeHandle(new AndroidFrameStream.Frame(first, 7, System.nanoTime()), null);
+        FakeHandle segmentTwo = new FakeHandle(new AndroidFrameStream.Frame(renewed, 2, System.nanoTime()), null);
+        Deque<FakeHandle> handles = new ArrayDeque<>(java.util.List.of(segmentOne, segmentTwo));
+        BearRealtimeFrameSource source = new BearRealtimeFrameSource(handles::removeFirst, () -> false,
+                () -> screenshot);
+
+        source.next();
+        assertEquals(new BearRealtimeFrameSource.FrameOrigin(
+                BearRealtimeFrameSource.FrameOrigin.Kind.VIDEO, 1, 7), source.lastOrigin());
+        source.next();
+        assertEquals(new BearRealtimeFrameSource.FrameOrigin(
+                BearRealtimeFrameSource.FrameOrigin.Kind.SCREENCAP, 1, 7), source.lastOrigin(),
+                "a static-screen screenshot is not in the video; it names the last decoded frame before it");
+        segmentOne.failure = "bounded recorder ended";
+        source.next();
+        assertEquals(new BearRealtimeFrameSource.FrameOrigin(
+                BearRealtimeFrameSource.FrameOrigin.Kind.VIDEO, 2, 2), source.lastOrigin());
+        source.close();
+    }
+
+    @Test
+    void aRecordingFailureIsReportedWhileTheLiveStreamContinues() {
+        RawImageData frame = RawImageData.capture(new byte[] {1, 1, 1, 1}, 1, 1, 4);
+        FakeHandle handle = new FakeHandle(new AndroidFrameStream.Frame(frame, 1, System.nanoTime()), null);
+        handle.recordingFailure = "disk full";
+        BearRealtimeFrameSource source = new BearRealtimeFrameSource(() -> handle, () -> false);
+
+        assertSame(frame, source.next().frame());
+        assertEquals("disk full", source.recordingFailure());
+        assertTrue(!handle.closed.get(), "a recording failure must not stop observation");
+        source.close();
+    }
+
+    @Test
     void cancellationStopsBeforeStartingTransport() {
         AtomicInteger factories = new AtomicInteger();
         BearRealtimeFrameSource source = new BearRealtimeFrameSource(() -> {
@@ -70,7 +109,8 @@ class BearRealtimeFrameSourceTest {
 
     private static final class FakeHandle implements BearRealtimeFrameSource.StreamHandle {
         private final AndroidFrameStream.Frame frame;
-        private final String failure;
+        private volatile String failure;
+        private volatile String recordingFailure;
         private final AtomicBoolean closed = new AtomicBoolean();
 
         private FakeHandle(AndroidFrameStream.Frame frame, String failure) {
@@ -90,6 +130,11 @@ class BearRealtimeFrameSourceTest {
         @Override
         public String failure() {
             return failure;
+        }
+
+        @Override
+        public String recordingFailure() {
+            return recordingFailure;
         }
 
         @Override

@@ -757,6 +757,7 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
         private final BearFormationAvailabilityGate formationGate =
                 new BearFormationAvailabilityGate();
         private final BearCaptureRecorder capture;
+        private int failedRecordingSegment;
         private final Map<String, Long> classificationTemplateNanos = new HashMap<>();
         private long classificationNanos;
         private Instant classificationStartedAt = Instant.EPOCH;
@@ -2358,8 +2359,20 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                         : BearUiStateMachine.Phase.ACTIVE);
                 BearFrameStream.Snapshot<RawImageData> frame = ui.observe();
                 if (capture != null) {
+                    String recordingFailure = realtimeFrames.recordingFailure();
+                    if (recordingFailure != null && realtimeFrames.segment() > failedRecordingSegment) {
+                        failedRecordingSegment = realtimeFrames.segment();
+                        capture.recordingFailed(failedRecordingSegment, recordingFailure);
+                        logWarning(routineLogBearTrapLine("Bear capture segment " + failedRecordingSegment
+                                + " stopped recording (" + recordingFailure + "); still observing, "
+                                + "the next segment retries"));
+                    }
+                    BearRealtimeFrameSource.FrameOrigin origin = realtimeFrames.lastOrigin();
+                    String image = origin != null
+                            && origin.kind() == BearRealtimeFrameSource.FrameOrigin.Kind.SCREENCAP
+                            ? capture.staticScreenshot(frame.frame()) : null;
                     Duration transportAge = Duration.between(frame.capturedAt(), classificationStartedAt);
-                    capture.observed(frame.sequence(), frame.capturedAt(),
+                    capture.observed(frame.sequence(), origin, image, frame.capturedAt(),
                             transportAge.isNegative() ? Duration.ZERO : transportAge,
                             frame.screen(), classificationNanos, Map.copyOf(classificationTemplateNanos));
                 }

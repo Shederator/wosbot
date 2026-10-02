@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.frostguard.api.domain.RawImageData;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -18,6 +19,45 @@ import org.junit.jupiter.api.io.TempDir;
 class BearCaptureRecorderTest {
 
     private static final Instant EVENT_END = Instant.parse("2026-10-03T19:30:00Z");
+    private static final BearRealtimeFrameSource.FrameOrigin VIDEO_1 = new BearRealtimeFrameSource.FrameOrigin(
+            BearRealtimeFrameSource.FrameOrigin.Kind.VIDEO, 1, 1);
+
+    @Test
+    void aStaticScreenshotIsSavedOnceUntilTheScreenChanges(@TempDir Path logs) throws Exception {
+        RawImageData screen = RawImageData.capture(new byte[720 * 1280 * 4], 720, 1280, 32);
+        byte[] changedPixels = new byte[720 * 1280 * 4];
+        changedPixels[0] = 9;
+        RawImageData changed = RawImageData.capture(changedPixels, 720, 1280, 32);
+        Path directory;
+        String first;
+        String repeated;
+        String next;
+        try (BearCaptureRecorder recorder = BearCaptureRecorder.open(logs, EVENT_END)) {
+            directory = recorder.directory();
+            first = recorder.staticScreenshot(screen);
+            repeated = recorder.staticScreenshot(RawImageData.capture(screen.getFrameBytes().clone(), 720, 1280, 32));
+            next = recorder.staticScreenshot(changed);
+        }
+
+        assertEquals("screencap-001.png", first);
+        assertEquals(first, repeated, "an unchanged static screen references the image already saved");
+        assertEquals("screencap-002.png", next);
+        assertTrue(Files.size(directory.resolve(first)) > 0, "the referenced screenshot is on disk");
+        assertTrue(Files.size(directory.resolve(next)) > 0);
+    }
+
+    @Test
+    void aRecordingFailureIsJournaledOncePerSegment(@TempDir Path logs) throws Exception {
+        Path journal;
+        try (BearCaptureRecorder recorder = BearCaptureRecorder.open(logs, EVENT_END)) {
+            recorder.recordingFailed(2, "disk full");
+            recorder.recordingFailed(2, "disk full");
+            journal = recorder.directory().resolve("frames.jsonl");
+        }
+
+        assertEquals(List.of("{\"event\":\"recordingFailed\",\"segment\":2,\"reason\":\"disk full\"}"),
+                Files.readAllLines(journal));
+    }
 
     @Test
     void eachRecorderRenewalWritesItsOwnNumberedSegment(@TempDir Path logs) throws Exception {
@@ -44,7 +84,7 @@ class BearCaptureRecorderTest {
             try (OutputStream segment = recorder.nextSegment()) {
                 segment.write(new byte[] {1, 2, 3});
             }
-            recorder.observed(1, EVENT_END, Duration.ZERO, BearNavigationPolicy.Screen.WORLD, 0L, Map.of());
+            recorder.observed(1, VIDEO_1, null, EVENT_END, Duration.ZERO, BearNavigationPolicy.Screen.WORLD, 0L, Map.of());
         }
         Path second;
         try (BearCaptureRecorder retry = BearCaptureRecorder.open(logs, EVENT_END)) {
@@ -63,19 +103,24 @@ class BearCaptureRecorderTest {
     void journalKeepsObservationOrderAsJsonLines(@TempDir Path logs) throws Exception {
         Path journal;
         try (BearCaptureRecorder recorder = BearCaptureRecorder.open(logs, EVENT_END)) {
-            recorder.observed(1, Instant.parse("2026-10-03T19:00:00Z"), Duration.ofMillis(120),
+            recorder.observed(1, VIDEO_1, null, Instant.parse("2026-10-03T19:00:00Z"), Duration.ofMillis(120),
                     BearNavigationPolicy.Screen.WORLD, 1_800_000_000L, Map.of("GAME_HOME_WORLD", 90_000_000L));
-            recorder.observed(2, Instant.parse("2026-10-03T19:00:02Z"), Duration.ofMillis(80),
+            recorder.observed(2, new BearRealtimeFrameSource.FrameOrigin(
+                    BearRealtimeFrameSource.FrameOrigin.Kind.SCREENCAP, 1, 1), "screencap-001.png",
+                    Instant.parse("2026-10-03T19:00:02Z"), Duration.ofMillis(80),
                     BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY, 2_100_000_000L, Map.of());
             journal = recorder.directory().resolve("frames.jsonl");
         }
 
         List<String> lines = Files.readAllLines(journal);
         assertEquals(2, lines.size());
-        assertEquals("{\"frame\":1,\"capturedAt\":\"2026-10-03T19:00:00Z\",\"transportAgeMs\":120,"
+        assertEquals("{\"frame\":1,\"source\":\"video\",\"segment\":1,\"decodedFrame\":1,"
+                + "\"capturedAt\":\"2026-10-03T19:00:00Z\",\"transportAgeMs\":120,"
                 + "\"screen\":\"WORLD\",\"classifyMs\":1800,\"templatesMs\":{\"GAME_HOME_WORLD\":90}}",
                 lines.get(0));
         assertTrue(lines.get(1).contains("\"screen\":\"WORLD_ACTIVE_BEAR_ICON_READY\""));
+        assertTrue(lines.get(1).startsWith("{\"frame\":2,\"source\":\"screencap\",\"segment\":1,"
+                + "\"afterDecodedFrame\":1,\"image\":\"screencap-001.png\","), lines.get(1));
     }
 
     @Test
@@ -90,7 +135,7 @@ class BearCaptureRecorderTest {
         })) {
             long started = System.nanoTime();
             for (int frame = 1; frame <= 1_000; frame++) {
-                recorder.observed(frame, EVENT_END, Duration.ZERO,
+                recorder.observed(frame, VIDEO_1, null, EVENT_END, Duration.ZERO,
                         BearNavigationPolicy.Screen.UNKNOWN, 0L, Map.of());
             }
             long elapsedMs = (System.nanoTime() - started) / 1_000_000L;

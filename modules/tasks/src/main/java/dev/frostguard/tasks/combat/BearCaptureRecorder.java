@@ -1,5 +1,7 @@
 package dev.frostguard.tasks.combat;
 
+import dev.frostguard.api.domain.RawImageData;
+import dev.frostguard.vision.convert.ImageConverter;
 import java.io.BufferedOutputStream;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -19,6 +21,8 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.zip.CRC32;
+import javax.imageio.ImageIO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,6 +48,10 @@ final class BearCaptureRecorder implements AutoCloseable {
     private final BlockingQueue<String> journal;
     private final Thread journalWriter;
     private final Runnable beforeEachWrite;
+    private final AtomicInteger screenshots = new AtomicInteger();
+    private String lastScreenshot;
+    private long lastScreenshotChecksum;
+    private int lastFailedSegment;
 
     private BearCaptureRecorder(Path directory, int journalCapacity, Runnable beforeEachWrite)
             throws IOException {
@@ -97,14 +105,24 @@ final class BearCaptureRecorder implements AutoCloseable {
 
     void observed(
             long frame,
+            BearRealtimeFrameSource.FrameOrigin origin,
+            String image,
             Instant capturedAt,
             Duration transportAge,
             BearNavigationPolicy.Screen screen,
             long classifyNanos,
             Map<String, Long> templateNanos) {
-        StringBuilder line = new StringBuilder(160)
-                .append("{\"frame\":").append(frame)
-                .append(",\"capturedAt\":\"").append(capturedAt).append('"')
+        StringBuilder line = new StringBuilder(200).append("{\"frame\":").append(frame);
+        if (origin != null) {
+            boolean video = origin.kind() == BearRealtimeFrameSource.FrameOrigin.Kind.VIDEO;
+            line.append(",\"source\":\"").append(video ? "video" : "screencap").append('"')
+                    .append(",\"segment\":").append(origin.segment())
+                    .append(video ? ",\"decodedFrame\":" : ",\"afterDecodedFrame\":").append(origin.decodedFrame());
+        }
+        if (image != null) {
+            line.append(",\"image\":\"").append(image).append('"');
+        }
+        line.append(",\"capturedAt\":\"").append(capturedAt).append('"')
                 .append(",\"transportAgeMs\":").append(transportAge.toMillis())
                 .append(",\"screen\":\"").append(screen.name()).append('"')
                 .append(",\"classifyMs\":").append(TimeUnit.NANOSECONDS.toMillis(classifyNanos))
@@ -118,6 +136,43 @@ final class BearCaptureRecorder implements AutoCloseable {
         }
         line.append("}}");
         if (!journal.offer(line.toString())) {
+            droppedLines.incrementAndGet();
+        }
+    }
+
+    /**
+     * Saves a static-screen screenshot, which the video does not contain, and returns its file name.
+     * An unchanged screen references the image already saved instead of writing it again.
+     */
+    String staticScreenshot(RawImageData screen) {
+        CRC32 checksum = new CRC32();
+        checksum.update(screen.getFrameBytes());
+        long content = checksum.getValue();
+        if (lastScreenshot != null && content == lastScreenshotChecksum) {
+            return lastScreenshot;
+        }
+        String name = String.format("screencap-%03d.png", screenshots.incrementAndGet());
+        try {
+            if (!ImageIO.write(ImageConverter.toBufferedImage(screen), "png", directory.resolve(name).toFile())) {
+                throw new IOException("no PNG writer");
+            }
+        } catch (IOException | RuntimeException failure) {
+            LOG.warn("Bear capture screenshot {} could not be saved: {}", name, failure.getMessage());
+            return null;
+        }
+        lastScreenshot = name;
+        lastScreenshotChecksum = content;
+        return name;
+    }
+
+    /** Journals once per segment that its evidence recording stopped; observation continues. */
+    void recordingFailed(int segment, String reason) {
+        if (segment <= lastFailedSegment) return;
+        lastFailedSegment = segment;
+        LOG.warn("Bear capture segment {} stopped recording: {}", segment, reason);
+        String line = "{\"event\":\"recordingFailed\",\"segment\":" + segment
+                + ",\"reason\":\"" + reason.replace("\\", "\\\\").replace("\"", "\\\"") + "\"}";
+        if (!journal.offer(line)) {
             droppedLines.incrementAndGet();
         }
     }

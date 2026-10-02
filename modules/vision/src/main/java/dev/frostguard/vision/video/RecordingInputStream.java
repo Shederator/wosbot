@@ -65,10 +65,11 @@ public final class RecordingInputStream extends FilterInputStream {
             super.close();
         } finally {
             if (recordingActive) {
+                recordingActive = false;
                 try {
                     recording.close();
                 } catch (IOException failure) {
-                    stopRecording(failure);
+                    recordingFailed.accept(failure);
                 }
             }
         }
@@ -85,6 +86,11 @@ public final class RecordingInputStream extends FilterInputStream {
 
     private void stopRecording(IOException failure) {
         recordingActive = false;
+        try {
+            recording.close();
+        } catch (IOException ignored) {
+            // The first failure is the one reported.
+        }
         recordingFailed.accept(failure);
     }
 }

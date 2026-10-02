@@ -37,8 +37,21 @@ final class BearRealtimeFrameSource implements AutoCloseable {
 
         String failure();
 
+        /** Why the evidence recording of this stream stopped, or {@code null} while it is healthy. */
+        default String recordingFailure() {
+            return null;
+        }
+
         @Override
         void close();
+    }
+
+    /**
+     * Where a returned frame came from, so a journal line can be matched to its exact pixels: a
+     * decoded frame of a recorded segment, or a screenshot taken after that segment's last frame.
+     */
+    record FrameOrigin(Kind kind, int segment, long decodedFrame) {
+        enum Kind { VIDEO, SCREENCAP }
     }
 
     @FunctionalInterface
@@ -50,6 +63,8 @@ final class BearRealtimeFrameSource implements AutoCloseable {
     private final BooleanSupplier interrupted;
     private final Supplier<RawImageData> staticScreenSample;
     private StreamHandle stream;
+    private int segment;
+    private FrameOrigin lastOrigin;
     private long transportSequence;
     private int consecutiveRestartsWithoutFrame;
     private boolean closed;
@@ -89,6 +104,7 @@ final class BearRealtimeFrameSource implements AutoCloseable {
                 long receivedAgeNanos = Math.max(0L, System.nanoTime() - frame.receivedNanos());
                 if (receivedAgeNanos <= MAXIMUM_TRANSPORT_FRAME_AGE.toNanos()) {
                     consecutiveRestartsWithoutFrame = 0;
+                    lastOrigin = new FrameOrigin(FrameOrigin.Kind.VIDEO, segment, frame.sequence());
                     return new BearFrameStream.Captured<>(
                             frame.image(), Instant.now().minusNanos(receivedAgeNanos));
                 }
@@ -104,6 +120,7 @@ final class BearRealtimeFrameSource implements AutoCloseable {
                 BearFrameStream.Captured<RawImageData> sampled = sampleStaticScreen();
                 if (sampled != null) {
                     consecutiveRestartsWithoutFrame = 0;
+                    lastOrigin = new FrameOrigin(FrameOrigin.Kind.SCREENCAP, segment, transportSequence);
                     return sampled;
                 }
             }
@@ -133,6 +150,8 @@ final class BearRealtimeFrameSource implements AutoCloseable {
             return;
         }
         stream = factory.create();
+        // Each stream asks the capture for its own segment file, so both count the same way.
+        segment++;
         try {
             stream.start();
             transportSequence = 0L;
@@ -140,6 +159,21 @@ final class BearRealtimeFrameSource implements AutoCloseable {
             closeCurrent();
             restartFailed("could not start Android frame stream", failure);
         }
+    }
+
+    /** The origin of the frame {@link #next()} returned last, or {@code null} before the first. */
+    FrameOrigin lastOrigin() {
+        return lastOrigin;
+    }
+
+    /** Why the current segment's evidence recording stopped, or {@code null} while it is healthy. */
+    String recordingFailure() {
+        return stream == null ? null : stream.recordingFailure();
+    }
+
+    /** The segment the current stream records into; 0 before the first stream starts. */
+    int segment() {
+        return segment;
     }
 
     private void restart(String reason) {
@@ -199,6 +233,11 @@ final class BearRealtimeFrameSource implements AutoCloseable {
             @Override
             public String failure() {
                 return delegate.failure();
+            }
+
+            @Override
+            public String recordingFailure() {
+                return delegate.recordingFailure();
             }
 
             @Override
