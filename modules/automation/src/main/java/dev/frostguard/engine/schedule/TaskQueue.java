@@ -336,6 +336,7 @@ public class TaskQueue {
         idleWakeInitializationPending = false;
         idleWakeInitializationForceNow = false;
         statusModel.setRunning(true);
+        restoreDurableBearOwnershipOnStart();
         executor.start(this::mainLoop, "TaskQueue-" + profile.getName());
     }
 
@@ -431,7 +432,7 @@ public class TaskQueue {
     public synchronized void runNow(TpDailyTaskEnum kind, boolean recurring) {
         if (kind == TpDailyTaskEnum.BEAR_TRAP
                 && BearRecoveryFinalization.deadline(profile).isPresent()
-                && BearTrapParticipationSchedule.resolveActiveSession(profile, Clock.systemUTC()).isEmpty()) {
+                && !hasProtectedBearOwnership(Instant.now())) {
             emitError("Bear Run Now refused outside an active configured event window; the pending "
                     + "recovery finalizer was preserved");
             return;
@@ -1310,7 +1311,7 @@ public class TaskQueue {
 
     protected void handleIdleTransitions() {
         if (Thread.currentThread().isInterrupted()) return;
-        if (BearTrapSessionLease.active(profile.getId()).isPresent()) return;
+        if (hasProtectedBearOwnership(Instant.now())) return;
         if (statusModel.getLoopState().isExecutedTask() || taskBacklog.isEmpty()) return;
         IdleBehaviorEnum idleBehavior = resolveIdleBehavior();
         if (!idleBehavior.requiresIdleTimeout()) {
@@ -1417,6 +1418,11 @@ public class TaskQueue {
     }
 
     private void suspendDevice(LocalDateTime until, boolean freeSlot) {
+        if (hasProtectedBearOwnership(Instant.now())) {
+            emitWarn("Refused device suspension while Bear owns the active event window");
+            statusModel.setIdleTimeExceeded(false);
+            return;
+        }
         IdleBehaviorEnum policy = resolveIdleBehavior();
         if (policy == IdleBehaviorEnum.SEND_TO_BACKGROUND) {
             deviceBridge.sendGameToBackground(profile.getEmulatorNumber());
@@ -1430,6 +1436,30 @@ public class TaskQueue {
             releaseActiveSlotLease();
         }
         broadcastStatus("Idle till " + DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(until));
+    }
+
+    boolean hasProtectedBearOwnership(Instant now) {
+        if (profile == null || profile.getId() == null || now == null) return false;
+        if (BearTrapSessionLease.active(profile.getId()).isPresent()) return true;
+        if (!Boolean.TRUE.equals(profile.getEnabled())
+                || !Boolean.TRUE.equals(profile.getConfig(
+                        ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL, Boolean.class))) {
+            return false;
+        }
+        return BearRecoveryFinalization.deadline(profile)
+                .filter(now::isBefore)
+                .isPresent();
+    }
+
+    boolean restoreDurableBearOwnershipOnStart() {
+        Instant now = Instant.now();
+        if (BearTrapSessionLease.active(profile.getId()).isPresent()
+                || !hasProtectedBearOwnership(now)) {
+            return false;
+        }
+        runNow(TpDailyTaskEnum.BEAR_TRAP, true);
+        emitInfo("Restored active Bear ownership from durable recovery; device is pinned open");
+        return true;
     }
 
     private boolean enforceSessionCap() {

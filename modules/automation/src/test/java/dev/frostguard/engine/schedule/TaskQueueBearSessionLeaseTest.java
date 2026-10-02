@@ -248,7 +248,70 @@ class TaskQueueBearSessionLeaseTest {
     }
 
     @Test
-    void manualRunNowOutsideActiveWindowIsRefusedAndPreservesFinalizer() {
+    void durableRecoveryPinsDeviceAndRequeuesBearImmediatelyAfterRestart() {
+        AccountDescriptor profile = configuredActiveProfile("Bear restart ownership ");
+        RecordingQueue failedQueue = new RecordingQueue(profile);
+        RecordingBearTask failedTask = new RecordingBearTask(profile);
+        BearTrapSessionLease.Lease lease =
+                BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+        failedQueue.routeError(failedTask, failure(
+                BearSessionExecutionException.FailureKind.FATAL_CONFIGURATION,
+                BearSessionExecutionException.RecoveryDirective.OPERATOR_ACTION));
+        BearTrapSessionLease.releaseForQueueStop(profile.getId());
+
+        AccountDescriptor reloaded = reload(profile.getId());
+        RecordingQueue restartedQueue = new RecordingQueue(reloaded);
+        assertTrue(restartedQueue.hasProtectedBearOwnership(Instant.now()),
+                "an unexpired durable recovery must pin the emulator open");
+        assertTrue(restartedQueue.restoreDurableBearOwnershipOnStart());
+        assertTrue(restartedQueue.getNextQueuedTaskTypes(20).contains(TpDailyTaskEnum.BEAR_TRAP),
+                "restart must restore Bear now instead of leaving it at event end");
+        assertEquals(lease.eventEnd(), BearRecoveryFinalization.deadline(reloaded).orElseThrow());
+    }
+
+    @Test
+    void durableRecoveryOwnershipSurvivesMutableScheduleChanges() {
+        AccountDescriptor profile = configuredActiveProfile("Bear changed schedule ownership ");
+        RecordingQueue failedQueue = new RecordingQueue(profile);
+        RecordingBearTask failedTask = new RecordingBearTask(profile);
+        BearTrapSessionLease.Lease lease =
+                BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+        failedQueue.routeError(failedTask, failure(
+                BearSessionExecutionException.FailureKind.FATAL_CONFIGURATION,
+                BearSessionExecutionException.RecoveryDirective.OPERATOR_ACTION));
+        BearTrapSessionLease.releaseForQueueStop(profile.getId());
+        assertTrue(ConfigService.obtain().writeAccountSetting(
+                profile, BEAR_TRAP_SCHEDULE_DATETIME_STRING, "01-01-2035 00:00"));
+
+        AccountDescriptor reloaded = reload(profile.getId());
+        RecordingQueue restartedQueue = new RecordingQueue(reloaded);
+        assertEquals(lease.eventEnd(), BearRecoveryFinalization.deadline(reloaded).orElseThrow());
+        assertTrue(restartedQueue.hasProtectedBearOwnership(Instant.now()));
+        assertTrue(restartedQueue.restoreDurableBearOwnershipOnStart());
+        assertTrue(restartedQueue.getNextQueuedTaskTypes(20).contains(TpDailyTaskEnum.BEAR_TRAP));
+    }
+
+    @Test
+    void explicitlyDisabledParticipationDoesNotResumeBearOnRestart() {
+        AccountDescriptor profile = configuredActiveProfile("Bear disabled ownership ");
+        RecordingQueue failedQueue = new RecordingQueue(profile);
+        RecordingBearTask failedTask = new RecordingBearTask(profile);
+        BearTrapSessionLease.acquireForBearExecution(profile).orElseThrow();
+        failedQueue.routeError(failedTask, failure(
+                BearSessionExecutionException.FailureKind.FATAL_CONFIGURATION,
+                BearSessionExecutionException.RecoveryDirective.OPERATOR_ACTION));
+        BearTrapSessionLease.releaseForQueueStop(profile.getId());
+        assertTrue(ConfigService.obtain().writeAccountSetting(
+                profile, BEAR_TRAP_EVENT_BOOL, "false"));
+
+        RecordingQueue restartedQueue = new RecordingQueue(reload(profile.getId()));
+        assertFalse(restartedQueue.hasProtectedBearOwnership(Instant.now()));
+        assertFalse(restartedQueue.restoreDurableBearOwnershipOnStart());
+        assertFalse(restartedQueue.getNextQueuedTaskTypes(20).contains(TpDailyTaskEnum.BEAR_TRAP));
+    }
+
+    @Test
+    void manualRunNowUsesDurableWindowWhenMutableScheduleWasChanged() {
         AccountDescriptor profile = configuredActiveProfile("Bear refused manual resume ");
         RecordingQueue queue = new RecordingQueue(profile);
         RecordingBearTask failedTask = new RecordingBearTask(profile);
@@ -262,7 +325,7 @@ class TaskQueueBearSessionLeaseTest {
 
         queue.runNow(TpDailyTaskEnum.BEAR_TRAP, true);
 
-        assertFalse(queue.getNextQueuedTaskTypes(20).contains(TpDailyTaskEnum.BEAR_TRAP));
+        assertTrue(queue.getNextQueuedTaskTypes(20).contains(TpDailyTaskEnum.BEAR_TRAP));
         assertEquals(lease.eventEnd(), BearRecoveryFinalization.deadline(profile).orElseThrow());
     }
 

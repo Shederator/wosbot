@@ -700,7 +700,19 @@ private final class LiveBearSessionDriver implements BearSessionCoordinator.Driv
 
         private void prepareUntil(Instant activation) {
             ui.phase(BearUiStateMachine.Phase.PREPARING);
-            prepareFrameDriven();
+            try {
+                prepareFrameDriven();
+            } catch (BearSessionExecutionException preparationUnavailable) {
+                if (!BearPreparationPolicy.mayWaitForActivation(preparationUnavailable)) {
+                    throw preparationUnavailable;
+                }
+                // Missing visual evidence forbids the preparation taps, but it must not throw
+                // away the protected event session. Retain the lease, record the omission, and
+                // enter the active state machine as soon as the game exposes the event UI.
+                logWarning(routineLogBearTrapLine(
+                        "Preparation step unavailable; waiting safely for Bear activation: "
+                                + preparationUnavailable.operation()));
+            }
             ui.phase(BearUiStateMachine.Phase.WAITING_FOR_ACTIVATION);
             while (now().isBefore(activation)) {
                 Duration remaining = Duration.between(now(), activation);
