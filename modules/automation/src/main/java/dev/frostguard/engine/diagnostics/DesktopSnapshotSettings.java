@@ -8,7 +8,8 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 
 /**
- * Global switch for desktop frames. A missing row stays off.
+ * Optional desktop-frame setting. The diagnostic snapshot master switch is
+ * enforced by the caller. A missing setting row stays off.
  */
 public final class DesktopSnapshotSettings {
 

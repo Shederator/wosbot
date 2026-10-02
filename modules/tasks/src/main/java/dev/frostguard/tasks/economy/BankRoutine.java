@@ -16,6 +16,7 @@ import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.helper.TemplateSearchHelper;
+import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 
 /**
  * Task responsible for managing bank deposit operations.
@@ -213,6 +214,10 @@ public class BankRoutine extends DelayedTask {
 			}
 		}
 
+		String snapshot = TaskDiagnosticSnapshots.capture(
+				emuManager, EMULATOR_NUMBER, "bank", "navigation-failed");
+		logWarning("Bank navigation failed after " + BANK_NAVIGATION_ATTEMPTS
+				+ " attempts; " + snapshot);
 		return false;
 	}
 

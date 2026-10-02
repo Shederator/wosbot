@@ -9,8 +9,8 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 /**
- * Global switch for a snapshot when a required event template is not installed.
- * A missing row stays off. The task still logs its next visit without a frame.
+ * Master switch for task diagnostic snapshots, including missing-template
+ * evidence. The legacy setting key is retained, and a missing row stays off.
  */
 public final class MissingTemplateSnapshotSettings {
 
@@ -23,7 +23,7 @@ public final class MissingTemplateSnapshotSettings {
         try {
             return enabled(ConfigService.obtain().loadGlobalSettings());
         } catch (RuntimeException failure) {
-            logger.warn("Missing-template snapshot setting could not be read: {}", failure.toString());
+            logger.warn("Diagnostic snapshot setting could not be read: {}", failure.toString());
             return false;
         }
     }

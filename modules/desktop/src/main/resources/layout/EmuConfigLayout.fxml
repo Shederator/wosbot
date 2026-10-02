@@ -148,16 +148,16 @@
               <children><Label text="Diagnostics" /></children>
           </HBox>
           <VBox spacing="10" styleClass="content-card-inner">
-              <CheckBox fx:id="checkboxDesktopSnapshots" mnemonicParsing="false" wrapText="true"
+              <CheckBox fx:id="checkboxDiagnosticSnapshots" mnemonicParsing="false" wrapText="true"
                         maxWidth="Infinity"
-                        text="Save a desktop screenshot alongside diagnostic snapshots" />
-              <Label text="Off by default. The image can include other windows. macOS is not tested."
+                        text="Save diagnostic snapshots, including when a required template is missing" />
+              <Label text="Off by default. When off, tasks still log their outcome without saving a frame."
                      styleClass="description-label" style="-fx-text-fill: #8b949e; -fx-font-size: 11;"
                      wrapText="true" />
-              <CheckBox fx:id="checkboxMissingTemplateSnapshots" mnemonicParsing="false" wrapText="true"
+              <CheckBox fx:id="checkboxDesktopSnapshots" mnemonicParsing="false" wrapText="true"
                         maxWidth="Infinity"
-                        text="Save a diagnostic snapshot when a required template is missing" />
-              <Label text="Off by default. The task still logs the next visit without a frame."
+                        text="Also save a desktop screenshot with each diagnostic snapshot" />
+              <Label text="Available only when diagnostic snapshots are enabled. The image can include other windows. macOS is not tested."
                      styleClass="description-label" style="-fx-text-fill: #8b949e; -fx-font-size: 11;"
                      wrapText="true" />
           </VBox>

@@ -13,7 +13,7 @@ public final class DesktopSnapshot {
     }
 
     public static Optional<String> captureIfEnabled(String type) {
-        if (!DesktopSnapshotSettings.enabled()) {
+        if (!MissingTemplateSnapshotSettings.enabled() || !DesktopSnapshotSettings.enabled()) {
             return Optional.empty();
         }
         return DiagnosticSnapshotStore.forCurrentWorkspace()

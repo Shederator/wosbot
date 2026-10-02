@@ -47,18 +47,28 @@ public final class DiagnosticSnapshotStore {
             "^(\\d{8}T\\d{6}\\.\\d{3}Z)-([a-z0-9]+)-(.+)\\.png$");
 
     private final Path workspaceRoot;
+    private final BooleanSupplier diagnosticSnapshotsEnabled;
     private final BooleanSupplier desktopSnapshotsEnabled;
     private final DesktopFrameSource desktopFrames;
 
     public DiagnosticSnapshotStore(Path workspaceRoot) {
-        this(workspaceRoot, () -> false, () -> Optional.empty());
+        this(workspaceRoot, () -> true, () -> false, () -> Optional.empty());
     }
 
     DiagnosticSnapshotStore(
             Path workspaceRoot,
             BooleanSupplier desktopSnapshotsEnabled,
             DesktopFrameSource desktopFrames) {
+        this(workspaceRoot, () -> true, desktopSnapshotsEnabled, desktopFrames);
+    }
+
+    private DiagnosticSnapshotStore(
+            Path workspaceRoot,
+            BooleanSupplier diagnosticSnapshotsEnabled,
+            BooleanSupplier desktopSnapshotsEnabled,
+            DesktopFrameSource desktopFrames) {
         this.workspaceRoot = workspaceRoot.toAbsolutePath().normalize();
+        this.diagnosticSnapshotsEnabled = diagnosticSnapshotsEnabled;
         this.desktopSnapshotsEnabled = desktopSnapshotsEnabled;
         this.desktopFrames = desktopFrames;
     }
@@ -66,7 +76,8 @@ public final class DiagnosticSnapshotStore {
     public static DiagnosticSnapshotStore forCurrentWorkspace() {
         return new DiagnosticSnapshotStore(
                 WorkspacePaths.current().root(),
-                DesktopSnapshotSettings::enabled,
+                MissingTemplateSnapshotSettings::enabled,
+                () -> MissingTemplateSnapshotSettings.enabled() && DesktopSnapshotSettings.enabled(),
                 DesktopFrames.platform());
     }
 
@@ -83,7 +94,7 @@ public final class DiagnosticSnapshotStore {
      * and leaves every other activity untouched.
      */
     public Optional<String> write(RawImageData frame, String activity, String type, Instant capturedAt) {
-        if (capturedAt == null) {
+        if (capturedAt == null || !isEnabled()) {
             return Optional.empty();
         }
         BufferedImage image;
@@ -128,6 +139,15 @@ public final class DiagnosticSnapshotStore {
             return;
         }
         captureDesktop(type, capturedAt);
+    }
+
+    public boolean isEnabled() {
+        try {
+            return diagnosticSnapshotsEnabled.getAsBoolean();
+        } catch (RuntimeException failure) {
+            logger.warn("Diagnostic snapshot setting could not be read: {}", failure.toString());
+            return false;
+        }
     }
 
     private boolean desktopEnabled() {

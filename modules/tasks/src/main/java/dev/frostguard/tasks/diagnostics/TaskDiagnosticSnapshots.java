@@ -19,12 +19,15 @@ public final class TaskDiagnosticSnapshots {
 
     static String capture(Supplier<RawImageData> takeFrame, String activity, String type) {
         try {
+            DiagnosticSnapshotStore store = DiagnosticSnapshotStore.forCurrentWorkspace();
+            if (!store.isEnabled()) {
+                return "snapshot=disabled";
+            }
             RawImageData frame = takeFrame.get();
             if (frame == null) {
                 return "snapshot=unavailable; reason=no-frame";
             }
-            return DiagnosticSnapshotStore.forCurrentWorkspace()
-                    .write(frame, activity, type, Instant.now())
+            return store.write(frame, activity, type, Instant.now())
                     .map(path -> "snapshot=" + path)
                     .orElse("snapshot=unavailable; reason=write-failed");
         } catch (RuntimeException failure) {

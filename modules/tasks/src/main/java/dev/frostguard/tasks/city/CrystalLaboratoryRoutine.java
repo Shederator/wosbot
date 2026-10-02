@@ -539,12 +539,15 @@ boolean hasMonday() {
 
     String retainDiagnosticSnapshot(String type) {
         try {
+            DiagnosticSnapshotStore store = DiagnosticSnapshotStore.forCurrentWorkspace();
+            if (!store.isEnabled()) {
+                return "snapshot=disabled";
+            }
             var frame = captureDiagnosticFrame();
             if (!isRetainableDiagnosticFrame(frame)) {
                 return "snapshot=unavailable; reason=capture-returned-no-valid-frame";
             }
-            var saved = DiagnosticSnapshotStore.forCurrentWorkspace().write(
-                    frame, "crystallaboratory", type, Instant.now());
+            var saved = store.write(frame, "crystallaboratory", type, Instant.now());
             return saved.map(path -> "snapshot=" + path)
                     .orElse("snapshot=unavailable; reason=write-failed");
         } catch (RuntimeException failure) {
