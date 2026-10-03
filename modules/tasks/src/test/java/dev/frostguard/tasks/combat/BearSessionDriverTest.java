@@ -30,6 +30,24 @@ import org.junit.jupiter.api.Test;
 
 /** Drives the real session driver with scripted frames and screens; no device is involved. */
 class BearSessionDriverTest {
+    @Test
+    void recorderRefusalDuringTerminalBackIsMarkedAsCleanupFailureWithoutInput() {
+        String prior = System.getProperty("frostguard.bear.record");
+        System.setProperty("frostguard.bear.record", "true");
+        try {
+            ScriptedBear bear = new ScriptedBear(EnumSet.of(TemplatesEnum.BEAR_WAR_TITLE,
+                    TemplatesEnum.BEAR_RALLY_TAB, TemplatesEnum.BEAR_BACK_ARROW));
+            var failure = assertThrows(BearSessionExecutionException.class,
+                    () -> bear.driver().cleanup(BearSessionCoordinator.ExitReason.EVENT_ENDED, true));
+            assertTrue(failure.operation().startsWith("terminal-cleanup"));
+            assertEquals(BearSessionExecutionException.FailureKind.PERSISTENCE, failure.failureKind());
+            assertEquals(0, bear.inputs);
+            assertEquals(0, bear.backs);
+        } finally {
+            if (prior == null) System.clearProperty("frostguard.bear.record");
+            else System.setProperty("frostguard.bear.record", prior);
+        }
+    }
 
     private static final RawImageData FRAME = RawImageData.capture(new byte[720 * 1280 * 4], 720, 1280, 32);
     private static final Set<TemplatesEnum> UNKNOWN = EnumSet.noneOf(TemplatesEnum.class);
@@ -105,6 +123,68 @@ class BearSessionDriverTest {
     }
 
     @Test
+    void terminalCleanupRequiresFreshWorldEvidence() {
+        ScriptedBear bear = new ScriptedBear(WORLD);
+        bear.classificationDelayMillis = 1_100;
+        var failure = assertThrows(BearSessionExecutionException.class,
+                () -> bear.driver().cleanup(BearSessionCoordinator.ExitReason.EVENT_ENDED, true));
+        assertEquals("terminal-cleanup-not-verified", failure.operation());
+        assertEquals(0, bear.inputs);
+        assertEquals(0, bear.backs);
+    }
+
+    @Test
+    void terminalCleanupAcceptsWorldOnItsLastPermittedEdge() throws Exception {
+        ScriptedBear bear = new ScriptedBear(EnumSet.of(TemplatesEnum.RALLY_MARCH_QUEUE_FULL));
+        var configuredTrap = BearTrapRoutine.class.getDeclaredField("trapNumber");
+        configuredTrap.setAccessible(true);
+        configuredTrap.setInt(bear, 1);
+        bear.backDestinations.add(EnumSet.of(TemplatesEnum.BEAR_DEPLOY_BUTTON));
+        bear.backDestinations.add(EnumSet.of(TemplatesEnum.RALLY_HOLD_BUTTON));
+        bear.backDestinations.add(EnumSet.of(TemplatesEnum.BEAR_RALLY_BUTTON,
+                TemplatesEnum.BEAR_PANEL_TITLE, TemplatesEnum.BEAR_CENTER_TRAP_1,
+                TemplatesEnum.BEAR_CENTER_ACTIVE));
+        bear.backDestinations.add(WORLD);
+        assertDoesNotThrow(() -> bear.driver().cleanup(BearSessionCoordinator.ExitReason.EVENT_ENDED, true));
+        assertEquals(4, bear.backs);
+        assertEquals(0, bear.inputs);
+    }
+
+    @Test
+    void terminalCleanupObservesLateWorldWithoutRepeatingUnconfirmedBack() {
+        ScriptedBear bear = new ScriptedBear(EnumSet.of(TemplatesEnum.ALLIANCE_TERRITORY_BUTTON));
+        bear.worldDelayAfterBackMillis = 4_100;
+        assertDoesNotThrow(() -> bear.driver().cleanup(BearSessionCoordinator.ExitReason.EVENT_ENDED, true));
+        assertEquals(1, bear.backs);
+        assertEquals(0, bear.inputs);
+    }
+
+    @Test
+    void terminalCleanupRecoversATransientUnknownWithoutBlindInput() {
+        ScriptedBear bear = new ScriptedBear(UNKNOWN);
+        var driver = bear.driver();
+        bear.becomeAfterNextClassification(WORLD);
+
+        assertDoesNotThrow(() -> driver.cleanup(BearSessionCoordinator.ExitReason.EVENT_ENDED, true));
+        assertTrue(bear.classifications > 1, "cleanup must observe a newer classified frame");
+        assertEquals(0, bear.inputs);
+        assertEquals(0, bear.backs);
+    }
+
+    @Test
+    void terminalCleanupBoundsUnknownRecoveryAndNeverSendsBlindBack() {
+        ScriptedBear bear = new ScriptedBear(UNKNOWN);
+        long started = System.nanoTime();
+        var failure = assertThrows(BearSessionExecutionException.class,
+                () -> bear.driver().cleanup(BearSessionCoordinator.ExitReason.EVENT_ENDED, true));
+        assertEquals("terminal-cleanup-not-verified", failure.operation());
+        assertTrue((System.nanoTime() - started) / 1_000_000 < 10_000,
+                "unknown cleanup must exhaust its bounded observation budget");
+        assertEquals(0, bear.inputs);
+        assertEquals(0, bear.backs);
+    }
+
+    @Test
     void observeOnlyCleanupSendsNoInputWhileNormalCleanupVerifiesTheUi() {
         ScriptedBear observing = new ScriptedBear(UNKNOWN);
         observing.getProfile().setConfig(ConfigurationKeyEnum.BEAR_TRAP_OBSERVE_ONLY_BOOL, true);
@@ -174,7 +254,7 @@ class BearSessionDriverTest {
         assertTrue(driver.recover(BearSessionCoordinator.State.FILL_JOIN_SLOTS));
         bear.visible = UNKNOWN;
 
-        assertFalse(driver.recover(BearSessionCoordinator.State.FILL_JOIN_SLOTS),
+        assertFalse(driver.recover(BearSessionCoordinator.State.OWN_RALLY_REQUIRED),
                 "after a classified screen the next unknown screen starts with Back again");
         assertEquals(2, bear.backs);
     }
@@ -199,7 +279,7 @@ class BearSessionDriverTest {
     }
 
     @Test
-    void recoveryStrikesAreCountedPerGoalAndResetOnlyByThatGoal() {
+    void aRecognizedRecoveryDestinationDoesNotEraseRepeatedGoalFailure() {
         ScriptedBear bear = new ScriptedBear(WORLD);
         BearTrapRoutine.LiveBearSessionDriver driver = bear.driver();
         BearSessionCoordinator.State ownRally = BearSessionCoordinator.State.OWN_RALLY_REQUIRED;
@@ -207,13 +287,8 @@ class BearSessionDriverTest {
         assertFalse(driver.recover(ownRally));
         assertFalse(driver.recover(ownRally));
         bear.visible = WORLD_WITH_BEAR;
-        assertTrue(driver.recover(ownRally), "the World with the Bear icon is a valid own-rally destination");
-        bear.visible = WORLD;
-        assertFalse(driver.recover(ownRally));
-        assertFalse(driver.recover(ownRally), "a successful recovery cleared the earlier own-rally strikes");
-
         assertThrows(BearSessionExecutionException.class, () -> driver.recover(ownRally),
-                "the third consecutive own-rally failure exhausts its budget");
+                "Back/World recognition is not own-rally progress; the third failed goal exhausts its budget");
         assertEquals(0, bear.inputs, "classified recoveries here send no input");
     }
 
@@ -226,6 +301,10 @@ class BearSessionDriverTest {
         private int switchAfter = Integer.MAX_VALUE;
         private int backs;
         private int inputs;
+        private long classificationDelayMillis;
+        private long worldDelayAfterBackMillis;
+        private long worldDueNanos = Long.MAX_VALUE;
+        private final java.util.ArrayDeque<Set<TemplatesEnum>> backDestinations = new java.util.ArrayDeque<>();
         private RawImageData captured = FRAME;
         private ImageSearchResultData lastTap;
 
@@ -280,6 +359,12 @@ class BearSessionDriverTest {
         BearFrameClassifier.TemplateMatcher templateMatcher() {
             return (frame, template, threshold) -> {
                 // Every classification checks the reconnect dialog first.
+                if (template == TemplatesEnum.GAME_HOME_RECONNECT) {
+                    if (classificationDelayMillis > 0) {
+                        java.util.concurrent.locks.LockSupport.parkNanos(classificationDelayMillis * 1_000_000);
+                    }
+                    if (System.nanoTime() >= worldDueNanos) visible = WORLD;
+                }
                 if (template == TemplatesEnum.GAME_HOME_RECONNECT && ++classifications > switchAfter) {
                     visible = pending;
                     switchAfter = Integer.MAX_VALUE;
@@ -300,6 +385,10 @@ class BearSessionDriverTest {
                 inputs++;
             }
             backs++;
+            if (!backDestinations.isEmpty()) visible = backDestinations.removeFirst();
+            if (worldDelayAfterBackMillis > 0) {
+                worldDueNanos = System.nanoTime() + worldDelayAfterBackMillis * 1_000_000;
+            }
         }
 
         @Override

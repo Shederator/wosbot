@@ -756,7 +756,7 @@ public class TaskQueue {
     }
 
     private void tryIdleInjection() {
-        if (BearTrapProtectionPolicy.isFullPauseActive(profile)) return;
+        if (!idleInjectionAllowed()) return;
 
         InjectionRule pending = GlobalMonitorService.getInstance().pollPendingInjection(profile.getId());
         if (pending == null) return;
@@ -768,6 +768,10 @@ public class TaskQueue {
             pending.executeInjection(EmulatorController.getInstance(), profile, stub);
         } catch (Exception ex) { emitError("Injection error: " + ex.getMessage()); }
         statusModel.getLoopState().setExecutedTask(true);
+    }
+
+    boolean idleInjectionAllowed() {
+        return !bearCleanupBlocked() && !BearTrapProtectionPolicy.isFullPauseActive(profile);
     }
 
     // ---- task dispatch -----------------------------------------------------
@@ -954,6 +958,11 @@ public class TaskQueue {
     }
 
     private boolean deferForBearTrapProtection(DelayedTask task) {
+        if (task.getTpTask() != TpDailyTaskEnum.BEAR_TRAP && bearCleanupBlocked()) {
+            task.reschedule(LocalDateTime.now().plusSeconds(30));
+            enqueue(task);
+            return true;
+        }
         BearTrapProtectionPolicy.Decision decision =
                 BearTrapProtectionPolicy.evaluateTask(profile, task.getTpTask());
         if (!decision.blocked()) {
@@ -1057,6 +1066,16 @@ public class TaskQueue {
                 task.getTpTask() == TpDailyTaskEnum.BEAR_TRAP
                         ? BearTrapSessionLease.active(profile.getId())
                         : Optional.empty();
+        // Cleanup can outlive the lease's release buffer. Its durable event identity,
+        // not the wall clock, still owns a failed terminal transition.
+        if (activeBearLease.isEmpty() && task.getTpTask() == TpDailyTaskEnum.BEAR_TRAP
+                && ex instanceof BearSessionExecutionException failure
+                && failure.operation().startsWith("terminal-cleanup")) {
+            activeBearLease = BearSessionCheckpoint.load(profile).map(checkpoint ->
+                    new BearTrapSessionLease.Lease(profile.getId(),
+                            profile.getConfig(ConfigurationKeyEnum.BEAR_TRAP_NUMBER_INT, Integer.class),
+                            Instant.now(), checkpoint.eventEnd()));
+        }
         if (ex instanceof BearSessionExecutionException
                 && activeBearLease.isPresent()) {
             BearSessionExecutionException bearFailure = (BearSessionExecutionException) ex;
@@ -1071,7 +1090,8 @@ public class TaskQueue {
                     0,
                     Instant.EPOCH,
                     plannedAttempts,
-                    bearFailure.recoveryDirective().name(),
+                    bearFailure.operation().startsWith("terminal-cleanup")
+                            ? "CLEANUP_UNVERIFIED" : bearFailure.recoveryDirective().name(),
                     Instant.now()), false)) {
                 throw new IllegalStateException(
                         "Bear recovery refused because its durable recovery point could not be persisted",
@@ -1288,6 +1308,14 @@ public class TaskQueue {
                 || finalizationAt.isEmpty()
                 || now.isBefore(finalizationAt.orElseThrow())) {
             return false;
+        }
+        if (bearCleanupBlocked()) {
+            // A deadline does not prove that dialogs/formation were safely left. Keep the
+            // checkpoint and device pin; an explicit operator revocation can release them.
+            task.setRecurring(true);
+            task.reschedule(LocalDateTime.now().plusSeconds(30));
+            enqueue(task);
+            return true;
         }
         // Decide what to restore from persisted state: the queue's copy may predate an operator
         // disabling the profile or Bear participation.
@@ -1707,12 +1735,28 @@ public class TaskQueue {
                         ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL, Boolean.class))) {
             return false;
         }
+        if (bearCleanupBlocked()) return true;
         // A crash skips requestStop and leaves only the checkpoint, so it also proves ownership.
         return BearRecoveryFinalization.deadline(profile)
                 .or(() -> BearSessionCheckpoint.load(profile)
                         .map(BearSessionCheckpoint.Checkpoint::eventEnd))
                 .filter(now::isBefore)
                 .isPresent();
+    }
+
+    private boolean bearCleanupBlocked() {
+        if (!Boolean.TRUE.equals(profile.getEnabled())
+                || !Boolean.TRUE.equals(profile.getConfig(ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL, Boolean.class))
+                || !BearSessionCheckpoint.cleanupUnverified(profile)
+                || bearRevoked(Instant.now())) return false;
+        try {
+            // Missing/unreadable storage cannot revoke an already durable cleanup hold.
+            return storedProfile().map(stored -> !Boolean.FALSE.equals(stored.getEnabled())
+                    && !Boolean.FALSE.equals(stored.getConfig(
+                            ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL, Boolean.class))).orElse(true);
+        } catch (RuntimeException unavailable) {
+            return true;
+        }
     }
 
     /**

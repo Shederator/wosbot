@@ -33,6 +33,7 @@ final class BearRecoveryStrikes {
         return false;
     }
 
+    /** Call only after the goal's postcondition, never merely after a successful Back. */
     void recovered(BearSessionCoordinator.State goal) {
         strikes.remove(goal);
     }

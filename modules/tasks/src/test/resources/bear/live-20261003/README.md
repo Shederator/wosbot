@@ -1,6 +1,7 @@
 # Recorded Bear UI regression fixtures
 
-Source: manual play, 2026-10-03 UTC, 720×1280. No bot input was sent. These PNGs are
+Original fixtures: manual play, 2026-10-03 UTC, 720×1280, without bot input.
+The failed-session addition below comes from a supervised automated run. These PNGs are
 exact decoded frames with irreversible privacy masks, not generated or reconstructed UI.
 Indices below are one-based within each original H.264 segment. The original recordings
 remain private; filenames intentionally contain no account identity.
@@ -59,3 +60,20 @@ These are calibration fixtures, not active Trap 2 validation. Live Back from bot
 Territory and Special Buildings returned to Alliance menu; transition tests model
 those observed parents. No rally, join, or event-enable input was used to obtain
 these additional preparation observations.
+# Failed-session addition
+
+`shortcut-opened-panel.png`: October 3 afternoon recording, event end 15:35 UTC,
+run 001 / segment 004 / decoded frame 511 (journal frame 815). Account-bearing
+areas are replaced with opaque fill; only numbered-trap text, active countdown,
+panel title/buttons and City control remain at their original coordinates. This
+is a focused visual fixture, not whole-screen clutter coverage. The source was
+viewed privately; the sanitized output was manually reviewed. New `centerTrap1Live`
+and `centerActiveLive` templates are non-identifying text crops from that frame.
+
+Private sequence replay (not checked-in source images): manual segment 006 frames
+115/128 show the first captain's green plus turning grey despite stable OCR identity.
+Frames 171/182/194/235 show grey controls, a scroll to a green plus, and that plus later
+turning grey beside a blue already-joined control. The production scanner combines shape
+and green-background evidence. Decorated-name OCR across the scroll is not stable and
+is not treated as authorization. These frames establish neither touch timing nor a bot
+deployment; the recording was manual play.

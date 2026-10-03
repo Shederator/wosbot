@@ -176,12 +176,14 @@ final class BearFrameClassifier {
 
     boolean configuredBearCentered(RawImageData frame) {
         return configuredBearIdentity(frame)
-                && (found(frame, BEAR_CENTER_ACTIVE, 95) || found(frame, BEAR_CENTER_ACTIVE_PANEL, 95));
+                && (found(frame, BEAR_CENTER_ACTIVE, 95) || found(frame, BEAR_CENTER_ACTIVE_PANEL, 95)
+                        || found(frame, BEAR_CENTER_ACTIVE_LIVE, 95));
     }
 
     boolean configuredBearIdentity(RawImageData frame) {
         return switch (trapNumber) {
-            case 1 -> found(frame, BEAR_CENTER_TRAP_1, 95) || found(frame, BEAR_CENTER_TRAP_1_PANEL, 95);
+            case 1 -> found(frame, BEAR_CENTER_TRAP_1, 95) || found(frame, BEAR_CENTER_TRAP_1_PANEL, 95)
+                    || found(frame, BEAR_CENTER_TRAP_1_LIVE, 95);
             case 2 -> found(frame, BEAR_CENTER_TRAP_2, 95);
             default -> false;
         };

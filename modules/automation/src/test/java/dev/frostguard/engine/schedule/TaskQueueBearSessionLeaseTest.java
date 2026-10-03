@@ -48,6 +48,64 @@ import dev.frostguard.engine.service.ProfileService;
 
 class TaskQueueBearSessionLeaseTest {
 
+    @Test
+    void unverifiedTerminalCleanupSurvivesDeadlineAndRestartWithoutRestoringNormalWork() {
+        AccountDescriptor profile = configuredActiveProfile("cleanup evidence ");
+        Instant ended = Instant.now().minusSeconds(60);
+        assertTrue(BearSessionCheckpoint.record(profile, new BearSessionCheckpoint.Checkpoint(
+                ended, "RECOVERING", "VISUAL_UNKNOWN", "terminal-cleanup-not-verified",
+                42, ended, 2, "CLEANUP_UNVERIFIED", Instant.now())));
+        assertTrue(BearRecoveryFinalization.arm(profile, ended));
+        var restarted = new RecordingQueue(reload(profile.getId()));
+        var task = new RecordingBearTask(profile);
+        assertTrue(restarted.finalizeBearRecoveryIfDue(task, Instant.now()));
+        assertTrue(restarted.hasProtectedBearOwnership(Instant.now()));
+        assertFalse(restarted.idleInjectionAllowed());
+        assertTrue(BearSessionCheckpoint.cleanupUnverified(reload(profile.getId())));
+        assertTrue(BearRecoveryFinalization.deadline(reload(profile.getId())).isPresent());
+        assertEquals(0, restarted.gatherRestores);
+        assertEquals(0, restarted.autojoinRestores);
+        assertFalse(task.getScheduled().isBefore(LocalDateTime.now().plusSeconds(20)));
+    }
+
+    @Test
+    void cleanupFailureAfterLeaseExpiryCreatesStickyPinAndExplicitDisableReleasesIt() {
+        AccountDescriptor profile = configuredActiveProfile("expired cleanup ");
+        Instant ended = Instant.now().minusSeconds(60);
+        assertTrue(BearSessionCheckpoint.open(profile, ended));
+        var queue = new RecordingQueue(profile);
+        var task = new RecordingBearTask(profile);
+        queue.routeError(task, new BearSessionExecutionException(
+                BearSessionExecutionException.FailureKind.VISUAL_UNKNOWN,
+                BearSessionExecutionException.RecoveryDirective.OPERATOR_ACTION,
+                "0", "terminal-cleanup-not-verified", "replay", null));
+        assertTrue(BearSessionCheckpoint.cleanupUnverified(reload(profile.getId())));
+        assertTrue(queue.hasProtectedBearOwnership(Instant.now()));
+        TaskQueue unreadable = new TaskQueue(profile) {
+            @Override java.util.Optional<AccountDescriptor> storedProfile() {
+                throw new IllegalStateException("storage unavailable");
+            }
+        };
+        TaskQueue missing = new TaskQueue(profile) {
+            @Override java.util.Optional<AccountDescriptor> storedProfile() {
+                return java.util.Optional.empty();
+            }
+        };
+        assertTrue(unreadable.hasProtectedBearOwnership(Instant.now()));
+        assertTrue(missing.hasProtectedBearOwnership(Instant.now()));
+        assertFalse(unreadable.idleInjectionAllowed());
+        assertFalse(missing.deviceReleaseAllowed());
+        assertTrue(BearSessionCheckpoint.recordScheduler(profile, new BearSessionCheckpoint.Checkpoint(
+                ended, "STOPPED", "UNKNOWN", "explicit-queue-stop", 0, Instant.EPOCH,
+                0, "explicit-queue-stop", Instant.now()), true));
+        assertTrue(BearSessionCheckpoint.cleanupUnverified(reload(profile.getId())));
+        AccountDescriptor stored = reload(profile.getId());
+        assertTrue(ConfigService.obtain().writeAccountSetting(stored, BEAR_TRAP_EVENT_BOOL, "false"));
+        assertFalse(queue.hasProtectedBearOwnership(Instant.now()), "stored disable wins over stale queue state");
+        assertTrue(queue.finalizeBearRecoveryIfDue(task, Instant.now()));
+        assertFalse(BearSessionCheckpoint.hasMarker(reload(profile.getId())));
+    }
+
     private static final DateTimeFormatter CONFIG_DATE_TIME =
             DateTimeFormatter.ofPattern("dd-MM-uuuu HH:mm");
 

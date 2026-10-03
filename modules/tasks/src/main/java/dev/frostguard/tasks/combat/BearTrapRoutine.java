@@ -63,6 +63,9 @@ private List<Integer> joinFlags = new ArrayList<>();
 
 private static final int TRAP_DURATION_MINUTES_VALUE = 30;
 
+private static final int TERMINAL_CLEANUP_TRANSITION_LIMIT = 4;
+private static final Duration TERMINAL_CLEANUP_SETTLE_DEADLINE = Duration.ofSeconds(1);
+
 private static final int TRAP_ACTIVATION_OFFSET_MINUTES_VALUE = 30;
 
 private static final int RALLY_DURATION_BASE_MINUTES_VALUE = 5;
@@ -1002,7 +1005,12 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                     };
                     ui.terminate(terminal);
                 } catch (BearSessionExecutionException protectedFailure) {
-                    throw protectedFailure;
+                    throw protectedFailure.operation().startsWith("terminal-cleanup")
+                            ? protectedFailure
+                            : new BearSessionExecutionException(protectedFailure.failureKind(),
+                                    protectedFailure.recoveryDirective(), protectedFailure.device(),
+                                    "terminal-cleanup-" + protectedFailure.operation(),
+                                    "Terminal Bear cleanup failed: " + protectedFailure.operation(), protectedFailure);
                 } catch (RuntimeException rawFailure) {
                     throw protectedFailure(
                             BearSessionExecutionException.FailureKind.CAPTURE_TRANSIENT,
@@ -1019,15 +1027,18 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
         }
 
         private boolean verifyTerminalUiCleanup() {
-            for (int attempt = 0; attempt < 4; attempt++) {
+            for (int attempt = 0; attempt < TERMINAL_CLEANUP_TRANSITION_LIMIT; attempt++) {
                 BearNavigationPolicy.Screen screen = observeBearScreen();
-                if (BearProductionScreens.WORLD.contains(screen)) {
+                if (terminalWorldVerified(ui.current())) {
                     return true;
                 }
                 if (screen == BearNavigationPolicy.Screen.RECONNECT
-                        || screen == BearNavigationPolicy.Screen.APP_LOADING) {
-                    ui.await(Duration.ofSeconds(1), frame -> frame.screen() != screen,
-                            "terminal-cleanup-wait");
+                        || screen == BearNavigationPolicy.Screen.APP_LOADING
+                        || screen == BearNavigationPolicy.Screen.UNKNOWN) {
+                    // A transient/unclassified frame is not permission for Back. Recovery
+                    // samples newer frames under a deadline, then re-enters classification.
+                    ui.await(TERMINAL_CLEANUP_SETTLE_DEADLINE, frame -> frame.screen() != screen,
+                            "terminal-cleanup-settle-" + (attempt + 1));
                     continue;
                 }
                 if (!BearUiAction.BACK_TO_PARENT.legalFrom(screen)
@@ -1035,10 +1046,22 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                     return false;
                 }
                 if (!backToVerifiedParent(screen)) {
-                    return false;
+                    // An unconfirmed input may have succeeded late. Observe for completion,
+                    // but never repeat that input merely because its acknowledgment was lost.
+                    return ui.await(TERMINAL_CLEANUP_SETTLE_DEADLINE,
+                            this::terminalWorldVerified,
+                            "terminal-cleanup-late-postcondition").isPresent();
                 }
             }
-            return false;
+            // The final allowed transition has its own newer-frame postcondition; do not
+            // reject a successful return just because there is no next loop iteration.
+            observeBearScreen();
+            return terminalWorldVerified(ui.current());
+        }
+
+        private boolean terminalWorldVerified(BearFrameStream.Snapshot<RawImageData> frame) {
+            return frame != null && BearProductionScreens.WORLD.contains(frame.screen())
+                    && frames.isCurrent(frame, BearVerifiedActionExecutor.MAXIMUM_AUTHORIZING_FRAME_AGE);
         }
 
         @Override
@@ -1319,6 +1342,7 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                         "OWN_RALLY_CONFIRMED",
                         null,
                         "exact-send-and-return-deadline");
+                recoveryStrikes.recovered(BearSessionCoordinator.State.OWN_RALLY_REQUIRED);
                 logInfo(routineLogBearTrapLine(newRally.getAsInt() == 0
                         ? "Own rally confirmed in the Bear Special row"
                         : "Own rally confirmed in march slot #" + newRally.getAsInt()));
@@ -1545,6 +1569,7 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                     rallyTraversal.completed(selectedRow);
                     requireTacticalCheckpoint(null, ownRallyBusyUntil, "ROW_COMPLETED", selectedRow,
                             "join-returned-to-list");
+                    recoveryStrikes.recovered(BearSessionCoordinator.State.FILL_JOIN_SLOTS);
                     return BearSessionCoordinator.JoinOutcome.JOINED;
                 }
                 return BearSessionCoordinator.JoinOutcome.RALLY_GONE;
@@ -1614,10 +1639,8 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
         @Override
         public boolean recover(BearSessionCoordinator.State resumeState) {
             boolean recovered = recoverOnce(resumeState);
-            if (recovered) {
-                recoveryStrikes.recovered(resumeState);
-                return true;
-            }
+            // Returning to World is navigation, not completion of the failed rally goal.
+            // Count the failed goal even when Back succeeds; only real progress resets it.
             if (recoveryStrikes.failed(resumeState)) {
                 throw protectedFailure(
                         BearSessionExecutionException.FailureKind.VISUAL_UNKNOWN,
@@ -1625,7 +1648,7 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                         "recover-budget-" + resumeState,
                         null);
             }
-            return false;
+            return recovered;
         }
 
         private boolean recoverOnce(BearSessionCoordinator.State resumeState) {
@@ -2216,8 +2239,9 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
             // An input failure after this method must not be allowed to repeat an ambiguous tap.
             restoredJoinSubstate = joinSubstate;
             restoredJoinRow = row;
-            if (row != null && BearJoinCheckpointSemantics.carriesSpatialFrontier(joinSubstate)) {
-                rallyTraversal.restoreCompleted(row);
+            rallyTraversal.checkpointWritten(joinSubstate, row);
+            if (row != null && ("ROW_COMPLETED".equals(joinSubstate)
+                    || "RECOVERED_PLUS_ABORTED".equals(joinSubstate))) {
                 preserveRestoredListFrontier = true;
             }
         }

@@ -39,6 +39,10 @@ public final class BearSessionCheckpoint {
         return raw != null && !raw.isBlank();
     }
 
+    public static boolean cleanupUnverified(AccountDescriptor profile) {
+        return load(profile).map(c -> "CLEANUP_UNVERIFIED".equals(c.reason())).orElse(false);
+    }
+
     static Optional<Checkpoint> parse(String raw) {
         if (raw == null || raw.isBlank()) {
             return Optional.empty();
@@ -145,7 +149,8 @@ public final class BearSessionCheckpoint {
                 transition.frameSequence(),
                 transition.frameCapturedAt(),
                 keepDurableBudget ? durable.recoveryAttempts() : transition.recoveryAttempts(),
-                transition.reason(),
+                "CLEANUP_UNVERIFIED".equals(durable.reason())
+                        ? durable.reason() : transition.reason(),
                 transition.updatedAt(),
                 durable.ownRallySentAt(),
                 durable.ownRallyReturnDeadline(),

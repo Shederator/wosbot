@@ -8,6 +8,8 @@ import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.helper.TemplateSearchHelper;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.CommonOCRSettings;
+import dev.frostguard.vision.convert.ImageConverter;
+import java.awt.image.BufferedImage;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Supplier;
@@ -17,6 +19,9 @@ final class BearRallyScanner {
 
     private static final int MAX_CARDS = 8;
     private static final int ROW_TOLERANCE = 90;
+    // Recorded disabled plus controls have almost identical luminance/geometry to green ones.
+    // Require a substantial green background as well as the plus-shaped template.
+    private static final int MINIMUM_GREEN_PERCENT = 20;
 
     @FunctionalInterface
     interface TextExtractor {
@@ -35,10 +40,14 @@ final class BearRallyScanner {
 
     BearRallyScanner(TemplateSearchHelper search, RawImageData raw) {
         TemplateSearchHelper.Frame frame = search.frame(raw);
+        BufferedImage pixels = ImageConverter.toBufferedImage(raw);
         this.greenButtons = () -> frame.locateAllPatterns(
-                TemplatesEnum.BEAR_JOIN_PLUS_ICON, search(80));
+                TemplatesEnum.BEAR_JOIN_PLUS_ICON, search(80)
+                        .withArea(CommonGameAreas.BEAR_LIST_PLUS_COLUMN).build()).stream()
+                .filter(hit -> greenJoinControl(pixels, hit)).toList();
         this.bearIcons = () -> frame.locateAllPatterns(
-                TemplatesEnum.BEAR_RALLY_TARGET, search(90));
+                TemplatesEnum.BEAR_RALLY_TARGET, search(90)
+                        .withArea(CommonGameAreas.BEAR_LIST_TARGET_COLUMN).build());
         this.text = (topLeft, bottomRight) -> {
             try {
                 return frame.extractText(
@@ -137,14 +146,35 @@ final class BearRallyScanner {
         return hit != null && hit.isFound() && hit.getPoint() != null;
     }
 
+    static boolean greenJoinControl(BufferedImage pixels, ImageSearchResultData hit) {
+        if (!usable(hit) || !hit.hasMatchedArea()) return false;
+        AreaData area = hit.getMatchedArea();
+        int x1 = area.topLeft().getX();
+        int y1 = area.topLeft().getY();
+        int x2 = area.bottomRight().getX() + 1;
+        int y2 = area.bottomRight().getY() + 1;
+        if (x1 < 0 || y1 < 0 || x2 > pixels.getWidth() || y2 > pixels.getHeight()
+                || x2 <= x1 || y2 <= y1) return false;
+        int green = 0;
+        for (int y = y1; y < y2; y++) {
+            for (int x = x1; x < x2; x++) {
+                int rgb = pixels.getRGB(x, y);
+                int r = (rgb >>> 16) & 255;
+                int g = (rgb >>> 8) & 255;
+                int b = rgb & 255;
+                if (g >= 90 && g * 10 > r * 13 && g * 10 > b * 12) green++;
+            }
+        }
+        return green * 100 >= (x2 - x1) * (y2 - y1) * MINIMUM_GREEN_PERCENT;
+    }
+
     private static List<ImageSearchResultData> safe(List<ImageSearchResultData> hits) {
         return hits == null ? List.of() : hits;
     }
 
-    private static TemplateSearchHelper.SearchConfig search(int threshold) {
+    private static TemplateSearchHelper.SearchConfig.Builder search(int threshold) {
         return TemplateSearchHelper.SearchConfig.builder()
                 .withThreshold(threshold)
-                .withMaxResults(MAX_CARDS)
-                .build();
+                .withMaxResults(MAX_CARDS);
     }
 }

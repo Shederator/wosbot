@@ -229,6 +229,9 @@ public final class CommonGameAreas {
     public static final AreaData BEAR_TRAP_2_STATUS = region(195, 480, 490, 528);
     // Bear body above the centered numbered nameplate; never the generic rally indicator.
     public static final AreaData BEAR_CENTER_BODY = region(335, 475, 390, 520);
+    // Recorded Rally cards: left artwork and right plus column; exclude tabs and Auto Join.
+    public static final AreaData BEAR_LIST_TARGET_COLUMN = region(30, 180, 235, 1125);
+    public static final AreaData BEAR_LIST_PLUS_COLUMN = region(580, 180, 700, 1125);
 
     public static AreaData bearTrapGoArea(int number) {
         return switch (number) {
@@ -241,12 +244,12 @@ public final class CommonGameAreas {
     /** Narrow only detectors whose positions have recorded evidence; others retain full search. */
     public static AreaData bearClassifierSearchArea(dev.frostguard.api.configs.TemplatesEnum template) {
         return switch (template) {
-            case BEAR_CENTER_TRAP_1, BEAR_CENTER_TRAP_1_PANEL -> region(335, 560, 450, 592);
+            case BEAR_CENTER_TRAP_1, BEAR_CENTER_TRAP_1_PANEL, BEAR_CENTER_TRAP_1_LIVE -> region(335, 560, 450, 592);
             case BEAR_CENTER_TRAP_2 -> region(320, 560, 455, 595);
             case BEAR_TERRITORY_OVERVIEW, BEAR_SPECIAL_TAB_UNSELECTED -> BEAR_PAGE_TABS;
             case BEAR_TRAP_GO -> region(515, 330, 670, 575);
             case BEAR_WORLD_ALLIANCE -> region(485, 1190, 580, 1250);
-            case BEAR_CENTER_ACTIVE, BEAR_CENTER_ACTIVE_PANEL -> region(298, 535, 365, 565);
+            case BEAR_CENTER_ACTIVE, BEAR_CENTER_ACTIVE_PANEL, BEAR_CENTER_ACTIVE_LIVE -> region(298, 535, 365, 565);
             case BEAR_PANEL_TITLE -> region(300, 815, 470, 865);
             case BEAR_PET_TITLE -> region(280, 120, 445, 185);
             case BEAR_PET_BATTLE_NAME -> region(50, 765, 280, 825);

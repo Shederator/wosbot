@@ -15,6 +15,17 @@ import org.junit.jupiter.params.provider.CsvSource;
 
 /** Real, privacy-redacted frames: these are visual regressions, not scripted matcher results. */
 class BearLiveFrameReplayTest {
+    @org.junit.jupiter.api.Test
+    void recordedShortcutOpenedPanelMustNotBeMisclassifiedAsWorld() throws Exception {
+        var matcher = new BearTemplateMatcher(EmulatorController.getInstance(), "bear-replay");
+        var raw = frame("shortcut-opened-panel");
+        assertEquals(BearNavigationPolicy.Screen.BEAR_RALLY_PANEL,
+                new BearFrameClassifier(matcher, 1).classify(raw).screen());
+        assertFalse(new BearFrameClassifier(matcher, 2).configuredBearCentered(raw),
+                "Trap 1 evidence must never authorize Trap 2");
+        assertTrue(BearUiAction.OPEN_ACTIVE_BEAR.destinations()
+                .contains(BearNavigationPolicy.Screen.BEAR_RALLY_PANEL));
+    }
     @BeforeAll
     static void initialize() throws Exception {
         WorkspaceSession.initializeLayout(WorkspacePaths.current());

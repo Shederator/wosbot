@@ -9,6 +9,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class BearRallyListTraversalTest {
 
+    @Test
+    void armingLiveJoinDoesNotConsumeItsOwnCandidateButRestartStillDoes() {
+        var traversal = new BearRallyListTraversal();
+        var first = row(300, 11, "A");
+        var second = row(600, 22, "B");
+        var rows = List.of(first, second);
+        traversal.checkpointWritten("JOIN_ARMED", first);
+        assertEquals(first, traversal.authorizeCandidate(first, rows).orElseThrow());
+        traversal.checkpointWritten("NONE", null); // Dispatch refused; retain prior frontier.
+        assertEquals(first, traversal.currentTopmostJoinable(rows).orElseThrow());
+        var restarted = new BearRallyListTraversal();
+        restarted.restoreCompleted(first); // An armed transaction after a crash is ambiguous.
+        assertEquals(second, restarted.currentTopmostJoinable(rows).orElseThrow());
+        traversal.checkpointWritten("ROW_COMPLETED", first);
+        assertEquals(second, traversal.currentTopmostJoinable(rows).orElseThrow());
+    }
+
     private static final Instant START = Instant.parse("2026-10-01T16:00:00Z");
 
     @Test

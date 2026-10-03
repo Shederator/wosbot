@@ -7,8 +7,32 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BearRallyScannerTest {
+
+    @Test
+    void plusShapeNeedsGreenBackgroundNotGreyBlueOrSparseGreenPixels() {
+        var pixels = new java.awt.image.BufferedImage(80, 80, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        var hit = ImageSearchResultData.hit(40, 40, 96, 40, 40);
+        for (int color : new int[]{0x707880, 0x3090df, 0xffffff}) {
+            var graphics = pixels.createGraphics();
+            graphics.setColor(new java.awt.Color(color));
+            graphics.fillRect(0, 0, 80, 80);
+            graphics.dispose();
+            assertFalse(BearRallyScanner.greenJoinControl(pixels, hit));
+        }
+        pixels.setRGB(40, 40, 0x30c020);
+        assertFalse(BearRallyScanner.greenJoinControl(pixels, hit));
+        var graphics = pixels.createGraphics();
+        graphics.setColor(new java.awt.Color(0x30c020));
+        graphics.fillRect(0, 0, 80, 80);
+        graphics.dispose();
+        assertTrue(BearRallyScanner.greenJoinControl(pixels, hit));
+        assertFalse(BearRallyScanner.greenJoinControl(pixels,
+                ImageSearchResultData.hit(100, 100, 96, 40, 40)));
+    }
 
     @Test
     void identicalBearArtDoesNotMakeDifferentCaptainsTheSameRow() {

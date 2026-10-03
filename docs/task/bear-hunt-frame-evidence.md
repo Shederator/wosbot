@@ -10,6 +10,10 @@ automated event works.
 
 ## Latest verification (2026-10-03)
 
+The afternoon supervised run **failed: no rally creation or join was confirmed**.
+Earlier passing suites below did not establish functional live readiness.
+See `bear-hunt-failed-session-20261003.md` for the evidence-backed causes and fixes.
+
 - Follow-up recording/pre-event navigation changes: full reactor 1,086 tests,
   zero failures/errors, five skipped, including the private two-frame OCR replay.
   Focused Bear tests also passed. Reviewer verified Territory/Special Back recovery
@@ -86,12 +90,16 @@ budget and must be measured on the supported setup.
   detector returned zero rows in six inspected list frames. The real-frame regression checks two
   fully visible cards and their green plus controls; this does not validate leader OCR or joins.
 - `BearPrivateRallyReplayTest` accepts `FROSTGUARD_BEAR_RECORDING_FRAMES` pointing to private
-  decoded segment-6 frames 115/128. It tests real OCR identity across compression changes without
+  decoded segment-6 frames 115/128/171/182/194/235. It tests real OCR identity across compression changes without
   committing account-bearing source frames. It is skipped unless explicitly enabled. This is
   offline evidence, not a live successful join or a CI guarantee for every captain name.
   In the local focused replay, classification plus the fresh two-row scan took 651 ms. The first
-  captain matched across the two actual frames; a decorated second name changed under OCR and
-  was refused. That is a known functional limitation, not successful authorization of both rows.
+  captain matched across the two actual frames, but its plus had turned grey: identity must NOT
+  authorize that join. The earlier replay assertion missed this and has been corrected. Template
+  shape alone matches grey controls too; production now also requires a substantial green
+  background in the detected button area. Frames 171/182/194/235 cover disabled rows, scrolling,
+  a green plus and its later grey state. Decorated names change under OCR and remain refused;
+  this is a known functional limitation, not successful authorization of those rows.
   Duplicate completed/pending anchors and duplicate bottom-proof rows are also refused.
 - Special Buildings and Territory Buildings require their page title and selected tab; blue/green
   controls cannot identify either page. The recorded rally-detail and Settings negatives are covered.

@@ -138,6 +138,14 @@ final class BearRallyListTraversal {
         emptySince = null;
     }
 
+    /** Arming is durable crash protection, not proof that this live row was consumed. */
+    void checkpointWritten(String substate, Row row) {
+        if (row != null && ("ROW_COMPLETED".equals(substate)
+                || "RECOVERED_PLUS_ABORTED".equals(substate))) {
+            restoreCompleted(row);
+        }
+    }
+
     /** Selects the current frame's first legal row after the spatial frontier. */
     Optional<Row> currentTopmostJoinable(List<Row> rows) {
         return nextJoinableBelowCompleted(rows == null ? List.of() : rows.stream()
