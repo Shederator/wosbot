@@ -8,6 +8,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.api.domain.OcrSettingsData.TextLayout;
@@ -81,7 +82,7 @@ public final class TesseractOcrProvider implements OcrProvider {
         Tesseract t = new Tesseract();
         t.setDatapath(locateTessdata());
         t.setLanguage(lang);
-        t.setConfigs(Collections.singletonList("quiet"));
+        configureQuietOutput(t);
         t.setPageSegMode(7); // SINGLE_LINE, matching the established default path
         t.setOcrEngineMode(1); // LSTM_ONLY
         return t;
@@ -92,7 +93,7 @@ public final class TesseractOcrProvider implements OcrProvider {
         Tesseract t = new Tesseract();
         t.setDatapath(locateTessdata());
         t.setLanguage("eng");
-        t.setConfigs(Collections.singletonList("quiet"));
+        configureQuietOutput(t);
 
         if (cfg.hasTextLayout()) {
             t.setPageSegMode(mapTextLayout(cfg.textLayout()));
@@ -106,6 +107,17 @@ public final class TesseractOcrProvider implements OcrProvider {
             t.setVariable("tessedit_char_whitelist", cfg.getAllowedChars());
         }
         return t;
+    }
+
+    static String quietConfigName(String osName) {
+        return osName != null && osName.toLowerCase(Locale.ROOT).startsWith("windows")
+                ? "quiet" : "quiet-unix";
+    }
+
+    private static void configureQuietOutput(Tesseract tesseract) {
+        String osName = System.getProperty("os.name", "");
+        // NUL is a Windows device name; Unix systems need /dev/null.
+        tesseract.setConfigs(Collections.singletonList(quietConfigName(osName)));
     }
 
     private static int mapTextLayout(TextLayout layout) {
