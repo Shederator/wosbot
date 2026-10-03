@@ -3,7 +3,7 @@
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 
-<!-- Pet management — BorderPane with FlowPane-based skill toggles -->
+<!-- One line per control: what it is, then what it does. -->
 <BorderPane maxHeight="Infinity" maxWidth="Infinity"
             HBox.hgrow="ALWAYS" VBox.vgrow="ALWAYS"
             xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1">
@@ -13,53 +13,49 @@
                     styleClass="task-page-scroll">
             <VBox spacing="14" styleClass="task-page-root" maxWidth="Infinity">
 
-                <!-- Pet Activation -->
-                <VBox styleClass="content-card">
-                    <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-orange">
-                        <Label text="Pet Automation" />
+                <VBox maxWidth="Infinity" styleClass="content-card">
+                    <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
+                        <Label style="-fx-font-weight: bold; -fx-text-fill: -fg-bg-app; -fx-font-size: 13px;"
+                               text="Pet Skills" />
                     </HBox>
-                    <VBox spacing="10" styleClass="task-section-inner">
-                        <Label styleClass="task-card-description"
-                               text="Configure automatic pet skill activation and management"
-                               wrapText="true" />
+                    <VBox spacing="9" styleClass="task-section-inner">
+                        <Label styleClass="task-card-description" wrapText="true"
+                               text="Ticked skills are used every time they come off cooldown. Each box drives one tile of the in-game Pet Skill panel; which skill sits there depends on the pets you own." />
+
                         <Separator style="-fx-opacity: 0.25;" />
+
+                        <CheckBox fx:id="checkboxFoodSkill" mnemonicParsing="false"
+                                  text="Tile 1 - the skill in the first slot (key: Food)" />
+                        <CheckBox fx:id="checkboxStaminaSkill" mnemonicParsing="false"
+                                  text="Tile 2 - the skill in the second slot (key: Stamina)" />
+                        <CheckBox fx:id="checkboxGatheringSkill" mnemonicParsing="false"
+                                  text="Tile 3 - the skill in the third slot (key: Gathering)" />
+
+                        <HBox alignment="CENTER_LEFT" spacing="10" style="-fx-padding: 0 0 0 22;">
+                            <Label styleClass="task-field-label" text="Gathers" minWidth="55" />
+                            <ComboBox fx:id="comboBoxGatheringResource" prefWidth="110.0" />
+                        </HBox>
+
+                        <CheckBox fx:id="checkboxTreasureSkill" mnemonicParsing="false"
+                                  text="Tile 4 - the skill in the fourth slot (key: Treasure)" />
+
+                        <Separator style="-fx-opacity: 0.25;" />
+
                         <CheckBox fx:id="checkBoxPetSkills" mnemonicParsing="false"
-                                  text="Enable Pet Management" />
-                        <CheckBox fx:id="checkBoxPetAllianceTreasure" mnemonicParsing="false"
-                                  text="Alliance Treasure" />
-                        <CheckBox fx:id="checkBoxPetPersonalTreasure" mnemonicParsing="false"
-                                  text="Personal Treasure" />
+                                  text="Enable pet skills - required for the Tile 3 gathering skill" />
                     </VBox>
                 </VBox>
 
-                <!-- Pet Skill Selection — FlowPane instead of GridPane -->
-                <VBox styleClass="content-card">
-                    <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-blue">
-                        <Label text="Skill Configuration" />
+                <VBox maxWidth="Infinity" styleClass="content-card">
+                    <HBox alignment="CENTER_LEFT" maxWidth="Infinity" styleClass="header-yellow">
+                        <Label style="-fx-font-weight: bold; -fx-text-fill: -fg-bg-app; -fx-font-size: 13px;"
+                               text="Treasures" />
                     </HBox>
-                    <VBox spacing="10" styleClass="task-section-inner">
-                        <Label styleClass="task-card-description"
-                               text="Select which pet skills to activate automatically"
-                               wrapText="true" />
-                        <Separator style="-fx-opacity: 0.25;" />
-
-                        <FlowPane hgap="18" vgap="10" alignment="CENTER_LEFT">
-                            <CheckBox fx:id="checkboxFoodSkill" mnemonicParsing="false"
-                                      text="Food Skill" />
-                            <CheckBox fx:id="checkboxGatheringSkill" mnemonicParsing="false"
-                                      text="Gathering Skill" />
-                            <CheckBox fx:id="checkboxStaminaSkill" mnemonicParsing="false"
-                                      text="Stamina Skill" />
-                            <CheckBox fx:id="checkboxTreasureSkill" mnemonicParsing="false"
-                                      text="Treasure Skill" />
-                        </FlowPane>
-                        
-                        <Separator style="-fx-opacity: 0.25;" />
-                        
-                        <HBox alignment="CENTER_LEFT" spacing="14">
-                            <Label styleClass="task-field-label" text="Gathering Resource" minWidth="140" />
-                            <ComboBox fx:id="comboBoxGatheringResource" prefWidth="120.0" />
-                        </HBox>
+                    <VBox spacing="9" styleClass="task-section-inner">
+                        <CheckBox fx:id="checkBoxPetAllianceTreasure" mnemonicParsing="false"
+                                  text="Alliance treasures - claims what your alliance shares (daily)" />
+                        <CheckBox fx:id="checkBoxPetPersonalTreasure" mnemonicParsing="false"
+                                  text="Pet adventures - runs adventure chests, 10 stamina each, 4 a day" />
                     </VBox>
                 </VBox>
 
