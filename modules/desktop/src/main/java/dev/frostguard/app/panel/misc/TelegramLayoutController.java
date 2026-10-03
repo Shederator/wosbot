@@ -13,6 +13,7 @@ import java.util.Properties;
 
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.engine.service.ConfigService;
+import dev.frostguard.engine.service.DesktopJarLocator;
 import dev.frostguard.engine.service.TelegramBotService;
 import dev.frostguard.engine.service.TelegramWatcherLauncher;
 import javafx.animation.PauseTransition;
@@ -243,9 +244,9 @@ public class TelegramLayoutController {
     private static String autoDetectBotJar() {
         File workingDirectory = new File(System.getProperty("user.dir"));
         try {
-            java.net.URL src = TelegramLayoutController.class
+            java.net.URL codeSource = TelegramLayoutController.class
                     .getProtectionDomain().getCodeSource().getLocation();
-            return autoDetectBotJar(new File(src.toURI()), workingDirectory);
+            return autoDetectBotJar(new File(codeSource.toURI()), workingDirectory);
         } catch (Exception e) {
             return autoDetectBotJar(null, workingDirectory);
         }
@@ -257,37 +258,15 @@ public class TelegramLayoutController {
             return codeSource.getAbsolutePath();
         }
 
-        File codeDirectory = codeSource != null && codeSource.isDirectory() ? codeSource : null;
-        File[] directories = {
-                codeDirectory == null ? null : codeDirectory.getParentFile(),
-                workingDirectory == null ? null : new File(workingDirectory, "target"),
-                workingDirectory == null ? null : new File(workingDirectory, "modules/desktop/target"),
-                workingDirectory
-        };
-        for (File directory : directories) {
-            String found = findFrostguardJar(directory);
-            if (found != null) return found;
+        if (codeSource != null) {
+            String detected = DesktopJarLocator.findFrom(codeSource.toPath())
+                    .map(Path::toString).orElse("");
+            if (!detected.isBlank()) return detected;
         }
-        return "";
-    }
-
-    private static String findFrostguardJar(File dir) {
-        if (dir == null || !dir.isDirectory()) return null;
-        File[] candidates = dir.listFiles(
-                f -> f.isFile() && f.getName().startsWith("frostguard-desktop-")
-                        && f.getName().endsWith(".jar")
-                        && !f.getName().endsWith("-sources.jar")
-                        && !f.getName().endsWith("-javadoc.jar")
-                        && !f.getName().endsWith("-tests.jar")
-                        && !f.getName().endsWith("-shaded.jar"));
-        if (candidates != null && candidates.length > 0) {
-            // Incremental builds leave older versioned JARs in target.
-            return java.util.Arrays.stream(candidates)
-                    .max(java.util.Comparator.comparingLong(File::lastModified)
-                            .thenComparing(File::getName))
-                    .orElseThrow().getAbsolutePath();
-        }
-        return null;
+        return workingDirectory == null
+                ? ""
+                : DesktopJarLocator.findFrom(workingDirectory.toPath())
+                        .map(Path::toString).orElse("");
     }
 
     /** Mirrors TelegramWatcher.configFilePath() – path convention kept in sync manually. */
