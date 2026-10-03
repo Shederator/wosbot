@@ -45,6 +45,7 @@ import dev.frostguard.engine.schedule.DelayedTaskRegistry;
 import dev.frostguard.engine.schedule.StaminaDeferral;
 import dev.frostguard.engine.schedule.TaskDispatcher;
 import dev.frostguard.engine.schedule.TaskQueue;
+import dev.frostguard.engine.schedule.TelemetrySnapshotSchedule;
 
 /**
  * Coordinates emulator startup, profile queues, and persisted task schedules.
@@ -416,7 +417,22 @@ public class ScheduleService {
 		if (BEAR_SCHEDULE_KEYS.contains(key)) {
 			realignBearTrapParticipationSchedule(account.getId());
 		}
+		if (key == ConfigurationKeyEnum.TELEMETRY_INTERVAL_HOURS_INT) {
+			realignTelemetrySchedule(account);
+			return "queue-reconciled";
+		}
 		return affectedTasks.isEmpty() ? "next-task" : "queue-reconciled";
+	}
+
+	private void realignTelemetrySchedule(AccountDescriptor account) {
+		TaskQueue queue = dispatcher.getQueue(account.getId());
+		if (queue == null) return;
+		LocalDateTime now = LocalDateTime.now();
+		LocalDateTime nextRun = TelemetrySnapshotSchedule.nextRun(
+				now, TelemetrySnapshotSchedule.configuredInterval(account));
+		if (queue.scheduleOrRescheduleQueuedTask(TpDailyTaskEnum.TELEMETRY_SNAPSHOT, account, nextRun)) {
+			persistNextSchedule(account, TpDailyTaskEnum.TELEMETRY_SNAPSHOT, nextRun, null);
+		}
 	}
 
 	private void reconcileConfigDrivenTasks(AccountDescriptor account, ConfigurationKeyEnum key,
@@ -478,7 +494,15 @@ public class ScheduleService {
 			}
 		});
 
+		alwaysOnTaskTypes().stream()
+				.map(type -> DelayedTaskRegistry.create(type, account))
+				.forEach(task -> enqueuePlannedTask(account, queue, task, progressByType));
+
 		addCustomTasks(account, queue, progress);
+	}
+
+	static List<TpDailyTaskEnum> alwaysOnTaskTypes() {
+		return List.of(TpDailyTaskEnum.TELEMETRY_SNAPSHOT);
 	}
 
 	private DelayedTask startupTaskFor(AccountDescriptor account) {

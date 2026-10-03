@@ -76,6 +76,7 @@ public class TaskQueue {
 
     final TaskQueueStatusData statusModel = new TaskQueueStatusData();
     private final TaskQueueExecutor executor = new TaskQueueExecutor();
+    private final TaskExecutionStateStore executionStateStore;
     private volatile AccountDescriptor profile;
     private volatile ExecutionContext   runningContext;
     private volatile LocalDateTime      sessionOrigin;
@@ -100,7 +101,14 @@ public class TaskQueue {
         }
     }
 
-    public TaskQueue(AccountDescriptor profile) { this.profile = profile; }
+    public TaskQueue(AccountDescriptor profile) {
+        this(profile, TaskExecutionStateStore.production());
+    }
+
+    TaskQueue(AccountDescriptor profile, TaskExecutionStateStore executionStateStore) {
+        this.profile = profile;
+        this.executionStateStore = Objects.requireNonNull(executionStateStore);
+    }
 
     // ---- queue manipulation ------------------------------------------------
 
@@ -801,7 +809,7 @@ public class TaskQueue {
         Object k = task.getDistinctKey(); if (k != null) s.setCustomTaskName(k.toString());
         s.setScheduled(true); s.setExecuting(true);
         s.setLastExecutionTime(LocalDateTime.now()); s.setNextExecutionTime(task.getScheduled());
-        TaskManagementService.shared().recordTaskState(profile.getId(), s);
+        executionStateStore.record(profile.getId(), s);
         return s;
     }
 
@@ -813,10 +821,33 @@ public class TaskQueue {
         s.setExecuting(false); s.setScheduled(task.isRecurring());
         s.setLastExecutionTime(LocalDateTime.now()); s.setNextExecutionTime(task.getScheduled());
         Object k = task.getDistinctKey(); if (k != null) s.setCustomTaskName(k.toString());
-        TaskManagementService.shared().recordTaskState(profile.getId(), s);
+        executionStateStore.record(profile.getId(), s);
         if (task.getScheduled() != null) {
-            ScheduleService.obtain().persistDailyCompletion(
+            executionStateStore.persistDailyCompletion(
                     profile, task.getTpTask(), task.getScheduled(), s.getCustomTaskName(), task.getStaminaDeferral());
+        }
+    }
+
+    interface TaskExecutionStateStore {
+        void record(Long profileId, TaskStateData state);
+
+        void persistDailyCompletion(AccountDescriptor profile, TpDailyTaskEnum task,
+                LocalDateTime nextRun, String customTaskName, StaminaDeferral staminaDeferral);
+
+        static TaskExecutionStateStore production() {
+            return new TaskExecutionStateStore() {
+                @Override
+                public void record(Long profileId, TaskStateData state) {
+                    TaskManagementService.shared().recordTaskState(profileId, state);
+                }
+
+                @Override
+                public void persistDailyCompletion(AccountDescriptor profile, TpDailyTaskEnum task,
+                        LocalDateTime nextRun, String customTaskName, StaminaDeferral staminaDeferral) {
+                    ScheduleService.obtain().persistDailyCompletion(
+                            profile, task, nextRun, customTaskName, staminaDeferral);
+                }
+            };
         }
     }
 
