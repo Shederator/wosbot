@@ -63,8 +63,12 @@ public class StorehouseChestRoutine extends DelayedTask {
     // ========== Stamina Reward Coordinates ==========
     private static final PointData STAMINA_AMOUNT_TOP_LEFT = new PointData(436, 632);
     private static final PointData STAMINA_AMOUNT_BOTTOM_RIGHT = new PointData(487, 657);
-    private static final PointData STAMINA_CLAIM_BUTTON_TOP_LEFT = new PointData(250, 930);
-    private static final PointData STAMINA_CLAIM_BUTTON_BOTTOM_RIGHT = new PointData(450, 950);
+    private static final AreaData STAMINA_REWARD_TITLE_AREA = new AreaData(
+            new PointData(170, 750), new PointData(550, 825));
+    private static final AreaData STAMINA_CLAIM_BUTTON_AREA = new AreaData(
+            new PointData(200, 900), new PointData(520, 1020));
+    private static final AreaData STAMINA_TOOLTIP_TITLE_AREA = new AreaData(
+            new PointData(45, 670), new PointData(300, 750));
 
     // ========== Fallback Timer OCR ==========
     static final PointData FALLBACK_TIMER_TOP_LEFT = new PointData(285, 642);
@@ -78,7 +82,9 @@ public class StorehouseChestRoutine extends DelayedTask {
     private static final int BUBBLE_CONFIRMATION_MARGIN = 24;
     private static final int CLAIM_BUTTON_POLL_INTERVAL_MILLIS = 400;
     private static final int CLAIM_BUTTON_TIMEOUT_MILLIS = 5_000;
-    private static final int CLAIM_BUTTON_THRESHOLD = 85;
+    private static final int REWARD_TITLE_THRESHOLD = 88;
+    private static final int CLAIM_BUTTON_THRESHOLD = 88;
+    private static final int TOOLTIP_TITLE_THRESHOLD = 88;
     private static final String BUILDING_COUNTDOWN_WHITELIST = "0123456789:d";
     private static final int BASE_STOREHOUSE_STAMINA = 120;
     private static final int SCROLL_ATTEMPT_COUNT = 2;
@@ -208,7 +214,6 @@ public class StorehouseChestRoutine extends DelayedTask {
                 StorehouseBubbleDetector.Candidate candidate) {
             logInfo("Stamina bubble found. Opening its claim dialog.");
             tapInside(candidate.center(), candidate.center());
-            dismissStaminaTutorial();
             ImageSearchResultData claimButton = awaitStaminaClaimButton();
             if (claimButton == null) {
                 captureInterfaceFailure("stamina-claim-button-missing");
@@ -309,22 +314,70 @@ public class StorehouseChestRoutine extends DelayedTask {
     }
 
     private ImageSearchResultData awaitStaminaClaimButton() {
-        SearchConfig claimSearch = SearchConfig.builder()
-                .withArea(new AreaData(STAMINA_CLAIM_BUTTON_TOP_LEFT, STAMINA_CLAIM_BUTTON_BOTTOM_RIGHT))
-                .withThreshold(CLAIM_BUTTON_THRESHOLD)
+        StorehouseStaminaClaimFlow.Result result = StorehouseStaminaClaimFlow.awaitClaimButton(
+                new StorehouseStaminaClaimFlow.Actions() {
+                    @Override
+                    public boolean isRewardDialogVisible() {
+                        ImageSearchResultData title = locateStaminaDialogTemplate(
+                                TemplatesEnum.STOREHOUSE_STAMINA_REWARD_TITLE,
+                                STAMINA_REWARD_TITLE_AREA,
+                                REWARD_TITLE_THRESHOLD);
+                        return title != null && title.isFound();
+                    }
+
+                    @Override
+                    public ImageSearchResultData findClaimButton() {
+                        return locateStaminaDialogTemplate(
+                                TemplatesEnum.STOREHOUSE_STAMINA_CLAIM_TEXT,
+                                STAMINA_CLAIM_BUTTON_AREA,
+                                CLAIM_BUTTON_THRESHOLD);
+                    }
+
+                    @Override
+                    public boolean isTooltipVisible() {
+                        return isStaminaTooltipVisible();
+                    }
+
+                    @Override
+                    public void pressBack() {
+                        logInfo("Stamina tooltip confirmed after opening the Storehouse reward; dismissing it once with Back.");
+                        StorehouseChestRoutine.this.pressBack();
+                    }
+
+                    @Override
+                    public void waitAfterBack() {
+                        sleepTask(CLAIM_CLOSE_SETTLE_MILLIS);
+                    }
+
+                    @Override
+                    public void waitForNextPoll() {
+                        sleepTask(CLAIM_BUTTON_POLL_INTERVAL_MILLIS);
+                    }
+                }, Duration.ofMillis(CLAIM_BUTTON_TIMEOUT_MILLIS), System::nanoTime);
+        if (result.claimButton() != null) {
+            return result.claimButton();
+        }
+        logWarning("Storehouse stamina reward was not verified with a Claim button"
+                + (result.rewardDialogSeen() ? "; reward dialog was visible." : "; reward dialog title was not visible."));
+        return null;
+    }
+
+    private ImageSearchResultData locateStaminaDialogTemplate(
+            TemplatesEnum template, AreaData area, int threshold) {
+        return templateSearchHelper.locatePattern(template, SearchConfig.builder()
+                .withArea(area)
+                .withThreshold(threshold)
                 .withMaxAttempts(1)
                 .withDelay(0)
-                .build();
-        long deadline = System.nanoTime() + Duration.ofMillis(CLAIM_BUTTON_TIMEOUT_MILLIS).toNanos();
-        while (System.nanoTime() < deadline) {
-            ImageSearchResultData claimButton = templateSearchHelper.locatePattern(
-                    TemplatesEnum.DAILY_MISSION_CLAIM_BUTTON, claimSearch);
-            if (claimButton != null && claimButton.isFound()) {
-                return claimButton;
-            }
-            sleepTask(CLAIM_BUTTON_POLL_INTERVAL_MILLIS);
-        }
-        return null;
+                .build());
+    }
+
+    private boolean isStaminaTooltipVisible() {
+        ImageSearchResultData tooltipTitle = locateStaminaDialogTemplate(
+                TemplatesEnum.STOREHOUSE_STAMINA_TOOLTIP_TITLE,
+                STAMINA_TOOLTIP_TITLE_AREA,
+                TOOLTIP_TITLE_THRESHOLD);
+        return tooltipTitle != null && tooltipTitle.isFound();
     }
 
     private Integer readAgnesBonus() {
@@ -336,21 +389,6 @@ public class StorehouseChestRoutine extends DelayedTask {
                 STAMINA_OCR_SETTINGS,
                 text -> RegexNumberParser.conformsTo(text, Pattern.compile(".*?(\\d+).*")),
                 text -> RegexNumberParser.extractByPattern(text, Pattern.compile(".*?(\\d+).*")));
-    }
-
-    private void dismissStaminaTutorial() {
-        sleepTask(1_000);
-        // Dismiss tutorial overlay (if present) by tapping on a safe neutral area, not on the stamina display itself
-        logDebug("Clearing tutorial overlays if present");
-        try {
-            // Tap center-left area to dismiss any hand tutorials without interfering with stamina display
-            tapInside(new PointData(200, 600), new PointData(250, 700), 1, 200);
-            sleepTask(300);
-        } catch (RuntimeException e) {
-            TaskControlSignals.rethrowControlSignal(e);
-            logDebug("Overlay clear attempt failed or not needed: " + e.getMessage());
-        }
-        sleepTask(300);
     }
 
     private StorehouseVisitFlow.CooldownRead readCooldown() {

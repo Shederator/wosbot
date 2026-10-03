@@ -15,6 +15,16 @@ white, with whitelist `0123456789:d`. Compact `001558` is 00:15:58. These are
 visual/OCR assumptions; do not infer the timer's game meaning from its text
 alone.
 
+The Storehouse stamina reward uses its own `A Warm Welcome` title and Claim-text
+templates. Search the Claim text in the full lower button area (x=200..520,
+y=900..1020 on 720x1280 frames); the Daily Mission Claim crop is too small for
+this button. A `Chief Stamina` tooltip can cover the reward title and button
+after tapping the 120 stamina tile. Dismiss it with Android Back only when its
+title is detected, then reacquire the reward title and Claim text before
+tapping. Never clear this popup with a neutral coordinate tap: that region
+overlaps the stamina tile and can open the tooltip again. Saved-frame coverage
+is in `StorehouseStaminaClaimFrameTest`.
+
 ## Visit flow and scheduling
 
 Keep a task `VisitState` (`READY`, `WAITING_COOLDOWN`, or `RETRY_ON_ERROR`)
