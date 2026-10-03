@@ -10,7 +10,7 @@ setlocal enabledelayedexpansion
 set "JAR="
 set "SEARCH_DIR=%~dp0"
 
-for /l %%i in (1,1,5) do (
+for /l %%i in (1,1,6) do (
     for %%f in ("!SEARCH_DIR!frostguard-watcher*.jar") do (
         set "CAND=%%~nxf"
         if /I not "!CAND:original-=!"=="!CAND!" (

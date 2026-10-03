@@ -89,8 +89,15 @@
 
                                         <HBox spacing="20" alignment="CENTER_LEFT">
                                             <children>
-                                                <Label fx:id="labelStatus" style="-fx-text-fill: #e57373;" text="Status: 🔴 Stopped" />
+                                                <Label fx:id="labelStatus" style="-fx-text-fill: #e57373;" text="App commands: Stopped" />
                                                 <Label fx:id="labelStartupStatus" style="-fx-text-fill: #e57373;" text="Auto-start: ❌ Not registered" />
+                                            </children>
+                                        </HBox>
+
+                                        <HBox spacing="10" alignment="CENTER_LEFT">
+                                            <children>
+                                                <Label fx:id="labelWatcherStatus" style="-fx-text-fill: #e57373;" text="Watcher: Not running" />
+                                                <Button onAction="#handleCheckWatcher" text="Check watcher" />
                                             </children>
                                         </HBox>
 
