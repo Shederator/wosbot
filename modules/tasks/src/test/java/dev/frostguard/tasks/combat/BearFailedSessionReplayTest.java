@@ -20,7 +20,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 @EnabledIfEnvironmentVariable(named = "FROSTGUARD_BEAR_GLD_FRAMES", matches = ".+")
 class BearFailedSessionReplayTest {
     @Test
-    void regionFirstClassificationMatchesBaselineOnTheSameRecordedFrames() throws Exception {
+    void acceleratedClassificationMatchesOriginalOnTheSameRecordedFrames() throws Exception {
         OpenCvPatternLocator.loadNativeLibrary();
         var controller = EmulatorController.getInstance();
         var optimized = new BearFrameClassifier(new BearTemplateMatcher(controller, "offline"), 1);
@@ -49,7 +49,7 @@ class BearFailedSessionReplayTest {
             }
         }
         System.out.println("BEAR_CLASSIFIER_AB samples=8 baselineMeanMs=" + oldNanos / 8_000_000
-                + " regionFirstMeanMs=" + newNanos / 8_000_000);
+                + " acceleratedMeanMs=" + newNanos / 8_000_000);
         costs.entrySet().stream().sorted(java.util.Map.Entry.<String, Long>comparingByValue().reversed())
                 .limit(5).forEach(cost -> System.out.println("BEAR_CLASSIFIER_COST template="
                         + cost.getKey() + " meanMs=" + cost.getValue() / 8_000_000));

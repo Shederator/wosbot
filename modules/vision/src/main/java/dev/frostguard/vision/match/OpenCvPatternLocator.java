@@ -166,6 +166,16 @@ public class OpenCvPatternLocator {
                 capture.getBpp(), spritePath, topLeft, bottomRight, threshold);
     }
 
+    /**
+     * Negative-only acceleration; survivors and masked templates use the original color matcher.
+     * A prefiltered miss reports zero rather than an exact correlation score.
+     */
+    public static ImageSearchResultData locatePatternWithProjectionRejection(RawImageData capture,
+            String spritePath, PointData topLeft, PointData bottomRight, double threshold) {
+        return scanCapture(capture.getData(), capture.getWidth(), capture.getHeight(),
+                capture.getBpp(), spritePath, topLeft, bottomRight, threshold, true);
+    }
+
     /** Colour multi-hit search against a raw device capture. */
     public static List<ImageSearchResultData> locateAllPatterns(RawImageData capture, String spritePath,
                                                       PointData topLeft, PointData bottomRight,
@@ -679,6 +689,12 @@ public class OpenCvPatternLocator {
     public static ImageSearchResultData scanCapture(byte[] rawImageData, int width, int height, int bpp,
             String spritePath, PointData upperLeft, PointData lowerRight,
             double threshold) {
+        return scanCapture(rawImageData, width, height, bpp, spritePath, upperLeft, lowerRight, threshold, false);
+    }
+
+    private static ImageSearchResultData scanCapture(byte[] rawImageData, int width, int height, int bpp,
+            String spritePath, PointData upperLeft, PointData lowerRight, double threshold,
+            boolean projectionRejection) {
 
         long startTime = System.currentTimeMillis();
         log.debug("=== Pattern Correlation Started ===");
@@ -762,6 +778,11 @@ public class OpenCvPatternLocator {
             }
 
             // Template matching
+            if (projectionRejection && (mask == null || mask.empty())
+                    && ColorCorrelationBound.rejects(roiSlice, template, threshold / 100)) {
+                log.debug("Color projection excludes reference below threshold: {}", spriteLabel);
+                return new ImageSearchResultData(false, null, 0.0);
+            }
             long matchStartTime = System.currentTimeMillis();
             heatmap = new Mat(resultRows, resultCols, CvType.CV_32FC1);
 

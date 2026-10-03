@@ -209,6 +209,15 @@ public class EmulatorController {
         } finally { OpenCvPatternLocator.clearContextLabel(); }
     }
 
+    public ImageSearchResultData locatePatternWithProjectionRejection(String idx, RawImageData frame,
+            TemplatesEnum template, PointData topLeft, PointData bottomRight, double threshold) {
+        try {
+            OpenCvPatternLocator.setContextLabel(label(idx));
+            return OpenCvPatternLocator.locatePatternWithProjectionRejection(
+                    frame, regionTpl(template.getTemplate()), topLeft, bottomRight, threshold);
+        } finally { OpenCvPatternLocator.clearContextLabel(); }
+    }
+
     public ImageSearchResultData locatePattern(String idx, TemplatesEnum t, double th) {
         return locatePattern(idx, captureScreen(idx), t, th);
     }

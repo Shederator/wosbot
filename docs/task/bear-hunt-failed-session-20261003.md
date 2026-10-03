@@ -105,6 +105,50 @@ the earlier private pair. The alternating classifier A/B was 559 ms baseline ver
 region-first. These samples exceed the one-second budget before dispatch costs: latency
 remains a functional gate, not a completed optimization or permission to weaken freshness.
 
+### Negative-match acceleration follow-up
+
+The next offline pass targets the three dominant full-screen checks (Reconnect, Download
+Now and mandatory Update). Native worker-count experiments did not produce a dependable
+improvement; no global thread setting was changed. An opt-in negative-only color-correlation
+prefilter is used only by these Bear classifier checks. It does not shrink their search area,
+change their threshold, infer a UI state or authorize input. Possible matches still use the
+original full-color matcher; masks, unsupported inputs and ill-conditioned cases fall back.
+
+The derivation uses the per-channel centering and color summation defined in
+[OpenCV's template-matching documentation](https://docs.opencv.org/4.13.0/df/dfb/group__imgproc__object.html).
+Projecting RGB onto the normalized sum channel retains fraction
+`w = Var(B+G+R) / (3 * sum(Var(channel)))` of template energy. If `r` bounds that
+projection's positive correlation, Cauchy-Schwarz bounds the full color score by
+`sqrt(1-w+w*r*r)`. Float channel sums avoid 8-bit grayscale rounding. The implementation
+uses extra peak/rejection slack; that slack is empirical, not a proven bound on every
+OpenCV native backend's floating-point behavior.
+
+Native tests compare against the original color oracle: random and low-contrast
+patches across four thresholds, all three real templates placed at screen edges (including
+low contrast), masked-template parity, and degenerate/unsupported inputs. The adversarial
+review additionally requested deliberately noise-mixed 84.9%/85.1% patches and nearly flat
+local patches surrounded by noise; all six native oracle tests passed, including those cases.
+The image-wide variance guard is not a guarantee of local-window conditioning. These are
+numerical/matching tests, not evidence of actual game dialog behavior. Saved real Bear
+fixtures and private OCR/scroll sequences also pass. A focused alternating eight-sample
+classification replay measured 469 ms original versus 241 ms accelerated; classification
+plus rally-row scanning measured 470–741 ms on the four failed-session frames, and 627 ms
+on the earlier private pair. Capture, persistence and dispatch are still outside these
+measurements. The subsequent full offline `package` reactor passed **1,118 tests, zero
+failures/errors, six skipped**, with private frame replays enabled. The two additional
+adversarial numerical test cases were added during that build and verified afterward in a
+separate six-test native run; they are not included in the 1,118 count. The Linux bundle
+passed structural verification (603 entries, 85 runtime JARs, 466 sprites).
+
+The full-run A/B was 518 ms original versus 262 ms accelerated classification; classification
+plus row scanning was 628–811 ms, with the earlier pair at 724 ms. These are saved-frame
+results on this Linux/native build, not a cross-platform numerical proof or an end-to-end
+input deadline guarantee. The one-second dispatch guard remains unchanged. Observe-only
+timing on the actual capture pipeline and supervised live-event validation are still required;
+unsupported preparation and missing Trap 2 evidence have not been silently enabled.
+The final adversarial implementation/test review found no concrete blocker to the offline-tested
+change; it did not endorse live readiness or claim a formal native floating-point error bound.
+
 The cleanup-driver additions cover transient UNKNOWN recovery without input,
 bounded persistent UNKNOWN, aged World refusal, success on the final permitted
 edge and late completion without repeating Back. These are scripted transition

@@ -29,6 +29,13 @@ final class BearTemplateMatcher implements BearFrameClassifier.TemplateMatcher {
             return false; // No calibrated targets or search regions at other geometries.
         }
         RawImageData region = copyRegion(frame, area);
+        if (region != null && switch (template) {
+            case GAME_HOME_RECONNECT, GAME_START_DOWNLOAD_NOW, GAME_START_MANDATORY_UPDATE_TITLE -> true;
+            default -> false;
+        }) {
+            return controller.locatePatternWithProjectionRejection(device, region, template,
+                    new PointData(0, 0), new PointData(region.getWidth(), region.getHeight()), threshold).isFound();
+        }
         return region != null && controller.locatePattern(device, region, template,
                 new PointData(0, 0), new PointData(region.getWidth(), region.getHeight()), threshold).isFound();
     }
