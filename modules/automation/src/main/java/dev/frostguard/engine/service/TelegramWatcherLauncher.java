@@ -48,8 +48,11 @@ public class TelegramWatcherLauncher {
         }
     }
 
-    private static boolean isWatcherRunning() {
-        Path lockPath = WorkspacePaths.current().watcherLock();
+    public static boolean isWatcherRunning() {
+        return isWatcherRunning(WorkspacePaths.current().watcherLock());
+    }
+
+    static boolean isWatcherRunning(Path lockPath) {
         try {
             Files.createDirectories(lockPath.getParent());
             try (FileChannel channel = FileChannel.open(lockPath,
