@@ -65,13 +65,75 @@ public class DeploymentHelper {
      * bonuses can reduce the action's nominal stamina cost.
      */
     public DeploymentScreenRead readScreen(int maxPlausibleStaminaCost) {
+        return readScreen(maxPlausibleStaminaCost, integerReader, durationReader);
+    }
+
+    /**
+     * Reads the first stable formation state after Attack. All template checks share one frame.
+     */
+    public DeploymentFormationRead readFormationScreen() {
+        TemplateSearchHelper.Frame frame = templates.captureFrame();
+        ImageSearchResultData queueFull = frame.locatePattern(
+                TemplatesEnum.RALLY_MARCH_QUEUE_FULL,
+                search(CommonGameAreas.RALLY_MARCH_QUEUE_FULL_AREA, 1, 85));
+        ImageSearchResultData deploy = frame.locatePattern(
+                TemplatesEnum.DEPLOY_BUTTON, search(1, 90));
+        ImageSearchResultData equalize = frame.locatePattern(
+                TemplatesEnum.RALLY_EQUALIZE_BUTTON,
+                search(CommonGameAreas.RALLY_BOTTOM_BUTTON_BAR, 1, 90));
+        return new DeploymentFormationRead(queueFull.isFound(), deploy, equalize);
+    }
+
+    /**
+     * Reads every safety and numeric signal needed immediately before tapping Deploy from one frame.
+     */
+    public DeploymentPreflightRead readPreflightScreen(int maxPlausibleStaminaCost) {
+        TemplateSearchHelper.Frame frame = templates.captureFrame();
+        DeploymentScreenRead deployment = readScreen(
+                maxPlausibleStaminaCost,
+                new ResilientOcrExecutor<>(frame),
+                new ResilientOcrExecutor<>(frame));
+        boolean noTroops = hasNoDeployableTroops(frame);
+        boolean redCost = isDeployCostRed(frame);
+        ImageSearchResultData deploy = frame.locatePattern(
+                TemplatesEnum.DEPLOY_BUTTON, search(1, 90));
+        return new DeploymentPreflightRead(deployment, noTroops, redCost, deploy);
+    }
+
+    /** Reads all known outcomes after tapping Deploy from one fresh frame. */
+    public DeploymentPostTapRead readPostTapScreen() {
+        TemplateSearchHelper.Frame frame = templates.captureFrame();
+        ImageSearchResultData queueFull = frame.locatePattern(
+                TemplatesEnum.RALLY_MARCH_QUEUE_FULL,
+                search(CommonGameAreas.RALLY_MARCH_QUEUE_FULL_AREA, 1, 85));
+        ImageSearchResultData confirmation = frame.locatePattern(
+                TemplatesEnum.DEPLOY_CONFIRMATION_DIALOG, search(1, 90));
+        ImageSearchResultData sameTarget = frame.locatePattern(
+                TemplatesEnum.TROOPS_ALREADY_MARCHING,
+                search(CommonGameAreas.SAME_TARGET_DIALOG_AREA, 1, 90));
+        ImageSearchResultData deploy = frame.locatePattern(
+                TemplatesEnum.DEPLOY_BUTTON, search(1, 90));
+        return new DeploymentPostTapRead(
+                queueFull.isFound(), confirmation, sameTarget.isFound(), deploy);
+    }
+
+    /** Closes a queue-full popup already proven by the current frame. */
+    public void dismissMarchQueueFullPopup() {
+        taps.tapNear(CommonGameAreas.RALLY_MARCH_QUEUE_FULL_CLOSE,
+                TapJitterPolicy.DEFAULT_POINT_JITTER_RADIUS);
+    }
+
+    private DeploymentScreenRead readScreen(
+            int maxPlausibleStaminaCost,
+            ResilientOcrExecutor<Integer> integers,
+            ResilientOcrExecutor<Duration> durations) {
         if (maxPlausibleStaminaCost < 1) {
             throw new IllegalArgumentException("Maximum plausible stamina cost must be positive");
         }
 
-        long travelSeconds = readTravelTimeSeconds();
+        long travelSeconds = readTravelTimeSeconds(durations);
 
-        Integer readCost = integerReader.attemptRecognition(
+        Integer readCost = integers.attemptRecognition(
                 CommonGameAreas.SPENT_STAMINA_OCR_AREA,
                 3, 100L,
                 CommonOCRSettings.SPENT_STAMINA_SETTINGS,
@@ -93,7 +155,11 @@ public class DeploymentHelper {
     }
 
     public long readTravelTimeSeconds() {
-        Duration travel = durationReader.attemptRecognition(
+        return readTravelTimeSeconds(durationReader);
+    }
+
+    private long readTravelTimeSeconds(ResilientOcrExecutor<Duration> durations) {
+        Duration travel = durations.attemptRecognition(
                 CommonGameAreas.TRAVEL_TIME_OCR_AREA,
                 3, 100L,
                 CommonOCRSettings.TRAVEL_TIME_SETTINGS,
@@ -145,11 +211,36 @@ public class DeploymentHelper {
         }
     }
 
+    private boolean isDeployCostRed(TemplateSearchHelper.Frame frame) {
+        try {
+            int redPixels = PixelStats.count(frame.bufferedImage(),
+                    CommonGameAreas.SPENT_STAMINA_OCR_AREA, GameColors::isBlockedRed);
+            boolean red = redPixels >= COST_RED_PIXEL_MIN;
+            log.debug("Deploy cost red check: redPixels=" + redPixels + " result=" + red);
+            return red;
+        } catch (Exception ex) {
+            log.warn("Deploy cost red check failed: " + ex.getMessage());
+            return false;
+        }
+    }
+
     /** The formation screen offers to train troops instead of deploying them: there are none to send. */
     public boolean hasNoDeployableTroops() {
         ImageSearchResultData trainButton = templates.locatePattern(
                 TemplatesEnum.RALLY_TROOP_TRAINING_BUTTON,
                 search(CommonGameAreas.RALLY_TROOP_TRAINING_AREA, 2, 85));
+        if (trainButton.isFound()) {
+            log.warn("No deployable troops: Troop Training button at " + trainButton.getPoint()
+                    + " score=" + trainButton.getMatchScore());
+            return true;
+        }
+        return false;
+    }
+
+    private boolean hasNoDeployableTroops(TemplateSearchHelper.Frame frame) {
+        ImageSearchResultData trainButton = frame.locatePattern(
+                TemplatesEnum.RALLY_TROOP_TRAINING_BUTTON,
+                search(CommonGameAreas.RALLY_TROOP_TRAINING_AREA, 1, 85));
         if (trainButton.isFound()) {
             log.warn("No deployable troops: Troop Training button at " + trainButton.getPoint()
                     + " score=" + trainButton.getMatchScore());
@@ -211,6 +302,14 @@ public class DeploymentHelper {
                 .withDelay(200)
                 .withThreshold(threshold)
                 .withArea(area)
+                .build();
+    }
+
+    private static TemplateSearchHelper.SearchConfig search(int attempts, int threshold) {
+        return TemplateSearchHelper.SearchConfig.builder()
+                .withMaxAttempts(attempts)
+                .withDelay(200)
+                .withThreshold(threshold)
                 .build();
     }
 }
