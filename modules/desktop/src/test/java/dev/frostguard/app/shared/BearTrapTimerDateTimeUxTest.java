@@ -20,7 +20,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.controlsfx.control.CheckComboBox;
@@ -40,20 +39,9 @@ import javafx.scene.control.TextField;
 
 class BearTrapTimerDateTimeUxTest {
 
-    private static final AtomicBoolean TOOLKIT_STARTED = new AtomicBoolean();
-
     @BeforeAll
     static void startJavaFx() throws Exception {
-        if (TOOLKIT_STARTED.compareAndSet(false, true)) {
-            CountDownLatch started = new CountDownLatch(1);
-            Platform.startup(started::countDown);
-            assertTrue(started.await(10, TimeUnit.SECONDS), "JavaFX toolkit did not start");
-        }
-    }
-
-    @AfterAll
-    static void stopJavaFx() {
-        Platform.exit();
+        JavaFxToolkit.start();
     }
 
     @Test

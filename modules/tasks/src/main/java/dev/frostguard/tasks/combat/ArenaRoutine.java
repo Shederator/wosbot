@@ -497,6 +497,26 @@ public class ArenaRoutine extends DelayedTask {
         return remainingAttempts > 0;
     }
 
+    /**
+      * Gem price of each successive extra attempt, cheapest first.
+      *
+      * <p>Exposed so the settings screen can price the option it offers instead
+      * of restating the figures and drifting from them.</p>
+      */
+    public static int[] extraAttemptGemPrices() {
+        return ATTEMPT_PRICES.clone();
+    }
+
+    /** List refreshes granted per run at no cost, always spent before any paid one. */
+    public static int maxFreeListRefreshes() {
+        return MAX_FREE_REFRESHES;
+    }
+
+    /** Further list refreshes available per run once the free ones are gone, each paid for in gems. */
+    public static int maxPaidListRefreshes() {
+        return MAX_GEM_REFRESHES;
+    }
+
     private OpponentCandidate findEligibleOpponent() {
         List<OpponentCandidate> opponents = scanOpponents();
         List<OpponentCandidate> eligible = opponents.stream()
