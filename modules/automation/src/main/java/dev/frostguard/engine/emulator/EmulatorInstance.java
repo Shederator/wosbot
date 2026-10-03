@@ -39,6 +39,61 @@ public abstract class EmulatorInstance {
     private final ConcurrentHashMap<String, Long>         runExpiry = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, RawImageData> lastFrame = new ConcurrentHashMap<>();
     private final ReentrantLock bridgeMtx = new ReentrantLock();
+    private final ThreadLocal<ObservedInput> observedInput = new ThreadLocal<>();
+
+    private static final class ObservedInput {
+        final String device;
+        final Runnable authorize;
+        boolean consumed;
+
+        ObservedInput(String device, Runnable authorize) {
+            this.device = device;
+            this.authorize = authorize;
+        }
+    }
+
+    /** One observed transition may dispatch at most one command, without transport recovery. */
+    public void withSingleAttemptInput(String idx, Runnable authorize, Runnable action) {
+        if (observedInput.get() != null) throw new IllegalStateException("Nested observed input");
+        observedInput.set(new ObservedInput(idx, Objects.requireNonNull(authorize)));
+        try { action.run(); } finally { observedInput.remove(); }
+    }
+
+    protected IDevice findObservedInputDevice(String idx) {
+        return bridge == null ? null : scan(getDeviceSerial(idx));
+    }
+
+    private <T> T dispatchInput(String idx, Function<IDevice, T> action, String tag) {
+        ObservedInput observed = observedInput.get();
+        if (observed == null) return withRetries(idx, action, tag);
+        if (!observed.device.equals(idx) || observed.consumed) {
+            throw new ADBConnectionException("Observed input refuses another command or device");
+        }
+        IDevice device = findObservedInputDevice(idx);
+        if (device == null || !device.isOnline()) {
+            throw new ADBConnectionException("Observed input device unavailable; re-observe after recovery");
+        }
+        if (Thread.currentThread().isInterrupted()) {
+            throw new ADBConnectionException("Observed input interrupted before dispatch");
+        }
+        observed.authorize.run();
+        observed.consumed = true;
+        // Delivery is ambiguous if this throws. Never resend from the same observation.
+        try {
+            return action.apply(device);
+        } catch (RuntimeException failure) {
+            throw new ADBConnectionException("Observed " + tag
+                    + " delivery is ambiguous; fresh observation required", failure);
+        }
+    }
+
+    private void executeInputCommand(IDevice device, String command) throws Exception {
+        if (observedInput.get() == null) {
+            device.executeShellCommand(command, new NullOutputReceiver());
+        } else {
+            device.executeShellCommand(command, new NullOutputReceiver(), 2_000, TimeUnit.MILLISECONDS);
+        }
+    }
 
     protected abstract String  getDeviceSerial(String idx);
     public    abstract void    launchEmulator(String idx);
@@ -182,6 +237,12 @@ public abstract class EmulatorInstance {
         // Phase 2: emulator restart
         if (Thread.currentThread().isInterrupted())
             throw new ADBConnectionException("Interrupted before recovery for " + tag);
+        if (DeviceReleaseGuard.isProtected(idx)) {
+            // The protected owner has its own bounded device recovery; relaunching here would
+            // close the emulator underneath it.
+            throw new ADBConnectionException("Exhausted retries for " + tag + " on " + idx
+                    + "; emulator relaunch refused while the device is protected");
+        }
         LOG.warn("Recovering emulator for {} on dev {}", tag, idx);
         try { closeEmulator(idx); sleep(5000); launchEmulator(idx); sleep(15000); }
         catch (Exception e) { throw new ADBConnectionException("Recovery failed for " + tag, e); }
@@ -218,19 +279,20 @@ public abstract class EmulatorInstance {
 
     public boolean performAdbHealthCheck(String idx) {
         LOG.info("ADB health check for dev {}", idx);
-        if (probe(idx)) return true;
+        if (probeDevice(idx)) return true;
 
         LOG.warn("Failed — restarting bridge");
         try { restartAdb(); Thread.sleep(3000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return false; }
-        if (probe(idx)) return true;
+        if (probeDevice(idx)) return true;
 
         LOG.warn("Still failing — kill-server + restart");
         try { killAdb(); Thread.sleep(2000); restartAdb(); Thread.sleep(3000); }
         catch (InterruptedException e) { Thread.currentThread().interrupt(); return false; }
-        return probe(idx);
+        return probeDevice(idx);
     }
 
-    private boolean probe(String idx) {
+    /** Probes one serial without restarting the process-global ADB server. */
+    public boolean probeDevice(String idx) {
         try {
             invalidateDeviceCache(idx);
             IDevice d = findDevice(idx);
@@ -273,7 +335,10 @@ public abstract class EmulatorInstance {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
-            throw new RuntimeException(captureFailureMessage(idx, serial, buf.size(), e), e);
+            throw ADBConnectionException.forDevice(
+                    serial,
+                    captureFailureMessage(idx, serial, buf.size(), e),
+                    e);
         }
     }
 
@@ -304,14 +369,17 @@ public abstract class EmulatorInstance {
     boolean touchArea(String idx, PointData a, PointData b, int n, int delMs) { return tap(idx, a, b, n, delMs); }
 
     private boolean tap(String idx, PointData c1, PointData c2, int reps, int delMs) {
-        return withRetries(idx, dev -> {
+        if (observedInput.get() != null && (reps != 1 || delMs != 0)) {
+            throw new ADBConnectionException("Observed input requires one tap without a fixed delay");
+        }
+        return dispatchInput(idx, dev -> {
             Random rng = new Random();
             int x0 = Math.min(c1.getX(), c2.getX()), x1 = Math.max(c1.getX(), c2.getX());
             int y0 = Math.min(c1.getY(), c2.getY()), y1 = Math.max(c1.getY(), c2.getY());
             for (int t = 0; t < reps; t++) {
                 int tx = x0 + rng.nextInt(Math.max(1, x1 - x0 + 1));
                 int ty = y0 + rng.nextInt(Math.max(1, y1 - y0 + 1));
-                try { dev.executeShellCommand("input tap " + tx + " " + ty, new NullOutputReceiver()); Thread.sleep(delMs); }
+                try { executeInputCommand(dev, "input tap " + tx + " " + ty); if (delMs > 0) Thread.sleep(delMs); }
                 catch (Exception e) { throw new RuntimeException(e); }
             }
             return Boolean.TRUE;
@@ -330,8 +398,8 @@ public abstract class EmulatorInstance {
     }
 
     private void swipe(String idx, PointData from, PointData to, Integer durationMs) {
-        withRetries(idx, dev -> {
-            try { dev.executeShellCommand(swipeCommand(from, to, durationMs), new NullOutputReceiver()); }
+        dispatchInput(idx, dev -> {
+            try { executeInputCommand(dev, swipeCommand(from, to, durationMs)); }
             catch (Exception e) { throw new RuntimeException(e); }
             return Boolean.TRUE;
         }, "swipe");
@@ -344,8 +412,8 @@ public abstract class EmulatorInstance {
     }
 
     public void pressBackButton(String idx) {
-        withRetries(idx, dev -> {
-            try { dev.executeShellCommand("input keyevent KEYCODE_BACK", new NullOutputReceiver()); }
+        dispatchInput(idx, dev -> {
+            try { executeInputCommand(dev, "input keyevent KEYCODE_BACK"); }
             catch (Exception e) { throw new RuntimeException(e); }
             return Boolean.TRUE;
         }, "back");

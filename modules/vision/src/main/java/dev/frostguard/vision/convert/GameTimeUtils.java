@@ -477,4 +477,12 @@ private static final DateTimeFormatter STRICT_HMS =
         int sec = Integer.parseInt(segment);
         return sec >= 0 && sec <= 59;
     }
+
+    /** Parses an explicit rally countdown as minutes and seconds, never as hours and minutes. */
+    public static Duration parseMinutesSeconds(String input) {
+        if (input == null || input.isBlank()) {
+            return null;
+        }
+        return attemptColonMinutesSeconds(input.replaceAll("\\s+", "").trim());
+    }
 }

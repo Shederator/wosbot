@@ -14,6 +14,7 @@ public final class RallyFlagCoordinates {
     private static final int[] RIGHT_END_SLOT_CENTRE_X = { 336, 409, 482, 556 };
     private static final int SLOT_CENTRE_Y = 120;
     private static final int SLOT_HALF_WIDTH = 27;
+    private static final int SELECTION_HALF_WIDTH = 35;
     private static final int SLOT_TOP_Y = 92;
     private static final int SLOT_BOTTOM_Y = 150;
 
@@ -34,5 +35,12 @@ public final class RallyFlagCoordinates {
         int centreX = pointForFlag(flagNumber).getX();
         return AreaData.of(centreX - SLOT_HALF_WIDTH, SLOT_TOP_Y,
                 centreX + SLOT_HALF_WIDTH, SLOT_BOTTOM_Y);
+    }
+
+    /** Includes the tile edge where the game draws the selected yellow outline. */
+    public static AreaData selectionAreaForFlag(int flagNumber) {
+        int centreX = pointForFlag(flagNumber).getX();
+        return AreaData.of(Math.max(0, centreX - SELECTION_HALF_WIDTH), 88,
+                centreX + SELECTION_HALF_WIDTH, 158);
     }
 }

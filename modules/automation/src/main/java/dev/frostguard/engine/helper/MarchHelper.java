@@ -11,6 +11,7 @@ import dev.frostguard.api.domain.MarchSlotState;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.engine.error.ADBConnectionException;
 import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.input.TapJitterPolicy;
 import dev.frostguard.engine.nav.CommonGameAreas;
@@ -28,6 +29,8 @@ import java.awt.image.BufferedImage;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 // Handles march-slot availability checks, rally flag interaction,
@@ -44,7 +47,8 @@ public class MarchHelper {
     private static final PointData FORMATION_SCROLL_INITIAL_FROM = new PointData(582, 120);
     private static final PointData FORMATION_SCROLL_INITIAL_TO = new PointData(182, 120);
     private static final int FORMATION_SCROLL_DURATION_MS = 600;
-    private static final long FORMATION_SCROLL_SETTLE_MS = 800;
+    private static final Duration FORMATION_SCROLL_TIMEOUT = Duration.ofMillis(1_500);
+    private static final Duration FORMATION_SELECTION_TIMEOUT = Duration.ofMillis(1_500);
     // "Idle" measures ~145 white pixels, a countdown ~255-285, so the gap is wide. Orange "Unlock"
     // (~260) and red "Unavailable" (~565) never overlap white; stationed rows have no status line.
     private static final int COLOUR_PRESENT_MIN = 60;
@@ -55,22 +59,47 @@ public class MarchHelper {
     private static final double ACTIVITY_ICON_THRESHOLD = 85;
     // A non-gather row icon still contributes enough non-background colour to prove the row is not idle.
     private static final int ICON_PRESENT_MIN = 500;
+    // Bear own rallies appear in the separate green "Special" row, not in the ordinary Wilderness
+    // march slots. The row can move vertically as normal rows expand, so inspect the full left rail.
+    private static final int SPECIAL_RALLY_RAIL_X0 = 0;
+    private static final int SPECIAL_RALLY_RAIL_X1 = 58;
+    private static final int SPECIAL_RALLY_RAIL_Y0 = 150;
+    private static final int SPECIAL_RALLY_RAIL_Y1 = 700;
+    private static final int SPECIAL_RALLY_WINDOW_HEIGHT = 50;
+    private static final int SPECIAL_RALLY_GREEN_MIN = 400;
+    private static final int SPECIAL_RALLY_CYAN_MIN = 50;
 
     private final EmulatorController emu;
     private final String device;
     private final TapInteractionService taps;
-    private final ResilientOcrExecutor<String> ocrStrings;
     private final ProfileContextLogger log;
     private final SidebarNavigator sidebar;
+    private final Supplier<RawImageData> frameSource;
+
+    public record MarchQueueSnapshot(List<MarchSlotState> slots, boolean specialRallyPreparing) {
+        public MarchQueueSnapshot {
+            slots = List.copyOf(slots);
+        }
+    }
 
     public MarchHelper(EmulatorController emuManager, String emulatorNumber,
                        ResilientOcrExecutor<String> stringHelper, AccountDescriptor profile) {
+        this(emuManager, emulatorNumber, stringHelper, profile,
+                () -> emuManager.captureScreen(emulatorNumber));
+    }
+
+    public MarchHelper(
+            EmulatorController emuManager,
+            String emulatorNumber,
+            ResilientOcrExecutor<String> stringHelper,
+            AccountDescriptor profile,
+            Supplier<RawImageData> frameSource) {
         this.emu = emuManager;
         this.device = emulatorNumber;
         this.taps = TapInteractionService.forController(emuManager, emulatorNumber);
-        this.ocrStrings = stringHelper;
         this.log = new ProfileContextLogger(MarchHelper.class, profile);
-        this.sidebar = new SidebarNavigator(emuManager, emulatorNumber, profile);
+        this.sidebar = new SidebarNavigator(emuManager, emulatorNumber, profile, frameSource);
+        this.frameSource = Objects.requireNonNull(frameSource, "frameSource");
     }
 
     public boolean checkMarchesAvailable() {
@@ -98,9 +127,14 @@ public class MarchHelper {
      * for flows that already normalize their world state and do not need legacy multi-tap recovery.
      */
     public List<MarchSlotState> readMarchQueueSinglePass() {
+        return readMarchQueueSnapshotSinglePass().slots();
+    }
+
+    /** Reads ordinary march slots and the separate Bear "Special" rally from the same frame. */
+    public MarchQueueSnapshot readMarchQueueSnapshotSinglePass() {
         openLeftMenuSection(false);
         try {
-            return readVisibleMarchQueue();
+            return readVisibleMarchQueueSnapshot();
         } finally {
             dismissLeftPanel();
         }
@@ -111,14 +145,23 @@ public class MarchHelper {
      * row lacks queue evidence, which indicates that the preserved scroll position cannot be trusted.
      */
     public List<MarchSlotState> readVisibleMarchQueue() {
-        List<MarchSlotState> slots = readVisibleMarchQueueOnce();
-        if (hasReliableQueueEvidence(slots)) {
-            return slots;
+        return readVisibleMarchQueueSnapshot().slots();
+    }
+
+    /** Reads the already-open Wilderness panel exclusively from the caller's frame. */
+    public MarchQueueSnapshot readVisibleMarchQueueSnapshot(RawImageData frame) {
+        return readVisibleMarchQueueOnce(frame);
+    }
+
+    private MarchQueueSnapshot readVisibleMarchQueueSnapshot() {
+        MarchQueueSnapshot snapshot = readVisibleMarchQueueOnce();
+        if (hasReliableQueueEvidence(snapshot.slots())) {
+            return snapshot;
         }
 
         log.warn("March Queue rows were not visible at the preserved position; reopening Wilderness once");
         if (!sidebar.close() || !sidebar.openSection(SidebarSection.WILDERNESS)) {
-            return List.of();
+            return new MarchQueueSnapshot(List.of(), false);
         }
         return readVisibleMarchQueueOnce();
     }
@@ -127,9 +170,12 @@ public class MarchHelper {
         return slots.stream().anyMatch(slot -> slot.availability() != MarchSlotAvailability.UNKNOWN);
     }
 
-    private List<MarchSlotState> readVisibleMarchQueueOnce() {
+    private MarchQueueSnapshot readVisibleMarchQueueOnce() {
+        return readVisibleMarchQueueOnce(frameSource.get());
+    }
+
+    private MarchQueueSnapshot readVisibleMarchQueueOnce(RawImageData frame) {
         try {
-            RawImageData frame = emu.captureScreen(device);
             BufferedImage image = dev.frostguard.vision.convert.ImageConverter.toBufferedImage(frame);
 
             List<MarchSlotState> slots = new ArrayList<>(SLOT_COUNT);
@@ -144,11 +190,65 @@ public class MarchHelper {
                             + (slot.countdown() == null ? "" : "(" + slot.countdown() + ")")
                             + (slot.evidence() == null ? "" : "{" + slot.evidence() + "}"))
                     .collect(Collectors.joining(" ")));
-            return slots;
+            boolean specialRallyPreparing = hasActiveSpecialRally(image);
+            if (specialRallyPreparing) {
+                log.info("Bear Special rally is preparing");
+            }
+            return new MarchQueueSnapshot(slots, specialRallyPreparing);
+        } catch (ADBConnectionException ex) {
+            throw ex;
         } catch (Exception ex) {
             log.error("March queue read error: " + ex.getMessage());
-            return List.of();
+            return new MarchQueueSnapshot(List.of(), false);
         }
+    }
+
+    static boolean hasActiveSpecialRally(BufferedImage image) {
+        int y0 = Math.max(0, SPECIAL_RALLY_RAIL_Y0);
+        int y1 = Math.min(image.getHeight() - 1, SPECIAL_RALLY_RAIL_Y1);
+        int x0 = Math.max(0, SPECIAL_RALLY_RAIL_X0);
+        int x1 = Math.min(image.getWidth() - 1, SPECIAL_RALLY_RAIL_X1);
+        if (y1 - y0 + 1 < SPECIAL_RALLY_WINDOW_HEIGHT || x1 < x0) {
+            return false;
+        }
+
+        int[] greenByRow = new int[y1 - y0 + 1];
+        int[] cyanByRow = new int[y1 - y0 + 1];
+        for (int y = y0; y <= y1; y++) {
+            for (int x = x0; x <= x1; x++) {
+                int rgb = image.getRGB(x, y);
+                if (GameColors.isVividGreen(rgb)) {
+                    greenByRow[y - y0]++;
+                }
+                if (isSpecialRallySwordCyan(rgb)) {
+                    cyanByRow[y - y0]++;
+                }
+            }
+        }
+
+        int green = 0;
+        int cyan = 0;
+        for (int row = 0; row < greenByRow.length; row++) {
+            green += greenByRow[row];
+            cyan += cyanByRow[row];
+            if (row >= SPECIAL_RALLY_WINDOW_HEIGHT) {
+                green -= greenByRow[row - SPECIAL_RALLY_WINDOW_HEIGHT];
+                cyan -= cyanByRow[row - SPECIAL_RALLY_WINDOW_HEIGHT];
+            }
+            if (row >= SPECIAL_RALLY_WINDOW_HEIGHT - 1
+                    && green >= SPECIAL_RALLY_GREEN_MIN
+                    && cyan >= SPECIAL_RALLY_CYAN_MIN) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isSpecialRallySwordCyan(int rgb) {
+        int red = (rgb >> 16) & 0xFF;
+        int green = (rgb >> 8) & 0xFF;
+        int blue = rgb & 0xFF;
+        return green > 170 && blue > 150 && red < 210 && green > red + 20;
     }
 
     private MarchSlotState readSlot(RawImageData frame, BufferedImage image, int index) {
@@ -184,7 +284,9 @@ public class MarchHelper {
         boolean attackText = matchesTitle(frame, title, TemplatesEnum.MARCH_QUEUE_TEXT_ATTACK);
         boolean terminalStatus = idleText || unlockText || unavailableText
                 || orange >= COLOUR_PRESENT_MIN || red >= COLOUR_PRESENT_MIN;
-        Duration countdown = !terminalStatus && white >= COLOUR_PRESENT_MIN ? readCountdown(index) : null;
+        Duration countdown = !terminalStatus && white >= COLOUR_PRESENT_MIN
+                ? readCountdown(frame, index)
+                : null;
         MarchResourceType resourceType = detectGatherResource(frame, icon);
         boolean activityIconPresent = iconColour >= ICON_PRESENT_MIN && !slotFlag;
 
@@ -230,16 +332,25 @@ public class MarchHelper {
                 ACTIVITY_ICON_THRESHOLD).isFound();
     }
 
-    private Duration readCountdown(int index) {
+    private Duration readCountdown(RawImageData frame, int index) {
         AreaData timer = CommonGameAreas.MARCH_QUEUE_TIMER[index];
-        String text = ocrStrings.attemptRecognition(timer.topLeft(), timer.bottomRight(),
-                2, 150L, CommonOCRSettings.MARCH_QUEUE_TIMER_SETTINGS,
-                GameTimeUtils::isAcceptedFormat, value -> value);
-        return text == null ? null : GameTimeUtils.parseDuration(text);
+        try {
+            String text = OcrEngine.recognizeText(
+                    frame,
+                    timer.topLeft(),
+                    timer.bottomRight(),
+                    CommonOCRSettings.MARCH_QUEUE_TIMER_SETTINGS);
+            return GameTimeUtils.isAcceptedFormat(text) ? GameTimeUtils.parseDuration(text) : null;
+        } catch (Exception failure) {
+            log.debug("Could not read march countdown from the current frame: "
+                    + failure.getMessage());
+            return null;
+        }
     }
 
-    // A slot is inspected before it is tapped: padlock evidence rejects locked slots, while the
-    // measured white-flag signal distinguishes a saved formation from an empty visible tile.
+    // Padlock evidence fails closed. White-pixel evidence is diagnostic only: live frames can dim a
+    // populated tile enough to resemble an empty one. The authoritative signal is the yellow outline
+    // the game draws after the tile is tapped.
     public boolean selectFlag(Integer flagNumber) {
         if (flagNumber == null) {
             log.debug("No formation configured - skipping selection");
@@ -255,24 +366,49 @@ public class MarchHelper {
             return false;
         }
         FormationSlotStateClassifier.State state = inspectFormationSlot(flagNumber, frame);
-        if (state != FormationSlotStateClassifier.State.SAVED) {
+        if (state == FormationSlotStateClassifier.State.LOCKED) {
             log.warn("Formation #" + flagNumber + " is " + state.name().toLowerCase().replace('_', ' ')
                     + " - not selecting it");
             return false;
         }
+        if (FormationSelectionVerifier.isSelected(
+                frame.image(), RallyFlagCoordinates.selectionAreaForFlag(flagNumber))) {
+            log.debug("Formation #" + flagNumber + " is already selected");
+            return true;
+        }
+        if (state == FormationSlotStateClassifier.State.EMPTY_OR_MISSING) {
+            log.warn("Formation #" + flagNumber
+                    + " has weak saved-slot evidence; tapping once and requiring yellow confirmation");
+        }
         log.debug("Selecting formation #" + flagNumber);
         // Flag slots are narrow fixed positions — keep the jitter tightly bounded.
         taps.tapNear(RallyFlagCoordinates.pointForFlag(flagNumber), TapJitterPolicy.DEFAULT_POINT_JITTER_RADIUS);
-        interruptibleWait(300);
-        return true;
+        return awaitFormationSelection(flagNumber);
+    }
+
+    private boolean awaitFormationSelection(int flagNumber) {
+        long deadline = System.nanoTime() + FORMATION_SELECTION_TIMEOUT.toNanos();
+        AreaData slot = RallyFlagCoordinates.selectionAreaForFlag(flagNumber);
+        do {
+            FormationFrame fresh = captureFormationFrame(flagNumber);
+            if (fresh != null && FormationSelectionVerifier.isSelected(fresh.image(), slot)) {
+                log.debug("Formation #" + flagNumber + " selection confirmed by yellow outline");
+                return true;
+            }
+        } while (!Thread.currentThread().isInterrupted() && System.nanoTime() < deadline);
+
+        log.warn("Formation #" + flagNumber + " did not show the yellow selected outline");
+        return false;
     }
 
     // Locating every padlock across the strip and mapping each to its nearest slot is immune to the
     // few pixels of tile drift; a per-slot window would leave a 58px template barely any room to slide.
     private FormationFrame captureFormationFrame(int flagNumber) {
         try {
-            RawImageData raw = emu.captureScreen(device);
+            RawImageData raw = frameSource.get();
             return new FormationFrame(raw, dev.frostguard.vision.convert.ImageConverter.toBufferedImage(raw));
+        } catch (ADBConnectionException ex) {
+            throw ex;
         } catch (Exception ex) {
             log.warn("Could not inspect formation #" + flagNumber + ": " + ex.getMessage());
             return null;
@@ -286,15 +422,16 @@ public class MarchHelper {
         }
         emu.swipeScreen(device, FORMATION_SCROLL_INITIAL_FROM, FORMATION_SCROLL_INITIAL_TO,
                 FORMATION_SCROLL_DURATION_MS);
-        interruptibleWait(FORMATION_SCROLL_SETTLE_MS);
-        FormationFrame right = captureFormationFrame(10);
-        if (right == null || !FormationBarFrameComparator.moved(
-                initial.image(), right.image(), CommonGameAreas.RALLY_FLAG_BAR)) {
-            log.warn("Formation bar did not move to the right-end view - not selecting a high slot");
-            return null;
-        }
-
-        return right;
+        long deadline = System.nanoTime() + FORMATION_SCROLL_TIMEOUT.toNanos();
+        do {
+            FormationFrame right = captureFormationFrame(10);
+            if (right != null && FormationBarFrameComparator.moved(
+                    initial.image(), right.image(), CommonGameAreas.RALLY_FLAG_BAR)) {
+                return right;
+            }
+        } while (!Thread.currentThread().isInterrupted() && System.nanoTime() < deadline);
+        log.warn("Formation bar did not move to the right-end view - not selecting a high slot");
+        return null;
     }
 
     private FormationSlotStateClassifier.State inspectFormationSlot(int flagNumber, FormationFrame frame) {
@@ -354,8 +491,4 @@ public class MarchHelper {
         sidebar.close();
     }
 
-    private void interruptibleWait(long ms) {
-        try { Thread.sleep(ms); }
-        catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-    }
 }

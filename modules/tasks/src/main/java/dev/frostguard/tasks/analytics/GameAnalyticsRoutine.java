@@ -3,6 +3,7 @@ package dev.frostguard.tasks.analytics;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.runtime.WorkspacePaths;
+import dev.frostguard.engine.emulator.DeviceReleaseGuard;
 import dev.frostguard.engine.emulator.EmulatorType;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.ranking.GameAnalyticsRunRegistry;
@@ -48,6 +49,10 @@ public final class GameAnalyticsRoutine extends DelayedTask {
                 GameAnalyticsRunRegistry.publish(new GameAnalyticsRunRegistry.Event(
                         profile.getId(), collectionType, GameAnalyticsRunRegistry.State.RUNNING,
                         "Capturing startup and ranking traffic...", null, null));
+                if (DeviceReleaseGuard.isProtected(EMULATOR_NUMBER)) {
+                    throw new IllegalStateException(
+                            "Power analytics refused while an active Bear event owns this emulator; retry after the event");
+                }
                 startCapture();
                 emuManager.forceStopApp(EMULATOR_NUMBER, EmulatorController.GAME.getPackageName());
                 new InitializeRoutine(profile, TpDailyTaskEnum.INITIALIZE).run();

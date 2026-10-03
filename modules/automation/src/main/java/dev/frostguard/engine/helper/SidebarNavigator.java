@@ -3,6 +3,8 @@ package dev.frostguard.engine.helper;
 import java.awt.image.BufferedImage;
 import java.util.Optional;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
+import java.util.Objects;
 
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
@@ -48,14 +50,24 @@ public final class SidebarNavigator {
     private final ScreenStateReader screenStates;
     private final Waiter transitionWaiter;
     private final ProfileContextLogger log;
+    private final Supplier<RawImageData> frameSource;
 
     public SidebarNavigator(EmulatorController emu, String device, AccountDescriptor profile) {
+        this(emu, device, profile, () -> emu.captureScreen(device));
+    }
+
+    public SidebarNavigator(
+            EmulatorController emu,
+            String device,
+            AccountDescriptor profile,
+            Supplier<RawImageData> frameSource) {
         this.emu = emu;
         this.device = device;
         this.taps = TapInteractionService.forController(emu, device);
         this.screenStates = this::captureScreenState;
         this.transitionWaiter = this::interruptibleWait;
         this.log = new ProfileContextLogger(SidebarNavigator.class, profile);
+        this.frameSource = Objects.requireNonNull(frameSource, "frameSource");
     }
 
     public boolean openSection(SidebarSection target) {
@@ -68,7 +80,7 @@ public final class SidebarNavigator {
             return false;
         }
 
-        RawImageData actionFrame = emu.captureScreen(device);
+        RawImageData actionFrame = frameSource.get();
         ImageSearchResultData rowIcon = locateRowIcon(destination, actionFrame);
         if (!rowIcon.isFound()) {
             log.info("Sidebar row moved before its action could be verified: " + destination);
@@ -104,7 +116,7 @@ public final class SidebarNavigator {
             return SidebarRowLookup.sidebarUnavailable();
         }
 
-        RawImageData frame = emu.captureScreen(device);
+        RawImageData frame = frameSource.get();
         if (frame == null || selectedSection(frame).orElse(null) != destination.section()) {
             log.warn("Sidebar state changed before scanning for " + destination);
             return SidebarRowLookup.sidebarUnavailable();
@@ -256,7 +268,7 @@ public final class SidebarNavigator {
         if (!interruptibleWait(SCROLL_SETTLE_MS)) {
             return null;
         }
-        return emu.captureScreen(device);
+        return frameSource.get();
     }
 
     private ImageSearchResultData locateRowIcon(SidebarDestination destination, RawImageData frame) {
@@ -280,7 +292,7 @@ public final class SidebarNavigator {
     }
 
     private ScreenState captureScreenState() {
-        RawImageData frame = emu.captureScreen(device);
+        RawImageData frame = frameSource.get();
         Optional<SidebarSection> section = selectedSection(frame);
         return new ScreenState(section, section.isEmpty() && isRootScreen(frame));
     }
@@ -292,7 +304,7 @@ public final class SidebarNavigator {
     }
 
     private Optional<SidebarSection> selectedSection() {
-        return selectedSection(emu.captureScreen(device));
+        return selectedSection(frameSource.get());
     }
 
     private Optional<SidebarSection> selectedSection(RawImageData frame) {

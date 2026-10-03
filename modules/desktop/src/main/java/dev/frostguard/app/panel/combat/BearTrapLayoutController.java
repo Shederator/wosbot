@@ -7,8 +7,10 @@ import dev.frostguard.app.panel.profile.ProfileAux;
 import dev.frostguard.app.shared.AbstractProfileController;
 import dev.frostguard.app.shared.UtcDateTimeEditor;
 import dev.frostguard.app.shared.UtcDateTimeValue;
+import dev.frostguard.engine.schedule.BearFlagConfiguration;
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.BooleanExpression;
+import javafx.collections.ListChangeListener;
 import javafx.fxml.FXML;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
@@ -58,6 +60,9 @@ public class BearTrapLayoutController extends AbstractProfileController {
     private CheckBox checkBoxRecallTroops;
 
     @FXML
+    private CheckBox checkBoxObserveOnly;
+
+    @FXML
     private ComboBox<Integer> comboBoxTrapNumber;
 
     @FXML
@@ -71,6 +76,9 @@ public class BearTrapLayoutController extends AbstractProfileController {
 
     @FXML
     private Label labelSelectedTimerWarning;
+
+    @FXML
+    private Label labelFormationConflict;
 
     @FXML
     private Label labelTimerRecommendation;
@@ -128,6 +136,7 @@ public class BearTrapLayoutController extends AbstractProfileController {
         checkBoxMappings.put(checkBoxEnableBearTrap, ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL);
         checkBoxMappings.put(checkBoxActivePets, ConfigurationKeyEnum.BEAR_TRAP_ACTIVE_PETS_BOOL);
         checkBoxMappings.put(checkBoxRecallTroops, ConfigurationKeyEnum.BEAR_TRAP_RECALL_TROOPS_BOOL);
+        checkBoxMappings.put(checkBoxObserveOnly, ConfigurationKeyEnum.BEAR_TRAP_OBSERVE_ONLY_BOOL);
         checkBoxMappings.put(checkBoxCallRally, ConfigurationKeyEnum.BEAR_TRAP_CALL_RALLY_BOOL);
         checkBoxMappings.put(checkBoxEnableJoin, ConfigurationKeyEnum.BEAR_TRAP_JOIN_RALLY_BOOL);
 
@@ -137,6 +146,22 @@ public class BearTrapLayoutController extends AbstractProfileController {
         comboBoxMappings.put(comboBoxTrapNumber, ConfigurationKeyEnum.BEAR_TRAP_NUMBER_INT);
         comboBoxMappings.put(comboBoxRallyFlag, ConfigurationKeyEnum.BEAR_TRAP_RALLY_FLAG_INT);
         checkComboBoxMappings.put(checkComboBoxJoinFlag, ConfigurationKeyEnum.BEAR_TRAP_JOIN_FLAG_INT);
+    }
+
+    /** Shows the same refusal the Bear session would raise, before the event starts. */
+    private void refreshFormationConflict() {
+        Integer ownFlag = comboBoxRallyFlag.getValue();
+        String refusal = BearFlagConfiguration.validate(
+                checkBoxCallRally.isSelected(),
+                ownFlag == null ? -1 : ownFlag,
+                checkBoxEnableJoin.isSelected(),
+                List.copyOf(checkComboBoxJoinFlag.getCheckModel().getCheckedItems()))
+                .refusal()
+                .orElse(null);
+        labelFormationConflict.setText(refusal == null ? "" : refusal
+                + ". Bear will only observe the event, without input.");
+        labelFormationConflict.setVisible(refusal != null);
+        labelFormationConflict.setManaged(refusal != null);
     }
 
     private void populateFlagControls() {
@@ -292,6 +317,7 @@ public class BearTrapLayoutController extends AbstractProfileController {
         BooleanExpression disabledUntilEnabled = checkBoxEnableBearTrap.selectedProperty().not();
         checkBoxActivePets.disableProperty().bind(disabledUntilEnabled);
         checkBoxRecallTroops.disableProperty().bind(disabledUntilEnabled);
+        checkBoxObserveOnly.disableProperty().bind(disabledUntilEnabled);
         comboBoxTrapNumber.disableProperty().bind(
                 disabledUntilEnabled.or(Bindings.isEmpty(comboBoxTrapNumber.getItems())));
         comboBoxParticipationTrigger.disableProperty().bind(disabledUntilEnabled);
@@ -303,6 +329,12 @@ public class BearTrapLayoutController extends AbstractProfileController {
 
         bindManagedVisibility(comboBoxRallyFlag, checkBoxCallRally.selectedProperty());
         bindManagedVisibility(checkComboBoxJoinFlag, checkBoxEnableJoin.selectedProperty());
+        comboBoxRallyFlag.valueProperty().addListener((observable, previous, current) -> refreshFormationConflict());
+        checkComboBoxJoinFlag.getCheckModel().getCheckedItems()
+                .addListener((ListChangeListener<Integer>) change -> refreshFormationConflict());
+        checkBoxCallRally.selectedProperty().addListener((observable, previous, current) -> refreshFormationConflict());
+        checkBoxEnableJoin.selectedProperty().addListener((observable, previous, current) -> refreshFormationConflict());
+        refreshFormationConflict();
     }
 
     private void bindTimerState(TimerBinding timer) {

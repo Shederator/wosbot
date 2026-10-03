@@ -1,0 +1,119 @@
+package dev.frostguard.tasks.combat;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import org.junit.jupiter.api.Test;
+
+class BearNavigationPolicyTest {
+
+    @Test
+    void preparationUsesAllianceTerritoryAndSpecialBuildingsInOrder() {
+        assertEquals(BearNavigationPolicy.Action.OPEN_ALLIANCE,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.WORLD,
+                        BearNavigationPolicy.Goal.PREPARED_AT_BEAR,
+                        BearNavigationPolicy.Phase.PREPARING));
+        assertEquals(BearNavigationPolicy.Action.OPEN_TERRITORY,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.ALLIANCE_MENU,
+                        BearNavigationPolicy.Goal.PREPARED_AT_BEAR,
+                        BearNavigationPolicy.Phase.PREPARING));
+        assertEquals(BearNavigationPolicy.Action.OPEN_SPECIAL_BUILDINGS,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.ALLIANCE_TERRITORY,
+                        BearNavigationPolicy.Goal.PREPARED_AT_BEAR,
+                        BearNavigationPolicy.Phase.PREPARING));
+        assertEquals(BearNavigationPolicy.Action.TAP_CONFIGURED_GO,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.SPECIAL_BUILDINGS,
+                        BearNavigationPolicy.Goal.PREPARED_AT_BEAR,
+                        BearNavigationPolicy.Phase.PREPARING));
+    }
+
+    @Test
+    void activeEventUsesVisibleBearIconInsteadOfReopeningAlliance() {
+        assertEquals(BearNavigationPolicy.Action.TAP_ACTIVE_BEAR_ICON,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
+                        BearNavigationPolicy.Goal.OWN_RALLY,
+                        BearNavigationPolicy.Phase.ACTIVE));
+        assertEquals(BearNavigationPolicy.Action.FAIL_CLOSED,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.WORLD,
+                        BearNavigationPolicy.Goal.OWN_RALLY,
+                        BearNavigationPolicy.Phase.ACTIVE));
+    }
+
+    @Test
+    void partialAllianceRenderWaitsForAnotherFrameInsteadOfRestartingTheRoute() {
+        assertEquals(BearNavigationPolicy.Action.WAIT_FOR_FRAME,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.APP_LOADING,
+                        BearNavigationPolicy.Goal.PREPARED_AT_BEAR,
+                        BearNavigationPolicy.Phase.PREPARING));
+    }
+
+    @Test
+    void onlyFallsBackToAllianceFromAConfirmedWorldWithoutAnAnchor() {
+        assertEquals(BearNavigationPolicy.Action.ROUTE_TO_BEAR,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.WORLD,
+                        BearNavigationPolicy.Goal.OWN_RALLY));
+        assertEquals(BearNavigationPolicy.Action.FAIL_CLOSED,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.UNKNOWN,
+                        BearNavigationPolicy.Goal.OWN_RALLY));
+    }
+
+    @Test
+    void leavesKnownChildScreensWithOneVerifiedBackTransition() {
+        assertEquals(BearNavigationPolicy.Action.BACK_ONCE,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.FORMATION,
+                        BearNavigationPolicy.Goal.WAR_LIST));
+        assertEquals(BearNavigationPolicy.Action.BACK_ONCE,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.BEAR_RALLY_PANEL,
+                        BearNavigationPolicy.Goal.WAR_LIST));
+    }
+
+    @Test
+    void opensWarDirectlyFromEitherVerifiedWorldState() {
+        assertEquals(BearNavigationPolicy.Action.TAP_WAR,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
+                        BearNavigationPolicy.Goal.WAR_LIST));
+        assertEquals(BearNavigationPolicy.Action.TAP_WAR,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.WORLD,
+                        BearNavigationPolicy.Goal.WAR_LIST));
+    }
+
+    @Test
+    void refreshesAnOpenWarListThroughWorldBeforeUsingItAgain() {
+        assertEquals(BearNavigationPolicy.Action.BACK_ONCE,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.WAR_LIST,
+                        BearNavigationPolicy.Goal.FRESH_WAR_LIST));
+        assertEquals(BearNavigationPolicy.Action.TAP_WAR,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
+                        BearNavigationPolicy.Goal.FRESH_WAR_LIST));
+    }
+
+    @Test
+    void successfulJoinReturnsFromWarListToWorldExactlyOnce() {
+        assertEquals(BearNavigationPolicy.Action.BACK_ONCE,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.WAR_LIST,
+                        BearNavigationPolicy.Goal.WORLD_READY));
+        assertEquals(BearNavigationPolicy.Action.READY,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.WORLD,
+                        BearNavigationPolicy.Goal.WORLD_READY));
+        assertEquals(BearNavigationPolicy.Action.WAIT_FOR_FRAME,
+                BearNavigationPolicy.next(
+                        BearNavigationPolicy.Screen.UNKNOWN,
+                        BearNavigationPolicy.Goal.WORLD_READY));
+    }
+}

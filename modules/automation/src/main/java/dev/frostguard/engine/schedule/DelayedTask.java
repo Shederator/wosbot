@@ -173,19 +173,7 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
                 return;
             }
 
-            verifyGameProcessActive();
-            navigationHelper.ensureCorrectScreenLocation(getRequiredStartLocation());
-
-            if (switchedProfileOnEmulator) {
-                // Changed by pernerch | Date: 2026-07-02 | Why: refresh stamina immediately on
-                // profile handover so downstream task logic always starts from current account data.
-                logInfo("Profile switch detected on emulator " + EMULATOR_NUMBER + ". Refreshing stamina from profile screen.");
-                staminaHelper.updateStaminaFromProfile();
-            }
-
-            if (consumesStamina() && StaminaService.getServices().requiresUpdate(profile.getId())) {
-                staminaHelper.updateStaminaFromProfile();
-            }
+            enterStartScreen(switchedProfileOnEmulator);
 
             execute();
 
@@ -193,8 +181,7 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
                 persistChangedProfileSettings(configBeforeExecution);
             }
 
-            sleepTask(2000);
-            navigationHelper.ensureCorrectScreenLocation(LaunchPoint.ANY);
+            leaveScreen();
         } finally {
             long elapsed = System.currentTimeMillis() - t0;
             int ocrDelta = this.currentOcrFailures - baselineOcr;
@@ -282,8 +269,37 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
         return deferForBearTrapProtection(BearTrapProtectionPolicy.evaluateRallyStart(profile));
     }
 
+    /**
+     * Confirms the game and reaches the task's start screen before {@link #execute()}. Tasks that
+     * own every screen transition through their own verified state machine override this.
+     */
+    protected void enterStartScreen(boolean profileSwitchedOnEmulator) {
+        verifyGameProcessActive();
+        navigationHelper.ensureCorrectScreenLocation(getRequiredStartLocation());
+
+        if (profileSwitchedOnEmulator) {
+            // Refresh stamina on profile handover so task logic starts from current account data.
+            logInfo("Profile switch detected on emulator " + EMULATOR_NUMBER + ". Refreshing stamina from profile screen.");
+            staminaHelper.updateStaminaFromProfile();
+        }
+
+        if (consumesStamina() && StaminaService.getServices().requiresUpdate(profile.getId())) {
+            staminaHelper.updateStaminaFromProfile();
+        }
+    }
+
+    /** Settles and returns to a known screen after a successful {@link #execute()}. */
+    protected void leaveScreen() {
+        sleepTask(2000);
+        navigationHelper.ensureCorrectScreenLocation(LaunchPoint.ANY);
+    }
+
+    protected boolean gameProcessRunning() {
+        return emuManager.isPackageRunning(EMULATOR_NUMBER, EmulatorController.GAME.getPackageName());
+    }
+
     private void verifyGameProcessActive() {
-        if (!emuManager.isPackageRunning(EMULATOR_NUMBER, EmulatorController.GAME.getPackageName())) {
+        if (!gameProcessRunning()) {
             throw new HomeNotFoundException("Game process is not active");
         }
     }

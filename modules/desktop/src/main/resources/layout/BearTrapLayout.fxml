@@ -117,6 +117,9 @@
                             <CheckBox fx:id="checkBoxRecallTroops" maxWidth="Infinity"
                                       mnemonicParsing="false"
                                       text="Recall gathering troops before Bear Trap" />
+                            <CheckBox fx:id="checkBoxObserveOnly" maxWidth="Infinity"
+                                      mnemonicParsing="false"
+                                      text="Observe only: record the event, send no input" />
                         </VBox>
                     </VBox>
 
@@ -139,6 +142,9 @@
                                        text="Join Flag" />
                                 <CheckComboBox fx:id="checkComboBoxJoinFlag" prefWidth="100.0" />
                             </HBox>
+                            <Label fx:id="labelFormationConflict"
+                                   maxWidth="300" managed="false" visible="false" wrapText="true"
+                                   style="-fx-background-color: rgba(245, 158, 11, 0.14); -fx-background-radius: 4; -fx-padding: 4 6; -fx-text-fill: #fbbf24; -fx-font-size: 11px;" />
                         </VBox>
                     </VBox>
                 </HBox>

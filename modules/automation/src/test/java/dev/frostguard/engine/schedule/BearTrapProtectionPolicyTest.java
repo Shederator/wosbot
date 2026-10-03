@@ -35,6 +35,7 @@ class BearTrapProtectionPolicyTest {
     @AfterEach
     void clearVisualProtection() {
         BearTrapVisualProtection.clearForTests();
+        BearTrapSessionLease.clearForTests();
     }
 
     @Test
@@ -169,8 +170,33 @@ class BearTrapProtectionPolicyTest {
                 decision.releaseAt());
     }
 
+    @Test
+    void acquiredSessionLeaseIgnoresLaterTimerMutationAndBlocksAllNormalWork() {
+        AccountDescriptor profile = profileWithTimer1();
+        Clock duringEvent = clockAt(TRAP_1.plusMinutes(1));
+
+        BearTrapSessionLease.Lease lease = BearTrapSessionLease
+                .acquireForBearExecution(profile, duringEvent)
+                .orElseThrow();
+        profile.setConfig(BEAR_TRAP_SCHEDULE_DATETIME_STRING,
+                TRAP_1.plusDays(2).format(CONFIG_DATE_TIME));
+        profile.setConfig(BEAR_TRAP_TIMER_1_PAUSE_ALL_TASKS_BOOL, false);
+
+        var decision = BearTrapProtectionPolicy.evaluateTask(
+                profile, TpDailyTaskEnum.ALLIANCE_CHESTS, duringEvent);
+
+        assertTrue(decision.blocked());
+        assertEquals(BearTrapProtectionPolicy.BlockReason.ALL_TASKS, decision.reason());
+        assertEquals("session 1", decision.trapNumbers());
+        assertEquals(lease.eventEnd().plusSeconds(BearTrapProtectionPolicy.RELEASE_BUFFER_SECONDS),
+                decision.releaseAt());
+    }
+
     private static AccountDescriptor profileWithTimer1() {
         AccountDescriptor profile = new AccountDescriptor(1L);
+        // A Bear session lease exists only for an enabled profile that participates.
+        profile.setEnabled(true);
+        profile.setConfig(BEAR_TRAP_EVENT_BOOL, true);
         profile.setConfig(BEAR_TRAP_TIMER_1_ENABLED_BOOL, true);
         profile.setConfig(BEAR_TRAP_TIMER_1_BLOCK_RALLIES_BOOL, true);
         profile.setConfig(BEAR_TRAP_TIMER_1_PAUSE_ALL_TASKS_BOOL, false);

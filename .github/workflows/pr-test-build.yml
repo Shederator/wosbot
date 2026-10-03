@@ -239,7 +239,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            tesseract-ocr libtesseract-dev libleptonica-dev xvfb
+            tesseract-ocr libtesseract-dev libleptonica-dev libpulse0 xvfb
 
       # Test the combined tree with host-native Linux dependencies. Selecting
       # Windows JavaFX during this phase prevents controller tests from starting
@@ -252,7 +252,7 @@ jobs:
       - name: Build Windows desktop bundle from the merged tree
         run: |
           read -r -a maven_args <<< "${MAVEN_ARGS}"
-          ./mvnw "${maven_args[@]}" install -DskipTests -Djavafx.platform=win
+          ./mvnw "${maven_args[@]}" install -DskipTests -Djavafx.platform=win -Dvideo.native.platform=windows-x86_64
 
       - name: Locate the desktop bundle
         id: bundle
