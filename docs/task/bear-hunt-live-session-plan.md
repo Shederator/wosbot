@@ -17,6 +17,13 @@ Ownership rules while the event is active:
   resumes inside the window.
 - An unexpired finalizer or checkpoint is ownership after a restart or crash: the restarted queue
   queues Bear immediately and the emulator stays pinned.
+- An ended unfinished checkpoint also pins the device until explicitly verified cleanup or
+  operator revocation. A `TERMINAL` phase alone is not verification. After expiry the scheduler
+  may invoke only the frame-driven cleanup hook (no tactical work or app/device restart), with
+  three persisted attempts shared across restarts and Run Now. Each attempt has at most four
+  verified navigation edges; exhaustion retains the hold. Persisted observe-only/disable,
+  cancellation and actual task device binding are checked before input. A failed marker write
+  fails closed instead of allowing ordinary tasks or idle device shutdown.
 - While any profile owns the event on an emulator, automatic release is refused: idle suspension,
   the session cap, cooldown force-stop, failed idle-wake slot release, character-switch close, and
   ADB-exhaustion relaunch. User-initiated stop, close, and reboot remain allowed.

@@ -64,8 +64,9 @@ class BearTrapRoutineArchitectureTest {
         for (String action : new String[] {"OPEN_JOIN_FORMATION", "SCROLL_RALLY_LIST", "DEPLOY_OWN_RALLY",
                 "DEPLOY_JOIN"}) {
             String callback = callbackOf(java, action);
-            // Measured bounded captain OCR may fit. It must never bypass the final age check.
-            int proof = callback.indexOf("scanRows()");
+            // Reuse is allowed only for this exact authorizing Snapshot; new snapshots rescan.
+            // BearRallyFrameScanTest verifies that contract independently of this source guard.
+            int proof = callback.indexOf("rallyFrameScan.rows(authorization)");
             int freshness = callback.indexOf("requireFreshAuthorization(");
             if (action.equals("OPEN_JOIN_FORMATION") || action.equals("SCROLL_RALLY_LIST")) {
                 assertTrue(proof >= 0, action + " must read captain identity in its own authorizing frame");

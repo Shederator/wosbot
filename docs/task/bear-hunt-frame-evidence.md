@@ -98,8 +98,10 @@ budget and must be measured on the supported setup.
   authorize that join. The earlier replay assertion missed this and has been corrected. Template
   shape alone matches grey controls too; production now also requires a substantial green
   background in the detected button area. Frames 171/182/194/235 cover disabled rows, scrolling,
-  a green plus and its later grey state. Decorated names change under OCR and remain refused;
-  this is a known functional limitation, not successful authorization of those rows.
+  a green plus and its later grey state. Excluding the sword edge from the name crop (x=291,
+  previously x=280) now preserves the exact decorated identity across 182/194 and authorizes
+  that offline green-control pair. The grey 235 control remains refused. Other names still
+  need coverage; no fuzzy identity matching was introduced.
   Duplicate completed/pending anchors and duplicate bottom-proof rows are also refused.
 - Special Buildings and Territory Buildings require their page title and selected tab; blue/green
   controls cannot identify either page. The recorded rally-detail and Settings negatives are covered.

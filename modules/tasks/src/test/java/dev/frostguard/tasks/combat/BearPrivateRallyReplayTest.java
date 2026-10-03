@@ -35,9 +35,9 @@ class BearPrivateRallyReplayTest {
         var candidate = traversal.currentTopmostJoinable(moving).orElseThrow();
         var settledCandidate = traversal.currentTopmostJoinable(settled).orElseThrow();
         assertTrue(candidate.y() != settledCandidate.y(), "this pair must exercise actual scrolling");
-        // Decorations are not OCR-stable in these frames. Green alone cannot override that.
-        assertEquals(candidate.sameIdentity(settledCandidate),
-                traversal.authorizeCandidate(candidate, settled).isPresent());
+        assertTrue(candidate.sameIdentity(settledCandidate),
+                "excluding the sword edge stabilizes this recorded decorated name without fuzzy matching");
+        assertTrue(traversal.authorizeCandidate(candidate, settled).isPresent());
         assertFalse(plusGone.isEmpty());
         assertTrue(plusGone.stream().noneMatch(BearRallyListTraversal.Row::joinable));
         assertTrue(traversal.authorizeCandidate(candidate, plusGone).isEmpty(),

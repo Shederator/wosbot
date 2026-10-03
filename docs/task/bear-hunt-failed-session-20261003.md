@@ -37,19 +37,39 @@ Private recordings and databases must not be committed or uploaded.
   pixels in the detected control. Segment 006 frames 115/128 show a stable captain but a
   green-to-grey control; the previous replay's positive-authorization assertion was wrong.
   Frames 171/182/194/235 additionally exercise scrolling, disabled/blue controls and a green
-  control becoming grey. Decorated-name OCR remains unstable; no fuzzy identity fallback was added.
+  control becoming grey. The captain crop included the sword's right edge, producing changing
+  leading punctuation. Moving its left edge from x=280 to x=291 makes the exact decorated
+  identity agree in frames 182/194 and the second captain agree in 115/128. This is calibrated
+  to these recordings, not proof for all names. No fuzzy identity fallback was added.
+- **Duplicate OCR on one observation:** the row scan is now reused only for the identical
+  `Snapshot` object. A newer observation always rescans, even if its pixels or sequence
+  compare equal. Age/sequence authorization remains enforced at the input boundary.
+  Classifier matching now converts only its existing calibrated ROI. An eight-sample
+  alternating A/B replay measured 425 ms baseline versus 421 ms region-first classification:
+  the ROI conversion alone is not a meaningful latency solution. Full-screen loading/reconnect
+  searches remain the largest classifier costs. Recorded classification plus one row scan
+  measured 738–1012 ms in that run; capture, persistence, permission reads and dispatch are extra.
 - **Unverified cleanup discarded:** the finalizer cleared state after
   `terminal-cleanup-not-verified`. Failed cleanup now retains a sticky durable hold
   beyond event/lease expiry, blocks normal task/idle injection/device release, and
   survives storage failure. An explicitly disabled/revoked profile releases ownership.
-  This is an operator hold, not automated proof of successful cleanup or permission
-  to resume tactical input after the event. Generic typed recorder failures in
+  The scheduler can now invoke a cleanup-only hook after expiry, never tactical execution,
+  app bootstrap/restart or preparation. At most three attempts are persisted before input,
+  across restarts and Run Now. Exhaustion retains the hold for operator action. Generic typed recorder failures in
   cleanup are tagged as terminal cleanup failures too.
   Cleanup now observes transient UNKNOWN/loading/reconnect states under bounded deadlines,
   accepts a late fresh World postcondition without repeating an uncertain Back, and checks
   success after the fourth permitted edge. Every terminal success requires current World
   evidence within one second. If this bounded recovery cannot verify cleanup, the durable
-  operator hold remains; there is no unbounded automatic retry or tactical restart after expiry.
+  operator hold remains after the cleanup-only budget; there is no unbounded automatic retry
+  or tactical restart after expiry. Cleanup failure takes precedence over an earlier tactical
+  exception so scheduler routing cannot miss it. Durable intent precedes terminal input and
+  durable verification precedes normal-work restoration. Marker-write failure retains an
+  immediate local hold; an ended unfinished checkpoint conservatively restores that hold on
+  restart, including `TERMINAL/RECOVERY_EXHAUSTED`. Tactical retry counts do not consume the
+  separate cleanup budget. Explicit observe-only, disable/cancellation and the persisted
+  device binding are checked before the hook and again before each input. A task bound to
+  an old emulator is refused rather than silently retargeted.
 - **Test setup error:** the private launcher setup used invalid idle value
   `DO_NOTHING` (parsed as `CLOSE_EMULATOR`) and stored the profile-only keep-open
   switch globally. Correct values are global `KEEP_RUNNING` and profile
@@ -58,7 +78,7 @@ Private recordings and databases must not be committed or uploaded.
 
 ## Replay and remaining gates
 
-Verification after the final corrections: full offline `package` reactor exited
+Previous committed baseline (`bfbab07`): full offline `package` reactor exited
 successfully, 1,099 tests, zero failures/errors, six skipped. Private failed-session
 and earlier private OCR/scroll replays were enabled. The final replay measured
 684–957 ms for classification plus row scanning on four actual failed-session frames;
@@ -68,6 +88,22 @@ structural verification (603 entries, 85 runtime JARs, 466 template sprites).
 Six launcher/config-validation tests also passed earlier. A fresh adversarial review found no remaining concrete blocker
 in the changed paths after cleanup-expiry, storage, revocation and recorder-failure
 corrections. This is offline verification, not live behavior verification.
+
+Continuation verification: full offline `package` reactor passed with both private replay
+environment variables enabled: **1,114 tests, zero failures/errors, six skipped**. The 54
+scheduler ownership/cleanup tests and 20 driver tests passed. The bundle verifier's 15 unit
+tests also passed. The first full run exposed an architecture source guard still requiring
+direct `scanRows()`; the guard now requires the exact authorizing snapshot and the subsequent
+freshness check, with a separate test proving new observations rescan. The entire reactor was
+rerun after that correction and the stronger marker-write-failure regression.
+
+The fresh targeted and broader adversarial reviews found no additional concrete blocker after
+transport-binding, marker-write failure, budget separation and unverified-terminal restart
+regressions were added. This does not establish full-event behavior. The final full-run replay
+measured **1029–1208 ms** for failed-session classification plus row scanning, and 1229 ms on
+the earlier private pair. The alternating classifier A/B was 559 ms baseline versus 538 ms
+region-first. These samples exceed the one-second budget before dispatch costs: latency
+remains a functional gate, not a completed optimization or permission to weaken freshness.
 
 The cleanup-driver additions cover transient UNKNOWN recovery without input,
 bounded persistent UNKNOWN, aged World refusal, success on the final permitted

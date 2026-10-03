@@ -49,6 +49,180 @@ import dev.frostguard.engine.service.ProfileService;
 class TaskQueueBearSessionLeaseTest {
 
     @Test
+    void terminalPhaseWithoutVerifiedCleanupCannotReleaseRestartedDevice() {
+        AccountDescriptor profile = configuredActiveProfile("unverified terminal phase ");
+        Instant end = Instant.now().minusSeconds(60);
+        assertTrue(BearSessionCheckpoint.record(profile, new BearSessionCheckpoint.Checkpoint(
+                end, "TERMINAL", "UNKNOWN", "RECOVERY_EXHAUSTED", 42, end,
+                4, "DEGRADED_WAIT", Instant.now())));
+        var queue = new RecordingQueue(reload(profile.getId()));
+        assertTrue(queue.hasProtectedBearOwnership(Instant.now()));
+        assertFalse(queue.deviceReleaseAllowed());
+        assertFalse(queue.idleInjectionAllowed());
+    }
+
+    @Test
+    void tacticalRetriesCannotConsumeCleanupOnlyBudget() {
+        AccountDescriptor profile = configuredActiveProfile("separate cleanup budget ");
+        Instant end = Instant.now().minusSeconds(60);
+        assertTrue(BearSessionCheckpoint.record(profile, new BearSessionCheckpoint.Checkpoint(
+                end, "RECOVERING", "UNKNOWN", "failed-join", 0, Instant.EPOCH,
+                4, "DEGRADED_WAIT", Instant.now())));
+        var queue = new RecordingQueue(profile);
+        var task = new CleanupTask(profile, true);
+        queue.routeError(task, new BearSessionExecutionException(
+                BearSessionExecutionException.FailureKind.PERSISTENCE,
+                BearSessionExecutionException.RecoveryDirective.OPERATOR_ACTION,
+                "0", "terminal-cleanup-intent-not-persisted", "test", null));
+        assertEquals(0, BearSessionCheckpoint.load(reload(profile.getId())).orElseThrow().recoveryAttempts());
+        assertTrue(queue.finalizeBearRecoveryIfDue(task, Instant.now()));
+        assertEquals(1, task.attempts);
+    }
+
+    @Test
+    void cleanupRefusesTaskStillBoundToPreviousDevice() {
+        AccountDescriptor local = cleanupProfile();
+        var task = new CleanupTask(local, true);
+        AccountDescriptor stored = reload(local.getId());
+        stored.setEmulatorNumber("1");
+        assertTrue(ProfileService.obtain().persistAccount(stored));
+        var queue = new RecordingQueue(local);
+        assertTrue(queue.finalizeBearRecoveryIfDue(task, Instant.now()));
+        assertEquals(0, task.attempts);
+        assertEquals(0, task.inputs);
+        assertTrue(queue.hasProtectedBearOwnership(Instant.now()));
+    }
+
+    @Test
+    void failedCleanupMarkerWriteKeepsOwnershipAndUnfinishedCheckpointProtectsRestart() {
+        AccountDescriptor profile = configuredActiveProfile("cleanup storage failure ");
+        Instant end = Instant.now().minusSeconds(60);
+        assertTrue(BearSessionCheckpoint.open(profile, end));
+        TaskQueue queue = new TaskQueue(profile) {
+            @Override boolean persistBearRecoveryPoint(BearSessionCheckpoint.Checkpoint point) { return false; }
+        };
+        var failure = new BearSessionExecutionException(
+                BearSessionExecutionException.FailureKind.PERSISTENCE,
+                BearSessionExecutionException.RecoveryDirective.OPERATOR_ACTION,
+                "0", "terminal-cleanup-intent-not-persisted", "test", null);
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+                () -> queue.routeError(new CleanupTask(profile, false), failure));
+        // Even loss of the worker's cached config cannot erase the immediate failure latch.
+        // The database still contains the unfinished event for the restart assertion below.
+        profile.setConfig(ConfigurationKeyEnum.BEAR_TRAP_SESSION_CHECKPOINT_STRING, "");
+        assertTrue(queue.hasProtectedBearOwnership(Instant.now()));
+        assertFalse(queue.idleInjectionAllowed());
+        assertFalse(queue.deviceReleaseAllowed());
+        var restarted = new RecordingQueue(reload(profile.getId()));
+        assertTrue(restarted.hasProtectedBearOwnership(Instant.now()));
+        assertFalse(restarted.idleInjectionAllowed());
+        assertFalse(restarted.deviceReleaseAllowed());
+    }
+
+    @Test
+    void successfulCleanupOnlyRetryFinalizesWithoutRunningBearTactics() {
+        AccountDescriptor profile = cleanupProfile();
+        var queue = new RecordingQueue(profile);
+        var task = new CleanupTask(profile, true);
+        assertTrue(queue.finalizeBearRecoveryIfDue(task, Instant.now()));
+        assertEquals(1, task.attempts);
+        assertFalse(BearSessionCheckpoint.hasMarker(reload(profile.getId())));
+        assertFalse(queue.hasProtectedBearOwnership(Instant.now()));
+        assertEquals(0, queue.appRestarts);
+    }
+
+    @Test
+    void cleanupOnlyBudgetSurvivesEachRestartAndCannotLoopForever() {
+        AccountDescriptor profile = cleanupProfile();
+        for (int attempt = 1; attempt <= 4; attempt++) {
+            var restored = reload(profile.getId());
+            var queue = new RecordingQueue(restored);
+            var task = new CleanupTask(restored, false);
+            assertTrue(queue.finalizeBearRecoveryIfDue(task, Instant.now()));
+            assertEquals(attempt <= 3 ? 1 : 0, task.attempts);
+            assertEquals(Math.min(attempt, 3),
+                    BearSessionCheckpoint.load(reload(profile.getId())).orElseThrow().recoveryAttempts());
+            assertTrue(queue.hasProtectedBearOwnership(Instant.now()));
+            assertEquals(0, queue.appRestarts);
+            assertEquals(0, queue.gatherRestores);
+        }
+    }
+
+    @Test
+    void explicitObserveOnlySettingNeverRunsTerminalRecoveryInputHook() {
+        AccountDescriptor profile = cleanupProfile();
+        assertTrue(ConfigService.obtain().writeAccountSetting(profile,
+                ConfigurationKeyEnum.BEAR_TRAP_OBSERVE_ONLY_BOOL, "true"));
+        var task = new CleanupTask(profile, true);
+        var queue = new RecordingQueue(profile);
+        assertTrue(queue.finalizeBearRecoveryIfDue(task, Instant.now()));
+        assertEquals(0, task.attempts);
+        assertTrue(queue.hasProtectedBearOwnership(Instant.now()));
+    }
+
+    private AccountDescriptor cleanupProfile() {
+        AccountDescriptor profile = configuredActiveProfile("cleanup retry ");
+        Instant ended = Instant.now().minusSeconds(60);
+        assertTrue(BearSessionCheckpoint.record(profile, new BearSessionCheckpoint.Checkpoint(
+                ended, "CLEANING_UP", "UNKNOWN", "terminal-cleanup-not-verified",
+                42, ended, 0, "CLEANUP_UNVERIFIED", Instant.now())));
+        assertTrue(BearRecoveryFinalization.arm(profile, ended));
+        return profile;
+    }
+
+    @Test
+    void staleQueueCannotOverridePersistedObserveOnlyForCleanup() {
+        AccountDescriptor local = cleanupProfile();
+        assertTrue(ConfigService.obtain().writeAccountSetting(local.getId(),
+                ConfigurationKeyEnum.BEAR_TRAP_OBSERVE_ONLY_BOOL, "true"));
+        var queue = new RecordingQueue(local);
+        var task = new CleanupTask(local, true);
+        assertTrue(queue.finalizeBearRecoveryIfDue(task, Instant.now()));
+        assertEquals(0, task.attempts);
+        assertTrue(queue.hasProtectedBearOwnership(Instant.now()));
+    }
+
+    @Test
+    void observeOnlyToggleAfterCleanupPublicationRefusesInputAndRetainsBudget() {
+        AccountDescriptor local = cleanupProfile();
+        var queue = new RecordingQueue(local);
+        var task = new CleanupTask(local, true);
+        task.beforeInput = () -> assertTrue(ConfigService.obtain().writeAccountSetting(local.getId(),
+                ConfigurationKeyEnum.BEAR_TRAP_OBSERVE_ONLY_BOOL, "true"));
+        assertTrue(queue.finalizeBearRecoveryIfDue(task, Instant.now()));
+        assertEquals(1, task.attempts);
+        assertEquals(0, task.inputs);
+        assertEquals(1, BearSessionCheckpoint.load(reload(local.getId())).orElseThrow().recoveryAttempts());
+        assertTrue(queue.hasProtectedBearOwnership(Instant.now()));
+    }
+
+    private static final class CleanupTask extends DelayedTask implements BearTerminalCleanup {
+        private final boolean result;
+        private int attempts;
+        private int inputs;
+        private Runnable beforeInput = () -> { };
+
+        CleanupTask(AccountDescriptor profile, boolean result) {
+            super(profile, TpDailyTaskEnum.BEAR_TRAP);
+            this.result = result;
+        }
+
+        @Override public boolean recoverTerminalUi(Instant end, Runnable authorizeInput) {
+            attempts++;
+            assertTrue(BearSessionCheckpoint.load(reload(profile.getId())).orElseThrow().recoveryAttempts() > 0,
+                    "the attempt must be durable before input");
+            checkPreemption();
+            beforeInput.run();
+            authorizeInput.run();
+            inputs++;
+            return result;
+        }
+
+        @Override protected void execute() { throw new AssertionError("Tactical Bear execution forbidden"); }
+        @Override public void run() { throw new AssertionError("Normal navigation/bootstrap forbidden"); }
+    }
+
+    @Test
     void unverifiedTerminalCleanupSurvivesDeadlineAndRestartWithoutRestoringNormalWork() {
         AccountDescriptor profile = configuredActiveProfile("cleanup evidence ");
         Instant ended = Instant.now().minusSeconds(60);
@@ -708,7 +882,7 @@ class TaskQueueBearSessionLeaseTest {
     }
 
     @Test
-    void expiredSessionWithoutALeaseFinalizesInsteadOfRetryingForever() {
+    void expiredSessionWithoutALeaseVerifiesCleanupBeforeFinalizing() {
         AccountDescriptor profile = new AccountDescriptor(
                 null, "Bear expired cleanup " + UUID.randomUUID(), "0", true, 100L, 30L);
         assertTrue(ProfileService.obtain().createAccount(profile));
@@ -716,11 +890,11 @@ class TaskQueueBearSessionLeaseTest {
         Instant endedAt = Instant.now().minusSeconds(120);
         assertTrue(BearSessionCheckpoint.open(profile, endedAt));
         RecordingQueue queue = new RecordingQueue(reload(profile.getId()));
-        RecordingBearTask bear = new RecordingBearTask(reload(profile.getId()));
+        CleanupTask bear = new CleanupTask(reload(profile.getId()), true);
 
         assertTrue(queue.executeTask(bear), "an ended session must finalize, not be refused");
 
-        assertEquals(0, bear.executionCount, "finalization performs no Bear strategy input");
+        assertEquals(1, bear.attempts, "finalization verifies cleanup without Bear strategy input");
         assertTrue(BearSessionCheckpoint.load(reload(profile.getId())).isEmpty());
         assertTrue(BearRecoveryFinalization.deadline(reload(profile.getId())).isEmpty());
     }

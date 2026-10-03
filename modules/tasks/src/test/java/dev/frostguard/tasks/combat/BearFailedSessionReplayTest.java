@@ -20,6 +20,42 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 @EnabledIfEnvironmentVariable(named = "FROSTGUARD_BEAR_GLD_FRAMES", matches = ".+")
 class BearFailedSessionReplayTest {
     @Test
+    void regionFirstClassificationMatchesBaselineOnTheSameRecordedFrames() throws Exception {
+        OpenCvPatternLocator.loadNativeLibrary();
+        var controller = EmulatorController.getInstance();
+        var optimized = new BearFrameClassifier(new BearTemplateMatcher(controller, "offline"), 1);
+        var baseline = new BearFrameClassifier((raw, template, threshold) -> {
+            var area = dev.frostguard.engine.nav.CommonGameAreas.bearClassifierSearchArea(template);
+            return controller.locatePattern("offline", raw, template,
+                    area.topLeft(), area.bottomRight(), threshold).isFound();
+        }, 1);
+        var directory = Path.of(System.getenv("FROSTGUARD_BEAR_GLD_FRAMES"));
+        long oldNanos = 0, newNanos = 0;
+        java.util.Map<String, Long> costs = new java.util.HashMap<>();
+        for (int round = 0; round < 3; round++) {
+            for (int id : new int[]{631, 637, 656, 660}) {
+                var raw = BearLiveFrameReplayTest.raw(ImageIO.read(directory.resolve("decoded-" + id + ".png").toFile()));
+                // Alternate execution order, and exclude warm-up, to reduce first-use bias.
+                var first = (round % 2 == 0 ? baseline : optimized).classify(raw);
+                var second = (round % 2 == 0 ? optimized : baseline).classify(raw);
+                assertEquals(BearNavigationPolicy.Screen.WAR_LIST, first.screen());
+                assertEquals(first.screen(), second.screen());
+                if (round > 0) {
+                    oldNanos += (round % 2 == 0 ? first : second).totalNanos();
+                    newNanos += (round % 2 == 0 ? second : first).totalNanos();
+                    (round % 2 == 0 ? second : first).templateNanos()
+                            .forEach((key, value) -> costs.merge(key, value, Long::sum));
+                }
+            }
+        }
+        System.out.println("BEAR_CLASSIFIER_AB samples=8 baselineMeanMs=" + oldNanos / 8_000_000
+                + " regionFirstMeanMs=" + newNanos / 8_000_000);
+        costs.entrySet().stream().sorted(java.util.Map.Entry.<String, Long>comparingByValue().reversed())
+                .limit(5).forEach(cost -> System.out.println("BEAR_CLASSIFIER_COST template="
+                        + cost.getKey() + " meanMs=" + cost.getValue() / 8_000_000));
+    }
+
+    @Test
     void narrowedSearchPreservesRecordedRowsAndArmingDoesNotRejectTheirIdentity() throws Exception {
         WorkspaceSession.initializeLayout(WorkspacePaths.current());
         OpenCvPatternLocator.loadNativeLibrary();

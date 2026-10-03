@@ -29,6 +29,7 @@ import dev.frostguard.engine.helper.TemplateSearchHelper;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.BearSessionCheckpoint;
+import dev.frostguard.engine.schedule.BearTerminalCleanup;
 import dev.frostguard.engine.schedule.BearTrapParticipationSchedule;
 import dev.frostguard.engine.schedule.BearFlagConfiguration;
 import dev.frostguard.engine.schedule.BearObserveOnlyFallback;
@@ -57,7 +58,7 @@ import java.util.Set;
 import static dev.frostguard.api.configs.ConfigurationKeyEnum.*;
 import static dev.frostguard.api.configs.TemplatesEnum.*;
 
-public class BearTrapRoutine extends DelayedTask {
+public class BearTrapRoutine extends DelayedTask implements BearTerminalCleanup {
 
 private List<Integer> joinFlags = new ArrayList<>();
 
@@ -283,12 +284,8 @@ public BearTrapRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
                                 BearSessionExecutionException.RecoveryDirective.DEGRADED_WAIT,
                                 "terminal-cleanup",
                                 cleanupFailure);
-                if (sessionFailure != null) {
-                    sessionFailure.addSuppressed(typedCleanup);
-                } else {
-                    sessionFailure = typedCleanup;
-                    activeSessionExit = BearSessionCoordinator.ExitReason.UNRECOVERABLE_FAILURE;
-                }
+                sessionFailure = preferTerminalFailure(sessionFailure, typedCleanup);
+                activeSessionExit = BearSessionCoordinator.ExitReason.UNRECOVERABLE_FAILURE;
                 resumeNormalTasks = false;
             }
             if (resumeNormalTasks) {
@@ -328,6 +325,23 @@ private BearSessionExecutionException protectedFailure(
 private boolean observeOnly() {
         return Boolean.TRUE.equals(profile.getConfig(BEAR_TRAP_OBSERVE_ONLY_BOOL, Boolean.class))
                 || BearObserveOnlyFallback.active(profile, Instant.now());
+    }
+
+    static BearSessionExecutionException preferTerminalFailure(
+            BearSessionExecutionException primary, BearSessionExecutionException cleanup) {
+        if (primary != null && primary != cleanup) cleanup.addSuppressed(primary);
+        return cleanup;
+    }
+
+    @Override
+    public boolean recoverTerminalUi(Instant eventEnd, Runnable authorizeInput) {
+        checkPreemption();
+        if (eventEnd == null || Instant.now().isBefore(eventEnd) || observeOnly()) return false;
+        trapNumber = resolveConfigInt(BEAR_TRAP_NUMBER_INT, DEFAULT_TRAP_NUMBER_VALUE);
+        var driver = new LiveBearSessionDriver(eventEnd,
+                Boolean.getBoolean("frostguard.bear.record") ? openCaptureRecorder(eventEnd) : null);
+        driver.cleanupAuthorization = java.util.Objects.requireNonNull(authorizeInput);
+        return driver.recoverTerminalUiOnly();
     }
 
 /** The device transport for a session; replaced in tests by scripted frames. */
@@ -735,6 +749,7 @@ static List<Integer> decodeJoinFlags(String flagConfig) {
     }
 
 final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
+        private Runnable cleanupAuthorization = () -> { };
 
         private final Instant eventEnd;
         private List<MarchSlotState> lastMarches = List.of();
@@ -747,6 +762,7 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
         private final BearRealtimeFrameSource realtimeFrames;
         private final BearUiStateMachine<RawImageData> ui;
         private final TemplateSearchHelper sessionSearch;
+        private final BearRallyFrameScan rallyFrameScan;
         private final MarchHelper sessionMarchHelper;
         private final DeploymentHelper sessionDeploymentHelper;
         private BearFrameStream.Snapshot<RawImageData> lastObservedFrame;
@@ -810,6 +826,7 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                     profile,
                     () -> frames.nextUnclassified().frame());
             this.sessionSearch.setPreemptionCheck(BearTrapRoutine.this::checkPreemption);
+            this.rallyFrameScan = new BearRallyFrameScan(raw -> new BearRallyScanner(sessionSearch, raw).scanRows());
             this.sessionMarchHelper = new MarchHelper(
                     emuManager,
                     EMULATOR_NUMBER,
@@ -988,6 +1005,12 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                 boolean resumeNormalTasks) {
             try {
                 try {
+                    if (verifiesTerminalUi(resumeNormalTasks)
+                            && !BearSessionCheckpoint.armCleanup(profile, eventEnd)) {
+                        throw protectedFailure(BearSessionExecutionException.FailureKind.PERSISTENCE,
+                                BearSessionExecutionException.RecoveryDirective.OPERATOR_ACTION,
+                                "terminal-cleanup-intent-not-persisted", null);
+                    }
                     ui.phase(BearUiStateMachine.Phase.CLEANING_UP);
                     if (verifiesTerminalUi(resumeNormalTasks) && !verifyTerminalUiCleanup()) {
                         throw protectedFailure(
@@ -995,6 +1018,12 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                                 BearSessionExecutionException.RecoveryDirective.OPERATOR_ACTION,
                                 "terminal-cleanup-not-verified",
                                 null);
+                    }
+                    if (verifiesTerminalUi(resumeNormalTasks)
+                            && !BearSessionCheckpoint.verifyInitialCleanup(profile, eventEnd)) {
+                        throw protectedFailure(BearSessionExecutionException.FailureKind.PERSISTENCE,
+                                BearSessionExecutionException.RecoveryDirective.OPERATOR_ACTION,
+                                "terminal-cleanup-verification-not-persisted", null);
                     }
                     cleanupFlow(resumeNormalTasks);
                     BearUiStateMachine.TerminalReason terminal = switch (exit == null
@@ -1057,6 +1086,19 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
             // reject a successful return just because there is no next loop iteration.
             observeBearScreen();
             return terminalWorldVerified(ui.current());
+        }
+
+        boolean recoverTerminalUiOnly() {
+            try {
+                cleanupAuthorization.run();
+                ui.phase(BearUiStateMachine.Phase.CLEANING_UP);
+                boolean verified = verifyTerminalUiCleanup();
+                if (verified) ui.terminate(BearUiStateMachine.TerminalReason.EVENT_ENDED);
+                return verified;
+            } finally {
+                realtimeFrames.close();
+                if (capture != null) capture.close();
+            }
         }
 
         private boolean terminalWorldVerified(BearFrameStream.Snapshot<RawImageData> frame) {
@@ -1392,8 +1434,7 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                 if (scanFrame.screen() != BearNavigationPolicy.Screen.WAR_LIST) {
                     return BearSessionCoordinator.JoinOutcome.PAGE_NOT_READY;
                 }
-                List<BearRallyScanner.RallyRow> controls = new BearRallyScanner(
-                        sessionSearch, scanFrame.frame()).scanRows();
+                List<BearRallyScanner.RallyRow> controls = rallyFrameScan.rows(scanFrame);
                 BearRallyListTraversal.Decision decision = rallyTraversal.decide(
                         rallyObservation(scanFrame, controls, rallyListBottomProven));
                 if (decision.kind() == BearRallyListTraversal.Kind.WAIT_FOR_VISIBLE_PLUS) {
@@ -1440,8 +1481,7 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                 BearVerifiedActionExecutor.Outcome plus = ui.transition(
                         BearUiAction.OPEN_JOIN_FORMATION,
                         authorization -> {
-                            List<BearRallyListTraversal.Row> currentRows = new BearRallyScanner(
-                                    sessionSearch, authorization.frame()).scanRows().stream()
+                            List<BearRallyListTraversal.Row> currentRows = rallyFrameScan.rows(authorization).stream()
                                     .map(BearRallyListTraversal.Row::new).toList();
                             BearRallyListTraversal.Row first = rallyTraversal.authorizeCandidate(candidate, currentRows)
                                     .orElseThrow(() -> new BearInputRefusedException(
@@ -2129,8 +2169,7 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                     BearUiAction.SCROLL_RALLY_LIST,
                     authorization -> {
                         // Read captain identity again from the exact swipe-authorizing frame.
-                        List<BearRallyScanner.RallyRow> currentRows = new BearRallyScanner(
-                                sessionSearch, authorization.frame()).scanRows();
+                        List<BearRallyScanner.RallyRow> currentRows = rallyFrameScan.rows(authorization);
                         var anchor = new BearRallyListTraversal.Row(bottomAnchor);
                         boolean anchorUnchanged = currentRows.stream()
                                 .filter(row -> anchor.sameIdentity(new BearRallyListTraversal.Row(row))).count() == 1
@@ -2153,8 +2192,7 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
             }
             List<BearRallyScanner.RallyRow> exactBefore = authorizingRows[0];
             BearFrameStream.Snapshot<RawImageData> immediateFrame = ui.current();
-            List<BearRallyScanner.RallyRow> afterControls = new BearRallyScanner(
-                    sessionSearch, immediateFrame.frame()).scanRows();
+            List<BearRallyScanner.RallyRow> afterControls = rallyFrameScan.rows(immediateFrame);
             Optional<BearFrameStream.Snapshot<RawImageData>> settledFrame = ui.await(
                     Duration.ofMillis(750),
                     frame -> frame.screen() == BearNavigationPolicy.Screen.WAR_LIST
@@ -2164,8 +2202,7 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
             if (settledFrame.isEmpty()) {
                 return false;
             }
-            List<BearRallyScanner.RallyRow> settledControls = new BearRallyScanner(
-                    sessionSearch, settledFrame.orElseThrow().frame()).scanRows();
+            List<BearRallyScanner.RallyRow> settledControls = rallyFrameScan.rows(settledFrame.orElseThrow());
             BearRallyListTraversal.Row anchor = new BearRallyListTraversal.Row(
                     exactBefore.getLast());
             boolean overlapProven = settledControls.stream()
@@ -2274,6 +2311,7 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
 
         private void authorizePhysicalInput(BearFrameStream.Snapshot<RawImageData> authorization) {
             checkPreemption();
+            cleanupAuthorization.run();
             requireInputAllowed("observed-transition");
             if (Boolean.getBoolean("frostguard.bear.record")) {
                 String recordingFailure = capture == null ? "recorder-missing" : capture.failureReason();

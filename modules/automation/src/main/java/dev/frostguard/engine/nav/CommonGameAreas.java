@@ -190,7 +190,9 @@ public final class CommonGameAreas {
     public static final int BEAR_RALLY_COUNTDOWN_X2 = 691;
     public static final int BEAR_RALLY_COUNTDOWN_DY1 = -163;
     public static final int BEAR_RALLY_COUNTDOWN_DY2 = -124;
-    public static final int BEAR_RALLY_LEADER_X1 = 280;
+    // Recorded cards place the sword icon left of x=291. Including its right edge
+    // introduced '-'/'_' OCR noise and destabilized decorated names across scroll frames.
+    public static final int BEAR_RALLY_LEADER_X1 = 291;
     public static final int BEAR_RALLY_LEADER_X2 = 570;
     public static final int BEAR_RALLY_LEADER_DY1 = -101;
     public static final int BEAR_RALLY_LEADER_DY2 = -65;

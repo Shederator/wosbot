@@ -40,7 +40,54 @@ public final class BearSessionCheckpoint {
     }
 
     public static boolean cleanupUnverified(AccountDescriptor profile) {
-        return load(profile).map(c -> "CLEANUP_UNVERIFIED".equals(c.reason())).orElse(false);
+        return load(profile).map(c -> "CLEANUP_UNVERIFIED".equals(c.reason())
+                || (!Instant.now().isBefore(c.eventEnd())
+                    && !"CLEANUP_VERIFIED".equals(c.reason())
+                    && !Boolean.TRUE.equals(profile.getConfig(
+                            ConfigurationKeyEnum.BEAR_TRAP_OBSERVE_ONLY_BOOL, Boolean.class))))
+                .orElse(false);
+    }
+
+    /** Terminal intent is durable before any cleanup input; failure forbids the input. */
+    public static boolean armCleanup(AccountDescriptor profile, Instant eventEnd) {
+        Checkpoint current = load(profile).orElse(null);
+        return current != null && current.eventEnd().equals(eventEnd)
+                && record(profile, cleanupTransition(current,
+                    "CLEANUP_UNVERIFIED".equals(current.reason()) ? current.recoveryAttempts() : 0, false));
+    }
+
+    public static boolean verifyInitialCleanup(AccountDescriptor profile, Instant eventEnd) {
+        Checkpoint current = load(profile).orElse(null);
+        return current != null && current.eventEnd().equals(eventEnd)
+                && record(profile, cleanupTransition(current, current.recoveryAttempts(), true));
+    }
+
+    public static final int MAXIMUM_CLEANUP_ATTEMPTS = 3;
+
+    /** Persist the attempt before the task can send any cleanup input; restart cannot reset it. */
+    static boolean beginCleanupAttempt(AccountDescriptor profile, Instant eventEnd) {
+        Checkpoint current = load(profile).orElse(null);
+        return current != null && current.eventEnd().equals(eventEnd) && cleanupUnverified(profile)
+                && (!"CLEANUP_UNVERIFIED".equals(current.reason())
+                    || current.recoveryAttempts() < MAXIMUM_CLEANUP_ATTEMPTS)
+                && record(profile, cleanupTransition(current,
+                    "CLEANUP_UNVERIFIED".equals(current.reason()) ? current.recoveryAttempts() + 1 : 1, false));
+    }
+
+    static boolean confirmCleanup(AccountDescriptor profile, Instant eventEnd, int attempt) {
+        Checkpoint current = load(profile).orElse(null);
+        return current != null && current.eventEnd().equals(eventEnd) && cleanupUnverified(profile)
+                && current.recoveryAttempts() == attempt && attempt > 0
+                && record(profile, cleanupTransition(current, attempt, true));
+    }
+
+    private static Checkpoint cleanupTransition(Checkpoint c, int attempt, boolean verified) {
+        return new Checkpoint(c.eventEnd(), "CLEANING_UP",
+                verified ? "CLEANUP_VERIFIED" : "CLEANUP_RETRY", "terminal-cleanup-retry",
+                c.frameSequence(), c.frameCapturedAt(), attempt,
+                verified ? "CLEANUP_VERIFIED" : "CLEANUP_UNVERIFIED", Instant.now(),
+                c.ownRallySentAt(), c.ownRallyReturnDeadline(), c.joinSubstate(),
+                c.listRowFingerprint(), c.listLeader(), c.listRowY(), c.petUseState());
     }
 
     static Optional<Checkpoint> parse(String raw) {

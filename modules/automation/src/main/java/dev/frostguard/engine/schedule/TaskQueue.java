@@ -90,6 +90,7 @@ public class TaskQueue {
     private volatile boolean bearCleanupOwedByRunningTask;
     /** End of the event an operator revoked; every Bear run for that event is cleanup-only. */
     private volatile Instant bearRevokedUntil;
+    private volatile boolean bearCleanupPersistenceHold;
     private final BooleanSupplier deviceOwnership = () -> hasProtectedBearOwnership(Instant.now());
     private volatile String             profileCooldownStatus;
     // Changed by pernerch | Date: 2026-07-04 | Why: ensure first startup cycle runs Initialize regardless of idle heuristics.
@@ -1062,6 +1063,12 @@ public class TaskQueue {
     }
 
     void routeError(DelayedTask task, Exception ex) {
+        if (task.getTpTask() == TpDailyTaskEnum.BEAR_TRAP
+                && ex instanceof BearSessionExecutionException failure
+                && failure.operation().startsWith("terminal-cleanup")) {
+            // A storage failure must not release this worker's ownership.
+            bearCleanupPersistenceHold = true;
+        }
         Optional<BearTrapSessionLease.Lease> activeBearLease =
                 task.getTpTask() == TpDailyTaskEnum.BEAR_TRAP
                         ? BearTrapSessionLease.active(profile.getId())
@@ -1082,7 +1089,13 @@ public class TaskQueue {
             BearTrapSessionLease.Lease lease = activeBearLease.orElseThrow();
             resetBearRecoveryBudgetFor(lease);
             int plannedAttempts = plannedAttemptsFor(bearFailure.recoveryDirective());
-            if (!BearSessionCheckpoint.recordScheduler(profile, new BearSessionCheckpoint.Checkpoint(
+            boolean terminalCleanup = bearFailure.operation().startsWith("terminal-cleanup");
+            if (terminalCleanup) {
+                plannedAttempts = BearSessionCheckpoint.load(profile)
+                        .filter(point -> "CLEANUP_UNVERIFIED".equals(point.reason()))
+                        .map(BearSessionCheckpoint.Checkpoint::recoveryAttempts).orElse(0);
+            }
+            if (!persistBearRecoveryPoint(new BearSessionCheckpoint.Checkpoint(
                     lease.eventEnd(),
                     "RECOVERING",
                     bearFailure.failureKind().name(),
@@ -1092,12 +1105,18 @@ public class TaskQueue {
                     plannedAttempts,
                     bearFailure.operation().startsWith("terminal-cleanup")
                             ? "CLEANUP_UNVERIFIED" : bearFailure.recoveryDirective().name(),
-                    Instant.now()), false)) {
+                    Instant.now()))) {
                 throw new IllegalStateException(
                         "Bear recovery refused because its durable recovery point could not be persisted",
                         bearFailure);
             }
-            String recoveryResult = applyBearRecoveryDirective(task, bearFailure, lease);
+            String recoveryResult;
+            if (terminalCleanup) {
+                scheduleBearFinalization(task, lease);
+                recoveryResult = "cleanup-only recovery armed; tactical retry forbidden";
+            } else {
+                recoveryResult = applyBearRecoveryDirective(task, bearFailure, lease);
+            }
             emitErrorTask(task, "Bear session entered protected recovery: kind="
                     + bearFailure.failureKind()
                     + "; directive=" + bearFailure.recoveryDirective()
@@ -1309,7 +1328,7 @@ public class TaskQueue {
                 || now.isBefore(finalizationAt.orElseThrow())) {
             return false;
         }
-        if (bearCleanupBlocked()) {
+        if (bearCleanupBlocked() && !recoverBearTerminalUi(task, now)) {
             // A deadline does not prove that dialogs/formation were safely left. Keep the
             // checkpoint and device pin; an explicit operator revocation can release them.
             task.setRecurring(true);
@@ -1377,6 +1396,73 @@ public class TaskQueue {
                     + "Bear window could not be resolved from configuration");
         }
         return true;
+    }
+
+    boolean persistBearRecoveryPoint(BearSessionCheckpoint.Checkpoint checkpoint) {
+        return BearSessionCheckpoint.recordScheduler(profile, checkpoint, false);
+    }
+
+    private boolean recoverBearTerminalUi(DelayedTask task, Instant now) {
+        var checkpoint = BearSessionCheckpoint.load(profile).orElse(null);
+        if (!(task instanceof BearTerminalCleanup cleanup) || checkpoint == null
+                || now.isBefore(checkpoint.eventEnd())
+                || ("CLEANUP_UNVERIFIED".equals(checkpoint.reason())
+                    && checkpoint.recoveryAttempts() >= BearSessionCheckpoint.MAXIMUM_CLEANUP_ATTEMPTS)
+                || Boolean.TRUE.equals(profile.getConfig(
+                        ConfigurationKeyEnum.BEAR_TRAP_OBSERVE_ONLY_BOOL, Boolean.class))) return false;
+        ExecutionContext context;
+        synchronized (this) {
+            if (shuttingDown || runningContext != null) return false;
+            context = new ExecutionContext(task);
+            runningContext = context;
+        }
+        try {
+            // Publish cancellation before the persisted enablement check, just like normal Bear claims.
+            if (bearRevoked(now) || !persistedBearOwnershipAllowed()) return false;
+            AccountDescriptor stored = storedProfile().orElseThrow();
+            if (Boolean.TRUE.equals(stored.getConfig(
+                    ConfigurationKeyEnum.BEAR_TRAP_OBSERVE_ONLY_BOOL, Boolean.class))) return false;
+            // setProfile does not rebind the task's controller/OCR/navigation transports.
+            if (!Objects.equals(stored.getEmulatorNumber(), task.EMULATOR_NUMBER)) return false;
+            profile = stored;
+            task.setProfile(profile);
+            if (!BearSessionCheckpoint.beginCleanupAttempt(profile, checkpoint.eventEnd())) return false;
+            int attempt = BearSessionCheckpoint.load(profile).orElseThrow().recoveryAttempts();
+            emitInfoTask(task, "Terminal cleanup-only attempt " + attempt + "/"
+                    + BearSessionCheckpoint.MAXIMUM_CLEANUP_ATTEMPTS);
+            AccountDescriptor authorizingProfile = profile;
+            Runnable authorization = () -> requireBearCleanupPermission(authorizingProfile);
+            authorization.run();
+            if (!cleanup.recoverTerminalUi(checkpoint.eventEnd(), authorization)
+                    || shuttingDown || bearRevoked(Instant.now()) || !persistedBearOwnershipAllowed()) return false;
+            task.checkPreemption();
+            authorization.run();
+            boolean confirmed = BearSessionCheckpoint.confirmCleanup(profile, checkpoint.eventEnd(), attempt);
+            if (confirmed) bearCleanupPersistenceHold = false;
+            return confirmed;
+        } catch (RuntimeException failure) {
+            emitWarnTask(task, "Terminal cleanup-only recovery failed; durable hold retained: "
+                    + failure.getClass().getSimpleName());
+            return false;
+        } finally {
+            synchronized (this) {
+                if (runningContext == context) runningContext = null;
+                context.clear();
+            }
+        }
+    }
+
+    private void requireBearCleanupPermission(AccountDescriptor expected) {
+        AccountDescriptor stored = storedProfile().orElseThrow();
+        if (shuttingDown || Thread.currentThread().isInterrupted() || bearRevoked(Instant.now())
+                || !Boolean.TRUE.equals(profile.getEnabled())
+                || !Boolean.TRUE.equals(stored.getEnabled())
+                || !Boolean.TRUE.equals(stored.getConfig(ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL, Boolean.class))
+                || Boolean.TRUE.equals(stored.getConfig(ConfigurationKeyEnum.BEAR_TRAP_OBSERVE_ONLY_BOOL, Boolean.class))
+                || !Objects.equals(stored.getEmulatorNumber(), expected.getEmulatorNumber())
+                || !BearSessionCheckpoint.cleanupUnverified(stored)) {
+            throw new IllegalStateException("Terminal cleanup permission revoked");
+        }
     }
 
     private static void scheduleBearRetry(DelayedTask task, long delaySeconds) {
@@ -1747,7 +1833,7 @@ public class TaskQueue {
     private boolean bearCleanupBlocked() {
         if (!Boolean.TRUE.equals(profile.getEnabled())
                 || !Boolean.TRUE.equals(profile.getConfig(ConfigurationKeyEnum.BEAR_TRAP_EVENT_BOOL, Boolean.class))
-                || !BearSessionCheckpoint.cleanupUnverified(profile)
+                || !(bearCleanupPersistenceHold || BearSessionCheckpoint.cleanupUnverified(profile))
                 || bearRevoked(Instant.now())) return false;
         try {
             // Missing/unreadable storage cannot revoke an already durable cleanup hold.

@@ -31,6 +31,39 @@ import org.junit.jupiter.api.Test;
 /** Drives the real session driver with scripted frames and screens; no device is involved. */
 class BearSessionDriverTest {
     @Test
+    void cleanupFailureTakesPrecedenceOverEarlierTacticalFailure() {
+        var primary = new BearSessionExecutionException(
+                BearSessionExecutionException.FailureKind.VISUAL_UNKNOWN,
+                BearSessionExecutionException.RecoveryDirective.DEGRADED_WAIT,
+                "offline", "join-failed", "test", null);
+        var cleanup = new BearSessionExecutionException(
+                BearSessionExecutionException.FailureKind.VISUAL_UNKNOWN,
+                BearSessionExecutionException.RecoveryDirective.OPERATOR_ACTION,
+                "offline", "terminal-cleanup-not-verified", "test", null);
+        assertEquals(cleanup, BearTrapRoutine.preferTerminalFailure(primary, cleanup));
+        assertEquals(primary, cleanup.getSuppressed()[0]);
+    }
+
+    @Test
+    void schedulerCleanupHookRefusesActiveEventAndObserveOnly() {
+        ScriptedBear bear = new ScriptedBear(WORLD);
+        assertFalse(bear.recoverTerminalUi(Instant.now().plusSeconds(60), () -> { }));
+        bear.getProfile().setConfig(ConfigurationKeyEnum.BEAR_TRAP_OBSERVE_ONLY_BOOL, true);
+        assertFalse(bear.recoverTerminalUi(Instant.now().minusSeconds(60), () -> { }));
+        assertEquals(0, bear.classifications);
+        assertEquals(0, bear.inputs);
+    }
+
+    @Test
+    void schedulerCleanupHookVerifiesWorldWithoutStartingTactics() {
+        ScriptedBear bear = new ScriptedBear(WORLD);
+        assertTrue(bear.recoverTerminalUi(Instant.now().minusSeconds(60), () -> { }));
+        assertTrue(bear.classifications > 0);
+        assertEquals(0, bear.inputs);
+        assertEquals(0, bear.backs);
+    }
+
+    @Test
     void recorderRefusalDuringTerminalBackIsMarkedAsCleanupFailureWithoutInput() {
         String prior = System.getProperty("frostguard.bear.record");
         System.setProperty("frostguard.bear.record", "true");
@@ -309,13 +342,22 @@ class BearSessionDriverTest {
         private ImageSearchResultData lastTap;
 
         private ScriptedBear(Set<TemplatesEnum> visible) {
-            super(new AccountDescriptor(990_003L, "Bear driver", "0", true, 100L, 30L),
+            super(testProfile(),
                     TpDailyTaskEnum.BEAR_TRAP);
             this.visible = visible;
         }
 
         BearTrapRoutine.LiveBearSessionDriver driver() {
-            return new LiveBearSessionDriver(Instant.now().plusSeconds(1_200), null);
+            Instant end = Instant.now().plusSeconds(1_200);
+            assertTrue(dev.frostguard.engine.schedule.BearSessionCheckpoint.open(getProfile(), end));
+            return new LiveBearSessionDriver(end, null);
+        }
+
+        private static AccountDescriptor testProfile() {
+            var profile = new AccountDescriptor(null, "Bear driver " + java.util.UUID.randomUUID(),
+                    "0", true, 100L, 30L);
+            assertTrue(dev.frostguard.engine.service.ProfileService.obtain().createAccount(profile));
+            return profile;
         }
 
         @Override
