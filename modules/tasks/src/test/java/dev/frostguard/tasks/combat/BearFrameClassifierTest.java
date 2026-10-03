@@ -15,6 +15,13 @@ class BearFrameClassifierTest {
     private static final RawImageData BLANK = RawImageData.capture(new byte[720 * 1280 * 4], 720, 1280, 32);
 
     @Test
+    void unsupportedGeometryCannotAuthorizeInputEvenWithMatchingSignals() {
+        var classifier = new BearFrameClassifier((frame, template, threshold) -> true, 1);
+        assertEquals(BearNavigationPolicy.Screen.UNKNOWN,
+                classifier.classify(RawImageData.capture(new byte[1080 * 2400 * 4], 1080, 2400, 32)).screen());
+    }
+
+    @Test
     void duringTheEventTheWorldRootIsClassifiedWithTheBearIcon() {
         assertEquals(BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
                 classify(EnumSet.of(TemplatesEnum.GAME_HOME_WORLD, TemplatesEnum.BEAR_HUNT_IS_RUNNING)));
@@ -37,7 +44,8 @@ class BearFrameClassifierTest {
         assertEquals(BearNavigationPolicy.Screen.UNKNOWN, classifier.classify(BLANK).screen());
 
         BearFrameClassifier withPlus = new BearFrameClassifier(
-                (frame, template, threshold) -> template == TemplatesEnum.BEAR_JOIN_PLUS_ICON, 1);
+                (frame, template, threshold) -> template == TemplatesEnum.BEAR_WAR_TITLE
+                        || template == TemplatesEnum.BEAR_RALLY_TAB, 1);
         assertEquals(BearNavigationPolicy.Screen.WAR_LIST, withPlus.classify(BLANK).screen());
         assertTrue(withPlus.warListKnown(), "a recognised War list is remembered for empty pages");
 

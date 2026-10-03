@@ -116,11 +116,19 @@ class BearTrapRoutineScreenOwnershipTest {
         BufferedImage template = ImageIO.read(BearTrapRoutineScreenOwnershipTest.class.getResource(
                 TemplatesEnum.GAME_HOME_WORLD.resourcePath()));
         BufferedImage screen = new BufferedImage(720, 1280, BufferedImage.TYPE_INT_ARGB);
-        screen.createGraphics().drawImage(template, 300, 900, null);
+        var graphics = screen.createGraphics();
+        graphics.drawImage(template, 625, 1190, null);
+        graphics.dispose();
         BearFrameClassifier.TemplateMatcher matcher = new RecordingBear(true).templateMatcher();
 
         assertTrue(matcher.found(rgba(screen), TemplatesEnum.GAME_HOME_WORLD, 90),
-                "the shipped World template is found where it is drawn");
+                "the shipped World template is found in its calibrated navigation region");
+        BufferedImage misplaced = new BufferedImage(720, 1280, BufferedImage.TYPE_INT_ARGB);
+        graphics = misplaced.createGraphics();
+        graphics.drawImage(template, 300, 900, null);
+        graphics.dispose();
+        assertTrue(!matcher.found(rgba(misplaced), TemplatesEnum.GAME_HOME_WORLD, 90),
+                "an identical icon outside the navigation region cannot identify World");
         BufferedImage noise = new BufferedImage(720, 1280, BufferedImage.TYPE_INT_ARGB);
         Random random = new Random(7);
         for (int y = 0; y < noise.getHeight(); y++) {

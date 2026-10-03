@@ -8,18 +8,18 @@ import org.junit.jupiter.api.Test;
 class BearWarListIdentityTest {
 
     @Test
-    void verifiedWarRouteCanIdentifyAnEmptyListFromItsCloseControl() {
-        assertTrue(BearWarListIdentity.isVisible(true, true, 0));
+    void titleAndSelectedTabIdentifyAListEvenWithoutJoinButtons() {
+        assertTrue(BearWarListIdentity.isVisible(true, true));
     }
 
     @Test
-    void joinButtonsIdentifyListsWithOneOrManyRows() {
-        assertTrue(BearWarListIdentity.isVisible(false, false, 1));
-        assertTrue(BearWarListIdentity.isVisible(false, false, 3));
+    void aWarDetailHeadingWithoutRallyTabIsNotTheList() {
+        assertFalse(BearWarListIdentity.isVisible(true, false));
     }
 
     @Test
-    void genericCloseControlWithoutVerifiedWarRouteIsNotEnough() {
-        assertFalse(BearWarListIdentity.isVisible(false, true, 0));
+    void genericTabWithoutWarHeadingIsNotEnough() {
+        assertFalse(BearWarListIdentity.isVisible(false, true));
+        assertFalse(BearWarListIdentity.isVisible(false, false));
     }
 }

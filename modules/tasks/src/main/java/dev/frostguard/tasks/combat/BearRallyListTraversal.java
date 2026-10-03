@@ -12,8 +12,8 @@ import java.util.Optional;
  *
  * <p>This class deliberately has no semantic "already attempted" history. A pass is spatial: after
  * a row transaction completes, the next eligible row is the one visibly below that row. A scroll
- * is accepted only when the last visible row can be found again by both its stable crop and leader
- * text. Reopening the Rally tab is the sole operation that resets a pass to the top.
+ * is accepted only when the last visible Bear row can be found again by unique captain identity
+ * read from that frame. Reopening the Rally tab resets a pass to the top.
  */
 final class BearRallyListTraversal {
 
@@ -30,8 +30,8 @@ final class BearRallyListTraversal {
 
         boolean sameIdentity(Row other) {
             return other != null
-                    && control.cropFingerprint() != 0L
-                    && control.cropFingerprint() == other.control.cropFingerprint()
+                    && control.identityFingerprint() != 0L
+                    && control.identityFingerprint() == other.control.identityFingerprint()
                     && !control.leaderText().isBlank()
                     && control.leaderText().equals(other.control.leaderText());
         }
@@ -71,9 +71,7 @@ final class BearRallyListTraversal {
     Decision decide(Observation observation) {
         Objects.requireNonNull(observation, "observation");
         if (pendingScrollAnchor != null) {
-            Optional<Row> overlap = observation.rows().stream()
-                    .filter(pendingScrollAnchor::sameIdentity)
-                    .findFirst();
+            Optional<Row> overlap = uniqueIdentity(observation.rows(), pendingScrollAnchor);
             if (overlap.isEmpty()) {
                 return Decision.of(Kind.OVERLAP_NOT_PROVEN);
             }
@@ -81,6 +79,10 @@ final class BearRallyListTraversal {
             pendingScrollAnchor = null;
         }
 
+        if (completedRow != null
+                && observation.rows().stream().filter(completedRow::sameIdentity).count() > 1) {
+            return Decision.of(Kind.OVERLAP_NOT_PROVEN);
+        }
         if (completedRow != null
                 && !observation.rows().isEmpty()
                 && observation.rows().stream().noneMatch(completedRow::sameIdentity)) {
@@ -142,6 +144,17 @@ final class BearRallyListTraversal {
                 .sorted(Comparator.comparingInt(Row::y)).toList());
     }
 
+    Optional<Row> authorizeCandidate(Row expected, List<Row> freshRows) {
+        if (expected == null || freshRows == null
+                || freshRows.stream().filter(expected::sameIdentity).count() != 1) return Optional.empty();
+        return currentTopmostJoinable(freshRows).filter(expected::sameIdentity);
+    }
+
+    private static Optional<Row> uniqueIdentity(List<Row> rows, Row expected) {
+        List<Row> matches = rows.stream().filter(expected::sameIdentity).toList();
+        return matches.size() == 1 ? Optional.of(matches.getFirst()) : Optional.empty();
+    }
+
     static boolean stableAbsoluteBottom(
             List<BearRallyScanner.RallyRow> before,
             List<BearRallyScanner.RallyRow> immediate,
@@ -159,9 +172,12 @@ final class BearRallyListTraversal {
         for (int i = 0; i < before.size(); i++) {
             BearRallyScanner.RallyRow left = before.get(i);
             BearRallyScanner.RallyRow right = after.get(i);
+            Row identity = new Row(left);
+            if (before.stream().filter(row -> identity.sameIdentity(new Row(row))).count() != 1
+                    || after.stream().filter(row -> identity.sameIdentity(new Row(row))).count() != 1) return false;
             if (left.rowY() != right.rowY()
-                    || left.cropFingerprint() == 0L
-                    || left.cropFingerprint() != right.cropFingerprint()
+                    || left.identityFingerprint() == 0L
+                    || left.identityFingerprint() != right.identityFingerprint()
                     || left.leaderText().isBlank()
                     || !left.leaderText().equals(right.leaderText())) {
                 return false;
@@ -174,7 +190,7 @@ final class BearRallyListTraversal {
         if (completedRow == null) {
             return rows.stream().filter(Row::joinable).findFirst();
         }
-        Optional<Row> same = rows.stream().filter(completedRow::sameIdentity).findFirst();
+        Optional<Row> same = uniqueIdentity(rows, completedRow);
         if (same.isEmpty()) return Optional.empty();
         int frontier = same.get().y();
         return rows.stream().filter(row -> row.y() > frontier).filter(Row::joinable).findFirst();

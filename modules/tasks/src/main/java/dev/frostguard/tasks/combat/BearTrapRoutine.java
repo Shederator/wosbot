@@ -91,18 +91,6 @@ private static final PointData BEAR_TRAP_2_GO_BUTTON_BR_VALUE = new PointData(62
 
 private static final PointData BEAR_CENTER_POINT_VALUE = new PointData(370, 507);
 
-private static final PointData PET_RAZORBACK_TL_VALUE = new PointData(100, 410);
-
-private static final PointData PET_RAZORBACK_BR_VALUE = new PointData(160, 460);
-
-private static final PointData PET_QUICK_USE_BUTTON_TL_VALUE = new PointData(120, 1070);
-
-private static final PointData PET_QUICK_USE_BUTTON_BR_VALUE = new PointData(280, 1100);
-
-private static final PointData PET_USE_BUTTON_TL_VALUE = new PointData(460, 800);
-
-private static final PointData PET_USE_BUTTON_BR_VALUE = new PointData(550, 830);
-
 private static final PointData AUTOJOIN_BUTTON_TL_VALUE = new PointData(260, 1200);
 
 private static final PointData AUTOJOIN_BUTTON_BR_VALUE = new PointData(450, 1240);
@@ -350,8 +338,12 @@ BearRealtimeFrameSource createRealtimeFrameSource(BearCaptureRecorder capture) {
 
 /** Template matching for the live classifier; replaced in tests by scripted screens. */
 BearFrameClassifier.TemplateMatcher templateMatcher() {
-        return (frame, template, threshold) -> emuManager.locatePattern(
-                EMULATOR_NUMBER, frame, template, threshold).isFound();
+        return new BearTemplateMatcher(emuManager, EMULATOR_NUMBER);
+    }
+
+/** Session tests replace transport, not authorization or transition semantics. */
+void executeObservedInput(Runnable authorize, Runnable input) {
+        emuManager.withSingleAttemptInput(EMULATOR_NUMBER, authorize, input);
     }
 
 /** Terminal UI verification uses input, so an observe-only session never performs it. */
@@ -798,8 +790,7 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                     Clock.systemUTC());
             this.ui = new BearUiStateMachine<>(
                     frames, Duration.ofSeconds(4), this::recordTransitionDiagnostic,
-                    (authorization, input) -> emuManager.withSingleAttemptInput(
-                            EMULATOR_NUMBER,
+                    (authorization, input) -> executeObservedInput(
                             () -> authorizePhysicalInput(authorization), input));
             this.sessionSearch = new TemplateSearchHelper(
                     emuManager,
@@ -916,11 +907,33 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                 requireLiveEvidence("march-sidebar and recall-confirmation frames", "recall-troops");
             }
             if (usePets) {
-                requireLiveEvidence("pet overview, Razorback, quick-use and activated-benefit frames",
-                        "activate-pet");
+                boolean petUseArmed = BearSessionCheckpoint.load(profile)
+                        .filter(value -> value.eventEnd().equals(eventEnd))
+                        .map(value -> !"NONE".equals(value.petUseState())).orElse(false);
+                if (!BearPetPreparation.activate(ui, petUseArmed, (action, authorization) -> {
+                    TemplatesEnum target = switch (action) {
+                        case OPEN_PETS -> GAME_HOME_PETS;
+                        case SELECT_BATTLE_SKILL -> BEAR_PET_BATTLE_ICON;
+                        case OPEN_PET_QUICK_USE -> BEAR_PET_QUICK_USE;
+                        case CONFIRM_PET_USE -> BEAR_PET_CONFIRM_USE;
+                        case CLOSE_PET_SKILLS -> BEAR_PET_CLOSE;
+                        default -> throw new IllegalArgumentException("Not a pet preparation edge: " + action);
+                    };
+                    if (action == BearUiAction.CONFIRM_PET_USE && !BearSessionCheckpoint.armPetUse(
+                            profile, eventEnd, authorization.sequence(), authorization.capturedAt())) {
+                        throw protectedFailure(BearSessionExecutionException.FailureKind.PERSISTENCE,
+                                BearSessionExecutionException.RecoveryDirective.DEGRADED_WAIT,
+                                "pet-use-intent-not-persisted", null);
+                    }
+                    tapTemplateFrom(authorization, target, 95, action.name());
+                })) {
+                    throw protectedFailure(
+                            BearSessionExecutionException.FailureKind.VISUAL_UNKNOWN,
+                            BearSessionExecutionException.RecoveryDirective.DEGRADED_WAIT,
+                            "pet-battle-skills-postcondition-not-verified", null);
+                }
             }
-            // Territory and Trap 2 have no positive live identity in the repository yet. Refuse the
-            // old coordinate script; an active-event run can still use the verified red Bear icon.
+            // Page and status identity are recorded; configured-trap arrival still needs calibration.
             requireLiveEvidence("Territory, Special Buildings, configured Trap and at-Bear frames",
                     "navigate-to-configured-bear");
         }
@@ -974,8 +987,7 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
         private boolean verifyTerminalUiCleanup() {
             for (int attempt = 0; attempt < 4; attempt++) {
                 BearNavigationPolicy.Screen screen = observeBearScreen();
-                if (screen == BearNavigationPolicy.Screen.WORLD
-                        || screen == BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY) {
+                if (BearProductionScreens.WORLD.contains(screen)) {
                     return true;
                 }
                 if (screen == BearNavigationPolicy.Screen.RECONNECT
@@ -1370,19 +1382,18 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                 BearVerifiedActionExecutor.Outcome plus = ui.transition(
                         BearUiAction.OPEN_JOIN_FORMATION,
                         authorization -> {
-                            BearRallyScanner.RallyRow current = new BearRallyScanner(
-                                    sessionSearch, authorization.frame()).scanRowsWithoutText().stream()
-                                    .filter(BearRallyScanner.RallyRow::joinable)
-                                    .filter(row -> row.cropFingerprint()
-                                            == candidate.control().cropFingerprint())
-                                    .findFirst()
+                            List<BearRallyListTraversal.Row> currentRows = new BearRallyScanner(
+                                    sessionSearch, authorization.frame()).scanRows().stream()
+                                    .map(BearRallyListTraversal.Row::new).toList();
+                            BearRallyListTraversal.Row first = rallyTraversal.authorizeCandidate(candidate, currentRows)
                                     .orElseThrow(() -> new BearInputRefusedException(
-                                            "join-row-not-in-authorizing-frame"));
+                                            "join-identity-or-order-not-proven-in-authorizing-frame"));
+                            BearRallyScanner.RallyRow current = first.control();
                             if (ownReturnDeadline != null && !now().isBefore(ownReturnDeadline)) {
                                 throw new BearInputRefusedException("own-rally-due-before-plus");
                             }
                             requireFreshAuthorization(authorization, "open-join-formation");
-                            committedRow[0] = candidate;
+                            committedRow[0] = first;
                             tapInside(current.joinArea());
                         });
                 if (!ui.lastInputSent()) {
@@ -1554,8 +1565,7 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                 preserveRestoredListFrontier = true;
             }
             if (screen != BearNavigationPolicy.Screen.WAR_LIST
-                    && screen != BearNavigationPolicy.Screen.WORLD
-                    && screen != BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY) {
+                    && !BearProductionScreens.WORLD.contains(screen)) {
                 return false;
             }
             requireTacticalCheckpoint(null, ownRallyBusyUntil, "RECOVERED_PLUS_ABORTED",
@@ -1595,6 +1605,10 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                         || screen == BearNavigationPolicy.Screen.RALLY_TIMER_PANEL
                         || screen == BearNavigationPolicy.Screen.BEAR_RALLY_PANEL
                         || screen == BearNavigationPolicy.Screen.ALLIANCE_MENU
+                        || screen == BearNavigationPolicy.Screen.PET_SKILL_PANEL
+                        || screen == BearNavigationPolicy.Screen.PET_BATTLE_SELECTED
+                        || screen == BearNavigationPolicy.Screen.PET_BATTLE_ACTIVE
+                        || screen == BearNavigationPolicy.Screen.PET_CONFIRMATION
                         || screen == BearNavigationPolicy.Screen.WAR_LIST
                         || screen == BearNavigationPolicy.Screen.MARCH_SIDEBAR
                         || screen == BearNavigationPolicy.Screen.SIDEBAR_OTHER
@@ -1644,12 +1658,15 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                     return false;
                 }
                 if (recoveryStrikes.unknownScreen() == BearRecoveryStrikes.UnknownStep.PRESS_BACK_ONCE) {
-                    // Operator-approved exception to the transition contract: one bounded Back
-                    // from an unclassified screen before escalating to a restart.
+                    // The operator permits one Back on UNKNOWN, not an unguarded transport call.
                     logWarning(routineLogBearTrapLine("Unclassified screen during " + resumeState
                             + " recovery; sending one bounded Back"));
-                    pressBack();
-                    return false;
+                    BearVerifiedActionExecutor.Outcome outcome = ui.transition(
+                            BearUiAction.RECOVER_UNKNOWN_BACK, authorization -> pressBack());
+                    boolean recovered = outcome == BearVerifiedActionExecutor.Outcome.CONFIRMED
+                            && validRecoveryDestination(resumeState, ui.current().screen());
+                    if (recovered) ui.phase(BearUiStateMachine.Phase.ACTIVE);
+                    return recovered;
                 }
                 throw protectedFailure(
                         BearSessionExecutionException.FailureKind.VISUAL_UNKNOWN,
@@ -1709,8 +1726,7 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
         private MarchHelper.MarchQueueSnapshot readMarchSnapshot() {
             BearNavigationPolicy.Screen screen = observeBearScreen();
             if (screen != BearNavigationPolicy.Screen.MARCH_SIDEBAR) {
-                if (screen != BearNavigationPolicy.Screen.WORLD
-                        && screen != BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY) {
+                if (!BearProductionScreens.WORLD.contains(screen)) {
                     return new MarchHelper.MarchQueueSnapshot(List.of(), false);
                 }
                 if (ui.transition(
@@ -1841,8 +1857,7 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
             long deadline = System.nanoTime()
                     + Duration.ofMillis(POST_DEPLOY_CONFIRMATION_TIMEOUT_MS).toNanos();
             BearNavigationPolicy.Screen postDeploy = observeBearScreen();
-            if (postDeploy != BearNavigationPolicy.Screen.WORLD
-                    && postDeploy != BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY) {
+            if (!BearProductionScreens.WORLD.contains(postDeploy)) {
                 logWarning(routineLogBearTrapLine(
                         "Own rally deployment left no stable World frame for confirmation"));
                 return OptionalInt.empty();
@@ -1932,6 +1947,15 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
         private boolean openBearRallyFromAnchor() {
             for (int transition = 0; transition < 4; transition++) {
                 BearNavigationPolicy.Screen screen = observeBearScreen();
+                if (screen == BearNavigationPolicy.Screen.SPECIAL_BUILDINGS
+                        && classifier.trapStatus(ui.current().frame(), trapNumber)
+                                == BearFrameClassifier.TrapStatus.COOLDOWN) {
+                    throw protectedFailure(
+                            BearSessionExecutionException.FailureKind.FATAL_CONFIGURATION,
+                            BearSessionExecutionException.RecoveryDirective.OPERATOR_ACTION,
+                            "configured-trap-" + trapNumber + "-on-cooldown",
+                            new IllegalStateException("Configured trap is on cooldown; a Go button is not activation"));
+                }
                 BearNavigationPolicy.Action action = BearNavigationPolicy.next(
                         screen, BearNavigationPolicy.Goal.OWN_RALLY,
                         BearNavigationPolicy.Phase.ACTIVE);
@@ -1940,6 +1964,9 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                         return true;
                     }
                     case TAP_ACTIVE_BEAR_ICON -> {
+                        if (trapNumber != 1) {
+                            requireLiveEvidence("configured Trap 2 centered-world identity", "center-configured-trap-2");
+                        }
                         BearVerifiedActionExecutor.Outcome opened = ui.transition(
                                 BearUiAction.OPEN_ACTIVE_BEAR,
                                 authorization -> tapTemplateFrom(
@@ -1951,6 +1978,15 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                     }
                     case ROUTE_TO_BEAR -> {
                         return false;
+                    }
+                    case TAP_CENTERED_BEAR -> {
+                        if (ui.transition(BearUiAction.OPEN_CENTERED_BEAR, authorization -> {
+                            if (!classifier.configuredBearCentered(authorization.frame())) {
+                                throw new BearInputRefusedException("configured-bear-not-centered-in-authorizing-frame");
+                            }
+                            requireFreshAuthorization(authorization, "open-centered-bear");
+                            tapInside(CommonGameAreas.BEAR_CENTER_BODY);
+                        }) != BearVerifiedActionExecutor.Outcome.CONFIRMED) return false;
                     }
                     case BACK_ONCE -> {
                         if (!backToVerifiedParent(screen)) {
@@ -2036,16 +2072,19 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
             BearVerifiedActionExecutor.Outcome outcome = ui.transition(
                     BearUiAction.SCROLL_RALLY_LIST,
                     authorization -> {
-                        // The anchor's text identity comes from the pre-scan; the authorizing
-                        // frame only has to show the same unchanged bottom row.
-                        boolean anchorUnchanged = new BearRallyScanner(
-                                sessionSearch, authorization.frame()).scanRowsWithoutText().stream()
-                                .anyMatch(row -> row.cropFingerprint() == bottomAnchor.cropFingerprint());
+                        // Read captain identity again from the exact swipe-authorizing frame.
+                        List<BearRallyScanner.RallyRow> currentRows = new BearRallyScanner(
+                                sessionSearch, authorization.frame()).scanRows();
+                        var anchor = new BearRallyListTraversal.Row(bottomAnchor);
+                        boolean anchorUnchanged = currentRows.stream()
+                                .filter(row -> anchor.sameIdentity(new BearRallyListTraversal.Row(row))).count() == 1
+                                && !currentRows.isEmpty()
+                                && anchor.sameIdentity(new BearRallyListTraversal.Row(currentRows.getLast()));
                         if (!anchorUnchanged) {
                             throw new BearInputRefusedException("scroll-anchor-not-in-authorizing-frame");
                         }
-                        authorizingRows[0] = beforeControls;
-                        rallyTraversal.scrollAuthorized(new BearRallyListTraversal.Row(bottomAnchor));
+                        authorizingRows[0] = currentRows;
+                        rallyTraversal.scrollAuthorized(new BearRallyListTraversal.Row(currentRows.getLast()));
                         requireFreshAuthorization(authorization, "scroll-rally-list");
                         swipe(RALLY_LIST_SCROLL_FROM, RALLY_LIST_SCROLL_TO);
                     },
@@ -2116,7 +2155,7 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                     effectiveSentAt,
                     effectiveDeadline,
                     joinSubstate,
-                    row == null ? 0L : row.control().cropFingerprint(),
+                    row == null ? 0L : row.control().identityFingerprint(),
                     row == null ? "NONE" : row.control().leaderText(),
                     row == null ? 0 : row.y(),
                     reason);
@@ -2155,8 +2194,10 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                 TemplatesEnum template,
                 int threshold,
                 String operation) {
+            AreaData searchArea = CommonGameAreas.bearClassifierSearchArea(template);
             ImageSearchResultData hit = emuManager.locatePattern(
-                    EMULATOR_NUMBER, authorization.frame(), template, threshold);
+                    EMULATOR_NUMBER, authorization.frame(), template,
+                    searchArea.topLeft(), searchArea.bottomRight(), threshold);
             if (!hit.isFound()) {
                 throw new BearInputRefusedException(operation + "-missing-in-authorizing-frame");
             }
@@ -2286,16 +2327,25 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
             BearVerifiedActionExecutor.Outcome outcome = ui.transition(
                     action,
                     authorization -> {
+                        if (authorization.screen() != source) {
+                            throw new BearInputRefusedException("back-source-changed-before-dispatch");
+                        }
                         if (action == BearUiAction.DISMISS_DEPLOY_DIALOG) {
                             pressBack();
                         } else if (source == BearNavigationPolicy.Screen.WAR_LIST) {
-                            AreaData close = BearFrameClassifier.warListClose(authorization.frame())
+                            AreaData close = classifier.warListBack(authorization.frame())
                                     .orElseThrow(() -> new BearInputRefusedException(
-                                            "close-war-rally-list-missing-in-authorizing-frame"));
-                            requireFreshAuthorization(authorization, "close-war-rally-list");
+                                            "back-war-rally-list-missing-in-authorizing-frame"));
+                            requireFreshAuthorization(authorization, "back-war-rally-list");
                             tapInside(close);
+                        } else if (source == BearNavigationPolicy.Screen.PET_SKILL_PANEL
+                                || source == BearNavigationPolicy.Screen.PET_BATTLE_SELECTED
+                                || source == BearNavigationPolicy.Screen.PET_BATTLE_ACTIVE) {
+                            tapTemplateFrom(authorization, BEAR_PET_CLOSE, 95, "close-pet-skills");
+                        } else if (source == BearNavigationPolicy.Screen.PET_CONFIRMATION) {
+                            tapTemplateFrom(authorization, BEAR_PET_CANCEL, 95, "cancel-pet-confirmation");
                         } else {
-                            tapInside(new PointData(50, 50), new PointData(50, 50));
+                            pressBack();
                         }
                     },
                     "newer frame at the verified parent of " + source,
@@ -2358,6 +2408,11 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
             classificationNanos = classification.totalNanos();
             classificationTemplateNanos.clear();
             classificationTemplateNanos.putAll(classification.templateNanos());
+            if (classification.screen() == BearNavigationPolicy.Screen.SPECIAL_BUILDINGS) {
+                logDebug(routineLogBearTrapLine("Observed configured trap=" + trapNumber
+                        + " status=" + classification.configuredTrapStatus()
+                        + "; Go availability does not establish activation"));
+            }
             return classification.screen();
         }
 
@@ -2430,9 +2485,11 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                 case LOCATE_BEAR, OWN_RALLY_REQUIRED, OWN_RALLY_STARTING,
                         OWN_RALLY_ACTIVE, RECOVER_TO_KNOWN_SCREEN ->
                         screen == BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY
+                                || screen == BearNavigationPolicy.Screen.WORLD_AT_CONFIGURED_BEAR
                                 || screen == BearNavigationPolicy.Screen.BEAR_RALLY_PANEL;
                 case FILL_JOIN_SLOTS, WAIT_FOR_NEXT_USEFUL_DEADLINE ->
                         screen == BearNavigationPolicy.Screen.WORLD
+                                || screen == BearNavigationPolicy.Screen.WORLD_AT_CONFIGURED_BEAR
                                 || screen == BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY
                                 || screen == BearNavigationPolicy.Screen.WAR_LIST;
                 case FINISHED, CANCELLED -> false;

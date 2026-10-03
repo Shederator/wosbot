@@ -18,14 +18,9 @@ class BearUiActionTest {
             BearUiAction.OPEN_ALLIANCE_WAR,
             BearUiAction.OPEN_AUTOJOIN,
             BearUiAction.STOP_AUTOJOIN,
-            BearUiAction.OPEN_TERRITORY,
-            BearUiAction.OPEN_SPECIAL_BUILDINGS,
             BearUiAction.GO_TO_CONFIGURED_TRAP,
-            BearUiAction.SELECT_RAZORBACK,
-            BearUiAction.OPEN_PET_QUICK_USE,
             BearUiAction.RECALL_MARCH,
-            BearUiAction.CONFIRM_RECALL,
-            BearUiAction.OPEN_ACTIVE_BEAR);
+            BearUiAction.CONFIRM_RECALL);
 
     @Test
     void everyReachableEdgeIsConfirmableByAProductionClassification() {
@@ -42,7 +37,8 @@ class BearUiActionTest {
         for (BearUiAction action : BearUiAction.values()) {
             // Tapping the active-Bear icon is only legal where the icon itself is visible.
             List<Set<Screen>> sides = action == BearUiAction.OPEN_ACTIVE_BEAR
-                    ? List.of(action.destinations())
+                    || action == BearUiAction.OPEN_CENTERED_BEAR
+                    ? List.of()
                     : List.of(action.sources(), action.destinations());
             for (Set<Screen> side : sides) {
                 if (side.stream().anyMatch(BearProductionScreens.WORLD::contains)) {
@@ -65,6 +61,7 @@ class BearUiActionTest {
         Map<Screen, Set<Screen>> parents = new EnumMap<>(Screen.class);
         Set<Screen> world = EnumSet.of(
                 Screen.WORLD,
+                Screen.WORLD_AT_CONFIGURED_BEAR,
                 Screen.WORLD_ACTIVE_BEAR_ICON_READY);
         parents.put(Screen.WAR_LIST, world);
         parents.put(Screen.FORMATION, EnumSet.of(
@@ -74,10 +71,10 @@ class BearUiActionTest {
         parents.put(Screen.ALLIANCE_MENU, world);
         parents.put(Screen.ALLIANCE_WAR, EnumSet.of(Screen.ALLIANCE_MENU));
         parents.put(Screen.AUTOJOIN_PANEL, EnumSet.of(Screen.ALLIANCE_WAR));
-        parents.put(Screen.PETS_OVERVIEW, world);
-        parents.put(Screen.PET_RAZORBACK, EnumSet.of(Screen.PETS_OVERVIEW));
-        parents.put(Screen.PET_QUICK_USE, EnumSet.of(Screen.PET_RAZORBACK));
-        parents.put(Screen.PET_CONFIRMATION, EnumSet.of(Screen.PET_RAZORBACK));
+        parents.put(Screen.PET_SKILL_PANEL, world);
+        parents.put(Screen.PET_BATTLE_SELECTED, world);
+        parents.put(Screen.PET_BATTLE_ACTIVE, world);
+        parents.put(Screen.PET_CONFIRMATION, EnumSet.of(Screen.PET_BATTLE_SELECTED));
         parents.put(Screen.MARCH_SIDEBAR, world);
         parents.put(Screen.SIDEBAR_OTHER, world);
         parents.put(Screen.DEPLOY_CONFIRMATION, EnumSet.of(Screen.FORMATION, Screen.WAR_LIST));

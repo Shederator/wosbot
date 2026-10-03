@@ -6,8 +6,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 class BearRallyScannerTest {
+
+    @Test
+    void identicalBearArtDoesNotMakeDifferentCaptainsTheSameRow() {
+        assertNotEquals(BearRallyScanner.leaderIdentity("Captain A"), BearRallyScanner.leaderIdentity("Captain B"));
+        assertEquals(0L, BearRallyScanner.leaderIdentity(""));
+    }
 
     @Test
     void returnsOnlyBearPlusControlsInStrictTopToBottomOrder() {
@@ -30,7 +37,7 @@ class BearRallyScannerTest {
     }
 
     @Test
-    void authorizationScanReadsNoTextSoItFitsTheInputBudget() {
+    void geometryOnlyScanDoesNotProduceAuthorizingIdentity() {
         AtomicInteger ocrCalls = new AtomicInteger();
         BearRallyScanner scanner = new BearRallyScanner(
                 () -> List.of(ImageSearchResultData.hit(620, 300, 96, 40, 40)),
@@ -42,7 +49,8 @@ class BearRallyScannerTest {
 
         List<BearRallyScanner.RallyRow> rows = scanner.scanRowsWithoutText();
 
-        assertEquals(0, ocrCalls.get(), "leader OCR is far too slow for an authorizing frame");
+        assertEquals(0, ocrCalls.get());
+        assertEquals(List.of(0L), rows.stream().map(BearRallyScanner.RallyRow::identityFingerprint).toList());
         assertEquals(List.of(270), rows.stream().map(BearRallyScanner.RallyRow::rowY).toList());
         assertEquals(List.of(true), rows.stream().map(BearRallyScanner.RallyRow::joinable).toList());
     }

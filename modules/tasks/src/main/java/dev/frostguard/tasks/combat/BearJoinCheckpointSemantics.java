@@ -12,7 +12,7 @@ final class BearJoinCheckpointSemantics {
 
     static boolean hasReconstructableRowIdentity(BearRallyListTraversal.Row row) {
         return row != null
-                && row.control().cropFingerprint() != 0L
+                && row.control().identityFingerprint() != 0L
                 && !row.control().leaderText().isBlank()
                 && !"NONE".equals(row.control().leaderText());
     }

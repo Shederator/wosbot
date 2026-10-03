@@ -49,7 +49,8 @@ below the completed row.
 
 When no usable plus is visible, generic Bear rows (including grey/full/departed rows) remain visible
 to the cursor and ordered frames are observed for three seconds before one bounded scroll. The scroll
-must retain the bottom visible overlap row proven by both its stable target crop and OCR leader text.
+must retain the bottom visible Bear row proven by freshly read captain identity. The swipe's
+authorizing rows, not an older pre-scan, are retained for the immediate/settled comparison.
 Absolute bottom is accepted only when the exact swipe-authorizing rows, the immediate newer frame,
 and a second settled frame at least 250 ms later contain the same ordered rows at the same
 positions. The routine then exits the Rally list, reopens it, and starts a new pass from the top.
@@ -78,8 +79,10 @@ observation updates preserve those tactical fields.
 Because a crash can occur between a plus tap and the `PLUS_COMMITTED` write, `JOIN_ARMED` is treated
 as an input that may already have occurred. Restart recovery aborts any visible formation transaction
 and preserves the durable spatial frontier rather than repeating that row. Arming is bound to the
-row in the exact tap-authorizing frame and requires a reconstructable crop fingerprint plus leader
-identity; failed/blank OCR therefore fails closed before the plus. A recovered ambiguous transaction
+row in the exact tap-authorizing frame and requires a reconstructable semantic fingerprint plus
+fresh leader OCR; failed/blank/duplicate OCR therefore fails closed before the plus. Reordered
+topmost candidates force a fresh decision instead of tapping the former candidate out of order.
+A recovered ambiguous transaction
 keeps that frontier across another restart. If the frontier row departs and successors collapse
 upward, its old screen coordinate is never reused: the list is closed and reopened for a new top
 pass. Persisted join provenance is established before dismissing a restart-time dialog, allowing an
@@ -103,7 +106,9 @@ machine, and a real event validates the entire 30-minute session.
 Departures from the 2026-10-02 fix plan, approved by the operator on 2026-10-02:
 
 - An unclassified screen that survives a bounded wait gets exactly one Back; the next unknown
-  recovery restarts the game. This is the only input sent without a classified source state.
+  recovery restarts the game. UNKNOWN is an explicit legal source of `RECOVER_UNKNOWN_BACK`:
+  the observation must still be current and fresh, transport is single-attempt, and a newer
+  recognized postcondition is required. It is not permission for a direct unguarded Back.
 - Missing templates fail the build through `TemplateResourceAvailabilityTest`, not application
   startup, because seven non-Bear templates are already missing upstream.
 - Slot starvation is solved by sibling profiles yielding the slot to the Bear owner rather than by a
@@ -115,6 +120,11 @@ Departures from the 2026-10-02 fix plan, approved by the operator on 2026-10-02:
 
 Not done, by design: the capture journal does not log the removed fast-revalidation heuristic.
 
-The at-Bear World states and the transitional screen were deleted (operator decision 2026-10-02):
-the live classifier never produced them. The configured-trap Go and active-Bear centring edges now
-have no confirmable destination and fail closed until real recordings define one.
+The earlier speculative at-Bear states were removed because no classifier produced them.
+October 3 footage now grounds `WORLD_AT_CONFIGURED_BEAR`: centered Trap 1 text plus active
+status, followed separately by the Bear rally panel. Trap 2 arrival and pre-event configured-trap
+Go remain gated. A visible shortcut alone is never proof of a centered target.
+
+Pet confirmation uses checkpoint version 3, with backward reads of versions 1 and 2. An armed
+Use is never repeated after a restart, including when the temporary post-input panel looks like
+the pre-input selection. Pet panels left open across activation can be closed through recovery.

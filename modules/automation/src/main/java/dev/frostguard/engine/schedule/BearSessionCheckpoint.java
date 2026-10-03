@@ -10,7 +10,7 @@ import java.util.Optional;
 /** Durable, non-secret recovery position for one protected Bear event session. */
 public final class BearSessionCheckpoint {
 
-    private static final String VERSION = "2";
+    private static final String VERSION = "3";
     private static final String SEPARATOR = "\\|";
 
     private BearSessionCheckpoint() {
@@ -47,7 +47,8 @@ public final class BearSessionCheckpoint {
         if ("1".equals(fields[0]) && fields.length == 10) {
             return parseVersionOne(fields);
         }
-        if (fields.length != 16 || !VERSION.equals(fields[0])) {
+        boolean versionTwo = "2".equals(fields[0]) && fields.length == 16;
+        if (!versionTwo && (fields.length != 17 || !VERSION.equals(fields[0]))) {
             return Optional.empty();
         }
         try {
@@ -66,7 +67,7 @@ public final class BearSessionCheckpoint {
                     text(fields[12]),
                     Long.parseLong(fields[13]),
                     text(fields[14]),
-                    Integer.parseInt(fields[15])));
+                    Integer.parseInt(fields[15]), versionTwo ? "NONE" : text(fields[16])));
         } catch (DateTimeParseException | NumberFormatException ignored) {
             return Optional.empty();
         }
@@ -151,7 +152,7 @@ public final class BearSessionCheckpoint {
                 durable.joinSubstate(),
                 durable.listRowFingerprint(),
                 durable.listLeader(),
-                durable.listRowY());
+                durable.listRowY(), durable.petUseState());
     }
 
     static Checkpoint mergeRecoveryBudget(Checkpoint durable, Checkpoint observation) {
@@ -173,7 +174,7 @@ public final class BearSessionCheckpoint {
                 durable.joinSubstate(),
                 durable.listRowFingerprint(),
                 durable.listLeader(),
-                durable.listRowY());
+                durable.listRowY(), durable.petUseState());
     }
 
     static String serialize(Checkpoint checkpoint) {
@@ -193,7 +194,7 @@ public final class BearSessionCheckpoint {
                 safe(checkpoint.joinSubstate()),
                 Long.toString(checkpoint.listRowFingerprint()),
                 safe(checkpoint.listLeader()),
-                Integer.toString(Math.max(0, checkpoint.listRowY())));
+                Integer.toString(Math.max(0, checkpoint.listRowY())), safe(checkpoint.petUseState()));
     }
 
     public static boolean recordTactical(
@@ -213,7 +214,17 @@ public final class BearSessionCheckpoint {
                 eventEnd, current.phase(), current.state(), current.action(),
                 current.frameSequence(), current.frameCapturedAt(), current.recoveryAttempts(),
                 reason, Instant.now(), instant(ownRallySentAt), instant(ownRallyReturnDeadline),
-                joinSubstate, listRowFingerprint, listLeader, listRowY));
+                joinSubstate, listRowFingerprint, listLeader, listRowY, current.petUseState()));
+    }
+
+    /** Persist before Use: a lost transport response must never lead to another confirmation. */
+    public static boolean armPetUse(AccountDescriptor profile, Instant eventEnd, long frame, Instant capturedAt) {
+        Checkpoint current = load(profile).filter(value -> value.eventEnd().equals(eventEnd)).orElse(null);
+        if (current == null) return false;
+        return record(profile, new Checkpoint(eventEnd, current.phase(), "PET_CONFIRMATION", "CONFIRM_PET_USE",
+                frame, capturedAt, current.recoveryAttempts(), "pet-use-armed-before-input", Instant.now(),
+                current.ownRallySentAt(), current.ownRallyReturnDeadline(), current.joinSubstate(),
+                current.listRowFingerprint(), current.listLeader(), current.listRowY(), "USE_ARMED"));
     }
 
     public static boolean clear(AccountDescriptor profile) {
@@ -256,7 +267,17 @@ public final class BearSessionCheckpoint {
             String joinSubstate,
             long listRowFingerprint,
             String listLeader,
-            int listRowY) {
+            int listRowY,
+            String petUseState) {
+
+        public Checkpoint(Instant eventEnd, String phase, String state, String action, long frameSequence,
+                Instant frameCapturedAt, int recoveryAttempts, String reason, Instant updatedAt,
+                Instant ownRallySentAt, Instant ownRallyReturnDeadline, String joinSubstate,
+                long listRowFingerprint, String listLeader, int listRowY) {
+            this(eventEnd, phase, state, action, frameSequence, frameCapturedAt, recoveryAttempts, reason,
+                    updatedAt, ownRallySentAt, ownRallyReturnDeadline, joinSubstate, listRowFingerprint,
+                    listLeader, listRowY, "NONE");
+        }
 
         public Checkpoint(
                 Instant eventEnd,

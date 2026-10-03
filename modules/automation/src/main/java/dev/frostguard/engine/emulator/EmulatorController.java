@@ -271,7 +271,7 @@ public class EmulatorController {
     }
     public List<ImageSearchResultData> locateAllPatterns(String idx, RawImageData frame,
             TemplatesEnum t, PointData tl, PointData br, double th, int max) {
-        requireBackend();
+        // Caller-owned frames are CPU-only evidence; replay must not initialize a device backend.
         try { OpenCvPatternLocator.setContextLabel(label(idx));
               return OpenCvPatternLocator.locateAllPatterns(frame, regionTpl(t.getTemplate()), tl, br, th, max);
         } finally { OpenCvPatternLocator.clearContextLabel(); }

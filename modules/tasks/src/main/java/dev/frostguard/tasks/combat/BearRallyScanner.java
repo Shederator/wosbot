@@ -8,7 +8,6 @@ import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.helper.TemplateSearchHelper;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.CommonOCRSettings;
-import java.awt.image.BufferedImage;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Supplier;
@@ -24,7 +23,7 @@ final class BearRallyScanner {
         String extract(PointData topLeft, PointData bottomRight);
     }
 
-    record RallyRow(AreaData joinArea, int rowY, long cropFingerprint, String leaderText) {
+    record RallyRow(AreaData joinArea, int rowY, long identityFingerprint, String leaderText) {
         boolean joinable() {
             return joinArea != null;
         }
@@ -33,14 +32,13 @@ final class BearRallyScanner {
     private final Supplier<List<ImageSearchResultData>> greenButtons;
     private final Supplier<List<ImageSearchResultData>> bearIcons;
     private final TextExtractor text;
-    private final BufferedImage identityImage;
 
     BearRallyScanner(TemplateSearchHelper search, RawImageData raw) {
         TemplateSearchHelper.Frame frame = search.frame(raw);
         this.greenButtons = () -> frame.locateAllPatterns(
                 TemplatesEnum.BEAR_JOIN_PLUS_ICON, search(80));
         this.bearIcons = () -> frame.locateAllPatterns(
-                TemplatesEnum.BEAR_HUNT_IS_RUNNING, search(80));
+                TemplatesEnum.BEAR_RALLY_TARGET, search(90));
         this.text = (topLeft, bottomRight) -> {
             try {
                 return frame.extractText(
@@ -49,7 +47,6 @@ final class BearRallyScanner {
                 return null;
             }
         };
-        this.identityImage = frame.bufferedImage();
     }
 
     BearRallyScanner(
@@ -59,17 +56,13 @@ final class BearRallyScanner {
         this.greenButtons = greenButtons;
         this.bearIcons = bearIcons;
         this.text = text;
-        this.identityImage = null;
     }
 
     List<RallyRow> scanRows() {
         return scan(true);
     }
 
-    /**
-     * Rows with their visual identity but no leader text. Leader OCR takes far longer than the
-     * input authorization budget, so authorizing frames are matched by fingerprint only.
-     */
+    /** Geometry-only scan for diagnostics, never sufficient to authorize a rally join. */
     List<RallyRow> scanRowsWithoutText() {
         return scan(false);
     }
@@ -107,11 +100,11 @@ final class BearRallyScanner {
         AreaData joinArea = button == null ? null : button.hasMatchedArea()
                 ? button.getMatchedArea()
                 : new AreaData(button.getPoint(), button.getPoint());
+        String leader = readLeader ? normalizeLeader(readLeader(anchorY)) : "";
         return new RallyRow(
                 joinArea,
                 icon.getPoint().getY(),
-                visualIdentity(anchorY),
-                readLeader ? normalizeLeader(readLeader(anchorY)) : "");
+                leaderIdentity(leader), leader);
     }
 
     private String readLeader(int anchorY) {
@@ -125,21 +118,13 @@ final class BearRallyScanner {
                 new PointData(CommonGameAreas.BEAR_RALLY_LEADER_X2, y2));
     }
 
-    /** Hashes the stable target crop; countdowns and animated hero portraits are intentionally out. */
-    private long visualIdentity(int anchorY) {
-        if (identityImage == null) {
-            return 0L;
-        }
-        int left = 38;
-        int right = Math.min(identityImage.getWidth() - 1, 225);
-        int top = Math.max(0, anchorY - 102);
-        int bottom = Math.min(identityImage.getHeight() - 1, anchorY + 70);
+    /** Versioned semantic key. Equality also requires exact normalized OCR text, never hash alone. */
+    static long leaderIdentity(String leader) {
+        if (leader == null || leader.isBlank()) return 0L;
         long hash = 0xcbf29ce484222325L;
-        for (int y = top; y <= bottom; y += 4) {
-            for (int x = left; x <= right; x += 4) {
-                hash ^= identityImage.getRGB(x, y) & 0x00ffffffL;
-                hash *= 0x100000001b3L;
-            }
+        for (char character : ("bear-leader-v1:" + leader).toCharArray()) {
+            hash ^= character;
+            hash *= 0x100000001b3L;
         }
         return hash;
     }

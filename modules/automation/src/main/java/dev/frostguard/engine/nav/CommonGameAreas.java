@@ -218,6 +218,52 @@ public final class CommonGameAreas {
     // so this is the upper-right header band shared with other closeable overlays.
     public static final AreaData BEAR_WAR_LIST_CLOSE_SEARCH_AREA = region(540, 0, 719, 240);
 
+    // 720x1280 recorded Bear layout. Page identity is separate from action/control readiness.
+    public static final AreaData BEAR_PAGE_TITLE = region(85, 5, 410, 75);
+    public static final AreaData BEAR_PAGE_TABS = region(15, 75, 610, 165);
+    public static final AreaData BEAR_BACK_ARROW = region(0, 0, 85, 78);
+    public static final AreaData BEAR_BACK_ARROW_TARGET = region(30, 25, 60, 50);
+    public static final AreaData BEAR_TRAP_1_TITLE = region(190, 250, 395, 300);
+    public static final AreaData BEAR_TRAP_2_TITLE = region(190, 435, 395, 485);
+    public static final AreaData BEAR_TRAP_1_STATUS = region(195, 300, 490, 343);
+    public static final AreaData BEAR_TRAP_2_STATUS = region(195, 480, 490, 528);
+    // Bear body above the centered numbered nameplate; never the generic rally indicator.
+    public static final AreaData BEAR_CENTER_BODY = region(335, 475, 390, 520);
+
+    /** Narrow only detectors whose positions have recorded evidence; others retain full search. */
+    public static AreaData bearClassifierSearchArea(dev.frostguard.api.configs.TemplatesEnum template) {
+        return switch (template) {
+            case BEAR_CENTER_TRAP_1, BEAR_CENTER_TRAP_1_PANEL -> region(335, 560, 450, 592);
+            case BEAR_CENTER_ACTIVE, BEAR_CENTER_ACTIVE_PANEL -> region(298, 535, 365, 565);
+            case BEAR_PANEL_TITLE -> region(300, 815, 470, 865);
+            case BEAR_PET_TITLE -> region(280, 120, 445, 185);
+            case BEAR_PET_BATTLE_NAME -> region(50, 765, 280, 825);
+            case BEAR_PET_BATTLE_ICON -> region(65, 375, 215, 530);
+            case BEAR_PET_QUICK_USE -> region(40, 1035, 360, 1140);
+            case BEAR_PET_CONFIRMATION -> region(140, 475, 580, 550);
+            case BEAR_PET_CONFIRM_USE -> region(370, 765, 655, 865);
+            case BEAR_PET_CANCEL -> region(65, 765, 350, 865);
+            case BEAR_PET_ACTIVE -> region(245, 1060, 360, 1115);
+            case BEAR_PET_CLOSE -> region(635, 120, 700, 185);
+            case GAME_HOME_PETS -> region(610, 895, 720, 1025);
+            case BEAR_WAR_TITLE, BEAR_TERRITORY_TITLE -> BEAR_PAGE_TITLE;
+            case BEAR_RALLY_TAB, BEAR_TERRITORY_TAB, BEAR_SPECIAL_TAB -> BEAR_PAGE_TABS;
+            case BEAR_BACK_ARROW -> BEAR_BACK_ARROW;
+            case BEAR_TRAP_1_TITLE -> BEAR_TRAP_1_TITLE;
+            case BEAR_TRAP_2_TITLE -> BEAR_TRAP_2_TITLE;
+            case BEAR_TRAP_ACTIVE, BEAR_TRAP_COOLDOWN -> region(195, 300, 490, 528);
+            case GAME_START_WELCOME_BACK_TITLE -> region(120, 180, 600, 310);
+            case RALLY_MARCH_QUEUE_FULL -> region(190, 285, 535, 390);
+            case DEPLOY_CONFIRMATION_DIALOG, TROOPS_ALREADY_MARCHING -> region(40, 390, 685, 870);
+            case BEAR_DEPLOY_BUTTON -> region(375, 1140, 715, 1280);
+            case RALLY_HOLD_BUTTON -> region(195, 750, 520, 870);
+            case BEAR_RALLY_BUTTON -> region(140, 650, 580, 1100);
+            case GAME_HOME_WORLD, BEAR_WORLD_CITY -> region(580, 1155, 720, 1280);
+            case BEAR_HUNT_IS_RUNNING -> region(490, 560, 630, 950);
+            default -> region(0, 0, 720, 1280);
+        };
+    }
+
     // Polar Terror search panel: the level number sits in the pill right of the slider, not on the
     // slider bar itself.
     public static final AreaData POLAR_LEVEL_DISPLAY = region(565, 1030, 665, 1078);

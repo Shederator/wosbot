@@ -8,6 +8,28 @@ import org.junit.jupiter.api.Test;
 class BearSessionCheckpointTest {
 
     @Test
+    void petIntentSurvivesSerializationObservationAndSchedulerRecovery() {
+        Instant end = Instant.parse("2026-10-03T01:00:00Z");
+        var armed = new BearSessionCheckpoint.Checkpoint(end, "PREPARING", "PET_CONFIRMATION",
+                "CONFIRM_PET_USE", 14, end.minusSeconds(2000), 1, "armed", end.minusSeconds(2000),
+                Instant.EPOCH, Instant.EPOCH, "NONE", 0, "NONE", 0, "USE_ARMED");
+        var restored = BearSessionCheckpoint.parse(BearSessionCheckpoint.serialize(armed)).orElseThrow();
+        assertEquals(armed, restored);
+        var next = new BearSessionCheckpoint.Checkpoint(end, "RECOVERING", "PET_BATTLE_SELECTED",
+                "NONE", 15, end.minusSeconds(1990), 2, "retry", end.minusSeconds(1990));
+        assertEquals("USE_ARMED", BearSessionCheckpoint.mergeRecoveryBudget(restored, next).petUseState());
+        assertEquals("USE_ARMED", BearSessionCheckpoint.mergeTactical(restored, next, false).petUseState());
+    }
+
+    @Test
+    void readsVersionTwoWithNoPetIntent() {
+        var old = BearSessionCheckpoint.parse("2|2026-10-03T01:00:00Z|ACTIVE|WORLD|NONE|4|"
+                + "2026-10-03T00:30:00Z|0|resume|2026-10-03T00:30:01Z|1970-01-01T00:00:00Z|"
+                + "1970-01-01T00:00:00Z|NONE|0|NONE|0").orElseThrow();
+        assertEquals("NONE", old.petUseState());
+    }
+
+    @Test
     void uiObservationCannotResetSchedulerRecoveryBudget() {
         Instant eventEnd = Instant.parse("2026-10-01T10:30:00Z");
         BearSessionCheckpoint.Checkpoint recovery = new BearSessionCheckpoint.Checkpoint(

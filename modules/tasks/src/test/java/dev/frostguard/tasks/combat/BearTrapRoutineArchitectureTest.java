@@ -43,14 +43,20 @@ class BearTrapRoutineArchitectureTest {
     }
 
     @Test
-    void authorizingCallbacksDoNoOcrOrPersistence() throws IOException {
+    void authorizingCallbacksRecheckFreshnessAfterEvidenceAndDoNotPersistTacticalState() throws IOException {
         String java = Files.readString(
                 Path.of("src/main/java/dev/frostguard/tasks/combat/BearTrapRoutine.java"));
         for (String action : new String[] {"OPEN_JOIN_FORMATION", "SCROLL_RALLY_LIST", "DEPLOY_OWN_RALLY",
                 "DEPLOY_JOIN"}) {
             String callback = callbackOf(java, action);
-            // OCR and checkpoint writes take longer than the one-second authorization budget.
-            assertFalse(callback.contains("scanRows()"), action + " callback must not read leader text");
+            // Measured bounded captain OCR may fit. It must never bypass the final age check.
+            int proof = callback.indexOf("scanRows()");
+            int freshness = callback.indexOf("requireFreshAuthorization(");
+            if (action.equals("OPEN_JOIN_FORMATION") || action.equals("SCROLL_RALLY_LIST")) {
+                assertTrue(proof >= 0, action + " must read captain identity in its own authorizing frame");
+            }
+            assertTrue(freshness >= 0 && freshness > proof,
+                    action + " must check freshness after any OCR evidence");
             assertFalse(callback.contains("requireTacticalCheckpoint"),
                     action + " callback must not persist before its input");
             assertFalse(callback.contains("readPreflightScreen"), action + " callback must not run OCR");

@@ -20,18 +20,22 @@ final class BearProductionScreens {
             Screen.BEAR_RALLY_PANEL,
             Screen.WAR_LIST,
             Screen.ALLIANCE_MENU,
+            Screen.ALLIANCE_TERRITORY,
             Screen.SPECIAL_BUILDINGS,
-            Screen.PET_QUICK_USE,
-            Screen.PETS_OVERVIEW,
+            Screen.PET_BATTLE_ACTIVE,
+            Screen.PET_BATTLE_SELECTED,
+            Screen.PET_CONFIRMATION,
+            Screen.PET_SKILL_PANEL,
             Screen.MARCH_SIDEBAR,
             Screen.SIDEBAR_OTHER,
             Screen.WORLD_ACTIVE_BEAR_ICON_READY,
+            Screen.WORLD_AT_CONFIGURED_BEAR,
             Screen.WORLD,
             Screen.UNKNOWN));
 
     /** During an active event the World root is classified with the Bear icon visible. */
     static final Set<Screen> WORLD = Set.copyOf(EnumSet.of(
-            Screen.WORLD, Screen.WORLD_ACTIVE_BEAR_ICON_READY));
+            Screen.WORLD, Screen.WORLD_ACTIVE_BEAR_ICON_READY, Screen.WORLD_AT_CONFIGURED_BEAR));
 
     private BearProductionScreens() {
     }

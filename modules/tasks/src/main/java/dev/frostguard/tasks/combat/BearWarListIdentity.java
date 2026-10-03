@@ -7,10 +7,9 @@ final class BearWarListIdentity {
     }
 
     static boolean isVisible(
-            boolean openedFromVerifiedWarIndicator,
-            boolean closeControlVisible,
-            int visibleJoinButtons) {
-        return visibleJoinButtons > 0
-                || (openedFromVerifiedWarIndicator && closeControlVisible);
+            boolean warTitleVisible,
+            boolean selectedRallyTabVisible) {
+        // Neither a generic rally indicator, a green plus nor remembered entry identifies a page.
+        return warTitleVisible && selectedRallyTabVisible;
     }
 }

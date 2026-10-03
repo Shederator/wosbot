@@ -14,6 +14,26 @@ import org.junit.jupiter.api.Test;
 class BearTransitionReplayTest {
 
     @Test
+    void unknownBackIsAProvenancedSingleInputWithANewerPostcondition() {
+        Replay replay = new Replay(BearNavigationPolicy.Screen.UNKNOWN, BearNavigationPolicy.Screen.WORLD);
+        long before = replay.machine.observe().sequence();
+        replay.confirm(BearUiAction.RECOVER_UNKNOWN_BACK);
+        assertEquals(1, replay.inputs.get());
+        assertTrue(replay.machine.current().sequence() > before);
+        assertTrue(replay.diagnostics.stream().anyMatch(line -> line.contains("RECOVER_UNKNOWN_BACK")));
+    }
+
+    @Test
+    void unknownBackCannotBeRepeatedAfterItsFrameWasConsumed() {
+        Replay replay = new Replay(BearNavigationPolicy.Screen.UNKNOWN, BearNavigationPolicy.Screen.WORLD);
+        replay.machine.observe();
+        replay.confirm(BearUiAction.RECOVER_UNKNOWN_BACK);
+        assertTrue(replay.machine.transition(BearUiAction.RECOVER_UNKNOWN_BACK,
+                ignored -> replay.inputs.incrementAndGet()) != BearVerifiedActionExecutor.Outcome.CONFIRMED);
+        assertEquals(1, replay.inputs.get());
+    }
+
+    @Test
     void preparationRouteFailsClosedAtTheUnverifiedConfiguredTrapGo() {
         Replay replay = new Replay(
                 BearNavigationPolicy.Screen.WORLD,
@@ -48,6 +68,17 @@ class BearTransitionReplayTest {
         assertEquals(BearVerifiedActionExecutor.Outcome.CONFIRMED,
                 replay.machine.transition(BearUiAction.OPEN_WAR_LIST, ignored -> replay.inputs.incrementAndGet()));
         assertEquals(1, replay.inputs.get(), "slow rendering must not cause a second tap");
+    }
+
+    @Test
+    void ownRallyNavigationRequiresCenteredTrapBeforeOpeningItsPanel() {
+        Replay replay = new Replay(BearNavigationPolicy.Screen.WORLD_ACTIVE_BEAR_ICON_READY,
+                BearNavigationPolicy.Screen.WORLD_AT_CONFIGURED_BEAR,
+                BearNavigationPolicy.Screen.BEAR_RALLY_PANEL);
+        replay.machine.observe();
+        replay.confirm(BearUiAction.OPEN_ACTIVE_BEAR);
+        replay.confirm(BearUiAction.OPEN_CENTERED_BEAR);
+        assertEquals(2, replay.inputs.get());
     }
 
     @Test

@@ -26,8 +26,7 @@ final class BearRecordingReplay {
             // Another frame test may already have loaded OpenCV in this JVM.
         }
         BearFrameClassifier classifier = new BearFrameClassifier(
-                (frame, template, threshold) -> EmulatorController.getInstance()
-                        .locatePattern("bear-replay", frame, template, threshold).isFound(),
+                new BearTemplateMatcher(EmulatorController.getInstance(), "bear-replay"),
                 trapNumber);
         List<BearFrameClassifier.Classification> classifications = new ArrayList<>();
         try (H264FrameDecoder decoder = new H264FrameDecoder(segment)) {

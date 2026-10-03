@@ -139,6 +139,46 @@ class BearRallyListTraversalTest {
         return row(y, hash, leader, true);
     }
 
+    @Test
+    void duplicateCompletedFrontierCannotAuthorizeTheUniqueRowBetweenCopies() {
+        var traversal = new BearRallyListTraversal();
+        var anchor = row(200, 11, "A");
+        var candidate = row(500, 22, "B");
+        var duplicate = row(800, 11, "A");
+        traversal.completed(anchor);
+        assertEquals(java.util.Optional.empty(), traversal.authorizeCandidate(candidate,
+                List.of(anchor, candidate, duplicate)));
+        assertEquals(BearRallyListTraversal.Kind.OVERLAP_NOT_PROVEN,
+                traversal.decide(observation(4, false, anchor, candidate, duplicate)).kind());
+    }
+
+    @Test
+    void duplicateScrollAnchorCannotProveOverlapOrAbsoluteBottom() {
+        var traversal = new BearRallyListTraversal();
+        var anchor = row(200, 11, "A");
+        var duplicate = row(800, 11, "A");
+        traversal.scrollAuthorized(anchor);
+        assertEquals(BearRallyListTraversal.Kind.OVERLAP_NOT_PROVEN,
+                traversal.decide(observation(4, false, anchor, duplicate)).kind());
+        var rows = List.of(anchor.control(), duplicate.control());
+        assertEquals(false, BearRallyListTraversal.stableAbsoluteBottom(rows, rows, rows));
+    }
+
+    @Test
+    void freshAuthorizationRejectsDuplicateNamesAndChangedTopmostOrder() {
+        var traversal = new BearRallyListTraversal();
+        var candidate = row(300, 11, "A");
+        assertEquals(java.util.Optional.empty(), traversal.authorizeCandidate(candidate,
+                List.of(candidate, row(700, 11, "A"))));
+        assertEquals(java.util.Optional.empty(), traversal.authorizeCandidate(candidate,
+                List.of(row(200, 22, "B"), candidate)));
+        var moved = row(320, 11, "A");
+        assertEquals(java.util.Optional.of(moved), traversal.authorizeCandidate(candidate,
+                List.of(moved, row(700, 22, "B"))));
+        assertEquals(java.util.Optional.empty(), traversal.authorizeCandidate(candidate,
+                List.of(row(300, 11, "", true))));
+    }
+
     private static BearRallyListTraversal.Row row(
             int y, long hash, String leader, boolean joinable) {
         return new BearRallyListTraversal.Row(new BearRallyScanner.RallyRow(

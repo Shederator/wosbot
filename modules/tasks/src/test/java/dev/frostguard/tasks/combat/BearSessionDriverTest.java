@@ -48,6 +48,51 @@ class BearSessionDriverTest {
     }
 
     @Test
+    void activeRecoveryClosesEachRecordedPetPanelWithoutUsingSkills() throws Exception {
+        for (String name : new String[]{"pet-panel", "pet-selected", "pet-active"}) {
+            Set<TemplatesEnum> signals = EnumSet.of(TemplatesEnum.BEAR_PET_TITLE);
+            if (!name.equals("pet-panel")) signals.add(TemplatesEnum.BEAR_PET_BATTLE_NAME);
+            if (name.equals("pet-selected")) signals.add(TemplatesEnum.BEAR_PET_QUICK_USE);
+            if (name.equals("pet-active")) signals.add(TemplatesEnum.BEAR_PET_ACTIVE);
+            ScriptedBear bear = new ScriptedBear(signals);
+            bear.captured = BearLiveFrameReplayTest.frame(name);
+            var driver = bear.driver();
+            bear.becomeAfterNextClassification(WORLD_WITH_BEAR);
+            assertTrue(driver.recover(BearSessionCoordinator.State.OWN_RALLY_REQUIRED), name);
+            assertEquals(1, bear.inputs, name);
+            assertEquals(0, bear.backs, name);
+        }
+    }
+
+    @Test
+    void activeRecoveryCancelsPetConfirmationInsteadOfSendingUse() throws Exception {
+        ScriptedBear bear = new ScriptedBear(EnumSet.of(
+                TemplatesEnum.BEAR_PET_CONFIRMATION, TemplatesEnum.BEAR_PET_CONFIRM_USE));
+        bear.captured = BearLiveFrameReplayTest.frame("pet-confirmation");
+        var driver = bear.driver();
+        bear.becomeAfterNextClassification(EnumSet.of(TemplatesEnum.BEAR_PET_TITLE,
+                TemplatesEnum.BEAR_PET_BATTLE_NAME, TemplatesEnum.BEAR_PET_QUICK_USE));
+        assertTrue(driver.recover(BearSessionCoordinator.State.OWN_RALLY_REQUIRED));
+        assertEquals(1, bear.inputs);
+        assertTrue(bear.lastTap.getPoint().getX() < 350, "recovery must target Cancel, not Use");
+    }
+
+    @Test
+    void configuredTrapOnCooldownRefusesOwnRallyWithoutInput() throws Exception {
+        ScriptedBear bear = new ScriptedBear(EnumSet.of(TemplatesEnum.BEAR_TERRITORY_TITLE,
+                TemplatesEnum.BEAR_SPECIAL_TAB, TemplatesEnum.BEAR_TRAP_2_TITLE,
+                TemplatesEnum.BEAR_TRAP_COOLDOWN));
+        // Normal execution loads this from the profile before constructing the driver.
+        var configuredTrap = BearTrapRoutine.class.getDeclaredField("trapNumber");
+        configuredTrap.setAccessible(true);
+        configuredTrap.setInt(bear, 2);
+        var failure = assertThrows(BearSessionExecutionException.class, () -> bear.driver().startOwnRally(1));
+        assertEquals("configured-trap-2-on-cooldown", failure.operation());
+        assertEquals(0, bear.inputs);
+        assertEquals(0, bear.backs);
+    }
+
+    @Test
     void observeOnlyCleanupSendsNoInputWhileNormalCleanupVerifiesTheUi() {
         ScriptedBear observing = new ScriptedBear(UNKNOWN);
         observing.getProfile().setConfig(ConfigurationKeyEnum.BEAR_TRAP_OBSERVE_ONLY_BOOL, true);
@@ -169,6 +214,8 @@ class BearSessionDriverTest {
         private int switchAfter = Integer.MAX_VALUE;
         private int backs;
         private int inputs;
+        private RawImageData captured = FRAME;
+        private ImageSearchResultData lastTap;
 
         private ScriptedBear(Set<TemplatesEnum> visible) {
             super(new AccountDescriptor(990_003L, "Bear driver", "0", true, 100L, 30L),
@@ -197,7 +244,7 @@ class BearSessionDriverTest {
 
                 @Override
                 public AndroidFrameStream.Frame latestAfter(long after) {
-                    return new AndroidFrameStream.Frame(FRAME, sequence.incrementAndGet(), System.nanoTime());
+                    return new AndroidFrameStream.Frame(captured, sequence.incrementAndGet(), System.nanoTime());
                 }
 
                 @Override
@@ -230,6 +277,12 @@ class BearSessionDriverTest {
         }
 
         @Override
+        void executeObservedInput(Runnable authorize, Runnable input) {
+            authorize.run();
+            input.run();
+        }
+
+        @Override
         public void pressBack() {
             if (getProfile().getConfig(ConfigurationKeyEnum.BEAR_TRAP_OBSERVE_ONLY_BOOL, Boolean.class) == Boolean.TRUE) {
                 inputs++;
@@ -249,6 +302,7 @@ class BearSessionDriverTest {
 
         @Override
         public boolean tapInside(ImageSearchResultData result) {
+            lastTap = result;
             inputs++;
             return true;
         }
