@@ -1,34 +1,33 @@
 ---
 name: analyze-logs
 description: >
-  Read Frostguard account logs and frostguard.log for one routine.
-  Use when the user asks to analyze logs, read an account log, explain what
-  a routine did, or runs /analyze-logs. Confirm the routine, profiles, day,
-  and logs directory, then return a visit timeline.
+  Analyze Frostguard account and global logs to explain one routine's visits.
+  Use when the user asks what a routine did, requests its visit timeline, or
+  runs /analyze-logs. Resolve only missing scope and inspect relevant log lines.
 user-invocable: true
 ---
 
 # Analyze Frostguard logs
 
-Extract one routine's visits from the workspace logs and return a timeline that can support an issue. Stop after the timeline. Do not edit code, file an issue, or commit logs.
+Extract the relevant visits from an existing or specifically collected logs directory. Return a timeline and answer the user's question from the evidence. This skill analyzes logs; it does not require a snapshot dump. Do not commit logs. If the user has separately authorized a code fix, the timeline does not block that work.
 
 ## Scope
 
 State the scope in the reply, then search.
 
-Ask only when the routine is missing, matches more than one class, or matches nothing, or when more than one logs directory exists and the user did not choose one. Profiles default to all. The window defaults to the machine's current local calendar day. Name that date in the scope. Captures the user names replace that default: the window is those UTC filenames converted to local time.
+State the scope before searching. Ask only when the routine is missing, matches more than one class, or matches nothing, or when the source logs directory cannot be resolved. Profiles default to all. The window defaults to the bot/account's current local calendar day; derive its offset from the log timestamps when available and name the resolved date in the scope. If the user names captures, use their UTC filename times converted to account-local time as anchors, then include each enclosing visit from its queue/routine start through its exit.
 
 | Input | Resolution |
 |---|---|
 | Routine | Required. A class simple name, a `TpDailyTaskEnum` constant, its display text, or a spoken alias below. |
 | Profiles | `all`, or the profile names the user gave. |
-| Window | A local calendar day, or an inclusive range of local days. Default: today. Named PNG captures set the window from their UTC stamps. |
-| Logs directory | A directory the user names. Otherwise the first existing path below. |
+| Window | An account-local calendar day or inclusive range. Default: the bot's current local day. Named PNG captures anchor the enclosing visit using their UTC stamps. |
+| Logs directory | A directory the user names or passes from a collection workflow. Otherwise the first existing path below. |
 | Question | Optional. With no question, return the timeline. |
 
 Logs directory, in order:
 
-1. The directory the user names. A copied folder is valid. A folder that holds only PNG captures is not a logs directory: use a logs path named in the same request, including a dump copied for another routine that ran the same night.
+1. The directory the user names or passes from a collection workflow. If a dump root contains `logs/`, use that child directory. A copied folder is valid. A folder that holds only PNG captures is not a logs directory: use a logs path named in the same request, including a dump copied for another routine that ran the same night.
 2. `<repo>/.frostguard-dev/logs` when that directory exists.
 3. `~/.frostguard/workspaces/<channel>/<name>/logs` for an installed Stable or Nightly workspace. If several exist, list them and ask.
 
@@ -105,12 +104,12 @@ Search the message only after the class prefix matches. Keep the full message. A
 
 A snapshot path in a message joins a capture by the UTC stamp and the activity token. The filename stamp is UTC (`yyyyMMdd'T'HHmmss.SSSZ`). Convert it to the account clock with the offset on `frostguard.log` (`+02:00` means add two hours). Filter account lines on that local time. Flat path: `logs/snapshot/<UTC>-<activity>-<type>.png`. Grouped path: `logs/snapshot/<activity>/<UTC>-<type>.png`. Words added after the activity in a renamed file are the user's annotation.
 
-## Timeline
+## Result
 
-1. **Scope.** Directory, files opened, profiles, day or range, class, display text, lines kept.
-2. **Visits, in time order.** One block per `Executing:` / routine start through `Completed:`, `PREEMPTED:`, or the routine's own exit. Each block names the profile, the start, the end, the exit sentence copied from the log, the next schedule copied from the log, and any `snapshot=` path. When the user gave captures, lead with the visits that join those files and summarize the other visits in the window as counts.
-3. **Decision lines under the visit, copied.** Search, hit, miss, tap, confirmation, and exit stay in order. Copy those lines for the joined visits.
-4. **Queue lines,** each marked `TaskQueue`, separate from the routine's own lines.
-5. **What the log does not show.** No capture, no balance, a dump that ends before a later PNG, or a matching template logged by another class.
+1. **Scope.** Logs directory, files opened, profiles, day or range, class, display text, and lines kept.
+2. **Visits, in time order.** One block per `Executing:` / routine start through `Completed:`, `PREEMPTED:`, or the routine's own exit. Each block names the profile, start and end, the exit sentence from the log, the next schedule from the log, and any `snapshot=` path. When the user gave captures, lead with the visits joined to those files and summarize other visits in the window as counts.
+3. **Decision lines under each visit,** in order: search, hit, miss, tap, confirmation, and exit. Copy the relevant lines for joined visits.
+4. **Queue lines,** marked `TaskQueue` and separate from routine lines.
+5. **Evidence limits.** State what the logs cannot establish, such as a missing capture, a dump ending before a later PNG, or a template result logged by another class.
 
-Answer the user's question from that timeline. Profile names may appear in the reply. Keep them out of GitHub issues, fixtures, filenames, and commits.
+Answer the user's question from the timeline. Include concise diagnosis or next-step recommendations when requested. Profile names may appear in the reply; keep them out of GitHub issues, fixtures, filenames, and commits.
