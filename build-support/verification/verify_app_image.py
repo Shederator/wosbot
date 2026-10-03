@@ -9,6 +9,7 @@ import binascii
 import hashlib
 import re
 import zipfile
+from datetime import datetime
 from pathlib import Path
 
 MINIMUM_RUNTIME_JARS = 50
@@ -163,8 +164,15 @@ def inspect_image(
                     metadata_values = {}
                     break
                 metadata_values[key] = value
-            if (set(metadata_values) != {"version", "pullRequestBuild", "authenticodePublisher"}
-                    or metadata_values["pullRequestBuild"] not in {"true", "false"}):
+            if (set(metadata_values) != {
+                    "version", "commit", "buildTime", "pullRequestBuild", "authenticodePublisher"
+            }
+                    or not metadata_values["version"]
+                    or metadata_values["pullRequestBuild"] not in {"true", "false"}
+                    or (metadata_values["commit"] != "unknown"
+                        and not re.fullmatch(r"[0-9a-f]{40,64}", metadata_values["commit"]))
+                    or (metadata_values["buildTime"] != "unknown"
+                        and not _is_utc_build_time(metadata_values["buildTime"]))):
                 problems.append("Desktop JAR has invalid build metadata")
             else:
                 jar_version = re.fullmatch(
@@ -218,6 +226,15 @@ def inspect_image(
         if any(part.lower() in {".frostguard", ".frostguard-dev", "logs"} for part in path.parts):
             problems.append(f"Runtime/user-data directory leaked into the application image: {relative}")
     return problems
+
+
+def _is_utc_build_time(value: str) -> bool:
+    try:
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        ) == value
+    except ValueError:
+        return False
 
 
 def main(argv: list[str] | None = None) -> int:

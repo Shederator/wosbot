@@ -9,6 +9,7 @@ import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.convert.RegexNumberParser;
 import java.time.LocalDateTime;
@@ -74,8 +75,7 @@ public WarAcademyRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDailyTask)
         Integer remainingShards = scanRemainingShards();
 
         if (remainingShards == null) {
-            logError(routineLogWarAcademyLine("Could not read remaining shards count."));
-            reschedule(LocalDateTime.now().plusMinutes(RETRY_DELAY_MINUTES_MS));
+            scheduleOcrRetry("initial shard count was unreadable", "initial-shards");
             return;
         }
 
@@ -87,13 +87,8 @@ public WarAcademyRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDailyTask)
 
         logInfo(routineLogWarAcademyLine(String.format("Detected %d shards to redeem.", remainingShards)));
 
-        if (!redeemMaximumShardsFlow()) {
-            logWarning(routineLogWarAcademyLine("Could not redeem shards."));
-            reschedule(LocalDateTime.now().plusMinutes(RETRY_DELAY_MINUTES_MS));
-            return;
-        }
-
-        managePostRedemptionCheck();
+        redeemMaximumShardsFlow();
+        managePostRedemptionCheck(remainingShards);
     }
 
 @Override
@@ -106,14 +101,18 @@ public WarAcademyRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDailyTask)
         return false;
     }
 
-private void managePostRedemptionCheck() {
+private void managePostRedemptionCheck(int initialShards) {
         logInfo(routineLogWarAcademyLine("Inspecting for additional shards after redemption."));
 
         Integer finalShards = scanRemainingShards();
 
         if (finalShards == null) {
-            logError(routineLogWarAcademyLine("Could not read final shards count."));
-            reschedule(LocalDateTime.now().plusMinutes(RETRY_DELAY_MINUTES_MS));
+            scheduleOcrRetry("final shard count was unreadable", "final-shards");
+            return;
+        }
+
+        if (!redemptionMadeProgress(initialShards, finalShards)) {
+            scheduleOcrRetry("shard count did not decrease after the redemption tap", "redemption-unconfirmed");
             return;
         }
 
@@ -150,8 +149,16 @@ private boolean redeemMaximumShardsFlow() {
         sleepTask(1000);
 
 
-        logInfo(routineLogWarAcademyLine("Shards redeemed finished cleanly."));
+        logInfo(routineLogWarAcademyLine("Redemption controls were tapped; checking the resulting shard count."));
         return true;
+    }
+
+private void scheduleOcrRetry(String reason, String type) {
+        LocalDateTime retryAt = LocalDateTime.now().plusMinutes(RETRY_DELAY_MINUTES_MS);
+        String snapshot = TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "waracademy", type);
+        logWarning(routineLogWarAcademyLine(reason + "; retrying at "
+                + retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + "."));
+        reschedule(retryAt);
     }
 
 private Integer scanRemainingShards() {
@@ -249,4 +256,8 @@ private boolean reachWarAcademy() {
         logInfo(routineLogWarAcademyLine("Successfully navigated to War Academy."));
         return true;
     }
+
+static boolean redemptionMadeProgress(int initialShards, int finalShards) {
+        return initialShards > 0 && finalShards < initialShards;
+}
 }

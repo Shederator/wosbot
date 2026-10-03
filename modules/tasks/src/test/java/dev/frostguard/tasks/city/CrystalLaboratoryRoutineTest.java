@@ -6,22 +6,31 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
+import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.runtime.WorkspacePaths;
+import dev.frostguard.engine.diagnostics.DiagnosticSnapshotStore;
+import dev.frostguard.vision.ocr.ResilientOcrExecutor;
 
 class CrystalLaboratoryRoutineTest {
+
+    @TempDir
+    Path snapshotWorkspace;
 
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 9, 12, 9, 0);
     private static final LocalDateTime DAILY_RESET = LocalDateTime.of(2026, 9, 13, 0, 0);
@@ -97,9 +106,9 @@ class CrystalLaboratoryRoutineTest {
         routine.redeemAllCrystals();
 
         assertTrue(routine.infoMessages.stream()
-                .anyMatch(message -> message.contains("Zero crystals available after 3 checks.")));
+                .anyMatch(message -> message.contains("No crystal claim control detected after 3 checks")));
         assertTrue(routine.infoMessages.stream()
-                .anyMatch(message -> message.contains("completed after 2 claim(s) and 3 final misses.")));
+                .anyMatch(message -> message.contains("Collected 2 crystal(s); no further claim control detected")));
         assertTrue(routine.warningMessages.stream()
                 .anyMatch(message -> message.contains("stopped at the safety limit after 25 claim(s).")));
     }
@@ -110,13 +119,147 @@ class CrystalLaboratoryRoutineTest {
         routine.discountedOfferFound = true;
         routine.refineButtonFound = true;
 
-        routine.purchaseDiscountedRFCFlow();
+        assertFalse(routine.purchaseDiscountedRFCFlow());
 
         assertEquals(1, routine.discountedOfferSearches);
         assertEquals(1, routine.refineButtonSearches);
         assertEquals(1, routine.discountedRfcTaps);
-        assertTrue(routine.infoMessages.stream()
-                .anyMatch(message -> message.contains("Discounted RFC purchased finished cleanly.")));
+        assertEquals(List.of("discounted-rfc-unconfirmed"), routine.snapshotTypes);
+        assertTrue(routine.warningMessages.stream()
+                .anyMatch(message -> message.contains("purchase outcome was not confirmed")));
+    }
+
+    @Test
+    void retriesSoonWhenADetectedDiscountedOfferIsUnconfirmed() {
+        TestRoutine routine = new TestRoutine();
+        routine.useDiscountedDailyRFC = true;
+        routine.discountedOfferFound = true;
+        routine.refineButtonFound = true;
+
+        routine.execute();
+
+        assertEquals(List.of(NOW.plusMinutes(5)), routine.scheduledTimes);
+        assertTrue(routine.warningMessages.stream()
+                .anyMatch(message -> message.contains("Discounted RFC purchase was not confirmed")));
+    }
+
+    @Test
+    void retainsAScreencapWhoseBitDepthFailsTheByteLengthCheck() {
+        RawImageData frame = RawImageData.capture(new byte[2 * 2 * 4], 2, 2, 32);
+        assertFalse(frame.isValid());
+
+        String retained = new RetentionRoutine(frame, snapshotWorkspace).retainDiagnosticSnapshot("bit-depth");
+        assertFalse(retained.contains("no-valid-frame"), retained);
+        assertTrue(retained.startsWith("snapshot="), retained);
+
+        assertTrue(new RetentionRoutine(null, snapshotWorkspace).retainDiagnosticSnapshot("bit-depth")
+                .contains("no-valid-frame"));
+        assertTrue(new RetentionRoutine(RawImageData.capture(new byte[1], 2, 2, 32), snapshotWorkspace)
+                .retainDiagnosticSnapshot("bit-depth")
+                .contains("no-valid-frame"));
+    }
+
+    @Test
+    void treatsNullAndUnparseableOcrAsFailedReadingsAndCapturesOneDiagnosticFrame() {
+        TestRoutine routine = new TestRoutine();
+        routine.setOcrResults(null, "   ", "RFC level unavailable");
+
+        assertEquals(-1, routine.extractNumberWithOCRFlow(
+                new PointData(0, 0), new PointData(10, 10), "current refined FC"));
+        assertEquals(List.of("ocr-failed-current-refined-FC"), routine.snapshotTypes);
+        assertTrue(routine.warningMessages.stream()
+                .anyMatch(message -> message.contains("snapshot=logs/snapshot/test.png")));
+        assertFalse(routine.warningMessages.stream().anyMatch(message -> message.contains("NullPointerException")));
+    }
+
+    @Test
+    void parsesTheExpectedRefinedFcNumberFromOcrText() {
+        TestRoutine routine = new TestRoutine();
+        routine.setOcrResults("RFC: 42,186");
+
+        assertEquals(42186, routine.extractNumberWithOCRFlow(
+                new PointData(0, 0), new PointData(10, 10), "current refined FC"));
+        assertTrue(routine.snapshotTypes.isEmpty());
+    }
+
+    @Test
+    void schedulesOcrFailureRetryBeforeTheDailyReset() {
+        TestRoutine routine = new TestRoutine();
+        routine.useDiscountedDailyRFC = true;
+        routine.weeklyRFCTarget = 5;
+        routine.weeklyCheckDay = true;
+        routine.dailyReset = NOW.plusMinutes(20);
+
+        routine.execute();
+
+        assertEquals(List.of(NOW.plusMinutes(20)), routine.scheduledTimes);
+        assertEquals(List.of("ocr-failed-current-FC"), routine.snapshotTypes);
+        assertTrue(routine.infoMessages.stream().anyMatch(message ->
+                message.contains("Weekly RFC retry scheduled at") && message.contains("reason=OCR_FAILED")));
+    }
+
+    @Test
+    void skipsWeeklyOcrWhenTheConfiguredTargetIsZero() {
+        TestRoutine routine = new TestRoutine();
+        routine.useDiscountedDailyRFC = true;
+        routine.weeklyRFCTarget = 0;
+        routine.weeklyCheckDay = true;
+
+        routine.execute();
+
+        assertEquals(0, routine.ocrExtractions);
+        assertEquals(List.of(DAILY_RESET), routine.scheduledTimes);
+    }
+
+    @Test
+    void retriesInsufficientFcNoLaterThanTheDailyReset() {
+        TestRoutine routine = new TestRoutine();
+        routine.useDiscountedDailyRFC = true;
+        routine.weeklyRFCTarget = 5;
+        routine.weeklyCheckDay = true;
+        routine.weeklyResult = CrystalLaboratoryRoutine.WeeklyRFCResultShape.INSUFFICIENT_FC;
+        routine.dailyReset = NOW.plusMinutes(30);
+
+        routine.execute();
+
+        assertEquals(List.of(NOW.plusMinutes(30)), routine.scheduledTimes);
+    }
+
+    @Test
+    void runsWeeklyRefinementsIndependentlyOfTheDailyDiscountSetting() {
+        TestRoutine routine = new TestRoutine();
+        routine.useDiscountedDailyRFC = false;
+        routine.weeklyRFCTarget = 5;
+        routine.weeklyCheckDay = true;
+        routine.weeklyResult = CrystalLaboratoryRoutine.WeeklyRFCResultShape.TARGET_REACHED;
+
+        routine.execute();
+
+        assertEquals(1, routine.weeklyHandlerCalls);
+        assertEquals(List.of(DAILY_RESET), routine.scheduledTimes);
+        assertEquals(0, routine.discountedOfferSearches);
+    }
+
+    private static final class RetentionRoutine extends CrystalLaboratoryRoutine {
+        private final RawImageData frame;
+        private final Path workspace;
+
+        private RetentionRoutine(RawImageData frame, Path workspace) {
+            super(new AccountDescriptor(1L, "Test", "1", true, 1L, 30L),
+                    TpDailyTaskEnum.CRYSTAL_LABORATORY);
+            this.frame = frame;
+            this.workspace = workspace;
+        }
+
+        @Override
+        DiagnosticSnapshotStore diagnosticSnapshotStore() {
+            return new DiagnosticSnapshotStore(workspace);
+        }
+
+        @Override
+        RawImageData captureDiagnosticFrame() {
+            return frame;
+        }
     }
 
     private static final class TestRoutine extends CrystalLaboratoryRoutine {
@@ -135,12 +278,28 @@ class CrystalLaboratoryRoutineTest {
         private int discountedOfferSearches;
         private int refineButtonSearches;
         private int discountedRfcTaps;
+        private final List<String> snapshotTypes = new ArrayList<>();
+        private boolean weeklyCheckDay;
+        private LocalDateTime dailyReset = DAILY_RESET;
+        private WeeklyRFCResultShape weeklyResult;
+        private int ocrExtractions;
+        private int weeklyHandlerCalls;
+        private Queue<String> ocrResults = new LinkedList<>();
         private CrystalClaimLoop.Result claimResult = new CrystalClaimLoop.Result(0, 3, false);
 
         private TestRoutine(Boolean... validationResults) {
             super(new AccountDescriptor(1L, "Test", "1", true, 1L, 30L),
                     TpDailyTaskEnum.CRYSTAL_LABORATORY);
             this.validationResults = new ArrayDeque<>(Arrays.asList(validationResults));
+            this.stringHelper = new ResilientOcrExecutor<>((config, topLeft, bottomRight) -> {
+                ocrExtractions++;
+                return ocrResults.poll();
+            });
+        }
+
+        private void setOcrResults(String... results) {
+            ocrResults = new LinkedList<>(Arrays.asList(results));
+            ocrExtractions = 0;
         }
 
         @Override
@@ -178,7 +337,24 @@ class CrystalLaboratoryRoutineTest {
 
         @Override
         LocalDateTime dailyResetTime() {
-            return DAILY_RESET;
+            return dailyReset;
+        }
+
+        @Override
+        boolean hasMonday() {
+            return weeklyCheckDay;
+        }
+
+        @Override
+        WeeklyRFCResultShape handleWeeklyRFC() {
+            weeklyHandlerCalls++;
+            return weeklyResult != null ? weeklyResult : super.handleWeeklyRFC();
+        }
+
+        @Override
+        String retainDiagnosticSnapshot(String type) {
+            snapshotTypes.add(type);
+            return "snapshot=logs/snapshot/test.png";
         }
 
         @Override
@@ -199,8 +375,9 @@ class CrystalLaboratoryRoutineTest {
         }
 
         @Override
-        void tapDiscountedRfc(ImageSearchResultData refineResult) {
+        boolean tapDiscountedRfc(ImageSearchResultData refineResult) {
             discountedRfcTaps++;
+            return true;
         }
 
         @Override

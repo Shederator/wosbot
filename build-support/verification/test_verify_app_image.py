@@ -46,6 +46,8 @@ class VerifyAppImageTest(unittest.TestCase):
             desktop_jar.writestr(
                 verify_app_image.BUILD_METADATA,
                 "version=3.0.0\n"
+                "commit=unknown\n"
+                "buildTime=2026-10-02T12:34:56Z\n"
                 "pullRequestBuild=false\n"
                 "authenticodePublisher=CN=Frostguard Project, O=Frostguard\n",
             )
@@ -130,9 +132,28 @@ class VerifyAppImageTest(unittest.TestCase):
         ) as desktop_jar:
             desktop_jar.writestr(
                 verify_app_image.BUILD_METADATA,
-                "version=2.1.0\npullRequestBuild=false\nauthenticodePublisher=\n",
+                "version=2.1.0\n"
+                "commit=unknown\n"
+                "buildTime=2026-10-02T12:34:56Z\n"
+                "pullRequestBuild=false\n"
+                "authenticodePublisher=\n",
             )
         self.assertTrue(any("version does not match its filename" in item
+                            for item in verify_app_image.inspect_image(self.image)))
+
+    def test_rejects_desktop_jar_with_invalid_build_identity(self):
+        with zipfile.ZipFile(
+                self.image / "app/frostguard-desktop-3.0.0.jar", "w"
+        ) as desktop_jar:
+            desktop_jar.writestr(
+                verify_app_image.BUILD_METADATA,
+                "version=3.0.0\n"
+                "commit=not-a-sha\n"
+                "buildTime=not-a-time\n"
+                "pullRequestBuild=false\n"
+                "authenticodePublisher=\n",
+            )
+        self.assertTrue(any("invalid build metadata" in item
                             for item in verify_app_image.inspect_image(self.image)))
 
     def test_rejects_update_jar_without_project_key(self):

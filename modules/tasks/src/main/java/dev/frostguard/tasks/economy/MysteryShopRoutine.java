@@ -1,6 +1,10 @@
 package dev.frostguard.tasks.economy;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
@@ -8,364 +12,526 @@ import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
+import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.helper.TemplateSearchHelper;
+import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.nav.ShopTab;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.service.StatisticsService;
+import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 import dev.frostguard.vision.convert.GameTimeUtils;
+import dev.frostguard.vision.ocr.OcrException;
 
+/**
+ * Mystery Shop visit. Free rewards cost nothing. An enabled hero-gear chest
+ * or generic shard is bought only at 250 badges, and only while the badge
+ * counter can pay for it. A bought card stays in place and turns grey until
+ * a refresh, so the purchase is confirmed by the sold-out label rather than
+ * by the original icon disappearing.
+ */
 public class MysteryShopRoutine extends DelayedTask {
 
-	public MysteryShopRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
-		super(profile, tpTask);
-	}
+    private static final long MAX_TASK_EXECUTION_MS = 2 * 60 * 1000L;
+    private static final int NAVIGATION_ATTEMPTS = 5;
+    private static final int MAX_OFFERS = 9;
+    private static final int SCREEN_WIDTH = 720;
+    private static final int SCREEN_HEIGHT = 1280;
+    private static final int MIN_SEARCH_WINDOW = 8;
 
-	@Override
-	protected void execute() {
-		int attempt = 0;
+    private static final int CHEST_THRESHOLD = 90;
+    private static final int SHARD_THRESHOLD = 95;
+    private static final int PRICE_THRESHOLD = 95;
+    private static final int SOLD_OUT_THRESHOLD = 90;
 
-		while (attempt < 5) {
-			if (navigateToMysteryShop()) {
-				handleMysteryShopOperations();
-				return;
-			} else {
-				logWarning("Navigate to shop failed, retrying...");
-				sleepTask(2000);
-			}
-			attempt++;
-		}
+    private static final long SEARCH_DELAY_MS = 300L;
+    private static final long NAVIGATION_RETRY_MS = 2000L;
+    private static final long FREE_TAP_SETTLE_MS = 400L;
+    private static final long FREE_CONFIRM_SETTLE_MS = 300L;
+    private static final long PURCHASE_SETTLE_MS = 600L;
+    private static final long REFRESH_SETTLE_MS = 1500L;
+    private static final long SWIPE_SETTLE_MS = 500L;
+    private static final long BACK_GAP_MS = 500L;
 
-		// If navigation fails after 5 attempts, reschedule for 1 hour
-		if (attempt >= 5) {
-			logWarning("Shop navigation failed after multiple attempts, rescheduling task for 1 hour");
-			LocalDateTime nextAttempt = LocalDateTime.now().plusHours(1);
-			this.reschedule(nextAttempt);
-		}
-	}
+    /** Badge digits under the hat. The gold star to their left is not part of the number. */
+    static final PointData BADGE_BALANCE_TOP_LEFT = new PointData(588, 26);
+    static final PointData BADGE_BALANCE_BOTTOM_RIGHT = new PointData(680, 62);
 
-	boolean navigateToMysteryShop() {
-		logInfo("Navigating to the Mystery Shop.");
-		return navigationHelper.navigateToShop(ShopTab.MYSTERY_SHOP);
-	}
+    /**
+     * Confirm control of the free-reward and purchase dialogs. No template
+     * exists for that button, so the measured point from the previous routine
+     * is kept.
+     */
+    private static final PointData CONFIRM_POINT = new PointData(360, 830);
+    private static final PointData SWIPE_START = new PointData(350, 1100);
+    private static final PointData SWIPE_END = new PointData(350, 650);
 
-	@Override
-	protected LaunchPoint getRequiredStartLocation() {
-		return LaunchPoint.HOME;
-	}
+    private static final String FREE_CLAIMS = "Mystery Shop Free Claims";
+    private static final String PURCHASES = "Mystery Shop Purchases";
+    private static final String REFRESHES = "Daily Refreshes Used";
 
-	/**
-	 * Handles all mystery shop operations: scroll, claim free rewards, make
-	 * configured purchases, use daily refresh
-	 */
-	private void handleMysteryShopOperations() {
-		logInfo("Starting Mystery Shop operations: claiming free items, making configured purchases and using daily refresh.");
-		// STEP 3: Scroll down in specific area to reveal all items
-		PointData scrollStart = new PointData(350, 1100);
-		PointData scrollEnd = new PointData(350, 650);
-		emuManager.swipeScreen(EMULATOR_NUMBER, scrollStart, scrollEnd);
-		sleepTask(500);
+    /**
+     * Remembered across visits on this task instance. It is not a reason to
+     * skip the next scan, and the old sticky failure flag is gone: a failed
+     * refresh no longer makes the following visit leave before reading the grid.
+     */
+    private MysteryShopProgress progress = MysteryShopProgress.READY;
+    private int consecutiveUnconfirmed;
+    private MysteryShopPhase phase = MysteryShopPhase.OPENING;
 
-		// STEP 4: Process free rewards, configured buys and daily refresh in a loop
-		boolean foundFreeRewards = true;
-		boolean foundConfiguredPurchases = true;
-		int dailyRefreshUsedCount = 0;
-		final int maxDailyRefreshes = 10; // configurable limit to avoid abusing refresh
-		int maxIterations = 5; // Prevent infinite loops
-		int iteration = 0;
-		boolean totalClaimedAny = false;
-		boolean totalPurchasedAny = false;
+    public MysteryShopRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
+        super(profile, tpTask);
+    }
 
-		while ((foundFreeRewards || foundConfiguredPurchases || dailyRefreshUsedCount < maxDailyRefreshes)
-				&& iteration < maxIterations) {
-			iteration++;
+    @Override
+    protected void execute() {
+        phase = MysteryShopPhase.OPENING;
+        logInfo("Resuming Mystery Shop from " + progress + ".");
+        if (!openShop()) {
+            return;
+        }
+        visitOpenShop(System.currentTimeMillis() + MAX_TASK_EXECUTION_MS);
+    }
 
-			// First, try to claim all free rewards
-			foundFreeRewards = claimAllFreeRewards();
-			totalClaimedAny = totalClaimedAny || foundFreeRewards;
+    @Override
+    protected LaunchPoint getRequiredStartLocation() {
+        return LaunchPoint.HOME;
+    }
 
-			// Second, try to make configured purchases
-			foundConfiguredPurchases = makeConfiguredPurchases();
-			totalPurchasedAny = totalPurchasedAny || foundConfiguredPurchases;
+    boolean navigateToMysteryShop() {
+        logInfo("Navigating to the Mystery Shop.");
+        return navigationHelper.navigateToShop(ShopTab.MYSTERY_SHOP);
+    }
 
-			// If no free rewards or purchases found, try to use daily refresh one or more
-			// times (up to remaining limit)
-			if (!foundFreeRewards && !foundConfiguredPurchases && dailyRefreshUsedCount < maxDailyRefreshes) {
-				// Try using daily refresh repeatedly until no more refresh is available or we
-				// reach the limit
-				while (dailyRefreshUsedCount < maxDailyRefreshes) {
-					boolean used = tryUseDailyRefresh();
-					if (!used)
-						break; // no refresh available now
-					dailyRefreshUsedCount++;
+    private boolean openShop() {
+        for (int attempt = 1; attempt <= NAVIGATION_ATTEMPTS; attempt++) {
+            if (navigateToMysteryShop()) {
+                return true;
+            }
+            logWarning("Navigate to shop failed, retrying...");
+            sleepTask(NAVIGATION_RETRY_MS);
+        }
+        finishUnconfirmed("shop-navigation",
+                "Shop navigation was not verified after five attempts", false);
+        return false;
+    }
 
-					// After using a refresh, give UI a moment to update and scroll again to reveal
-					// new items
-					sleepTask(1000);
-					emuManager.swipeScreen(EMULATOR_NUMBER, scrollStart, scrollEnd);
-					sleepTask(1000);
+    private void visitOpenShop(long deadline) {
+        boolean buyChest = enabled(ConfigurationKeyEnum.BOOL_MYSTERY_SHOP_250_HERO_WIDGET);
+        boolean buyShard = enabled(ConfigurationKeyEnum.BOOL_MYSTERY_SHOP_250_SHARD);
+        phase = MysteryShopPhase.READING_BALANCE;
+        Integer balance = readBadgeBalance();
+        if (balance == null) {
+            if (!claimFreeRewards(deadline)) {
+                return;
+            }
+            finishUnconfirmed("balance-unreadable",
+                    "Badge balance was not readable. Free rewards were claimed when present. "
+                            + "No chest, shard, or refresh was attempted",
+                    true);
+            return;
+        }
+        logInfo("Badge balance " + balance + ".");
 
-					// After refresh, attempt to claim rewards and make purchases again
-					foundFreeRewards = claimAllFreeRewards();
-					totalClaimedAny = totalClaimedAny || foundFreeRewards;
+        boolean revealedLowerGrid = false;
+        while (System.currentTimeMillis() < deadline) {
+            ActionResult freeReward = claimOneFreeReward();
+            if (freeReward == ActionResult.UNCONFIRMED) {
+                finishUnconfirmed("action-unverified",
+                        "Free reward claim outcome is unverified", true);
+                return;
+            }
+            if (freeReward == ActionResult.DONE) {
+                noteConfirmed();
+                continue;
+            }
 
-					foundConfiguredPurchases = makeConfiguredPurchases();
-					totalPurchasedAny = totalPurchasedAny || foundConfiguredPurchases;
+            if (buyChest && MysteryShopDecisions.isAffordable(balance)) {
+                ActionResult chest = buyOne(TemplatesEnum.MYSTERY_SHOP_CHEST_ICON, CHEST_THRESHOLD,
+                        MysteryShopPhase.BUYING_CHEST, "250 badge chest");
+                if (chest == ActionResult.UNCONFIRMED) {
+                    logUnconfirmedPurchase(balance);
+                    finishUnconfirmed("action-unverified",
+                            "250 badge chest purchase outcome is unverified", true);
+                    return;
+                }
+                if (chest == ActionResult.DONE) {
+                    balance = MysteryShopDecisions.afterPurchase(balance);
+                    noteConfirmed();
+                    logInfo("250 badge chest purchased. Badge balance now " + balance + ".");
+                    continue;
+                }
+            }
 
-					// If we found rewards or purchases after this refresh, break inner refresh loop
-					// and continue outer loop
-					if (foundFreeRewards || foundConfiguredPurchases)
-						break;
-					// otherwise continue trying another refresh (if any left)
-				}
-			}
-		}
+            if (buyShard && MysteryShopDecisions.isAffordable(balance)) {
+                ActionResult shard = buyOne(TemplatesEnum.MYSTERY_SHOP_MYTHIC_SHARDS_BUTTON, SHARD_THRESHOLD,
+                        MysteryShopPhase.BUYING_SHARD, "250 badge shard");
+                if (shard == ActionResult.UNCONFIRMED) {
+                    logUnconfirmedPurchase(balance);
+                    finishUnconfirmed("action-unverified",
+                            "250 badge shard purchase outcome is unverified", true);
+                    return;
+                }
+                if (shard == ActionResult.DONE) {
+                    balance = MysteryShopDecisions.afterPurchase(balance);
+                    noteConfirmed();
+                    logInfo("250 badge shard purchased. Badge balance now " + balance + ".");
+                    continue;
+                }
+            }
 
-		// Navigate back
-		pressBack();
-		sleepTask(1000);
-		pressBack();
+            boolean targetsRemain = unaffordableTargetRemains(buyChest, buyShard, balance);
+            if (!targetsRemain && !revealedLowerGrid) {
+                logInfo("No target on the visible grid. Revealing the lower rows once.");
+                emuManager.swipeScreen(EMULATOR_NUMBER, SWIPE_START, SWIPE_END);
+                sleepTask(SWIPE_SETTLE_MS);
+                revealedLowerGrid = true;
+                continue;
+            }
 
-		// If no more actions possible, reschedule to game reset time
-		if (!foundFreeRewards && !foundConfiguredPurchases) {
-			LocalDateTime nextReset = GameTimeUtils.dailyResetTime();
-			this.reschedule(nextReset);
-			if (totalClaimedAny) {
-				logInfo("Free rewards claimed");
-			}
-			if (totalPurchasedAny) {
-				logInfo("Configured purchases made");
-			}
-			if (dailyRefreshUsedCount > 0 && !totalClaimedAny && !totalPurchasedAny) {
-				logInfo("Daily refresh used but no rewards or purchases found");
-			}
-			if (!totalClaimedAny && !totalPurchasedAny && dailyRefreshUsedCount == 0) {
-				logInfo("No free rewards, purchases or daily refresh available");
-			}
-		}
-	}
+            phase = MysteryShopPhase.REFRESHING;
+            boolean refreshVisible = isFreeRefresh();
+            MysteryShopDecisions.RefreshChoice choice = MysteryShopDecisions.choose(
+                    targetsRemain, refreshVisible);
+            if (choice == MysteryShopDecisions.RefreshChoice.WAIT_FOR_BADGES) {
+                finishWaiting(balance);
+                return;
+            }
+            if (choice == MysteryShopDecisions.RefreshChoice.DAY_COMPLETE) {
+                finishDay();
+                return;
+            }
+            if (!useFreeRefresh(balance)) {
+                return;
+            }
+            revealedLowerGrid = false;
+        }
+        finishUnconfirmed("execution-limit",
+                "Mystery Shop reached its two-minute execution limit", true);
+    }
 
-	/**
-	 * Claims all available free rewards
-	 *
-	 * @return true if at least one free reward was found and claimed, false
-	 *         otherwise
-	 */
-	private boolean claimAllFreeRewards() {
-		boolean foundAnyReward = false;
-		boolean foundRewardInThisIteration = true;
-		int maxRewardAttempts = 5;
-		int rewardAttempt = 0;
+    private boolean claimFreeRewards(long deadline) {
+        while (System.currentTimeMillis() < deadline) {
+            ActionResult claimed = claimOneFreeReward();
+            if (claimed == ActionResult.UNCONFIRMED) {
+                finishUnconfirmed("action-unverified",
+                        "Free reward claim outcome is unverified", true);
+                return false;
+            }
+            if (claimed == ActionResult.NONE) {
+                return true;
+            }
+            noteConfirmed();
+        }
+        finishUnconfirmed("execution-limit",
+                "Mystery Shop reached its two-minute execution limit during free rewards", true);
+        return false;
+    }
 
-		// Keep looking for free rewards until none are found
-		while (foundRewardInThisIteration && rewardAttempt < maxRewardAttempts) {
-			rewardAttempt++;
-			foundRewardInThisIteration = false;
+    /**
+     * The free-reward search and tap sequence are the previous ones. A second
+     * Free label elsewhere on the screen is another reward, not a failed tap.
+     * The same label still sitting on the tapped card is unconfirmed.
+     */
+    private ActionResult claimOneFreeReward() {
+        phase = MysteryShopPhase.CLAIMING_FREE;
+        ImageSearchResultData reward = templateSearchHelper.locatePattern(
+                TemplatesEnum.MYSTERY_SHOP_FREE_REWARD,
+                SearchConfigConstants.DEFAULT_SINGLE);
+        if (!isFreeReward(reward)) {
+            return ActionResult.NONE;
+        }
+        PointData tapped = reward.getPoint();
+        tapInside(tapped, tapped);
+        sleepTask(FREE_TAP_SETTLE_MS);
+        tapNear(CONFIRM_POINT);
+        sleepTask(FREE_CONFIRM_SETTLE_MS);
+        ImageSearchResultData stillThere = templateSearchHelper.locatePattern(
+                TemplatesEnum.MYSTERY_SHOP_FREE_REWARD,
+                SearchConfigConstants.DEFAULT_SINGLE);
+        if (isFreeReward(stillThere) && MysteryShopDecisions.sameCard(
+                tapped.getX(), tapped.getY(), stillThere.getX(), stillThere.getY())) {
+            return ActionResult.UNCONFIRMED;
+        }
+        StatisticsService.obtain().addToCounter(profile, FREE_CLAIMS, 1);
+        logInfo("A free reward has been claimed.");
+        return ActionResult.DONE;
+    }
 
-			// Search for free reward button on screen (one at a time)
-			ImageSearchResultData freeRewardResult = templateSearchHelper.locatePattern(
-					TemplatesEnum.MYSTERY_SHOP_FREE_REWARD,
-					SearchConfigConstants.DEFAULT_SINGLE);
+    private ActionResult buyOne(TemplatesEnum icon, int iconThreshold, MysteryShopPhase buying, String label) {
+        phase = buying;
+        Offer offer = findPricedOffer(icon, iconThreshold);
+        if (offer == null) {
+            return ActionResult.NONE;
+        }
+        logInfo(label + " found. Icon at (" + offer.icon().getX() + "," + offer.icon().getY()
+                + "), price at (" + offer.price().getX() + "," + offer.price().getY() + ").");
+        if (!tapInside(offer.price())) {
+            return ActionResult.UNCONFIRMED;
+        }
+        sleepTask(PURCHASE_SETTLE_MS);
+        tapNear(CONFIRM_POINT);
+        sleepTask(PURCHASE_SETTLE_MS);
+        if (!isSoldOutNear(offer)) {
+            return ActionResult.UNCONFIRMED;
+        }
+        StatisticsService.obtain().addToCounter(profile, PURCHASES, 1);
+        return ActionResult.DONE;
+    }
 
-			// If found, claim the reward
-			if (freeRewardResult.isFound()) {
-				// Tap on the free reward
-				tapInside(freeRewardResult.getPoint(), freeRewardResult.getPoint());
-				sleepTask(400);
+    private boolean unaffordableTargetRemains(boolean buyChest, boolean buyShard, Integer balance) {
+        if (MysteryShopDecisions.isAffordable(balance)) {
+            return false;
+        }
+        if (buyChest && findPricedOffer(TemplatesEnum.MYSTERY_SHOP_CHEST_ICON, CHEST_THRESHOLD) != null) {
+            return true;
+        }
+        return buyShard && findPricedOffer(
+                TemplatesEnum.MYSTERY_SHOP_MYTHIC_SHARDS_BUTTON, SHARD_THRESHOLD) != null;
+    }
 
-				// Confirm the claim (tap on confirm button or area)
-				tapNear(new PointData(360, 830));
-				sleepTask(300);
+    /**
+     * A free refresh that is still visible is not a failure while more free
+     * refreshes remain. The grid fingerprint distinguishes a real restock
+     * from a tap that did nothing. The button disappearing means the last
+     * free refresh was consumed. A dead first tap is retried once in this
+     * visit; a second miss is unconfirmed.
+     */
+    private boolean useFreeRefresh(Integer balance) {
+        ImageSearchResultData refresh = templateSearchHelper.locatePattern(
+                TemplatesEnum.MYSTERY_SHOP_DAILY_REFRESH,
+                SearchConfigConstants.DEFAULT_SINGLE);
+        if (!isFreeRefresh(refresh)) {
+            finishDay();
+            return false;
+        }
+        logInfo("No target remains. Using free refresh. Badge balance is " + balance + ".");
+        RawImageData before = emuManager.captureScreen(EMULATOR_NUMBER);
+        int tapsTried = 0;
+        while (true) {
+            if (!tapInside(refresh)) {
+                finishUnconfirmed("action-unverified",
+                        "Could not dispatch the free refresh tap", true);
+                return false;
+            }
+            tapsTried++;
+            sleepTask(REFRESH_SETTLE_MS);
+            ImageSearchResultData stillVisible = templateSearchHelper.locatePattern(
+                    TemplatesEnum.MYSTERY_SHOP_DAILY_REFRESH,
+                    SearchConfigConstants.DEFAULT_SINGLE);
+            if (!isFreeRefresh(stillVisible)) {
+                StatisticsService.obtain().addToCounter(profile, REFRESHES, 1);
+                noteConfirmed();
+                logInfo("Free refresh used. The free refresh button is gone.");
+                return true;
+            }
+            RawImageData after = emuManager.captureScreen(EMULATOR_NUMBER);
+            double delta = MysteryShopDecisions.meanChannelDelta(before, after,
+                    MysteryShopDecisions.GRID_LEFT, MysteryShopDecisions.GRID_TOP,
+                    MysteryShopDecisions.GRID_RIGHT, MysteryShopDecisions.GRID_BOTTOM,
+                    MysteryShopDecisions.GRID_STEP);
+            if (MysteryShopDecisions.gridChanged(delta)) {
+                StatisticsService.obtain().addToCounter(profile, REFRESHES, 1);
+                noteConfirmed();
+                logInfo("Free refresh used. The button is still visible and the grid changed by mean "
+                        + String.format(Locale.ROOT, "%.1f", delta) + ".");
+                return true;
+            }
+            if (MysteryShopDecisions.retryRefreshTap(tapsTried, true, delta)) {
+                logInfo("Free refresh button is still visible and the grid is unchanged (mean "
+                        + String.format(Locale.ROOT, "%.1f", delta)
+                        + "). Tapping it once more.");
+                refresh = stillVisible;
+                continue;
+            }
+            finishUnconfirmed("action-unverified",
+                    "Free refresh button is still visible and the grid is unchanged (mean "
+                            + String.format(Locale.ROOT, "%.1f", delta) + ")",
+                    true);
+            return false;
+        }
+    }
 
-				logInfo("A free reward has been claimed.");
-				StatisticsService.obtain().addToCounter(profile, "Mystery Shop Free Claims", 1);
-				foundAnyReward = true;
-				foundRewardInThisIteration = true;
+    private Offer findPricedOffer(TemplatesEnum iconTemplate, int iconThreshold) {
+        List<ImageSearchResultData> considered = new ArrayList<>();
+        for (ImageSearchResultData icon : locateAll(iconTemplate, iconThreshold)) {
+            if (icon == null || !icon.isFound()) {
+                continue;
+            }
+            boolean duplicate = considered.stream().anyMatch(seen -> MysteryShopDecisions.sameCard(
+                    seen.getX(), seen.getY(), icon.getX(), icon.getY()));
+            if (duplicate) {
+                continue;
+            }
+            considered.add(icon);
+            ImageSearchResultData price = locateIn(
+                    TemplatesEnum.MYSTERY_SHOP_250_BADGES_BUTTON,
+                    PRICE_THRESHOLD,
+                    MysteryShopDecisions.priceWindowTopLeft(icon.getX(), icon.getY()),
+                    MysteryShopDecisions.priceWindowBottomRight(icon.getX(), icon.getY()));
+            boolean onCard = price.isFound() && MysteryShopDecisions.priceOnSameCard(
+                    icon.getX(), icon.getY(), price.getX(), price.getY());
+            boolean target = iconTemplate == TemplatesEnum.MYSTERY_SHOP_CHEST_ICON
+                    ? MysteryShopDecisions.isChest250(true, onCard)
+                    : MysteryShopDecisions.isShard250(true, onCard);
+            if (target) {
+                return new Offer(icon, price);
+            }
+        }
+        return null;
+    }
 
-				// Wait a bit before searching for the next reward
-				sleepTask(1000);
-			}
-		}
+    private boolean isSoldOutNear(Offer offer) {
+        ImageSearchResultData soldOut = locateIn(
+                TemplatesEnum.MYSTERY_SHOP_SOLD_OUT,
+                SOLD_OUT_THRESHOLD,
+                MysteryShopDecisions.soldOutWindowTopLeft(offer.price().getX(), offer.price().getY()),
+                MysteryShopDecisions.soldOutWindowBottomRight(offer.price().getX(), offer.price().getY()));
+        return MysteryShopDecisions.isSoldOut(soldOut.isFound());
+    }
 
-		return foundAnyReward;
-	}
+    private boolean isFreeReward(ImageSearchResultData result) {
+        return MysteryShopDecisions.isFreeReward(result != null && result.isFound());
+    }
 
-	/**
-	 * Tries to use the daily refresh if available
-	 *
-	 * @return true if daily refresh was used, false otherwise
-	 */
-	private boolean tryUseDailyRefresh() {
-		ImageSearchResultData dailyRefreshResult = templateSearchHelper.locatePattern(
-				TemplatesEnum.MYSTERY_SHOP_DAILY_REFRESH,
-				SearchConfigConstants.DEFAULT_SINGLE);
+    private boolean isFreeRefresh() {
+        return isFreeRefresh(templateSearchHelper.locatePattern(
+                TemplatesEnum.MYSTERY_SHOP_DAILY_REFRESH,
+                SearchConfigConstants.DEFAULT_SINGLE));
+    }
 
-		if (dailyRefreshResult.isFound()) {
-			// Tap on daily refresh
-			tapInside(dailyRefreshResult.getPoint(), dailyRefreshResult.getPoint());
-			sleepTask(1000);
+    private boolean isFreeRefresh(ImageSearchResultData result) {
+        return MysteryShopDecisions.isFreeRefresh(result != null && result.isFound());
+    }
 
-			logInfo("Daily refresh used successfully");
-			StatisticsService.obtain().addToCounter(profile, "Daily Refreshes Used", 1);
-			return true;
-		}
+    private List<ImageSearchResultData> locateAll(TemplatesEnum template, int threshold) {
+        List<ImageSearchResultData> found = templateSearchHelper.locateAllPatterns(
+                template,
+                TemplateSearchHelper.SearchConfig.builder()
+                        .withMaxAttempts(1)
+                        .withThreshold(threshold)
+                        .withDelay(SEARCH_DELAY_MS)
+                        .withMaxResults(MAX_OFFERS)
+                        .build());
+        return found == null ? List.of() : found;
+    }
 
-		return false;
-	}
+    private ImageSearchResultData locateIn(TemplatesEnum template, int threshold,
+            PointData topLeft, PointData bottomRight) {
+        int left = clamp(Math.min(topLeft.getX(), bottomRight.getX()), 0, SCREEN_WIDTH);
+        int top = clamp(Math.min(topLeft.getY(), bottomRight.getY()), 0, SCREEN_HEIGHT);
+        int right = clamp(Math.max(topLeft.getX(), bottomRight.getX()), 0, SCREEN_WIDTH);
+        int bottom = clamp(Math.max(topLeft.getY(), bottomRight.getY()), 0, SCREEN_HEIGHT);
+        if (right - left < MIN_SEARCH_WINDOW || bottom - top < MIN_SEARCH_WINDOW) {
+            return ImageSearchResultData.miss();
+        }
+        ImageSearchResultData result = templateSearchHelper.locatePattern(
+                template,
+                TemplateSearchHelper.SearchConfig.builder()
+                        .withMaxAttempts(1)
+                        .withThreshold(threshold)
+                        .withDelay(SEARCH_DELAY_MS)
+                        .withCoordinates(new PointData(left, top), new PointData(right, bottom))
+                        .build());
+        return result == null ? ImageSearchResultData.miss() : result;
+    }
 
-	/**
-	 * Makes all configured purchases based on profile configs
-	 *
-	 *
-	 * @return true if at least one purchase was made, false otherwise
-	 */
-	private boolean makeConfiguredPurchases() {
-		boolean foundAnyPurchase = false;
+    private Integer readBadgeBalance() {
+        MysteryShopPhase restore = phase;
+        phase = MysteryShopPhase.READING_BALANCE;
+        try {
+            String raw = emuManager.readText(
+                    EMULATOR_NUMBER,
+                    BADGE_BALANCE_TOP_LEFT,
+                    BADGE_BALANCE_BOTTOM_RIGHT,
+                    CommonOCRSettings.MYSTERY_BADGE_BALANCE_SETTINGS,
+                    true);
+            Integer parsed = MysteryShopDecisions.parseBalance(raw);
+            logInfo("Badge balance read '" + raw + "' as " + parsed + ".");
+            return parsed;
+        } catch (IOException | OcrException exception) {
+            logWarning("Badge balance could not be read: " + exception.getMessage());
+            return null;
+        } finally {
+            phase = restore;
+        }
+    }
 
-		// Handle 250 Hero Widget purchases
-		if (profile.getConfig(ConfigurationKeyEnum.BOOL_MYSTERY_SHOP_250_HERO_WIDGET, Boolean.class)) {
-			foundAnyPurchase = buyHeroWidget() || foundAnyPurchase;
-		}
+    private void logUnconfirmedPurchase(Integer balance) {
+        Integer reread = readBadgeBalance();
+        logWarning("Purchase was not confirmed by the sold-out label. Balance before the tap was "
+                + balance + " and the reread is " + reread + ". No badges were deducted.");
+    }
 
-		// Add more purchase types here as needed
-		// Example:
-		// if (buyOtherItem) {
-		// foundAnyPurchase = buyItems(TemplatesEnum.MYSTERY_SHOP_OTHER_ITEM_BUTTON,
-		// "Other Item") || foundAnyPurchase;
-		// }
+    private void noteConfirmed() {
+        consecutiveUnconfirmed = 0;
+        if (progress == MysteryShopProgress.UNCONFIRMED) {
+            progress = MysteryShopProgress.READY;
+        }
+    }
 
-		return foundAnyPurchase;
-	}
+    private void finishWaiting(Integer balance) {
+        consecutiveUnconfirmed = 0;
+        progress = MysteryShopProgress.WAITING_FOR_BADGES;
+        phase = MysteryShopPhase.FINISHED;
+        LocalDateTime next = MysteryShopDecisions.earnMoneyVisit(
+                LocalDateTime.now(), GameTimeUtils.dailyResetTime());
+        logInfo("A 250 badge target is still on screen and the balance is " + balance
+                + ". Next check at " + next.format(DATETIME_FORMATTER) + ".");
+        reschedule(next);
+        leaveShop();
+    }
 
-	private boolean buyHeroWidget() {
-		boolean foundAnyWidget = false;
-		boolean foundWidgetInThisIteration = true;
-		int maxPurchaseAttempts = 5;
-		int purchaseAttempt = 0;
+    private void finishDay() {
+        consecutiveUnconfirmed = 0;
+        progress = MysteryShopProgress.COMPLETE_UNTIL_RESET;
+        phase = MysteryShopPhase.FINISHED;
+        LocalDateTime next = MysteryShopDecisions.dayCompleteVisit(GameTimeUtils.dailyResetTime());
+        logInfo("Mystery Shop is clear until the daily reset. Next check at "
+                + next.format(DATETIME_FORMATTER) + ".");
+        reschedule(next);
+        leaveShop();
+    }
 
-		// List to store coordinates of found mythic shards to avoid checking them
-		// repeatedly
-		java.util.List<PointData> blacklistedCoordinates = new java.util.ArrayList<>();
+    private void finishUnconfirmed(String snapshotType, String reason, boolean shopOpen) {
+        MysteryShopPhase failedDuring = phase;
+        boolean repeated = MysteryShopDecisions.repeatUnconfirmed(consecutiveUnconfirmed);
+        consecutiveUnconfirmed++;
+        progress = MysteryShopProgress.UNCONFIRMED;
+        phase = MysteryShopPhase.FINISHED;
+        LocalDateTime next = MysteryShopDecisions.unconfirmedVisit(
+                LocalDateTime.now(), GameTimeUtils.dailyResetTime(), repeated);
+        String snapshot = TaskDiagnosticSnapshots.capture(
+                emuManager, EMULATOR_NUMBER, "mysteryshop", snapshotType);
+        logWarning(reason + ". Progress " + progress + " after " + failedDuring
+                + ". Next check at " + next.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+        reschedule(next);
+        if (shopOpen) {
+            leaveShop();
+        }
+    }
 
-		// Keep looking for Hero Widgets to buy until none are found
-		while (foundWidgetInThisIteration && purchaseAttempt < maxPurchaseAttempts) {
-			logDebug("Searching for 250 badges Hero Widget to purchase. Attempt " + (purchaseAttempt + 1));
+    private void leaveShop() {
+        pressBack();
+        sleepTask(BACK_GAP_MS);
+        pressBack();
+    }
 
-			purchaseAttempt++;
-			foundWidgetInThisIteration = false;
+    private boolean enabled(ConfigurationKeyEnum key) {
+        return Boolean.TRUE.equals(profile.getConfig(key, Boolean.class));
+    }
 
-			// Search for the 250 Hero Widget buy button
-			ImageSearchResultData heroWidgetResult = templateSearchHelper.locatePattern(
-					TemplatesEnum.MYSTERY_SHOP_250_BADGES_BUTTON,
-					TemplateSearchHelper.SearchConfig.builder()
-							.withMaxAttempts(1)
-							.withThreshold(95)
-							.withDelay(300L)
-							.build());
+    private static int clamp(int value, int low, int high) {
+        return Math.max(low, Math.min(high, value));
+    }
 
-			if (heroWidgetResult.isFound()) {
-				// Check if this position is already blacklisted
-				boolean isBlacklisted = blacklistedCoordinates.stream()
-						.anyMatch(point -> Math.abs(point.getX() - heroWidgetResult.getPoint().getX()) < 40 &&
-								Math.abs(point.getY() - heroWidgetResult.getPoint().getY()) < 40);
+    private enum ActionResult {
+        NONE,
+        DONE,
+        UNCONFIRMED
+    }
 
-				if (isBlacklisted) {
-					logDebug("Skipping already identified mythic shard location.");
-					continue;
-				}
-
-				// Check if it is not mythic shards to avoid wrong purchase
-				// Search in a specific area based on heroWidgetResult position
-				ImageSearchResultData mythicShardResult = templateSearchHelper.locatePattern(
-						TemplatesEnum.MYSTERY_SHOP_MYTHIC_SHARDS_BUTTON,
-						TemplateSearchHelper.SearchConfig.builder()
-								.withMaxAttempts(1)
-								.withThreshold(95)
-								.withDelay(300L)
-								.withCoordinates(
-										new PointData(heroWidgetResult.getPoint().getX() - 51,
-												heroWidgetResult.getPoint().getY() - 177),
-										new PointData(heroWidgetResult.getPoint().getX() + 45,
-												heroWidgetResult.getPoint().getY() - 82))
-								.build());
-
-				if (mythicShardResult.isFound()) {
-					// Add this location to the blacklist
-					blacklistedCoordinates.add(heroWidgetResult.getPoint());
-					logInfo("Mythic shards found instead of 250 Hero Widget. Skipping purchase.");
-					continue;
-				}
-
-				// Tap on the hero widget buy button
-				tapInside(heroWidgetResult);
-				sleepTask(600);
-
-				// Confirm the purchase (tap on confirm button or area)
-				tapNear(new PointData(360, 830));
-				sleepTask(600);
-
-				logInfo("250 Hero Widget found and purchased on attempt " + purchaseAttempt + ".");
-				StatisticsService.obtain().addToCounter(profile, "Mystery Shop Purchases", 1);
-				foundAnyWidget = true;
-				foundWidgetInThisIteration = true;
-
-				// Wait a bit before searching for the next widget
-				sleepTask(2000);
-			}
-		}
-
-		return foundAnyWidget;
-	}
-
-	/**
-	 * Attempts to buy specific items from the mystery shop
-	 *
-	 * @param template the template to search for the buy button
-	 * @param itemName the name of the item for logging purposes
-	 * @return true if at least one item was purchased, false otherwise
-	 */
-	@SuppressWarnings("unused")
-	private boolean buyItems(TemplatesEnum template, String itemName) {
-		boolean foundAnyItem = false;
-		boolean foundItemInThisIteration = true;
-		int maxPurchaseAttempts = 5;
-		int purchaseAttempt = 0;
-
-		// Keep looking for items to buy until none are found
-		while (foundItemInThisIteration && purchaseAttempt < maxPurchaseAttempts) {
-			purchaseAttempt++;
-			foundItemInThisIteration = false;
-
-			// Search for the buy button on screen (one at a time)
-			ImageSearchResultData buyButtonResult = templateSearchHelper.locatePattern(
-					template,
-					TemplateSearchHelper.SearchConfig.builder()
-							.withMaxAttempts(1)
-							.withThreshold(95)
-							.withDelay(300L)
-							.build());
-
-			// If found, purchase the item
-			if (buyButtonResult.isFound()) {
-				// Tap on the buy button
-				tapInside(buyButtonResult.getPoint(), buyButtonResult.getPoint());
-				sleepTask(600);
-
-				// Confirm the purchase (tap on confirm button or area)
-				tapNear(new PointData(360, 830));
-				sleepTask(600);
-
-				logInfo(itemName + " has been purchased.");
-				StatisticsService.obtain().addToCounter(profile, "Mystery Shop Purchases", 1);
-				foundAnyItem = true;
-				foundItemInThisIteration = true;
-
-				// Wait a bit before searching for the next item
-				sleepTask(2000);
-			}
-		}
-
-		return foundAnyItem;
-	}
+    private record Offer(ImageSearchResultData icon, ImageSearchResultData price) {
+    }
 }

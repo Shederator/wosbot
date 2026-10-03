@@ -1,8 +1,10 @@
 package dev.frostguard.tasks.pets;
 
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.vision.convert.GameTimeUtils;
+import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.ImageSearchResultData;
@@ -10,6 +12,7 @@ import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.nav.SearchConfigConstants;
+import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -56,6 +59,19 @@ public class PetAdventureChestRoutine extends DelayedTask {
 	private static final int MIN_STAMINA_REQUIRED = 10;
 	private static final int TARGET_STAMINA_FOR_REFRESH = 40;
 	private static final int MAX_CHEST_START_ITERATIONS = 12;
+
+	private static final SearchConfig CHEST_CANDIDATES = SearchConfig.builder()
+			.withMaxAttempts(3)
+			.withThreshold(90)
+			.withDelay(200L)
+			.withMaxResults(3)
+			.build();
+
+	private static final SearchConfig ADVENTURE_TIMERS = SearchConfig.builder()
+			.withMaxAttempts(1)
+			.withThreshold((int) PetAdventureDecisions.TIMER_THRESHOLD)
+			.withMaxResults(5)
+			.build();
 
 	// ========================================================================
 	// NAVIGATION CONSTANTS
@@ -147,6 +163,12 @@ public class PetAdventureChestRoutine extends DelayedTask {
 		}
 
 		claimCompletedChests();
+		if (observeOnlyVisit()) {
+			clearObserveOnly();
+			logInfo("Re-reading Pet Adventure after an unverified start; Start will not be sent on this visit.");
+			rescheduleForChestCompletion();
+			return;
+		}
 		startAvailableChests();
 	}
 
@@ -289,9 +311,7 @@ public class PetAdventureChestRoutine extends DelayedTask {
 
 			// Safety check to prevent infinite loops
 			if (iterationCount > MAX_CHEST_START_ITERATIONS) {
-				logWarning("Reached maximum iteration limit (" + MAX_CHEST_START_ITERATIONS +
-						"). Stopping chest search.");
-				rescheduleForChestCompletion();
+				scheduleUnknownChestRetry("chest scan reached its iteration limit", "iteration-limit");
 				return;
 			}
 
@@ -301,11 +321,12 @@ public class PetAdventureChestRoutine extends DelayedTask {
 
 				if (result == ChestStartResult.STARTED) {
 					foundAnyChest = true;
-					break; // Restart search from highest priority
+					break;
 				} else if (result == ChestStartResult.NO_ATTEMPTS) {
 					return; // Task already rescheduled
+				} else if (result == ChestStartResult.UNKNOWN) {
+					return;
 				}
-				// Continue to next chest type if NOT_FOUND
 			}
 
 		} while (foundAnyChest);
@@ -325,64 +346,105 @@ public class PetAdventureChestRoutine extends DelayedTask {
 	 * <li>Tap chest to open detail screen</li>
 	 * <li>Tap Select button</li>
 	 * <li>Check for Start button vs No Attempts message</li>
-	 * <li>If Start found: tap it, subtract stamina, return to map</li>
+	 * <li>Skip pins whose countdown pill is already running</li>
+	 * <li>If Start remains visible, retry shortly without recording a start</li>
+	 * <li>If Start disappears and In Adventure is present, count the start and keep scanning</li>
+	 * <li>If Start disappears without In Adventure, re-read on the next visit and do not tap Start again</li>
 	 * <li>If No Attempts: reschedule and exit task</li>
 	 * </ol>
 	 * 
 	 * @param chestTemplate The chest template to search for
-	 * @return Result indicating what happened (STARTED, NO_ATTEMPTS, or NOT_FOUND)
+	 * @return STARTED, NOT_FOUND, NO_ATTEMPTS, or UNKNOWN
 	 */
 	private ChestStartResult attemptToStartChest(TemplatesEnum chestTemplate) {
 		logDebug("Searching for " + chestTemplate);
 
-		ImageSearchResultData chestResult = templateSearchHelper.locatePattern(
+		List<ImageSearchResultData> chests = templateSearchHelper.locateAllPatterns(
 				chestTemplate,
-				SearchConfigConstants.SINGLE_WITH_RETRIES);
+				CHEST_CANDIDATES);
+		List<ImageSearchResultData> timers = templateSearchHelper.locateAllPatterns(
+				TemplatesEnum.PETS_CHEST_ADVENTURE_TIMER,
+				ADVENTURE_TIMERS);
 
-		if (!chestResult.isFound()) {
+		if (chests == null || chests.isEmpty()) {
 			return ChestStartResult.NOT_FOUND;
 		}
 
+		for (ImageSearchResultData chestResult : chests) {
+			if (!chestResult.isFound()) {
+				continue;
+			}
+			if (PetAdventureDecisions.occupiedByTimer(chestResult.getPoint(), timers)) {
+				logInfo("Skipping " + chestTemplate + " already in adventure at "
+						+ chestResult.getPoint());
+				continue;
+			}
+			return startIdleChest(chestTemplate, chestResult);
+		}
+
+		return ChestStartResult.NOT_FOUND;
+	}
+
+	private ChestStartResult startIdleChest(TemplatesEnum chestTemplate, ImageSearchResultData chestResult) {
 		logInfo("Found " + chestTemplate + ". Attempting to start adventure");
 
-		// Open chest detail screen
 		tapInside(chestResult.getPoint(), chestResult.getPoint());
-		sleepTask(500); // Wait for detail screen
+		sleepTask(500);
 
-		// Tap Select button
 		ImageSearchResultData selectButton = templateSearchHelper.locatePattern(
 				TemplatesEnum.PETS_CHEST_SELECT,
 				SearchConfigConstants.DEFAULT_SINGLE);
 
 		if (!selectButton.isFound()) {
-			logWarning("Select button not found for " + chestTemplate);
-			return ChestStartResult.NOT_FOUND;
+			scheduleUnknownChestRetry("Select control was missing for " + chestTemplate, "select-control");
+			pressBack();
+			return ChestStartResult.UNKNOWN;
 		}
 
 		tapInside(selectButton);
-		sleepTask(500); // Wait for confirmation screen
+		sleepTask(500);
 
-		// Check for Start button (attempts available)
 		ImageSearchResultData startButton = templateSearchHelper.locatePattern(
 				TemplatesEnum.PETS_CHEST_START,
 				SearchConfigConstants.DEFAULT_SINGLE);
 
 		if (startButton.isFound()) {
-			// Start the adventure
 			tapInside(startButton);
-			sleepTask(500); // Wait for start confirmation
+			sleepTask(1000);
+			ImageSearchResultData startStillVisible = templateSearchHelper.locatePattern(
+					TemplatesEnum.PETS_CHEST_START,
+					SearchConfigConstants.DEFAULT_SINGLE);
+			if (startStillVisible.isFound()) {
+				scheduleUnknownChestRetry("Start control remained visible after the tap", "start-unconfirmed");
+				pressBack();
+				return ChestStartResult.UNKNOWN;
+			}
 
-			staminaHelper.subtractStamina(STAMINA_PER_CHEST, false);
-			logInfo("Started " + chestTemplate + " adventure (consumed " +
-					STAMINA_PER_CHEST + " stamina)");
+			ImageSearchResultData inAdventure = templateSearchHelper.locatePattern(
+					TemplatesEnum.PETS_CHEST_IN_ADVENTURE,
+					SearchConfigConstants.DEFAULT_SINGLE);
+			if (PetAdventureDecisions.inAdventureOverlay(inAdventure)) {
+				staminaHelper.subtractStamina(STAMINA_PER_CHEST, false);
+				logInfo("Started " + chestTemplate + " adventure (consumed "
+						+ STAMINA_PER_CHEST + " stamina)");
+				pressBack();
+				sleepTask(500);
+				return ChestStartResult.STARTED;
+			}
 
-			pressBack(); // Return to adventure map
-			sleepTask(500); // Wait for screen transition
-
-			return ChestStartResult.STARTED;
+			markObserveOnly();
+			LocalDateTime nextCheck = unverifiedStartRecheck(LocalDateTime.now());
+			String snapshot = TaskDiagnosticSnapshots.capture(
+					emuManager, EMULATOR_NUMBER, "petadventurechest", "start-outcome");
+			logWarning("Start tap was sent but the adventure state was not confirmed; "
+					+ "the next visit only re-reads. Next check at "
+					+ nextCheck.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+			reschedule(nextCheck);
+			pressBack();
+			sleepTask(500);
+			return ChestStartResult.UNKNOWN;
 		}
 
-		// Check for No Attempts message
 		ImageSearchResultData noAttemptsMessage = templateSearchHelper.locatePattern(
 				TemplatesEnum.PETS_CHEST_ATTEMPT,
 				SearchConfigConstants.DEFAULT_SINGLE);
@@ -393,10 +455,10 @@ public class PetAdventureChestRoutine extends DelayedTask {
 			return ChestStartResult.NO_ATTEMPTS;
 		}
 
-		// Neither Start nor No Attempts found - unknown state
 		logWarning("Could not determine chest start status for " + chestTemplate);
-		pressBack(); // Try to recover by going back
-		return ChestStartResult.NOT_FOUND;
+		scheduleUnknownChestRetry("neither Start nor No Attempts was detected", "start-status");
+		pressBack();
+		return ChestStartResult.UNKNOWN;
 	}
 
 	// ========================================================================
@@ -442,6 +504,31 @@ public class PetAdventureChestRoutine extends DelayedTask {
 		logWarning("Navigation failed. Retrying at " + retryTime.format(TIME_FORMATTER));
 	}
 
+	static LocalDateTime unverifiedStartRecheck(LocalDateTime now) {
+		return now.plusHours(CHEST_COMPLETION_HOURS);
+	}
+
+	private boolean observeOnlyVisit() {
+		return Boolean.TRUE.equals(profile.getConfig(
+				ConfigurationKeyEnum.PET_ADVENTURE_OBSERVE_ONLY_BOOL, Boolean.class));
+	}
+
+	private void markObserveOnly() {
+		writeProfileSetting(ConfigurationKeyEnum.PET_ADVENTURE_OBSERVE_ONLY_BOOL, true);
+	}
+
+	private void clearObserveOnly() {
+		writeProfileSetting(ConfigurationKeyEnum.PET_ADVENTURE_OBSERVE_ONLY_BOOL, false);
+	}
+
+	private void scheduleUnknownChestRetry(String reason, String type) {
+		LocalDateTime retryTime = LocalDateTime.now().plusMinutes(NAVIGATION_RETRY_MINUTES);
+		String snapshot = TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "petadventurechest", type);
+		logWarning("Pet Adventure outcome is unknown: " + reason + "; retrying at "
+				+ retryTime.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+		reschedule(retryTime);
+	}
+
 	// ========================================================================
 	// HELPER ENUMS
 	// ========================================================================
@@ -450,13 +537,16 @@ public class PetAdventureChestRoutine extends DelayedTask {
 	 * Result of attempting to start a chest adventure.
 	 */
 	private enum ChestStartResult {
-		/** Chest was found and adventure started successfully */
+		/** Chest was idle and In Adventure confirmed the start. */
 		STARTED,
 
 		/** No daily attempts remaining (task rescheduled) */
 		NO_ATTEMPTS,
 
 		/** Chest not found or could not be started */
-		NOT_FOUND
+		NOT_FOUND,
+
+		/** The screen or action outcome could not be verified. */
+		UNKNOWN
 	}
 }

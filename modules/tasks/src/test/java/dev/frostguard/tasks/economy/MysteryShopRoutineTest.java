@@ -25,17 +25,20 @@ class MysteryShopRoutineTest {
     @Test
     void retriesSharedNavigationThenReschedulesFromHome() {
         TestRoutine routine = new TestRoutine();
-        LocalDateTime before = LocalDateTime.now().plusMinutes(59);
+        LocalDateTime before = LocalDateTime.now();
 
         routine.execute();
 
         assertEquals(5, routine.navigationAttempts);
+        assertEquals(0, routine.backPresses);
         assertEquals(LaunchPoint.HOME, routine.requiredStartLocation());
         assertTrue(routine.scheduledTime().isAfter(before));
+        assertTrue(routine.scheduledTime().isBefore(before.plusHours(2)));
     }
 
     private static final class TestRoutine extends MysteryShopRoutine {
         private int navigationAttempts;
+        private int backPresses;
 
         private TestRoutine() {
             super(new AccountDescriptor(1L, "Test", "1", true, 1L, 30L),
@@ -46,6 +49,11 @@ class MysteryShopRoutineTest {
         boolean navigateToMysteryShop() {
             navigationAttempts++;
             return false;
+        }
+
+        @Override
+        public void pressBack() {
+            backPresses++;
         }
 
         @Override

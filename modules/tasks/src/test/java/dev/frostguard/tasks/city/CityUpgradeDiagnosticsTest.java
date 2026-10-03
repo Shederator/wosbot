@@ -32,7 +32,13 @@ class CityUpgradeDiagnosticsTest {
         diagnostics.stage("recover-any");
         assertTrue(diagnostics.retain(() -> store, CityUpgradeDiagnosticsTest::frame, "root-recovery-failed")
                 .contains("snapshotBasis=best-effort-fresh-capture"));
-        try (var files = Files.list(store.directory())) { assertEquals(2, files.count()); }
+        Path activityDirectory = store.directory().resolve("cityupgrade");
+        try (var files = Files.list(activityDirectory)) {
+            List<String> names = files.map(path -> path.getFileName().toString()).sorted().toList();
+            assertEquals(2, names.size());
+            assertTrue(names.stream().anyMatch(name -> name.contains("control-not-recognized")));
+            assertTrue(names.stream().anyMatch(name -> name.contains("root-recovery-failed")));
+        }
     }
 
     @Test

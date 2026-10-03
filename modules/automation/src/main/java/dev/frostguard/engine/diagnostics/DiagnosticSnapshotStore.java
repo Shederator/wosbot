@@ -17,18 +17,22 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * Writes local diagnostic PNGs under {@code logs/snapshot}. Filenames carry a
- * UTC timestamp, the activity that captured the frame, and a failure type.
- * They never include profile names, device serials, or exception text.
- * Callers anonymize a frame before sharing it; this store does not redact or upload.
+ * Writes local diagnostic PNGs under {@code logs/snapshot/<activity>}.
+ * Each activity has its own directory. The filename carries a UTC timestamp
+ * and a failure type. Names never include profile names, device serials, or
+ * exception text. Callers anonymize a frame before sharing it; this store
+ * does not redact or upload.
  */
 public final class DiagnosticSnapshotStore {
 
@@ -39,20 +43,32 @@ public final class DiagnosticSnapshotStore {
     static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss.SSS'Z'")
             .withZone(ZoneOffset.UTC);
     private static final Object WRITE_LOCK = new Object();
+    private static final Pattern FLAT_CAPTURE = Pattern.compile(
+            "^(\\d{8}T\\d{6}\\.\\d{3}Z)-([a-z0-9]+)-(.+)\\.png$");
 
     private final Path workspaceRoot;
+    private final BooleanSupplier diagnosticSnapshotsEnabled;
     private final BooleanSupplier desktopSnapshotsEnabled;
     private final DesktopFrameSource desktopFrames;
 
     public DiagnosticSnapshotStore(Path workspaceRoot) {
-        this(workspaceRoot, () -> false, () -> Optional.empty());
+        this(workspaceRoot, () -> true, () -> false, () -> Optional.empty());
     }
 
     DiagnosticSnapshotStore(
             Path workspaceRoot,
             BooleanSupplier desktopSnapshotsEnabled,
             DesktopFrameSource desktopFrames) {
+        this(workspaceRoot, () -> true, desktopSnapshotsEnabled, desktopFrames);
+    }
+
+    private DiagnosticSnapshotStore(
+            Path workspaceRoot,
+            BooleanSupplier diagnosticSnapshotsEnabled,
+            BooleanSupplier desktopSnapshotsEnabled,
+            DesktopFrameSource desktopFrames) {
         this.workspaceRoot = workspaceRoot.toAbsolutePath().normalize();
+        this.diagnosticSnapshotsEnabled = diagnosticSnapshotsEnabled;
         this.desktopSnapshotsEnabled = desktopSnapshotsEnabled;
         this.desktopFrames = desktopFrames;
     }
@@ -60,7 +76,8 @@ public final class DiagnosticSnapshotStore {
     public static DiagnosticSnapshotStore forCurrentWorkspace() {
         return new DiagnosticSnapshotStore(
                 WorkspacePaths.current().root(),
-                DesktopSnapshotSettings::enabled,
+                MissingTemplateSnapshotSettings::enabled,
+                () -> MissingTemplateSnapshotSettings.enabled() && DesktopSnapshotSettings.enabled(),
                 DesktopFrames.platform());
     }
 
@@ -70,13 +87,14 @@ public final class DiagnosticSnapshotStore {
 
     /**
      * Saves one PNG and returns its workspace-relative path using {@code /}
-     * separators. {@code activity} names the calling task and {@code type}
-     * names the situation. An unusable frame or any filesystem failure returns
-     * empty and leaves no partial file. Retention then keeps the newest
-     * captures of that activity and leaves every other activity untouched.
+     * separators. {@code activity} names the calling task and becomes the
+     * directory under {@code logs/snapshot}. {@code type} names the situation.
+     * An unusable frame or any filesystem failure returns empty and leaves no
+     * partial file. Retention then keeps the newest captures in that directory
+     * and leaves every other activity untouched.
      */
     public Optional<String> write(RawImageData frame, String activity, String type, Instant capturedAt) {
-        if (capturedAt == null) {
+        if (capturedAt == null || !isEnabled()) {
             return Optional.empty();
         }
         BufferedImage image;
@@ -123,6 +141,15 @@ public final class DiagnosticSnapshotStore {
         captureDesktop(type, capturedAt);
     }
 
+    public boolean isEnabled() {
+        try {
+            return diagnosticSnapshotsEnabled.getAsBoolean();
+        } catch (RuntimeException failure) {
+            logger.warn("Diagnostic snapshot setting could not be read: {}", failure.toString());
+            return false;
+        }
+    }
+
     private boolean desktopEnabled() {
         try {
             return desktopSnapshotsEnabled.getAsBoolean();
@@ -139,8 +166,11 @@ public final class DiagnosticSnapshotStore {
             synchronized (WRITE_LOCK) {
                 Path snapshotDirectory = directory();
                 Files.createDirectories(snapshotDirectory);
-                Path target = reserve(snapshotDirectory, fileName(activityKey, type, capturedAt));
-                partial = snapshotDirectory.resolve(target.getFileName().toString() + ".partial");
+                migrateFlatCaptures(snapshotDirectory);
+                Path activityDirectory = directory().resolve(activityKey);
+                Files.createDirectories(activityDirectory);
+                Path target = reserve(activityDirectory, fileName(type, capturedAt));
+                partial = activityDirectory.resolve(target.getFileName().toString() + ".partial");
                 if (!ImageIO.write(image, "png", partial.toFile())) {
                     Files.deleteIfExists(partial);
                     return Optional.empty();
@@ -148,11 +178,11 @@ public final class DiagnosticSnapshotStore {
                 moveIntoPlace(partial, target);
                 partial = null;
                 try {
-                    pruneActivity(snapshotDirectory, activityKey);
+                    pruneActivity(activityDirectory);
                 } catch (IOException retentionFailure) {
                     // The saved capture stays referenceable when retention cannot run.
                 }
-                return Optional.of(relativePath(target.getFileName().toString()));
+                return Optional.of(relativePath(activityKey, target.getFileName().toString()));
             }
         } catch (RuntimeException | IOException failure) {
             if (partial != null) {
@@ -166,14 +196,14 @@ public final class DiagnosticSnapshotStore {
         }
     }
 
-    static String fileName(String activity, String type, Instant capturedAt) {
-        return TIMESTAMP.format(capturedAt) + "-" + activityToken(activity) + "-" + token(type) + ".png";
+    static String fileName(String type, Instant capturedAt) {
+        return TIMESTAMP.format(capturedAt) + "-" + token(type) + ".png";
     }
 
     /**
-     * Activity is one alphanumeric segment. The timestamp is followed by that
-     * segment, then the type, so retention can group files without confusing
-     * {@code bear} and {@code beartrap}.
+     * Activity is one alphanumeric directory name. {@code bear} and
+     * {@code beartrap} stay separate directories, so one retention pass
+     * cannot delete the other.
      */
     static String activityToken(String value) {
         String normalized = value == null ? "" : value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
@@ -195,8 +225,8 @@ public final class DiagnosticSnapshotStore {
         return normalized.isBlank() ? "unknown" : normalized;
     }
 
-    static String relativePath(String fileName) {
-        return "logs/snapshot/" + fileName;
+    static String relativePath(String activity, String fileName) {
+        return "logs/snapshot/" + activityToken(activity) + "/" + fileName;
     }
 
     private static Path reserve(Path directory, String fileName) throws IOException {
@@ -221,9 +251,37 @@ public final class DiagnosticSnapshotStore {
         }
     }
 
-    private static void pruneActivity(Path directory, String activity) throws IOException {
-        Pattern managedActivity = Pattern.compile(
-                "\\d{8}T\\d{6}\\.\\d{3}Z-" + Pattern.quote(activity) + "-.+\\.png");
+    /**
+     * Older builds wrote every capture in {@code logs/snapshot}. The activity
+     * token is the single alphanumeric segment after the timestamp, so those
+     * files can move into the directory of that routine without a second pass
+     * by the operator.
+     */
+    private static void migrateFlatCaptures(Path snapshotRoot) throws IOException {
+        List<Path> files;
+        try (Stream<Path> listed = Files.list(snapshotRoot)) {
+            files = listed.filter(Files::isRegularFile).toList();
+        }
+        Set<String> touched = new HashSet<>();
+        for (Path file : files) {
+            Matcher matcher = FLAT_CAPTURE.matcher(file.getFileName().toString());
+            if (!matcher.matches()) {
+                continue;
+            }
+            String activity = matcher.group(2);
+            String groupedName = matcher.group(1) + "-" + matcher.group(3) + ".png";
+            Path activityDirectory = snapshotRoot.resolve(activity);
+            Files.createDirectories(activityDirectory);
+            moveIntoPlace(file, reserve(activityDirectory, groupedName));
+            touched.add(activity);
+        }
+        for (String activity : touched) {
+            pruneActivity(snapshotRoot.resolve(activity));
+        }
+    }
+
+    private static void pruneActivity(Path directory) throws IOException {
+        Pattern managedActivity = Pattern.compile("\\d{8}T\\d{6}\\.\\d{3}Z-.+\\.png");
         List<Path> managed;
         try (Stream<Path> files = Files.list(directory)) {
             managed = files

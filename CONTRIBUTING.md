@@ -92,6 +92,11 @@ commit has a valid sign-off.
 2. Follow `AGENTS.md` and the relevant technical guidance.
 3. Sign off every commit with `git commit -s`.
 4. Add tests or saved-frame fixtures where they preserve the changed behavior.
+   For a schedule or completion change, assert the next run time and that an
+   unknown result is not stored as success or deferred to the reset. Do not
+   stub diagnostic retention: assert that a normal screencap is kept even when
+   RawImageData.isValid() returns false, and assert that a fallback timer is
+   not labeled as validated.
 5. Run at least the affected checks and record their actual results.
 6. Open a pull request using the repository template as an adaptable review
    guide.

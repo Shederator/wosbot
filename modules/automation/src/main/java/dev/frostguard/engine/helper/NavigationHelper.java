@@ -303,6 +303,10 @@ public class NavigationHelper {
     // ── event menu ───────────────────────────────────────────────────
 
     public boolean navigateToEventMenu(EventMenu event) {
+        return openEventMenu(event) == EventMenuOpenResult.REACHED;
+    }
+
+    public EventMenuOpenResult openEventMenu(EventMenu event) {
         broadcastInfo("Navigating to " + event.name());
 
         // open the events panel
@@ -310,7 +314,7 @@ public class NavigationHelper {
                 TemplatesEnum.HOME_EVENTS_BUTTON, SearchConfigConstants.SINGLE_WITH_RETRIES);
         if (!evtBtn.isFound()) {
             broadcastWarn("Events panel missed");
-            return false;
+            return EventMenuOpenResult.PANEL_CLOSED;
         }
         taps.tapInside(evtBtn);
         interruptibleWait(2000);
@@ -353,13 +357,13 @@ public class NavigationHelper {
 
         if (!tab.isFound()) {
             broadcastWarn("Tab not found: " + event);
-            return false;
+            return EventMenuOpenResult.TAB_ABSENT;
         }
 
         taps.tapInside(tab);
         interruptibleWait(1000);
         broadcastInfo("Reached " + event.name());
-        return true;
+        return EventMenuOpenResult.REACHED;
     }
 
     private ImageSearchResultData locateEventTab(TemplatesEnum template) {
@@ -471,4 +475,6 @@ public class NavigationHelper {
     private enum ScreenState { HOME, WORLD, RECONNECT, UNKNOWN }
     public enum AllianceMenu { WAR, CHESTS, TERRITORY, SHOP, TECH, HELP, TRIUMPH }
     public enum EventMenu { HERO_MISSION, MERCENARY, ALLIANCE_CHAMPIONSHIP, ALLIANCE_MOBILIZATION, TUNDRA_TRUCK }
+
+    public enum EventMenuOpenResult { REACHED, PANEL_CLOSED, TAB_ABSENT }
 }

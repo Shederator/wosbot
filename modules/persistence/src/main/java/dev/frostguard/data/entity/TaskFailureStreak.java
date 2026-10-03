@@ -55,7 +55,12 @@ public class TaskFailureStreak {
     }
 
     public void record(String failureSignature, LocalDateTime failedAt) {
-        if (!signature.equals(failureSignature)) {
+        record(failureSignature, failedAt, null);
+    }
+
+    public void record(String failureSignature, LocalDateTime failedAt, LocalDateTime resetBoundary) {
+        if (!signature.equals(failureSignature)
+                || (resetBoundary != null && lastFailureAt.isBefore(resetBoundary))) {
             start(failureSignature, failedAt);
             return;
         }

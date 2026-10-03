@@ -57,10 +57,10 @@ sign-in, app-detail, and Play Pass variants are retained only as external issue
 evidence for future Store automation. The existing resource-download fixture
 and flow remain separate.
 
-A terminal blocker saves one PNG under `logs/snapshot/` before the game
-process is stopped. The filename is a UTC timestamp, the activity
-`initialize`, and a type such as `initialize-blocked`,
-`play-store-redirect`, `resource-download-timeout`, or `update-follow-up`.
+A terminal blocker saves one PNG under `logs/snapshot/initialize/` before the
+game process is stopped. The filename is a UTC timestamp and a type such as
+`initialize-blocked`, `play-store-redirect`, `resource-download-timeout`, or
+`update-follow-up`.
 The terminal log line and copied incident diagnostics both carry the
 workspace-relative path. The saved frame is the last decision frame, or one
 fresh capture marked best-effort when that frame is missing. Passive checks

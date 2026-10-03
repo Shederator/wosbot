@@ -8,6 +8,7 @@ import dev.frostguard.engine.helper.FurnacePanelDetector;
 import dev.frostguard.engine.diagnostics.DiagnosticSnapshotStore;
 import dev.frostguard.tasks.city.CityUpgradeFlow.Attempt;
 import dev.frostguard.tasks.city.CityUpgradeFlow.FailureReason;
+import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.nav.SidebarSection;
 import dev.frostguard.engine.schedule.DelayedTask;
@@ -48,7 +49,7 @@ private static final AreaData BUILDING_ACTION_BUTTON_AREA_VALUE = new AreaData(n
 private static final AreaData BUILDING_CONFIRM_UPGRADE_SEARCH_AREA_VALUE =
         new AreaData(new PointData(350, 900), new PointData(700, 1255));
 
-private static final AreaData BUILDING_NAME_AREA_VALUE = new AreaData(new PointData(260, 510), new PointData(510, 575));
+static final AreaData BUILDING_NAME_AREA_VALUE = new AreaData(new PointData(260, 510), new PointData(510, 575));
 
 private static final int BLOCKER_RELEASE_GRACE_MINUTES = 5;
 
@@ -158,13 +159,20 @@ private void executeQueues() {
 
 
             if (!productionBlockers.isEmpty()) {
-                LocalDateTime retryAt = productionBlockers.stream()
+                LocalDateTime now = LocalDateTime.now();
+                LocalDateTime trainingHandoff = productionBlockers.stream()
                         .map(ProductionBlocker::completionTime)
                         .min(LocalDateTime::compareTo)
-                        .orElse(LocalDateTime.now().plusMinutes(5))
+                        .orElse(now)
                         .plusSeconds(COMPLETION_SETTLE_SECONDS);
+                Optional<LocalDateTime> constructionSlot = earliestConstructionSlot(updatedResults, now);
+                LocalDateTime retryAt = constructionSlot
+                        .map(slot -> CityUpgradeSchedule.earliest(trainingHandoff, slot))
+                        .orElse(trainingHandoff);
                 logInfo(routineLogUpgradeBuildingsLine(
-                        "Recommended building is blocked by production. Planning exact handoff retry for: " + retryAt));
+                        "Next visit at " + retryAt
+                                + "; training handoff=" + trainingHandoff
+                                + "; construction slot=" + constructionSlot.map(LocalDateTime::toString).orElse("none")));
                 this.reschedule(retryAt);
                 marchHelper.closeLeftMenu();
                 return;
@@ -336,20 +344,15 @@ private void deferBasedOnBusyQueues(List<QueueReadout> queueResults) {
 
         if (shortestBusyQueue != null) {
             long minutesToWait = decodeTimeToMinutes(shortestBusyQueue.state.timeRemaining);
-            LocalDateTime rescheduleTime;
+            LocalDateTime rescheduleTime = CityUpgradeSchedule.constructionRetry(LocalDateTime.now(), minutesToWait);
 
             if (minutesToWait > 30) {
-
-                long halfTime = minutesToWait / 2;
-                rescheduleTime = LocalDateTime.now().plusMinutes(halfTime);
                 logInfo(routineLogUpgradeBuildingsLine("Wait time exceeds 30 minutes (" + minutesToWait + " min). Planning next run for half time: " +
-                        halfTime + " minutes from now"));
+                        minutesToWait / 2 + " minutes from now"));
             } else if (minutesToWait < 5) {
-                rescheduleTime = LocalDateTime.now().plusMinutes(minutesToWait);
                 logInfo(routineLogUpgradeBuildingsLine("Wait time is less than 5 minutes. Keeping normal schedule: " +
                         minutesToWait + " minutes from now"));
             } else {
-                rescheduleTime = LocalDateTime.now().plusMinutes(minutesToWait);
                 logInfo(routineLogUpgradeBuildingsLine("Wait time is " + minutesToWait + " minutes. Using normal schedule"));
             }
 
@@ -367,10 +370,54 @@ private void deferBasedOnBusyQueues(List<QueueReadout> queueResults) {
         }
     }
 
+private Optional<LocalDateTime> earliestConstructionSlot(List<QueueReadout> queues, LocalDateTime now) {
+        return queues.stream()
+                .filter(result -> result.state.status == QueueMood.BUSY && result.state.timeRemaining != null)
+                .map(result -> decodeTimeToMinutes(result.state.timeRemaining))
+                .min(Long::compare)
+                .map(minutes -> CityUpgradeSchedule.constructionRetry(now, minutes));
+    }
+
 private void logQueueSummaryFlow(List<UpgradeBuildingsRoutine.QueueReadout> queueResults) {
         logInfo(routineLogUpgradeBuildingsLine("=== Queue Analysis Summary ==="));
         for (UpgradeBuildingsRoutine.QueueReadout result : queueResults) {
             logInfo(routineLogUpgradeBuildingsLine(result.toString()));
+        }
+    }
+
+private ProductionBlocker readBusyTrainingCamp(int constructionQueue) {
+        diagnostics.stage("training-clock");
+        String buildingName = readSelectedBuildingName();
+        String clockText = readTrainingClock();
+        diagnostics.observation("training name='" + buildingName + "' clock='" + clockText + "'");
+        TrainingCampBusyRead.Decision decision = TrainingCampBusyRead.positive(buildingName, clockText, false);
+        if (decision == null) {
+            return null;
+        }
+
+        LocalDateTime completionTime = LocalDateTime.now().plus(decision.remaining());
+        reserveConsumers(decision.camps(), constructionQueue, completionTime);
+        logInfo(routineLogUpgradeBuildingsLine(
+                "Training camp " + decision.camps() + " is busy; name='" + buildingName
+                        + "'; clock='" + clockText
+                        + "'; upgrade control absent. Next visit at " + completionTime
+                        + ". Construction was not started."));
+        return new ProductionBlocker(decision.camps(), constructionQueue, completionTime);
+    }
+
+private String readTrainingClock() {
+        try {
+            String text = emuManager.readText(
+                    EMULATOR_NUMBER,
+                    TrainingCampBusyRead.CLOCK_AREA.topLeft(),
+                    TrainingCampBusyRead.CLOCK_AREA.bottomRight(),
+                    CommonOCRSettings.MARCH_QUEUE_TIMER_SETTINGS,
+                    true);
+            return text == null ? "" : text.trim();
+        } catch (Exception e) {
+            CityUpgradeFlow.rethrowControlSignal(e);
+            logWarning(routineLogUpgradeBuildingsLine("Could not read the training clock: " + e.getMessage()));
+            return "";
         }
     }
 
@@ -1004,6 +1051,10 @@ private Attempt<QueueHandlingResult> handleQueueAttempt(QueueReadout queueResult
         diagnostics.stage("recognize-build-control");
         if (isBuildButtonVisible()) {
             return buildingAttempt(startBuildingAction("build", null));
+        }
+        ProductionBlocker training = readBusyTrainingCamp(queueResult.queueNumber());
+        if (training != null) {
+            return Attempt.completed(new QueueHandlingResult(false, training));
         }
         diagnostics.stage("production-blocker");
         ProductionBlocker blocker = handleProductionBlocker(queueResult.queueNumber());

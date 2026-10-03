@@ -9,9 +9,12 @@ import dev.frostguard.api.domain.PointData;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 import java.time.LocalDateTime;
 
 public class NewSurvivorsRoutine extends DelayedTask {
+
+private static final int MAX_ASSIGNMENT_ATTEMPTS = 20;
 
 public NewSurvivorsRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
         super(profile, tpTask);
@@ -45,27 +48,25 @@ public NewSurvivorsRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
                 emuManager.swipeScreen(EMULATOR_NUMBER, new PointData(340, 610), new PointData(340, 900));
                 sleepTask(200);
 
-                ImageSearchResultData plusButton = null;
-                while ((plusButton = templateSearchHelper.locatePattern(
-                        TemplatesEnum.GAME_HOME_NEW_SURVIVORS_PLUS_BUTTON, SearchConfigConstants.DEFAULT_SINGLE))
-                        .isFound()) {
-                    tapInside(plusButton);
-                    sleepTask(50);
+                if (!assignVisibleSlots("lower")) {
+                    scheduleUnknownRetry("lower survivor assignment slots did not settle", "lower-slots");
+                    return;
                 }
 
 
                 emuManager.swipeScreen(EMULATOR_NUMBER, new PointData(340, 900), new PointData(340, 610));
                 sleepTask(200);
-                while ((plusButton = templateSearchHelper.locatePattern(
-                        TemplatesEnum.GAME_HOME_NEW_SURVIVORS_PLUS_BUTTON, SearchConfigConstants.DEFAULT_SINGLE))
-                        .isFound()) {
-                    tapInside(plusButton);
-                    sleepTask(50);
+                if (!assignVisibleSlots("upper")) {
+                    scheduleUnknownRetry("upper survivor assignment slots did not settle", "upper-slots");
+                    return;
                 }
 
                 logInfo(routineLogNewSurvivorsLine("Survivor assignment complete. Planning next run task."));
                 this.reschedule(LocalDateTime.now().plusMinutes(
                         profile.getConfig(ConfigurationKeyEnum.CITY_ACCEPT_NEW_SURVIVORS_OFFSET_INT, Integer.class)));
+            } else {
+                scheduleUnknownRetry("notification opened but Welcome In control was not detected", "welcome-control");
+                return;
             }
 
         } else {
@@ -75,6 +76,32 @@ public NewSurvivorsRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 
         }
 
+    }
+
+private boolean assignVisibleSlots(String section) {
+        for (int attempt = 0; attempt < MAX_ASSIGNMENT_ATTEMPTS; attempt++) {
+            ImageSearchResultData plusButton = templateSearchHelper.locatePattern(
+                    TemplatesEnum.GAME_HOME_NEW_SURVIVORS_PLUS_BUTTON, SearchConfigConstants.DEFAULT_SINGLE);
+            if (!plusButton.isFound()) {
+                return true;
+            }
+            tapInside(plusButton);
+            sleepTask(50);
+        }
+
+        ImageSearchResultData remaining = templateSearchHelper.locatePattern(
+                TemplatesEnum.GAME_HOME_NEW_SURVIVORS_PLUS_BUTTON, SearchConfigConstants.DEFAULT_SINGLE);
+        logDebug(routineLogNewSurvivorsLine(section + " assignment pass reached "
+                + MAX_ASSIGNMENT_ATTEMPTS + " taps; remaining control found=" + remaining.isFound()));
+        return !remaining.isFound();
+    }
+
+private void scheduleUnknownRetry(String reason, String type) {
+        LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+        String snapshot = TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "newsurvivors", type);
+        logWarning(routineLogNewSurvivorsLine(reason + "; retrying at "
+                + retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + "."));
+        reschedule(retryAt);
     }
 
 @Override

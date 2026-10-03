@@ -28,6 +28,9 @@ final class StartupBlockerSnapshots {
             Supplier<RawImageData> freshCapture,
             String type,
             Instant capturedAt) {
+        if (!store.isEnabled()) {
+            return Retention.disabled();
+        }
         RawImageData frame = usable(decisionFrame) ? decisionFrame : null;
         String basis = "decision-frame";
         if (frame == null) {
@@ -57,6 +60,10 @@ final class StartupBlockerSnapshots {
     }
 
     record Retention(String relativePath, String basis) {
+        static Retention disabled() {
+            return new Retention("", "disabled");
+        }
+
         static Retention captureFailed() {
             return new Retention("", "capture-failed");
         }

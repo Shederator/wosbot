@@ -9,6 +9,7 @@ import java.io.*;
 import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,6 +26,14 @@ public final class ProfileContextLogger {
     private static final Logger rootLog = LoggerFactory.getLogger(ProfileContextLogger.class);
     private static final Map<Long, PrintWriter> writerRegistry = new ConcurrentHashMap<>();
     private static final ThreadLocal<Capture> currentCapture = new ThreadLocal<>();
+    private static volatile List<String> sessionBuildLines = List.of("Bot Version: unknown");
+
+    /** Supplies build identity before the first profile log is opened. */
+    public static void configureSessionBuildLines(List<String> lines) {
+        sessionBuildLines = lines == null || lines.isEmpty()
+                ? List.of("Bot Version: unknown")
+                : List.copyOf(lines);
+    }
 
     private record Capture(long profileId, Consumer<String> listener) {}
 
@@ -119,6 +128,7 @@ public final class ProfileContextLogger {
         pw.println("Session Started: " + logTimestamp.format(new Date()));
         pw.println("Target Profile: " + acc.getName() + " [#" + acc.getId() + "]");
         pw.println("Device Slot: " + acc.getEmulatorNumber());
+        sessionBuildLines.forEach(pw::println);
         pw.println("----------------------------------------------------------");
     }
 
@@ -246,5 +256,6 @@ public final class ProfileContextLogger {
     public static void shutdown() {
         writerRegistry.values().forEach(PrintWriter::close);
         writerRegistry.clear();
+        sessionBuildLines = List.of("Bot Version: unknown");
     }
 }

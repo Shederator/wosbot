@@ -9,6 +9,7 @@ import dev.frostguard.engine.config.PriorityConfigResolver;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.vision.convert.RegexNumberParser;
 import java.awt.*;
@@ -91,8 +92,6 @@ private static final int QUANTITY_HEIGHT_VALUE = 35;
 private static final int THRESHOLD_SHOP_BUTTON_VALUE = 90;
 
 private static final int DISCOUNT_TOLERANCE_VALUE = 4;
-
-private static final int DEFAULT_QUANTITY_VALUE = 1;
 
 private static final int RETRIES_SHOP_BUTTON_VALUE = 5;
 
@@ -262,15 +261,6 @@ private List<PriorityItemData> hydrateEnabledPriorities() {
                 ConfigurationKeyEnum.ALLIANCE_SHOP_PRIORITIES_STRING);
     }
 
-private int computePurchaseQuantity(int cardIndex, AllianceShopItemEnum shopItem, int itemPrice) {
-        Integer availableQuantity = scanAvailableQuantity(cardIndex, shopItem);
-        if (availableQuantity == null) {
-            availableQuantity = DEFAULT_QUANTITY_VALUE;
-        }
-
-        return computeBuyQtyFlow(currentCoins, minCoins, itemPrice, availableQuantity);
-    }
-
 private void detectExpertUnlockFlow() {
         ImageSearchResultData expertIcon = templateSearchHelper.locatePattern(
                 TemplatesEnum.ALLIANCE_SHOP_EXPERT_ICON,
@@ -300,7 +290,10 @@ private PriceCheck validateItemPriceFlow(int cardIndex, AllianceShopItemEnum sho
 
         Integer availableQty = scanAvailableQuantity(cardIndex, shopItem);
         if (availableQty == null) {
-            availableQty = DEFAULT_QUANTITY_VALUE;
+            logWarning(routineLogAllianceShopLine("Available quantity is unknown for " + shopItem.getDisplayName()
+                    + "; skipping purchase. "
+                    + TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "allianceshop", "quantity-ocr")));
+            return new PriceCheck(BuyResult.ERROR, itemPrice, 0);
         }
 
         return new PriceCheck(BuyResult.PURCHASED, itemPrice, availableQty);
@@ -324,15 +317,11 @@ private Integer scanAvailableQuantity(int cardIndex, AllianceShopItemEnum shopIt
                 text -> RegexNumberParser.extractByPattern(text, Pattern.compile(".*?(\\d+).*")));
 
         if (availableQuantity == null) {
-            logWarning(routineLogAllianceShopLine("Could not read available quantity for item: " +
-                    shopItem.getDisplayName() + ". Assuming quantity of " + DEFAULT_QUANTITY_VALUE + "."));
+            logWarning(routineLogAllianceShopLine("Could not read available quantity for item: "
+                    + shopItem.getDisplayName() + "."));
         }
 
         return availableQuantity;
-    }
-
-private void refreshRemainingCoins(int qty, int itemPrice) {
-        currentCoins -= qty * itemPrice;
     }
 
 private boolean reachShopAndReadCoins() {
@@ -357,10 +346,7 @@ private boolean reachShopAndReadCoins() {
         logDebug(routineLogAllianceShopLine("Shop button detected at: " + shopButton.getPoint()));
         tapInside(shopButton.getPoint(), shopButton.getPoint(), 1, 1000);
 
-        logDebug(routineLogAllianceShopLine("Entering shop details to read coins..."));
-        tapInside(SHOP_DETAILS_TOP_LEFT_VALUE, SHOP_DETAILS_BOTTOM_RIGHT_VALUE, 1, 1000);
-
-        currentCoins = scanCurrentCoins();
+        currentCoins = readCoinsFromShopDetails();
 
         if (currentCoins == null) {
             logWarning(routineLogAllianceShopLine("Could not read current alliance coins."));
@@ -368,10 +354,6 @@ private boolean reachShopAndReadCoins() {
         }
 
         logInfo(routineLogAllianceShopLine("Current alliance coins: " + currentCoins + ". Minimum to save: " + minCoins));
-
-
-        tapInside(CLOSE_TOP_LEFT_VALUE, CLOSE_BOTTOM_RIGHT_VALUE, 3, 200);
-
         return true;
     }
 
@@ -403,8 +385,8 @@ private boolean managePurchaseOutcome(
             default:
                 logWarning(routineLogAllianceShopLine("Unexpected error while attempting to purchase " +
                         shopItem.getDisplayName() + " in " + tab +
-                        " tab. Continuing."));
-                break;
+                        " tab. Stopping the purchase cycle."));
+                return false;
         }
 
         return true;
@@ -496,13 +478,25 @@ private void logPrioritiesFlow(List<PriorityItemData> priorities) {
         }
     }
 
-private int computeBuyQtyFlow(int currentCoins, int minCoins, int itemPrice, int availableQuantity) {
+static int computeBuyQtyFlow(int currentCoins, int minCoins, int itemPrice, int availableQuantity) {
         if (itemPrice <= 0) {
             return 0;
         }
 
         int affordable = (currentCoins - minCoins) / itemPrice;
         return Math.max(0, Math.min(availableQuantity, affordable));
+    }
+
+static boolean coinsConfirmPurchase(Integer observedCoins, int expectedCoins) {
+        return observedCoins != null && observedCoins == expectedCoins;
+    }
+
+private Integer readCoinsFromShopDetails() {
+        logDebug(routineLogAllianceShopLine("Entering shop details to read coins..."));
+        tapInside(SHOP_DETAILS_TOP_LEFT_VALUE, SHOP_DETAILS_BOTTOM_RIGHT_VALUE, 1, 1000);
+        Integer coins = scanCurrentCoins();
+        tapInside(CLOSE_TOP_LEFT_VALUE, CLOSE_BOTTOM_RIGHT_VALUE, 3, 200);
+        return coins;
     }
 
 private Integer scanCurrentCoins() {
@@ -605,7 +599,7 @@ private AreaData resolveCardArea(int cardNumber, int offsetX, int offsetY, int w
         return new AreaData(new PointData(x1, y1), new PointData(x2, y2));
     }
 
-private void performPurchase(
+private boolean performPurchase(
             AllianceShopItemEnum shopItem,
             int itemPrice,
             int availableQuantity,
@@ -617,13 +611,26 @@ private void performPurchase(
                 ", Current Coins: " + currentCoins + ")"));
 
         openUpPurchaseDialog(cardIndex);
-        chooseQuantity(qty, availableQuantity);
+        chooseQuantity(qty);
         confirmPurchaseFlow();
-        refreshRemainingCoins(qty, itemPrice);
+        sleepTask(1000);
         dismissPurchaseDialog();
+        sleepTask(500);
+        Integer observedCoins = readCoinsFromShopDetails();
+        int expectedCoins = currentCoins - qty * itemPrice;
+        if (!coinsConfirmPurchase(observedCoins, expectedCoins)) {
+            String snapshot = TaskDiagnosticSnapshots.capture(
+                    emuManager, EMULATOR_NUMBER, "allianceshop", "purchase-outcome");
+            logWarning(routineLogAllianceShopLine("Purchase outcome for " + shopItem.getDisplayName()
+                    + " is unverified; expected coins=" + expectedCoins + ", observed=" + observedCoins
+                    + ". Stopping purchases. " + snapshot));
+            return false;
+        }
+        currentCoins = observedCoins;
 
-        logInfo(routineLogAllianceShopLine("Successfully purchased " + qty + " of " + shopItem.getDisplayName() +
+        logInfo(routineLogAllianceShopLine("Purchase confirmed by coin balance: " + qty + " of " + shopItem.getDisplayName() +
                 ". Remaining coins: " + currentCoins));
+        return true;
     }
 
 private void handlePurchases(List<PriorityItemData> enabledPriorities) {
@@ -670,25 +677,19 @@ private BuyResult handleItemInTab(AllianceShopItemEnum shopItem, AllianceShopIte
         }
 
         int itemPrice = priceValidation.getPrice();
-        int quantity = computePurchaseQuantity(cardIndex, shopItem, itemPrice);
+        int quantity = computeBuyQtyFlow(currentCoins, minCoins, itemPrice, priceValidation.getAvailableQuantity());
 
         if (quantity <= 0) {
             logInfo(routineLogAllianceShopLine("Cannot afford any more of item: " + shopItem.getDisplayName()));
             return BuyResult.CANT_AFFORD;
         }
 
-        performPurchase(shopItem, itemPrice, priceValidation.getAvailableQuantity(), quantity, cardIndex);
-        return BuyResult.PURCHASED;
+        return performPurchase(shopItem, itemPrice, priceValidation.getAvailableQuantity(), quantity, cardIndex)
+                ? BuyResult.PURCHASED : BuyResult.ERROR;
     }
 
-private void chooseQuantity(int qty, int availableQuantity) {
-        if (qty == availableQuantity) {
-
-
-            tapInside(MAX_BUTTON_TOP_LEFT_LIMIT, MAX_BUTTON_BOTTOM_RIGHT_LIMIT, 1, 300);
-        } else {
-
-
+private void chooseQuantity(int qty) {
+        if (qty > 1) {
             tapInside(PLUS_BUTTON_TOP_LEFT_VALUE, PLUS_BUTTON_BOTTOM_RIGHT_VALUE, qty - 1, 300);
         }
     }

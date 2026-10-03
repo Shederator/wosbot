@@ -22,6 +22,8 @@
 	     ────────────────────────────────────────────── -->
 	<properties>
 		<revision>3.0.2</revision>
+		<frostguard.build.commit>unknown</frostguard.build.commit>
+		<maven.build.timestamp.format>yyyy-MM-dd'T'HH:mm:ss'Z'</maven.build.timestamp.format>
 		<frostguard.pull-request-build>false</frostguard.pull-request-build>
 		<frostguard.update.manifest.stable></frostguard.update.manifest.stable>
 		<frostguard.update.manifest.nightly></frostguard.update.manifest.nightly>

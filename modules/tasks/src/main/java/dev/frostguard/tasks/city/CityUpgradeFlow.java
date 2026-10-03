@@ -1,10 +1,6 @@
 package dev.frostguard.tasks.city;
 
-import dev.frostguard.engine.error.ADBConnectionException;
-import dev.frostguard.engine.error.ProfileCooldownException;
-import dev.frostguard.engine.error.ProfileInReconnectStateException;
-import dev.frostguard.engine.error.StopExecutionException;
-import dev.frostguard.engine.error.TaskPreemptedException;
+import dev.frostguard.tasks.diagnostics.TaskControlSignals;
 
 /** Keeps failure recovery separate from construction success and scheduler control signals. */
 final class CityUpgradeFlow {
@@ -87,17 +83,8 @@ final class CityUpgradeFlow {
         }
     }
 
-    static void rethrowControlSignal(Throwable failure) {
-        // Emulator capture can wrap an ADB failure in a plain RuntimeException.
-        var seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<Throwable, Boolean>());
-        for (Throwable cause = failure; cause != null && seen.add(cause); cause = cause.getCause()) {
-            if (cause instanceof StopExecutionException stop) throw stop;
-            if (cause instanceof TaskPreemptedException preempted) throw preempted;
-            if (cause instanceof ProfileInReconnectStateException reconnect) throw reconnect;
-            if (cause instanceof ProfileCooldownException cooldown) throw cooldown;
-            if (cause instanceof ADBConnectionException adb) throw adb;
-        }
-        if (Thread.currentThread().isInterrupted()) throw StopExecutionException.userCancelled();
+    public static void rethrowControlSignal(Throwable failure) {
+        TaskControlSignals.rethrowControlSignal(failure);
     }
 
     static final class UnresolvedBuildingException extends IllegalStateException {

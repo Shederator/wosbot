@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TaskFailureStreakRepositoryTest {
@@ -50,6 +51,7 @@ class TaskFailureStreakRepositoryTest {
                 .recordFailure(7L, "TASK", "same", first.plusMinutes(10));
         assertEquals(3, third.consecutiveFailures());
         assertEquals(first, third.firstFailureAt());
+        assertEquals(third, new TaskFailureStreakRepository(store).find(7L, "TASK").orElseThrow());
 
         TaskFailureStreakData changed = repository.recordFailure(
                 7L, "TASK", "different", first.plusMinutes(15));
@@ -59,5 +61,51 @@ class TaskFailureStreakRepositoryTest {
         assertTrue(repository.clear(7L, "TASK"));
         assertEquals(1, repository.recordFailure(7L, "TASK", "same", first.plusMinutes(20))
                 .consecutiveFailures());
+    }
+
+    @Test
+    void resetsWhenLastFailureIsBeforeResetBoundary() {
+        LocalDateTime first = LocalDateTime.of(2026, 8, 21, 1, 0);
+        repository.recordFailure(7L, "TASK", "same", first);
+
+        TaskFailureStreakData reset = repository.recordFailureSince(
+                7L, "TASK", "same", first.plusMinutes(15), first.plusMinutes(10));
+
+        assertEquals(1, reset.consecutiveFailures());
+        assertEquals(first.plusMinutes(15), reset.firstFailureAt());
+        assertEquals(first.plusMinutes(15), reset.lastFailureAt());
+    }
+
+    @Test
+    void continuesCountingFailuresWithinSameResetCycle() {
+        LocalDateTime first = LocalDateTime.of(2026, 8, 21, 1, 0);
+        repository.recordFailureSince(7L, "TASK", "same", first, first);
+
+        TaskFailureStreakData second = repository.recordFailureSince(
+                7L, "TASK", "same", first.plusMinutes(5), first);
+        TaskFailureStreakData third = repository.recordFailureSince(
+                7L, "TASK", "same", first.plusMinutes(10), first);
+
+        assertEquals(2, second.consecutiveFailures());
+        assertEquals(3, third.consecutiveFailures());
+        assertEquals(first, third.firstFailureAt());
+    }
+
+    @Test
+    void isolatesStreaksByProfileAndTask() {
+        LocalDateTime first = LocalDateTime.of(2026, 8, 21, 1, 0);
+        repository.recordFailure(7L, "TASK", "same", first);
+        repository.recordFailure(8L, "TASK", "same", first);
+        repository.recordFailure(7L, "OTHER_TASK", "same", first);
+
+        assertEquals(1, repository.find(7L, "TASK").orElseThrow().consecutiveFailures());
+        assertEquals(1, repository.find(8L, "TASK").orElseThrow().consecutiveFailures());
+        assertEquals(1, repository.find(7L, "OTHER_TASK").orElseThrow().consecutiveFailures());
+        assertFalse(repository.find(9L, "TASK").isPresent());
+
+        TaskFailureStreakData updated = repository.recordFailure(7L, "TASK", "same", first.plusMinutes(1));
+        assertEquals(2, updated.consecutiveFailures());
+        assertEquals(1, repository.find(8L, "TASK").orElseThrow().consecutiveFailures());
+        assertEquals(1, repository.find(7L, "OTHER_TASK").orElseThrow().consecutiveFailures());
     }
 }

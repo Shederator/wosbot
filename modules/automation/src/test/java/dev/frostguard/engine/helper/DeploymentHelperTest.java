@@ -38,6 +38,16 @@ class DeploymentHelperTest {
         assertTrue(read.staminaCostFallback());
     }
 
+    @Test
+    void classifiesDeploymentAsConfirmedOnlyAfterWorldAnchorAppears() {
+        assertEquals(DeploymentHelper.LaunchCheck.WORLD_VERIFIED,
+                DeploymentHelper.classifyLaunchCheck(false, true));
+        assertEquals(DeploymentHelper.LaunchCheck.STILL_ON_DEPLOYMENT,
+                DeploymentHelper.classifyLaunchCheck(true, true));
+        assertEquals(DeploymentHelper.LaunchCheck.UNKNOWN,
+                DeploymentHelper.classifyLaunchCheck(false, false));
+    }
+
     private DeploymentHelper helperReturning(String travelText, String costText) {
         ResilientOcrExecutor<Integer> integers = new ResilientOcrExecutor<>(
                 (config, topLeft, bottomRight) -> costText);

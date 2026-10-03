@@ -28,8 +28,14 @@ class StorehouseChestFrameTest {
 
     private static final PointData SCREEN_ORIGIN = new PointData(0, 0);
     private static final PointData SCREEN_LIMIT = new PointData(720, 1280);
-    private static final double SEARCH_THRESHOLD = 90;
+    private static final double STAMINA_SEARCH_THRESHOLD = 90;
+    private static final double CHEST_SEARCH_THRESHOLD = 75;
     private static final Duration VISIBLE_COUNTDOWN = Duration.ofHours(1).plusMinutes(1).plusSeconds(2);
+    private static final Duration WHITE_PILL_COUNTDOWN = Duration.ofMinutes(15).plusSeconds(58);
+    private static final Duration CONSTRUCTION_COUNTDOWN = Duration.ofDays(3)
+            .plusHours(3)
+            .plusMinutes(53)
+            .plusSeconds(22);
 
     @BeforeAll
     static void loadOpenCv() throws IOException {
@@ -42,55 +48,117 @@ class StorehouseChestFrameTest {
 
     @Test
     void detectsTheVisibleStaminaCan() throws IOException {
-        assertTrue(matches(TemplatesEnum.STOREHOUSE_STAMINA));
+        assertTrue(matches("city-can-visible.png", TemplatesEnum.STOREHOUSE_STAMINA, STAMINA_SEARCH_THRESHOLD));
+        assertTrue(matches("construction-stamina-3d.png", TemplatesEnum.STOREHOUSE_STAMINA, STAMINA_SEARCH_THRESHOLD));
     }
 
     @Test
     void rejectsBothChestTemplatesOnTheStaminaCan() throws IOException {
-        assertFalse(matches(TemplatesEnum.STOREHOUSE_CHEST));
-        assertFalse(matches(TemplatesEnum.STOREHOUSE_CHEST_2));
+        assertNoChest("city-can-visible.png");
+        assertNoChest("construction-stamina-3d.png");
+    }
+
+    @Test
+    void detectsTheNightCrateBelowTheDefaultNinetyCut() throws IOException {
+        assertTrue(matches("night-crate-ready.png", TemplatesEnum.STOREHOUSE_CHEST,
+                CHEST_SEARCH_THRESHOLD));
+        assertTrue(matches("night-crate-ready.png", TemplatesEnum.STOREHOUSE_CHEST_2,
+                CHEST_SEARCH_THRESHOLD));
+        assertTrue(matches("night-crate-ready.png", TemplatesEnum.STOREHOUSE_CHEST_3,
+                CHEST_SEARCH_THRESHOLD));
+        assertFalse(matches("night-crate-ready.png", TemplatesEnum.STOREHOUSE_CHEST, STAMINA_SEARCH_THRESHOLD));
+        assertFalse(matches("night-crate-ready.png", TemplatesEnum.STOREHOUSE_CHEST_2, STAMINA_SEARCH_THRESHOLD));
+        assertFalse(matches("night-crate-ready.png", TemplatesEnum.STOREHOUSE_STAMINA, STAMINA_SEARCH_THRESHOLD));
+    }
+
+    @Test
+    void detectsTheDayCrateThatMissesTheNightCrops() throws IOException {
+        assertTrue(matches("day-crate-ready.png", TemplatesEnum.STOREHOUSE_CHEST_3,
+                CHEST_SEARCH_THRESHOLD));
+        assertFalse(matches("day-crate-ready.png", TemplatesEnum.STOREHOUSE_CHEST,
+                CHEST_SEARCH_THRESHOLD));
+        assertFalse(matches("day-crate-ready.png", TemplatesEnum.STOREHOUSE_CHEST_2,
+                CHEST_SEARCH_THRESHOLD));
+        assertFalse(matches("day-crate-ready.png", TemplatesEnum.STOREHOUSE_STAMINA, STAMINA_SEARCH_THRESHOLD));
+    }
+
+    @Test
+    void rejectsChestAndStaminaOnACooldownPill() throws IOException {
+        assertNoChest("cooldown-white-pill.png");
+        assertFalse(matches("cooldown-white-pill.png", TemplatesEnum.STOREHOUSE_STAMINA, STAMINA_SEARCH_THRESHOLD));
     }
 
     @Test
     void readsTheGreenBuildingCountdown() throws Exception {
-        String clock = OcrEngine.recognizeText(
-                rgbaFrame(loadFrame()),
-                StorehouseChestRoutine.FALLBACK_TIMER_TOP_LEFT,
-                StorehouseChestRoutine.FALLBACK_TIMER_BOTTOM_RIGHT,
-                StorehouseChestRoutine.buildingCountdownSettings());
+        String clock = recognize("city-can-visible.png", StorehouseChestRoutine.buildingCountdownSettings());
 
         assertEquals(VISIBLE_COUNTDOWN, GameTimeUtils.parseDuration(clock));
     }
 
     @Test
-    void whiteIsolationDoesNotReadTheBuildingCountdown() throws Exception {
-        OcrSettingsData white = OcrSettingsData.assembler()
+    void whiteIsolationDoesNotReadTheGreenBuildingCountdown() throws Exception {
+        OcrSettingsData whiteWithoutDay = OcrSettingsData.assembler()
                 .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
                 .stripBackground(true)
                 .setTextColor(Color.WHITE)
                 .charWhitelist("0123456789:")
                 .build();
 
-        String clock = OcrEngine.recognizeText(
-                rgbaFrame(loadFrame()),
-                StorehouseChestRoutine.FALLBACK_TIMER_TOP_LEFT,
-                StorehouseChestRoutine.FALLBACK_TIMER_BOTTOM_RIGHT,
-                white);
+        String clock = recognize("city-can-visible.png", whiteWithoutDay);
 
         assertFalse(GameTimeUtils.isAcceptedFormat(clock), () -> "White isolation read: " + clock);
+        assertFalse(GameTimeUtils.isAcceptedFormat(
+                recognize("city-can-visible.png", StorehouseChestRoutine.buildingCountdownWhiteSettings())));
     }
 
-    private boolean matches(TemplatesEnum template) throws IOException {
-        try (InputStream stream = getClass().getResourceAsStream("/storehouse/city-can-visible.png")) {
-            byte[] encoded = Objects.requireNonNull(stream, "Missing storehouse frame").readAllBytes();
-            return OpenCvPatternLocator.locatePattern(
-                    encoded, template, SCREEN_ORIGIN, SCREEN_LIMIT, SEARCH_THRESHOLD).isFound();
+    @Test
+    void readsTheWhiteCooldownPill() throws Exception {
+        String clock = recognize("cooldown-white-pill.png", StorehouseChestRoutine.buildingCountdownWhiteSettings());
+
+        assertEquals(WHITE_PILL_COUNTDOWN, GameTimeUtils.parseDuration(clock));
+        assertFalse(GameTimeUtils.isAcceptedFormat(
+                recognize("cooldown-white-pill.png", StorehouseChestRoutine.buildingCountdownSettings())));
+    }
+
+    @Test
+    void readsTheConstructionDayQualifierWithWhiteIsolation() throws Exception {
+        String clock = recognize("construction-stamina-3d.png",
+                StorehouseChestRoutine.buildingCountdownWhiteSettings());
+
+        assertEquals(CONSTRUCTION_COUNTDOWN, GameTimeUtils.parseDuration(clock));
+    }
+
+    private void assertNoChest(String frame) throws IOException {
+        assertFalse(matches(frame, TemplatesEnum.STOREHOUSE_CHEST,
+                CHEST_SEARCH_THRESHOLD), frame);
+        assertFalse(matches(frame, TemplatesEnum.STOREHOUSE_CHEST_2,
+                CHEST_SEARCH_THRESHOLD), frame);
+        assertFalse(matches(frame, TemplatesEnum.STOREHOUSE_CHEST_3,
+                CHEST_SEARCH_THRESHOLD), frame);
+    }
+
+    private boolean matches(String frame, TemplatesEnum template, double threshold) throws IOException {
+        return OpenCvPatternLocator.locatePattern(
+                encoded(frame), template, SCREEN_ORIGIN, SCREEN_LIMIT, threshold).isFound();
+    }
+
+    private String recognize(String frame, OcrSettingsData settings) throws Exception {
+        return OcrEngine.recognizeText(
+                rgbaFrame(loadFrame(frame)),
+                StorehouseChestRoutine.FALLBACK_TIMER_TOP_LEFT,
+                StorehouseChestRoutine.FALLBACK_TIMER_BOTTOM_RIGHT,
+                settings);
+    }
+
+    private byte[] encoded(String frame) throws IOException {
+        try (InputStream stream = getClass().getResourceAsStream("/storehouse/" + frame)) {
+            return Objects.requireNonNull(stream, "Missing storehouse frame: " + frame).readAllBytes();
         }
     }
 
-    private BufferedImage loadFrame() throws IOException {
-        try (InputStream stream = getClass().getResourceAsStream("/storehouse/city-can-visible.png")) {
-            return ImageIO.read(Objects.requireNonNull(stream, "Missing storehouse frame"));
+    private BufferedImage loadFrame(String frame) throws IOException {
+        try (InputStream stream = getClass().getResourceAsStream("/storehouse/" + frame)) {
+            return ImageIO.read(Objects.requireNonNull(stream, "Missing storehouse frame: " + frame));
         }
     }
 

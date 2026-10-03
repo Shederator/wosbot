@@ -61,6 +61,8 @@
                     <Separator style="-fx-opacity: 0.25;" />
                     <CheckBox fx:id="checkBoxMysteryShop50DiscountGear" mnemonicParsing="false"
                               text="Buy 50% discounted hero gear (250 badges)" />
+                    <CheckBox fx:id="checkBoxMysteryShopShards" mnemonicParsing="false"
+                              text="Buy generic shards (250 badges)" />
                 </VBox>
             </TitledPane>
 

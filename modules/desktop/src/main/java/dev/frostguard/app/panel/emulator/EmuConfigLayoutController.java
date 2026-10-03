@@ -119,6 +119,9 @@ public class EmuConfigLayoutController {
 	@FXML
 	private CheckBox checkboxDesktopSnapshots;
 
+	@FXML
+	private CheckBox checkboxDiagnosticSnapshots;
+
 	/* ── Internal state ── */
 
 	private final FileChooser fileChooser = new FileChooser();
@@ -139,7 +142,7 @@ public class EmuConfigLayoutController {
 		configureStopBehaviorDropdowns(globalConfig);
 		configureAutoStartSection(globalConfig);
 		configureAnalyticsToggles(globalConfig);
-		configureDesktopSnapshots(globalConfig);
+		configureDiagnosticSnapshots(globalConfig);
 	}
 
 	/* ────────────────────────────────────────────────
@@ -444,14 +447,34 @@ public class EmuConfigLayoutController {
 					ConfigurationKeyEnum.HIDE_ANALYTICS_LOGS_BOOL, String.valueOf(now)));
 	}
 
-	private void configureDesktopSnapshots(Map<String, String> cfg) {
-		boolean enabled = Boolean.parseBoolean(cfg.getOrDefault(
+	private void configureDiagnosticSnapshots(Map<String, String> cfg) {
+		boolean diagnosticSnapshotsEnabled = Boolean.parseBoolean(cfg.getOrDefault(
+				ConfigurationKeyEnum.MISSING_TEMPLATE_SNAPSHOT_ENABLED_BOOL.name(),
+				ConfigurationKeyEnum.MISSING_TEMPLATE_SNAPSHOT_ENABLED_BOOL.getDefaultValue()));
+		boolean desktopSnapshotsEnabled = Boolean.parseBoolean(cfg.getOrDefault(
 				ConfigurationKeyEnum.DESKTOP_SNAPSHOT_ENABLED_BOOL.name(),
 				ConfigurationKeyEnum.DESKTOP_SNAPSHOT_ENABLED_BOOL.getDefaultValue()));
-		checkboxDesktopSnapshots.setSelected(enabled);
+		checkboxDiagnosticSnapshots.setSelected(diagnosticSnapshotsEnabled);
+		checkboxDesktopSnapshots.setSelected(diagnosticSnapshotsEnabled && desktopSnapshotsEnabled);
+		checkboxDesktopSnapshots.setDisable(!diagnosticSnapshotsEnabled);
 		checkboxDesktopSnapshots.selectedProperty().addListener((obs, prev, now) ->
 				ConfigService.obtain().writeGlobalSetting(
 						ConfigurationKeyEnum.DESKTOP_SNAPSHOT_ENABLED_BOOL, String.valueOf(now)));
+
+		checkboxDiagnosticSnapshots.selectedProperty().addListener((obs, prev, now) ->
+				{
+					ConfigService.obtain().writeGlobalSetting(
+							ConfigurationKeyEnum.MISSING_TEMPLATE_SNAPSHOT_ENABLED_BOOL, String.valueOf(now));
+					checkboxDesktopSnapshots.setDisable(!now);
+					if (!now) {
+						checkboxDesktopSnapshots.setSelected(false);
+					}
+				});
+
+		if (!diagnosticSnapshotsEnabled && desktopSnapshotsEnabled) {
+			ConfigService.obtain().writeGlobalSetting(
+					ConfigurationKeyEnum.DESKTOP_SNAPSHOT_ENABLED_BOOL, "false");
+		}
 	}
 
 	/* ────────────────────────────────────────────────

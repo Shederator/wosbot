@@ -10,6 +10,11 @@ import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.engine.helper.AllianceChampionshipHelper;
 import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
+import dev.frostguard.engine.helper.NavigationHelper.EventMenuOpenResult;
+import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
+import dev.frostguard.tasks.events.EventMenuRetryState;
+import dev.frostguard.tasks.events.EventPeriodVisit;
+import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.helper.TimeWindowHelper;
 import dev.frostguard.engine.schedule.DelayedTask;
@@ -75,6 +80,8 @@ private DeploymentPosition position;
 
 private Integer flagNumber;
 
+private final EventMenuRetryState menuRetry = new EventMenuRetryState();
+
 public AllianceChampionshipRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
         super(profile, tpTask);
     }
@@ -93,10 +100,12 @@ public AllianceChampionshipRoutine(AccountDescriptor profile, TpDailyTaskEnum tp
 
         logWindowInformationFlow();
 
-        if (!reachChampionshipEvent()) {
-            manageNavigationFailure("Failed to navigate to championship event");
+        EventMenuOpenResult opened = openChampionshipEvent();
+        if (opened != EventMenuOpenResult.REACHED) {
+            respondToMenu(opened);
             return;
         }
+        menuRetry.found();
 
         DeploymentStatusShape status = inspectDeploymentStatus();
 
@@ -353,18 +362,48 @@ private void setTroopPercentageFlow(PointData topLeft, PointData bottomRight, in
         logDebug(routineLogAllianceChampionshipLine(troopType + " percentage set to " + percentage + "%"));
     }
 
-private boolean reachChampionshipEvent() {
+private EventMenuOpenResult openChampionshipEvent() {
         logInfo(routineLogAllianceChampionshipLine("Moving to Alliance Championship event..."));
 
-        boolean success = navigationHelper.navigateToEventMenu(EventMenu.ALLIANCE_CHAMPIONSHIP);
+        EventMenuOpenResult opened = navigationHelper.openEventMenu(EventMenu.ALLIANCE_CHAMPIONSHIP);
 
-        if (!success) {
+        if (opened != EventMenuOpenResult.REACHED) {
             logWarning(routineLogAllianceChampionshipLine("Could not navigate to Alliance Championship event"));
-            return false;
+            return opened;
         }
 
         sleepTask(2000);
-        return true;
+        return opened;
+    }
+
+protected void respondToMenu(EventMenuOpenResult opened) {
+        if (opened == EventMenuOpenResult.REACHED) {
+            menuRetry.found();
+            return;
+        }
+        if (opened == EventMenuOpenResult.PANEL_CLOSED) {
+            LocalDateTime retryAt = EventPeriodVisit.retryAt(LocalDateTime.now());
+            logWarning(routineLogAllianceChampionshipLine("Events panel did not open. Retrying at "
+                    + retryAt.format(DATETIME_FORMATTER) + "; " + diagnosticSnapshot("event-panel") + "."));
+            reschedule(retryAt);
+            return;
+        }
+
+        EventMenuRetryState.Choice choice = menuRetry.choose(LocalDateTime.now(), GameTimeUtils.dailyResetTime());
+        String snapshot = diagnosticSnapshot("event-navigation");
+        if (!choice.resting()) {
+            logWarning(routineLogAllianceChampionshipLine("Alliance Championship tab was not in view. One more menu visit at "
+                    + choice.at().format(DATETIME_FORMATTER) + "; " + snapshot + "."));
+        } else {
+            logWarning(routineLogAllianceChampionshipLine(
+                    "Alliance Championship tab was still not in view after the extra menu visit. Next visit at "
+                            + choice.at().format(DATETIME_FORMATTER) + "; event was not completed; " + snapshot + "."));
+        }
+        reschedule(choice.at());
+    }
+
+protected String diagnosticSnapshot(String type) {
+        return TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "alliancechampionship", type);
     }
 
 private boolean confirmExecutionWindow() {

@@ -7,8 +7,9 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
@@ -19,10 +20,18 @@ import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.tasks.diagnostics.TaskControlSignals;
+import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 import dev.frostguard.engine.nav.SearchConfigConstants;
+import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
+import dev.frostguard.engine.helper.NavigationHelper.EventMenuOpenResult;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
+import dev.frostguard.tasks.events.EventMenuRetryState;
+import dev.frostguard.tasks.events.EventPeriodVisit;
 
 public class TundraTruckEventRoutine extends DelayedTask {
+
+	private static final Pattern TRUCK_COUNT_PATTERN = Pattern.compile("^(\\d+)\\s*/\\s*(\\d+)$");
 
 	// ===================== CONSTANTS =====================
 	// UI Areas
@@ -82,6 +91,7 @@ public class TundraTruckEventRoutine extends DelayedTask {
 	private boolean truckSSR;
 	private String activationTime; // Format: "HH:mm"
 	private boolean useActivationTime;
+	private final EventMenuRetryState menuRetry = new EventMenuRetryState();
 
 	public TundraTruckEventRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDailyTask) {
 		super(profile, tpDailyTask);
@@ -101,24 +111,37 @@ public class TundraTruckEventRoutine extends DelayedTask {
 		}
 
 		// Attempt navigation
+		boolean tabWasAbsent = false;
 		for (int attempt = 0; attempt < MAX_NAVIGATION_ATTEMPTS; attempt++) {
 			TundraNavigationResult result = navigateToTundraEvent();
 
 			switch (result) {
 				case SUCCESS:
+					menuRetry.found();
 					logInfo("Successfully navigated to Tundra Truck event");
 					handleTundraEvent();
 					return;
 
 				case COUNTDOWN:
+					menuRetry.found();
 					logInfo("Event in countdown. Waiting for next activation time.");
 					return;
 
 				case ENDED:
+					menuRetry.found();
 					logInfo("Event has ended. Task disabled.");
 					return;
 
-				case FAILURE:
+				case TAB_ABSENT:
+					tabWasAbsent = true;
+					logError("Navigation failed (attempt " + (attempt + 1) + "/" + MAX_NAVIGATION_ATTEMPTS + ")");
+					if (attempt < MAX_NAVIGATION_ATTEMPTS - 1) {
+						sleepTask(300);
+						pressBack();
+					}
+					break;
+
+				case PANEL_CLOSED:
 					logError("Navigation failed (attempt " + (attempt + 1) + "/" + MAX_NAVIGATION_ATTEMPTS + ")");
 					if (attempt < MAX_NAVIGATION_ATTEMPTS - 1) {
 						sleepTask(300);
@@ -128,10 +151,7 @@ public class TundraTruckEventRoutine extends DelayedTask {
 			}
 		}
 
-		// All navigation attempts failed
-		logWarning("Could not find Tundra Truck event after " + MAX_NAVIGATION_ATTEMPTS +
-				" attempts.");
-		rescheduleWithActivationTime();
+		respondToMenu(tabWasAbsent ? EventMenuOpenResult.TAB_ABSENT : EventMenuOpenResult.PANEL_CLOSED);
 	}
 
 	/**
@@ -210,48 +230,73 @@ public class TundraTruckEventRoutine extends DelayedTask {
 	 * Reschedule with activation time or game reset
 	 */
 	private void rescheduleWithActivationTime() {
+		LocalDateTime rest = activationRest();
+		if (useActivationTime) {
+			logInfo("Rescheduling for next activation at " + activationTime + " UTC tomorrow (" +
+					rest.format(DATETIME_FORMATTER) + " local time)");
+		} else {
+			logInfo("Rescheduling for game reset time");
+		}
+		reschedule(rest);
+	}
+
+	protected void respondToMenu(EventMenuOpenResult opened) {
+		if (opened == EventMenuOpenResult.REACHED) {
+			menuRetry.found();
+			return;
+		}
+		if (opened == EventMenuOpenResult.PANEL_CLOSED) {
+			LocalDateTime retryAt = EventPeriodVisit.retryAt(LocalDateTime.now());
+			logWarning("Events panel did not open. Retrying at " + retryAt.format(DATETIME_FORMATTER) + "; "
+					+ diagnosticSnapshot("event-panel") + ".");
+			reschedule(retryAt);
+			return;
+		}
+
+		EventMenuRetryState.Choice choice = menuRetry.choose(LocalDateTime.now(), activationRest());
+		String snapshot = diagnosticSnapshot("event-navigation");
+		if (!choice.resting()) {
+			logWarning("Tundra Truck tab was not in view. One more menu visit at "
+					+ choice.at().format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+		} else {
+			logWarning("Tundra Truck tab was still not in view after the extra menu visit. Next visit at "
+					+ choice.at().format(DATETIME_FORMATTER) + "; event was not completed; " + snapshot + ".");
+		}
+		reschedule(choice.at());
+	}
+
+	protected String diagnosticSnapshot(String type) {
+		return TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "tundratruck", type);
+	}
+
+	protected LocalDateTime activationRest() {
 		if (useActivationTime) {
 			validateActivationTime();
 			try {
 				LocalTime targetTime = LocalTime.parse(activationTime.trim(), TIME_FORMATTER);
-				ZonedDateTime nowUtc = ZonedDateTime.now(ZoneId.of("UTC"));
-
-				// Schedule for tomorrow at activation time
-				ZonedDateTime tomorrowActivationUtc = nowUtc.toLocalDate().plusDays(1)
+				ZonedDateTime tomorrowActivationUtc = ZonedDateTime.now(ZoneId.of("UTC")).toLocalDate().plusDays(1)
 						.atTime(targetTime)
 						.atZone(ZoneId.of("UTC"));
-
-				ZonedDateTime localActivationTime = tomorrowActivationUtc.withZoneSameInstant(ZoneId.systemDefault());
-
-				logInfo("Rescheduling for next activation at " + activationTime + " UTC tomorrow (" +
-						localActivationTime.format(DATETIME_FORMATTER) + " local time)");
-
-				reschedule(localActivationTime.toLocalDateTime());
+				return tomorrowActivationUtc.withZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime();
 			} catch (DateTimeParseException e) {
 				logError("Failed to parse activation time: " + e.getMessage());
-				reschedule(GameTimeUtils.dailyResetTime());
 			}
-		} else {
-			logInfo("Rescheduling for game reset time");
-			reschedule(GameTimeUtils.dailyResetTime());
 		}
+		return GameTimeUtils.dailyResetTime();
 	}
 
-	/**
-	 * Navigate to Tundra Truck event section
-	 * 
-	 * <p>
-	 * Uses the generic NavigationHelper.navigateToEventMenu() method.
-	 */
 	private TundraNavigationResult navigateToTundraEvent() {
 		logInfo("Navigating to Tundra Truck event");
 
-		boolean success = navigationHelper.navigateToEventMenu(
-				dev.frostguard.engine.helper.NavigationHelper.EventMenu.TUNDRA_TRUCK);
+		EventMenuOpenResult opened = navigationHelper.openEventMenu(EventMenu.TUNDRA_TRUCK);
 
-		if (!success) {
+		if (opened == EventMenuOpenResult.PANEL_CLOSED) {
 			logWarning("Failed to navigate to Tundra Truck event");
-			return TundraNavigationResult.FAILURE;
+			return TundraNavigationResult.PANEL_CLOSED;
+		}
+		if (opened == EventMenuOpenResult.TAB_ABSENT) {
+			logWarning("Failed to navigate to Tundra Truck event");
+			return TundraNavigationResult.TAB_ABSENT;
 		}
 
 		sleepTask(2000);
@@ -361,13 +406,34 @@ public class TundraTruckEventRoutine extends DelayedTask {
 					null,
 					s -> !s.isEmpty(),
 					s -> s);
-			logInfo("Remaining trucks OCR: '" + text + "'");
+			TruckCount truckCount = parseTruckCount(text);
+			if (truckCount == null) {
+				LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+				String snapshot = TaskDiagnosticSnapshots.capture(
+						emuManager, EMULATOR_NUMBER, "tundratruck", "remaining-count");
+				logWarning("Remaining truck count is unreadable; dispatch is paused until "
+						+ retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+				reschedule(retryAt);
+				return false;
+			}
+			int remaining = truckCount.remaining();
+			logInfo("Remaining trucks OCR: '" + text.trim() + "'");
 
-			if (text != null && text.trim().matches("0\\s*/\\s*\\d+")) {
+			if (remaining == 0) {
 				logInfo("No trucks available to send (0/4)");
 
 				// Check if any trucks are still in transit
-				if (hasInTransitTrucks()) {
+				Boolean inTransit = hasInTransitTrucks();
+				if (inTransit == null) {
+					LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+					String snapshot = TaskDiagnosticSnapshots.capture(
+							emuManager, EMULATOR_NUMBER, "tundratruck", "return-timer");
+					logWarning("No-truck availability is known but transit state is unreadable; retrying at "
+							+ retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+					reschedule(retryAt);
+					return false;
+				}
+				if (inTransit) {
 					logInfo("Trucks are in transit. Scheduling next check for truck return time.");
 					scheduleNextTruckCheck();
 					return false;
@@ -380,15 +446,38 @@ public class TundraTruckEventRoutine extends DelayedTask {
 
 			return true;
 		} catch (Exception e) {
-			logError("Error checking available trucks: " + e.getMessage(), e);
-			return true; // Proceed anyway
+			TaskControlSignals.rethrowControlSignal(e);
+			LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+			String snapshot = TaskDiagnosticSnapshots.capture(
+					emuManager, EMULATOR_NUMBER, "tundratruck", "remaining-count-error");
+			logWarning("Truck availability could not be read; dispatch is paused until "
+					+ retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+			reschedule(retryAt);
+			return false;
+		}
+	}
+
+	static TruckCount parseTruckCount(String text) {
+		if (text == null) {
+			return null;
+		}
+		Matcher matcher = TRUCK_COUNT_PATTERN.matcher(text.trim());
+		if (!matcher.matches()) {
+			return null;
+		}
+		try {
+			int remaining = Integer.parseInt(matcher.group(1));
+			int total = Integer.parseInt(matcher.group(2));
+			return total > 0 && remaining <= total ? new TruckCount(remaining, total) : null;
+		} catch (NumberFormatException malformed) {
+			return null;
 		}
 	}
 
 	/**
 	 * Check if any trucks are currently in transit (have return times)
 	 */
-	private boolean hasInTransitTrucks() {
+	private Boolean hasInTransitTrucks() {
 		logDebug("Checking if any trucks are in transit...");
 
 		Optional<LocalDateTime> leftTime = extractTruckTime(TruckSide.LEFT);
@@ -404,7 +493,10 @@ public class TundraTruckEventRoutine extends DelayedTask {
 			logInfo("Right truck is in transit, returns at: " + rightTime.get());
 		}
 
-		return leftInTransit || rightInTransit;
+		if (leftInTransit || rightInTransit) {
+			return true;
+		}
+		return leftTime.isPresent() && rightTime.isPresent() ? false : null;
 	}
 
 	/**
@@ -669,15 +761,22 @@ public class TundraTruckEventRoutine extends DelayedTask {
 			logInfo("Both truck times extracted. Next check: " + nextSchedule.format(DATETIME_FORMATTER)
 					+ " (soonest return)");
 		} else if (leftTime.isPresent()) {
-			nextSchedule = leftTime.get();
-			logInfo("Only left truck time extracted. Next check: " + nextSchedule.format(DATETIME_FORMATTER));
+			nextSchedule = now.plusMinutes(5);
+			String snapshot = TaskDiagnosticSnapshots.capture(
+					emuManager, EMULATOR_NUMBER, "tundratruck", "right-return-time");
+			logWarning("Left return time is known but the right slot is unknown; rechecking at "
+					+ nextSchedule.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
 		} else if (rightTime.isPresent()) {
-			nextSchedule = rightTime.get();
-			logInfo("Only right truck time extracted. Next check: " + nextSchedule.format(DATETIME_FORMATTER));
+			nextSchedule = now.plusMinutes(5);
+			String snapshot = TaskDiagnosticSnapshots.capture(
+					emuManager, EMULATOR_NUMBER, "tundratruck", "left-return-time");
+			logWarning("Right return time is known but the left slot is unknown; rechecking at "
+					+ nextSchedule.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
 		} else {
-			// Fallback: 30 minutes
-			nextSchedule = now.plusMinutes(30);
-			logInfo("Could not extract truck times. Fallback: next check in 30 minutes");
+			nextSchedule = now.plusMinutes(5);
+			String snapshot = TaskDiagnosticSnapshots.capture(
+					emuManager, EMULATOR_NUMBER, "tundratruck", "return-timers");
+			logWarning("Truck return times are unknown; retrying in five minutes; " + snapshot + ".");
 		}
 
 		reschedule(nextSchedule);
@@ -713,6 +812,7 @@ public class TundraTruckEventRoutine extends DelayedTask {
 			return Optional.of(returnTime);
 
 		} catch (Exception e) {
+			TaskControlSignals.rethrowControlSignal(e);
 			logError("Error extracting " + side + " truck time: " + e.getMessage());
 			return Optional.empty();
 		}
@@ -735,9 +835,13 @@ public class TundraTruckEventRoutine extends DelayedTask {
 
 	private enum TundraNavigationResult {
 		SUCCESS,
-		FAILURE,
+		PANEL_CLOSED,
+		TAB_ABSENT,
 		COUNTDOWN,
 		ENDED
+	}
+
+	record TruckCount(int remaining, int total) {
 	}
 
 	private enum TruckStatus {

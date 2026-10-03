@@ -2,33 +2,21 @@ package dev.frostguard.tasks.economy;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import java.time.LocalDateTime;
+import java.time.Duration;
 
 import org.junit.jupiter.api.Test;
 
 class StorehouseChestScheduleTest {
 
-    private static final LocalDateTime NOW = LocalDateTime.of(2026, 9, 27, 12, 49, 59);
-
     @Test
-    void keepsAFutureChestCountdown() {
-        LocalDateTime chestCountdown = NOW.plusHours(1).plusMinutes(1).plusSeconds(2);
+    void schedulesFiveMinuteRetryWhenStorehouseCannotBeOpenedBeforeFlowStarts() {
+        StorehouseVisitFlow.VisitDecision decision = StorehouseVisitFlow.retryBeforeFlow(
+                "Could not open Storehouse.");
 
-        assertEquals(chestCountdown, StorehouseChestRoutine.nextChestVisit(NOW, chestCountdown));
-    }
-
-    @Test
-    void retriesFiveMinutesWhenTheChestCountdownIsMissing() {
-        assertEquals(NOW.plusMinutes(5), StorehouseChestRoutine.nextChestVisit(NOW, null));
-    }
-
-    @Test
-    void retriesFiveMinutesWhenTheChestCountdownIsAlreadyPast() {
-        assertEquals(NOW.plusMinutes(5), StorehouseChestRoutine.nextChestVisit(NOW, NOW.minusMinutes(1)));
-    }
-
-    @Test
-    void keepsAChestCountdownThatIsExactlyNow() {
-        assertEquals(NOW, StorehouseChestRoutine.nextChestVisit(NOW, NOW));
+        assertEquals(StorehouseVisitFlow.VisitState.RETRY_ON_ERROR, decision.state());
+        assertEquals(Duration.ofMinutes(5), decision.delay());
+        assertEquals("Could not open Storehouse.", decision.reason());
+        assertEquals(0, decision.confirmedChestCollections());
+        assertEquals(0, decision.confirmedStaminaCollections());
     }
 }

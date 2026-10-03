@@ -17,6 +17,7 @@ import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 import dev.frostguard.tasks.city.ResearchDialogClassifier.ResearchDialogState;
 import dev.frostguard.tasks.city.ResearchNodeSelectionPolicy.ResearchNode;
 import dev.frostguard.tasks.city.ResearchNodeSelectionPolicy.ResearchRow;
@@ -185,14 +186,13 @@ public ResearchRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
                             + formatDuration(recheckDelay) + "."));
                     this.reschedule(rescheduleTime);
                 } else {
-                    logWarning(routineLogResearchLine("Could not read research queue time. Planning next run in 1 hour."));
-                    this.reschedule(LocalDateTime.now().plusHours(1));
+                    scheduleUnknownQueueRetry("remaining time OCR returned no valid duration");
                 }
                 return;
             }
         } catch (IOException | OcrException | RuntimeException e) {
-            logError(routineLogResearchLine("Issue while research status OCR: " + e.getMessage()));
-            this.reschedule(LocalDateTime.now().plusHours(1));
+            CityUpgradeFlow.rethrowControlSignal(e);
+            scheduleUnknownQueueRetry("queue status OCR failed: " + e.getClass().getSimpleName());
             return;
         }
 
@@ -260,6 +260,14 @@ public ResearchRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
                 }
 
         this.reschedule(LocalDateTime.now().plusMinutes(RESEARCH_TIMER_RETRY_MINUTES));
+    }
+
+    private void scheduleUnknownQueueRetry(String reason) {
+        LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+        String snapshot = TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "research", "queue-ocr");
+        logWarning(routineLogResearchLine("Research queue state is unknown; " + reason
+                + ". Retrying at " + retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + "."));
+        reschedule(retryAt);
     }
 
 private boolean replenishResourcesAndRetryStart(PointData researchButton) {

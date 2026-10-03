@@ -37,7 +37,7 @@ jobs:
     permissions:
       contents: write
     env:
-      MAVEN_ARGS: "-B --no-transfer-progress -Dstyle.color=never"
+      MAVEN_ARGS: "-B --no-transfer-progress -Dstyle.color=never -Dfrostguard.build.commit=${{ github.sha }}"
       REQUESTED_CHANNEL: ${{ inputs.channel }}
       REQUESTED_VERSION: ${{ inputs.version }}
       REQUESTED_MINIMUM_UPDATER_VERSION: ${{ inputs.minimum_updater_version }}
