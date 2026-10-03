@@ -65,6 +65,18 @@ class BearSessionDriverTest {
     }
 
     @Test
+    void activeRecoveryAfterInterruptedPreparationLeavesTerritoryPages() throws Exception {
+        for (var tab : new TemplatesEnum[]{TemplatesEnum.BEAR_TERRITORY_OVERVIEW, TemplatesEnum.BEAR_SPECIAL_TAB}) {
+            ScriptedBear bear = new ScriptedBear(EnumSet.of(TemplatesEnum.BEAR_TERRITORY_TITLE, tab));
+            var driver = bear.driver();
+            bear.becomeAfterNextClassification(EnumSet.of(TemplatesEnum.ALLIANCE_TERRITORY_BUTTON));
+            assertTrue(driver.recover(BearSessionCoordinator.State.OWN_RALLY_REQUIRED), tab.name());
+            assertEquals(1, bear.backs);
+            assertEquals(0, bear.inputs);
+        }
+    }
+
+    @Test
     void activeRecoveryCancelsPetConfirmationInsteadOfSendingUse() throws Exception {
         ScriptedBear bear = new ScriptedBear(EnumSet.of(
                 TemplatesEnum.BEAR_PET_CONFIRMATION, TemplatesEnum.BEAR_PET_CONFIRM_USE));

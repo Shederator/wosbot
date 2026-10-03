@@ -79,7 +79,7 @@ class BearCaptureLiveDeviceTest {
     }
 
     /** {@code screencap} raw output: a little-endian width, height, format header, then RGBA. */
-    private static RawImageData screencap() {
+    static RawImageData screencap() {
         try {
             Process process = new ProcessBuilder(System.getenv("FROSTGUARD_LIVE_ADB"), "-s",
                     System.getenv("FROSTGUARD_LIVE_ADB_SERIAL"), "exec-out", "screencap").start();

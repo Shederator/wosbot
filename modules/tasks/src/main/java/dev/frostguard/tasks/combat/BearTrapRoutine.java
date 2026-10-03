@@ -204,7 +204,8 @@ public BearTrapRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
                 sessionDriver = new LiveBearSessionDriver(eventEndInstant, openCaptureRecorder(eventEndInstant));
                 activeSessionExit = sessionDriver.observeOnlyUntil(eventEndInstant);
             } else {
-                sessionDriver = new LiveBearSessionDriver(eventEndInstant, null);
+                sessionDriver = new LiveBearSessionDriver(eventEndInstant,
+                        Boolean.getBoolean("frostguard.bear.record") ? openCaptureRecorder(eventEndInstant) : null);
 
                 if (now.isBefore(timing.activationTime)) {
                     sessionDriver.prepareUntil(
@@ -353,8 +354,15 @@ void executeObservedInput(Runnable authorize, Runnable input) {
 
 private BearCaptureRecorder openCaptureRecorder(Instant eventEnd) {
         try {
-            return BearCaptureRecorder.open(WorkspacePaths.current().logs(), eventEnd);
+            BearCaptureRecorder recorder = BearCaptureRecorder.open(WorkspacePaths.current().logs(), eventEnd);
+            logInfo(routineLogBearTrapLine("Bear evidence recording: " + recorder.directory()));
+            return recorder;
         } catch (IOException failure) {
+            if (Boolean.getBoolean("frostguard.bear.record")) {
+                throw protectedFailure(BearSessionExecutionException.FailureKind.PERSISTENCE,
+                        BearSessionExecutionException.RecoveryDirective.OPERATOR_ACTION,
+                        "required-bear-recording-could-not-open", failure);
+            }
             logWarning(routineLogBearTrapLine("Bear capture could not be opened; observing without recording: "
                     + failure.getMessage()));
             return null;
@@ -788,6 +796,7 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                     this::recoverCapture,
                     3,
                     Clock.systemUTC());
+            this.frames.observeWith(this::recordObservedFrame);
             this.ui = new BearUiStateMachine<>(
                     frames, Duration.ofSeconds(4), this::recordTransitionDiagnostic,
                     (authorization, input) -> executeObservedInput(
@@ -816,6 +825,7 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
 
         private void recordTransitionDiagnostic(String diagnostic) {
             logDebug(routineLogBearTrapLine(diagnostic));
+            if (capture != null) capture.transition(frames.latestSequence(), diagnostic);
             if (!diagnostic.startsWith("transition")
                     && !diagnostic.startsWith("phase")
                     && !diagnostic.startsWith("terminal")) {
@@ -933,9 +943,33 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                             "pet-battle-skills-postcondition-not-verified", null);
                 }
             }
-            // Page and status identity are recorded; configured-trap arrival still needs calibration.
-            requireLiveEvidence("Territory, Special Buildings, configured Trap and at-Bear frames",
-                    "navigate-to-configured-bear");
+            if (!BearTrapPreparation.navigate(ui, frame -> classifier.configuredBearIdentity(frame.frame()),
+                    (action, authorization) -> {
+                        if (action == BearUiAction.GO_TO_CONFIGURED_TRAP) {
+                            if (classifier.trapStatus(authorization.frame(), trapNumber)
+                                    == BearFrameClassifier.TrapStatus.UNKNOWN) {
+                                throw new BearInputRefusedException("configured-trap-row-not-verified");
+                            }
+                            AreaData row = CommonGameAreas.bearTrapGoArea(trapNumber);
+                            ImageSearchResultData hit = emuManager.locatePattern(EMULATOR_NUMBER,
+                                    authorization.frame(), BEAR_TRAP_GO, row.topLeft(), row.bottomRight(), 95);
+                            if (!hit.isFound()) throw new BearInputRefusedException("configured-trap-go-missing");
+                            requireFreshAuthorization(authorization, "configured-trap-go");
+                            tapInside(hit);
+                        } else {
+                            TemplatesEnum target = switch (action) {
+                                case OPEN_ALLIANCE -> BEAR_WORLD_ALLIANCE;
+                                case OPEN_TERRITORY -> ALLIANCE_TERRITORY_BUTTON;
+                                case OPEN_SPECIAL_BUILDINGS -> BEAR_SPECIAL_TAB_UNSELECTED;
+                                default -> throw new IllegalArgumentException("Not a trap navigation edge: " + action);
+                            };
+                            tapTemplateFrom(authorization, target, 95, action.name());
+                        }
+                    })) {
+                throw protectedFailure(BearSessionExecutionException.FailureKind.VISUAL_UNKNOWN,
+                        BearSessionExecutionException.RecoveryDirective.DEGRADED_WAIT,
+                        "configured-trap-arrival-not-verified", null);
+            }
         }
 
         private void requireLiveEvidence(String evidence, String operation) {
@@ -1605,6 +1639,8 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                         || screen == BearNavigationPolicy.Screen.RALLY_TIMER_PANEL
                         || screen == BearNavigationPolicy.Screen.BEAR_RALLY_PANEL
                         || screen == BearNavigationPolicy.Screen.ALLIANCE_MENU
+                        || screen == BearNavigationPolicy.Screen.ALLIANCE_TERRITORY
+                        || screen == BearNavigationPolicy.Screen.SPECIAL_BUILDINGS
                         || screen == BearNavigationPolicy.Screen.PET_SKILL_PANEL
                         || screen == BearNavigationPolicy.Screen.PET_BATTLE_SELECTED
                         || screen == BearNavigationPolicy.Screen.PET_BATTLE_ACTIVE
@@ -1964,9 +2000,6 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                         return true;
                     }
                     case TAP_ACTIVE_BEAR_ICON -> {
-                        if (trapNumber != 1) {
-                            requireLiveEvidence("configured Trap 2 centered-world identity", "center-configured-trap-2");
-                        }
                         BearVerifiedActionExecutor.Outcome opened = ui.transition(
                                 BearUiAction.OPEN_ACTIVE_BEAR,
                                 authorization -> tapTemplateFrom(
@@ -2218,6 +2251,17 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
         private void authorizePhysicalInput(BearFrameStream.Snapshot<RawImageData> authorization) {
             checkPreemption();
             requireInputAllowed("observed-transition");
+            if (Boolean.getBoolean("frostguard.bear.record")) {
+                String recordingFailure = capture == null ? "recorder-missing" : capture.failureReason();
+                if (recordingFailure == null && realtimeFrames.recordingFailure() != null) {
+                    recordingFailure = "segment-write-failed";
+                }
+                if (recordingFailure != null) {
+                    throw protectedFailure(BearSessionExecutionException.FailureKind.PERSISTENCE,
+                            BearSessionExecutionException.RecoveryDirective.OPERATOR_ACTION,
+                            "required-bear-recording-" + recordingFailure, null);
+                }
+            }
             requireFreshAuthorization(authorization, "physical-dispatch");
             if (ui.phase() != BearUiStateMachine.Phase.CLEANING_UP && !now().isBefore(eventEnd)) {
                 throw new BearInputRefusedException("event-ended-before-dispatch");
@@ -2434,6 +2478,15 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                         ? BearUiStateMachine.Phase.WAITING_FOR_ACTIVATION
                         : BearUiStateMachine.Phase.ACTIVE);
                 BearFrameStream.Snapshot<RawImageData> frame = ui.observe();
+                if (frame.screen() != previous) {
+                    snapshots.write(frame.frame(), "bear-observe", frame.screen().name(), frame.capturedAt());
+                    previous = frame.screen();
+                }
+            }
+            return BearSessionCoordinator.ExitReason.EVENT_ENDED;
+        }
+
+        private void recordObservedFrame(BearFrameStream.Snapshot<RawImageData> frame, boolean classified) {
                 if (capture != null) {
                     String recordingFailure = realtimeFrames.recordingFailure();
                     if (recordingFailure != null && realtimeFrames.segment() > failedRecordingSegment) {
@@ -2447,17 +2500,13 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                     String image = origin != null
                             && origin.kind() == BearRealtimeFrameSource.FrameOrigin.Kind.SCREENCAP
                             ? capture.staticScreenshot(frame.frame()) : null;
-                    Duration transportAge = Duration.between(frame.capturedAt(), classificationStartedAt);
+                    Duration transportAge = Duration.between(frame.capturedAt(),
+                            classified ? classificationStartedAt : Instant.now());
                     capture.observed(frame.sequence(), origin, image, frame.capturedAt(),
                             transportAge.isNegative() ? Duration.ZERO : transportAge,
-                            frame.screen(), classificationNanos, Map.copyOf(classificationTemplateNanos));
+                            frame.screen(), classified ? classificationNanos : 0,
+                            classified ? Map.copyOf(classificationTemplateNanos) : Map.of());
                 }
-                if (frame.screen() != previous) {
-                    snapshots.write(frame.frame(), "bear-observe", frame.screen().name(), frame.capturedAt());
-                    previous = frame.screen();
-                }
-            }
-            return BearSessionCoordinator.ExitReason.EVENT_ENDED;
         }
 
         private boolean recoverCapture(RuntimeException failure, int failedAttempt) {

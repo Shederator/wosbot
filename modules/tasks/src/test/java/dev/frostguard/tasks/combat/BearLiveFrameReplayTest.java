@@ -80,6 +80,36 @@ class BearLiveFrameReplayTest {
     }
 
     @org.junit.jupiter.api.Test
+    void realTrapTwoIdentityDoesNotTurnCooldownIntoActiveBear() throws Exception {
+        var matcher = new BearTemplateMatcher(EmulatorController.getInstance(), "bear-replay");
+        var image = frame("trap2-cooldown-centered");
+        var one = new BearFrameClassifier(matcher, 1);
+        var two = new BearFrameClassifier(matcher, 2);
+        assertTrue(two.configuredBearIdentity(image));
+        assertFalse(one.configuredBearIdentity(image));
+        assertFalse(two.configuredBearCentered(image));
+        assertNotEquals(BearNavigationPolicy.Screen.BEAR_RALLY_PANEL, two.classify(image).screen());
+    }
+
+    @org.junit.jupiter.api.Test
+    void recordedTrapTwoPreparationHasDistinctTargetsAndInactiveStatus() throws Exception {
+        var matcher = new BearTemplateMatcher(EmulatorController.getInstance(), "bear-replay");
+        var classifier = new BearFrameClassifier(matcher, 2);
+        var overview = frame("territory-overview");
+        assertEquals(BearNavigationPolicy.Screen.ALLIANCE_TERRITORY, classifier.classify(overview).screen());
+        assertTrue(matcher.found(overview, dev.frostguard.api.configs.TemplatesEnum.BEAR_SPECIAL_TAB_UNSELECTED, 95));
+        var traps = frame("trap2-list-cooldown");
+        assertEquals(BearNavigationPolicy.Screen.SPECIAL_BUILDINGS, classifier.classify(traps).screen());
+        assertEquals(BearFrameClassifier.TrapStatus.COOLDOWN, classifier.trapStatus(traps, 2));
+        for (int number : new int[]{1,2}) {
+            assertTrue(matcher.foundIn(traps, dev.frostguard.api.configs.TemplatesEnum.BEAR_TRAP_GO, 95,
+                    dev.frostguard.engine.nav.CommonGameAreas.bearTrapGoArea(number)));
+        }
+        assertTrue(matcher.found(frame("trap2-cooldown-centered"),
+                dev.frostguard.api.configs.TemplatesEnum.BEAR_WORLD_ALLIANCE, 95));
+    }
+
+    @org.junit.jupiter.api.Test
     void backRequiresListIdentityAndTheArrowInTheSameFrame() throws Exception {
         var classifier = new BearFrameClassifier(new BearTemplateMatcher(
                 EmulatorController.getInstance(), "bear-replay"), 2);

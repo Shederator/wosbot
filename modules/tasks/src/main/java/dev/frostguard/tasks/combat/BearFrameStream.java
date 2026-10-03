@@ -58,6 +58,12 @@ final class BearFrameStream<T> {
     private final Clock clock;
     private long sequence;
     private Snapshot<T> latest;
+    private java.util.function.BiConsumer<Snapshot<T>, Boolean> observer = (frame, classified) -> { };
+
+    /** Evidence observes the exact sample used by both decisions and low-level reads. */
+    void observeWith(java.util.function.BiConsumer<Snapshot<T>, Boolean> observer) {
+        this.observer = Objects.requireNonNull(observer, "observer");
+    }
 
     BearFrameStream(
             Supplier<T> source,
@@ -111,6 +117,7 @@ final class BearFrameStream<T> {
         Captured<T> captured = capture();
         T frame = captured.frame();
         latest = new Snapshot<>(++sequence, captured.capturedAt(), frame, classifier.apply(frame));
+        observer.accept(latest, true);
         return latest;
     }
 
@@ -118,6 +125,7 @@ final class BearFrameStream<T> {
         Captured<T> captured = capture();
         latest = new Snapshot<>(++sequence, captured.capturedAt(), captured.frame(),
                 BearNavigationPolicy.Screen.UNKNOWN);
+        observer.accept(latest, false);
         return latest;
     }
 

@@ -16,6 +16,21 @@ import org.junit.jupiter.api.Test;
 class BearTrapRoutineArchitectureTest {
 
     @Test
+    void automatedRecordingSharesTheDecisionStream() throws IOException {
+        String java = Files.readString(Path.of("src/main/java/dev/frostguard/tasks/combat/BearTrapRoutine.java"));
+        assertTrue(java.contains("Boolean.getBoolean(\"frostguard.bear.record\") ? openCaptureRecorder(eventEndInstant) : null"));
+        assertTrue(java.contains("this.frames.observeWith(this::recordObservedFrame)"));
+        assertTrue(java.contains("required-bear-recording-could-not-open"));
+        assertEquals(1, occurrences(java, "capture.observed("));
+        int guard = java.indexOf("private void authorizePhysicalInput(");
+        int freshness = java.indexOf("requireFreshAuthorization(authorization, \"physical-dispatch\")", guard);
+        String physicalGuard = java.substring(guard, freshness);
+        assertTrue(physicalGuard.contains("capture.failureReason()"));
+        assertTrue(physicalGuard.contains("realtimeFrames.recordingFailure()"));
+        assertTrue(physicalGuard.contains("RecoveryDirective.OPERATOR_ACTION"));
+    }
+
+    @Test
     void bearRoutineHasNoLegacyFixedSleepsOrProceduralTapHelpers() throws IOException {
         Path source = Path.of("src/main/java/dev/frostguard/tasks/combat/BearTrapRoutine.java");
         String java = Files.readString(source);

@@ -130,7 +130,7 @@ final class BearFrameClassifier {
             } else if (found(frame, BEAR_TERRITORY_TITLE, 90)) {
                 screen = found(frame, BEAR_SPECIAL_TAB, 90)
                         ? BearNavigationPolicy.Screen.SPECIAL_BUILDINGS
-                        : found(frame, BEAR_TERRITORY_TAB, 90)
+                        : (found(frame, BEAR_TERRITORY_TAB, 90) || found(frame, BEAR_TERRITORY_OVERVIEW, 95))
                         ? BearNavigationPolicy.Screen.ALLIANCE_TERRITORY : BearNavigationPolicy.Screen.UNKNOWN;
             } else if (found(frame, BEAR_WAR_TITLE, 90)) {
                 // A detail page also has a War heading and plus controls, but is not the list.
@@ -175,10 +175,16 @@ final class BearFrameClassifier {
     }
 
     boolean configuredBearCentered(RawImageData frame) {
-        // Only Trap 1 has calibrated centered-world evidence. Trap 2 must not borrow its identity.
-        return trapNumber == 1 && (found(frame, BEAR_CENTER_TRAP_1, 95)
-                || found(frame, BEAR_CENTER_TRAP_1_PANEL, 95))
+        return configuredBearIdentity(frame)
                 && (found(frame, BEAR_CENTER_ACTIVE, 95) || found(frame, BEAR_CENTER_ACTIVE_PANEL, 95));
+    }
+
+    boolean configuredBearIdentity(RawImageData frame) {
+        return switch (trapNumber) {
+            case 1 -> found(frame, BEAR_CENTER_TRAP_1, 95) || found(frame, BEAR_CENTER_TRAP_1_PANEL, 95);
+            case 2 -> found(frame, BEAR_CENTER_TRAP_2, 95);
+            default -> false;
+        };
     }
 
     private boolean foundIn(RawImageData frame, TemplatesEnum template, int threshold, AreaData area) {

@@ -58,6 +58,7 @@ enum BearUiAction {
             set(Screen.FORMATION, Screen.WAR_LIST)),
     BACK_TO_PARENT(set(Screen.WAR_LIST, Screen.FORMATION, Screen.RALLY_TIMER_PANEL,
                     Screen.BEAR_RALLY_PANEL, Screen.ALLIANCE_MENU, Screen.ALLIANCE_WAR,
+                    Screen.ALLIANCE_TERRITORY, Screen.SPECIAL_BUILDINGS,
                     Screen.AUTOJOIN_PANEL, Screen.PET_SKILL_PANEL, Screen.PET_BATTLE_SELECTED,
                     Screen.PET_BATTLE_ACTIVE, Screen.PET_CONFIRMATION, Screen.SIDEBAR_OTHER, Screen.MARCH_SIDEBAR),
             set(Screen.WORLD, Screen.WORLD_ACTIVE_BEAR_ICON_READY, Screen.WORLD_AT_CONFIGURED_BEAR, Screen.WAR_LIST,
@@ -101,6 +102,7 @@ enum BearUiAction {
             case RALLY_TIMER_PANEL -> destination == Screen.BEAR_RALLY_PANEL;
             case BEAR_RALLY_PANEL -> world(destination);
             case ALLIANCE_MENU -> world(destination);
+            case ALLIANCE_TERRITORY, SPECIAL_BUILDINGS -> destination == Screen.ALLIANCE_MENU;
             case ALLIANCE_WAR -> destination == Screen.ALLIANCE_MENU;
             case AUTOJOIN_PANEL -> destination == Screen.ALLIANCE_WAR;
             case PET_SKILL_PANEL, PET_BATTLE_SELECTED, PET_BATTLE_ACTIVE,
@@ -119,8 +121,8 @@ enum BearUiAction {
     }
 
     /**
-     * The destination of an edge that has no real-frame identity yet (configured-trap Go and Bear
-     * centring). It never confirms, so the edge fails closed until M3 defines it from recordings.
+     * Go requires a custom postcondition proving the configured numbered trap in a newer World
+     * frame. World classification alone must never confirm arrival at the intended trap.
      */
     private static Set<Screen> unconfirmable() {
         return EnumSet.noneOf(Screen.class);

@@ -20,6 +20,46 @@ import org.junit.jupiter.api.Test;
 class BearFrameStreamTest {
 
     @Test
+    void slowRecordingCannotMakeAnExpiredFrameAuthorizeInput() {
+        var time = new java.util.concurrent.atomic.AtomicReference<>(Instant.parse("2026-10-03T13:25:00Z"));
+        Clock clock = new Clock() {
+            public java.time.ZoneId getZone() { return ZoneOffset.UTC; }
+            public Clock withZone(java.time.ZoneId zone) { return this; }
+            public Instant instant() { return time.get(); }
+        };
+        var stream = new BearFrameStream<String>(() -> "world", ignored -> BearNavigationPolicy.Screen.WORLD,
+                () -> false, (failure, attempt) -> false, 1, clock);
+        stream.observeWith((frame, classified) -> time.set(time.get().plusSeconds(2)));
+        var observed = stream.next();
+        AtomicInteger taps = new AtomicInteger();
+        var executor = new BearVerifiedActionExecutor<>(stream, Duration.ofMillis(10));
+        assertEquals(BearVerifiedActionExecutor.Outcome.STALE_AUTHORIZATION,
+                executor.tapWithOneVerifiedRetry(observed, taps::incrementAndGet, frame -> true, frame -> true));
+        assertEquals(0, taps.get());
+    }
+
+    @Test
+    void recordsExactClassifiedAndUnclassifiedSamplesWithoutExtraCapture() {
+        AtomicInteger captures = new AtomicInteger();
+        var stream = new BearFrameStream<Integer>(captures::incrementAndGet,
+                ignored -> BearNavigationPolicy.Screen.WORLD, () -> false);
+        var recorded = new java.util.ArrayList<BearFrameStream.Snapshot<Integer>>();
+        var classified = new java.util.ArrayList<Boolean>();
+        stream.observeWith((frame, wasClassified) -> {
+            recorded.add(frame);
+            classified.add(wasClassified);
+        });
+        var first = stream.next();
+        var second = stream.nextUnclassified();
+        assertEquals(2, captures.get());
+        assertEquals(List.of(first, second), recorded);
+        assertSame(first, recorded.get(0));
+        assertSame(second, recorded.get(1));
+        assertEquals(List.of(true, false), classified);
+        assertEquals(2L, second.sequence());
+    }
+
+    @Test
     void transientCaptureFailuresRecoverInsideTheSameStream() {
         AtomicInteger captures = new AtomicInteger();
         AtomicInteger recoveries = new AtomicInteger();

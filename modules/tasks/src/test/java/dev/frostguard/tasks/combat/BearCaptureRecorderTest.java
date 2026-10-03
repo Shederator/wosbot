@@ -3,6 +3,7 @@ package dev.frostguard.tasks.combat;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import dev.frostguard.api.domain.RawImageData;
 import java.io.OutputStream;
@@ -17,6 +18,54 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class BearCaptureRecorderTest {
+
+    @Test
+    void segmentCreationFailureLatchesUnhealthyState(@TempDir Path logs) throws Exception {
+        try (var recorder = BearCaptureRecorder.open(logs, EVENT_END)) {
+            Files.createDirectory(recorder.directory().resolve("segment-001.h264"));
+            assertNull(recorder.nextSegment());
+            assertEquals("segment-open-failed", recorder.failureReason());
+            try (var ignored = recorder.nextSegment()) {
+                assertEquals("segment-open-failed", recorder.failureReason(), "a later segment cannot hide lost evidence");
+            }
+        }
+    }
+
+    @Test
+    void staticImageWriteFailureLatchesUnhealthyState(@TempDir Path logs) throws Exception {
+        try (var recorder = BearCaptureRecorder.open(logs, EVENT_END)) {
+            Files.createDirectory(recorder.directory().resolve("screencap-001.png"));
+            Files.writeString(recorder.directory().resolve("screencap-001.png/blocker"), "prevent replacement");
+            assertNull(recorder.staticScreenshot(RawImageData.capture(new byte[4], 1, 1, 32)));
+            assertEquals("screenshot-write-failed", recorder.failureReason());
+        }
+    }
+
+    @Test
+    void backgroundWriterFailureIsVisibleToInputGuard(@TempDir Path logs) throws Exception {
+        try (var recorder = BearCaptureRecorder.open(logs, EVENT_END, 4, () -> {
+            throw new java.io.UncheckedIOException(new java.io.IOException("injected write failure"));
+        })) {
+            recorder.transition(1, "test");
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(2);
+            while (recorder.failureReason() == null && System.nanoTime() < deadline) Thread.sleep(1);
+            assertEquals("journal-write-failed", recorder.failureReason());
+        }
+    }
+
+    @Test
+    void transitionJournalSeparatesLatestSampleFromAuthorizingFrame(@TempDir Path logs) throws Exception {
+        Path journal;
+        try (var recorder = BearCaptureRecorder.open(logs, Instant.parse("2026-10-03T13:55:00Z"))) {
+            journal = recorder.directory().resolve("frames.jsonl");
+            recorder.transition(9, "transition frame=7 expected=\"WORLD\"\nconfirmed");
+        }
+        var lines = Files.readAllLines(journal);
+        assertEquals(1, lines.size());
+        var json = new com.fasterxml.jackson.databind.ObjectMapper().readTree(lines.getFirst());
+        assertEquals(9, json.get("latestSampledFrame").asLong());
+        assertEquals("transition frame=7 expected=\"WORLD\"\nconfirmed", json.get("diagnostic").asText());
+    }
 
     private static final Instant EVENT_END = Instant.parse("2026-10-03T19:30:00Z");
     private static final BearRealtimeFrameSource.FrameOrigin VIDEO_1 = new BearRealtimeFrameSource.FrameOrigin(
@@ -52,6 +101,7 @@ class BearCaptureRecorderTest {
         try (BearCaptureRecorder recorder = BearCaptureRecorder.open(logs, EVENT_END)) {
             recorder.recordingFailed(2, "disk full");
             recorder.recordingFailed(2, "disk full");
+            assertEquals("segment-write-failed", recorder.failureReason());
             journal = recorder.directory().resolve("frames.jsonl");
         }
 
@@ -142,6 +192,7 @@ class BearCaptureRecorderTest {
 
             assertTrue(elapsedMs < 500, "journal writes must not wait for the disk: " + elapsedMs + "ms");
             assertTrue(recorder.droppedJournalLines() > 0, "overflow is counted, not blocked on");
+            assertEquals("journal-overflow", recorder.failureReason());
             release.countDown();
         }
     }

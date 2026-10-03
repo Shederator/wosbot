@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 
 class BearUiActionTest {
 
-    /** Edges that still need a real-frame identity and therefore fail closed in production. */
+    /** Uncalibrated edges, plus Go which needs numbered identity beyond a destination screen enum. */
     private static final Set<BearUiAction> EVIDENCE_GATED = EnumSet.of(
             BearUiAction.OPEN_ALLIANCE_WAR,
             BearUiAction.OPEN_AUTOJOIN,
@@ -69,6 +69,8 @@ class BearUiActionTest {
         parents.put(Screen.RALLY_TIMER_PANEL, EnumSet.of(Screen.BEAR_RALLY_PANEL));
         parents.put(Screen.BEAR_RALLY_PANEL, world);
         parents.put(Screen.ALLIANCE_MENU, world);
+        parents.put(Screen.ALLIANCE_TERRITORY, EnumSet.of(Screen.ALLIANCE_MENU));
+        parents.put(Screen.SPECIAL_BUILDINGS, EnumSet.of(Screen.ALLIANCE_MENU));
         parents.put(Screen.ALLIANCE_WAR, EnumSet.of(Screen.ALLIANCE_MENU));
         parents.put(Screen.AUTOJOIN_PANEL, EnumSet.of(Screen.ALLIANCE_WAR));
         parents.put(Screen.PET_SKILL_PANEL, world);

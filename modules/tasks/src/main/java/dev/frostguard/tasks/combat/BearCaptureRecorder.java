@@ -21,6 +21,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.CRC32;
 import javax.imageio.ImageIO;
 import org.slf4j.Logger;
@@ -45,6 +46,7 @@ final class BearCaptureRecorder implements AutoCloseable {
     private final Path directory;
     private final AtomicInteger segments = new AtomicInteger();
     private final AtomicLong droppedLines = new AtomicLong();
+    private final AtomicReference<String> failure = new AtomicReference<>();
     private final BlockingQueue<String> journal;
     private final Thread journalWriter;
     private final Runnable beforeEachWrite;
@@ -92,12 +94,27 @@ final class BearCaptureRecorder implements AutoCloseable {
         return directory;
     }
 
+    String failureReason() {
+        if (droppedLines.get() > 0) failure.compareAndSet(null, "journal-overflow");
+        return failure.get();
+    }
+
+    void transition(long frame, String diagnostic) {
+        String escaped = diagnostic.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
+        if (!journal.offer("{\"event\":\"transition\",\"latestSampledFrame\":" + frame
+                + ",\"at\":\"" + Instant.now() + "\",\"diagnostic\":\"" + escaped + "\"}")) {
+            droppedLines.incrementAndGet();
+        }
+    }
+
     /** Opens the file for the next recorder renewal, or {@code null} when it cannot be created. */
     OutputStream nextSegment() {
         Path segment = directory.resolve(String.format("segment-%03d.h264", segments.incrementAndGet()));
         try {
             return new BufferedOutputStream(Files.newOutputStream(segment), 1 << 16);
         } catch (IOException failure) {
+            this.failure.compareAndSet(null, "segment-open-failed");
             LOG.warn("Bear capture segment {} could not be created: {}", segment, failure.getMessage());
             return null;
         }
@@ -157,6 +174,7 @@ final class BearCaptureRecorder implements AutoCloseable {
                 throw new IOException("no PNG writer");
             }
         } catch (IOException | RuntimeException failure) {
+            this.failure.compareAndSet(null, "screenshot-write-failed");
             LOG.warn("Bear capture screenshot {} could not be saved: {}", name, failure.getMessage());
             return null;
         }
@@ -167,6 +185,7 @@ final class BearCaptureRecorder implements AutoCloseable {
 
     /** Journals once per segment that its evidence recording stopped; observation continues. */
     void recordingFailed(int segment, String reason) {
+        failure.compareAndSet(null, "segment-write-failed");
         if (segment <= lastFailedSegment) return;
         lastFailedSegment = segment;
         LOG.warn("Bear capture segment {} stopped recording: {}", segment, reason);
@@ -208,9 +227,11 @@ final class BearCaptureRecorder implements AutoCloseable {
                 writer.newLine();
                 if (journal.isEmpty()) writer.flush();
             }
-        } catch (IOException failure) {
+        } catch (IOException | RuntimeException failure) {
+            this.failure.compareAndSet(null, "journal-write-failed");
             LOG.warn("Bear capture journal stopped: {}", failure.getMessage());
         } catch (InterruptedException interrupted) {
+            failure.compareAndSet(null, "journal-interrupted");
             Thread.currentThread().interrupt();
         }
     }

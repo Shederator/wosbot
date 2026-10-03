@@ -10,6 +10,16 @@ automated event works.
 
 ## Latest verification (2026-10-03)
 
+- Follow-up recording/pre-event navigation changes: full reactor 1,086 tests,
+  zero failures/errors, five skipped, including the private two-frame OCR replay.
+  Focused Bear tests also passed. Reviewer verified Territory/Special Back recovery
+  and required-recorder-health input gating; this is not live-event approval.
+- Device 1 read-only recording preflight: 40 warmed samples, median 580 ms,
+  p95 647 ms, max 760 ms for capture/classification/recording. This excludes
+  authorization OCR and dispatch. A separate 135-second capture decoded 3,477
+  frames across two segments, proving a real 120-second renewal on that device.
+- Earlier verification before these follow-up changes:
+
 - Focused Bear suite passed with the private recorded-frame replay enabled.
 - Full reactor: `./mvnw -q -o -Djava.awt.headless=true test`, with
   `FROSTGUARD_BEAR_RECORDING_FRAMES` set for the offline replay: 1,073 tests, no failures or
@@ -21,6 +31,11 @@ automated event works.
   a valid rally. No emulator input, normal-branch integration or deployment was performed.
 
 ## Collecting evidence with observe-only
+
+Automated supervised runs may also set `-Dfrostguard.bear.record=true`. This uses
+the decision stream itself rather than a second recorder. Required-recording health
+is checked at every physical input boundary. Open/write failures or journal overflow
+latch an operator-action outcome; later healthy segments do not hide missing evidence.
 
 Enable **Observe only** in the profile's Bear settings for an event. The session owns the event
 window like a normal Bear run but refuses every device input. It writes, under the workspace's
@@ -42,7 +57,8 @@ budget and must be measured on the supported setup.
 
 ## Still evidence-gated in production
 
-- Trap 2 centring has no calibrated production identity. Trap 1 now requires a centered numbered
+- Trap 2 now has a pre-event numbered-identity calibration, but no active positive.
+  Trap 1 requires a centered numbered
   nameplate plus active status, followed by a separate Bear-panel postcondition. These calibration
   frames do not prove the live target tap or all animation variants.
 - Every preparation edge listed in `BearUiActionTest.EVIDENCE_GATED`.
@@ -118,7 +134,8 @@ frame where noted, before enabling preparation in production:
 3. Pet activation is already recorded (segment 1, decoded 258/480/490/505/512). Still needed:
    wider pet layouts, unavailable/cooldown battle skills, cancellation/close input timing and
    restart footage. Growth-skill Use must never substitute for the Battle-Skills confirmation.
-4. Alliance-menu to Territory navigation sequence. The Territory Buildings landing frame is covered.
+4. Wider Alliance-menu to Territory navigation variants. Pre-event Bonus Overview,
+   Special Buildings, row-specific Go, and Back to Alliance were observed October 3.
 5. Special Buildings with Trap 2 active. Trap 1 active / Trap 2 cooldown is covered; both Go buttons
    remain enabled, so an inactive trap must not be modelled as a disabled Go button.
 6. Centered Trap 1 is recorded (segment 13, decoded 569/788), with 788 represented in fixtures.

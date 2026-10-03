@@ -122,8 +122,18 @@ Not done, by design: the capture journal does not log the removed fast-revalidat
 
 The earlier speculative at-Bear states were removed because no classifier produced them.
 October 3 footage now grounds `WORLD_AT_CONFIGURED_BEAR`: centered Trap 1 text plus active
-status, followed separately by the Bear rally panel. Trap 2 arrival and pre-event configured-trap
-Go remain gated. A visible shortcut alone is never proof of a centered target.
+status, followed separately by the Bear rally panel. Pre-event configured-trap Go
+now requires a newer World frame with the configured numbered nameplate. Trap 2
+identity is calibrated from cooldown footage, which never proves activation;
+active Trap 2 still needs a live positive. A visible shortcut alone is never proof
+of a centered target.
+
+Automated sessions can opt into recording with `-Dfrostguard.bear.record=true`.
+The same sampled frames used for decisions are journaled, with raw H.264 segments
+and static-screen PNGs. Required recording blocks new physical input after any
+detected segment, PNG, journal or overflow failure, using protected operator-action
+recovery rather than continuing unrecorded. A background write can fail after an
+already dispatched input; this is not a guarantee of synchronous disk durability.
 
 Pet confirmation uses checkpoint version 3, with backward reads of versions 1 and 2. An armed
 Use is never repeated after a restart, including when the temporary post-input panel looks like

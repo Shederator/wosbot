@@ -44,3 +44,18 @@ the recorded centered/panel states; exact-template positives are calibration, no
 No genuine empty-list image, recall completion, or input timestamps are included. Do not describe
 these tests as complete session validation. State-order tests use synthetic timing, not recorded
 touch events. Pet confirmation recovery cancels rather than repeats an ambiguous Use.
+
+Additional pre-event direct screenshots from October 3 (not H.264 frame indices):
+
+- `territory-overview`: actual Alliance Territory landing on Bonus Overview;
+  validates landing identity and the unselected Special Buildings tab target.
+- `trap2-list-cooldown`: both numbered traps on cooldown, with row-specific Go
+  buttons. Coordinates are masked. Go can navigate before activation; it does not
+  activate an event or authorize a rally.
+- `trap2-cooldown-centered`: numbered Trap 2 World identity, privacy-redacted with
+  only fixed trap text restored. It is a negative for active Bear/rally state.
+
+These are calibration fixtures, not active Trap 2 validation. Live Back from both
+Territory and Special Buildings returned to Alliance menu; transition tests model
+those observed parents. No rally, join, or event-enable input was used to obtain
+these additional preparation observations.
