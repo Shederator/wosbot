@@ -3,6 +3,7 @@ package dev.frostguard.tasks.combat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -13,6 +14,33 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 class BearUiStateMachineTest {
+
+    @Test
+    void ambiguousDispatchIsTracedAndEscapesToRecoveryWithoutRetry() {
+        List<String> diagnostics = new ArrayList<>();
+        AtomicInteger sends = new AtomicInteger();
+        BearFrameStream<BearNavigationPolicy.Screen> frames = new BearFrameStream<>(
+                () -> BearNavigationPolicy.Screen.WORLD, state -> state, () -> false);
+        BearUiStateMachine<BearNavigationPolicy.Screen> machine = new BearUiStateMachine<>(
+                frames, Duration.ofMillis(100), diagnostics::add,
+                (frame, action) -> {
+                    assertEquals(1, frame.sequence());
+                    action.run();
+                });
+        machine.observe();
+        assertThrows(IllegalStateException.class, () -> machine.transition(
+                BearUiAction.OPEN_ALLIANCE, frame -> {
+                    sends.incrementAndGet();
+                    throw new IllegalStateException("ambiguous delivery");
+                }, frame -> true, 3));
+        assertEquals(1, sends.get());
+        assertTrue(machine.lastInputSent());
+        assertTrue(diagnostics.stream().anyMatch(line -> line.contains("input-delivery-ambiguous")
+                && line.contains("frame=1") && line.contains("terminal=NOT_CONFIRMED")));
+        assertEquals(BearVerifiedActionExecutor.Outcome.STALE_AUTHORIZATION,
+                machine.transition(BearUiAction.OPEN_ALLIANCE, frame -> sends.incrementAndGet()));
+        assertEquals(1, sends.get(), "consumed frame cannot authorize another input");
+    }
 
     @Test
     void legalTransitionRequiresNewerDestinationFrameAndEmitsProvenance() {

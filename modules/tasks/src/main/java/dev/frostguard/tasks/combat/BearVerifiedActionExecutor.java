@@ -150,6 +150,12 @@ final class BearVerifiedActionExecutor<T> {
                 trace(action, authorization, expectedPostcondition, authorization, attempt,
                         "input-refused:" + refused.getMessage(), outcome);
                 return outcome;
+            } catch (RuntimeException ambiguous) {
+                lastInputSent = true;
+                trace(action, authorization, expectedPostcondition, null, attempt,
+                        "input-delivery-ambiguous:" + ambiguous.getClass().getSimpleName(),
+                        Outcome.NOT_CONFIRMED);
+                throw ambiguous;
             }
             lastInputSent = true;
             PollResult result = poll(authorization.sequence(), destination);

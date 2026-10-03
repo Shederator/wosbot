@@ -91,6 +91,11 @@ public class EmulatorController {
         if (backend == null) throw new IllegalStateException("Backend not initialised");
     }
 
+    public void withSingleAttemptInput(String idx, Runnable authorize, Runnable action) {
+        requireBackend();
+        backend.withSingleAttemptInput(idx, authorize, action);
+    }
+
     // --- screen capture ---
 
     public RawImageData captureScreen(String idx) { requireBackend(); return backend.captureScreenshot(idx); }

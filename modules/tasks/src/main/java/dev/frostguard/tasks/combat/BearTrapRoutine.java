@@ -797,7 +797,10 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                     3,
                     Clock.systemUTC());
             this.ui = new BearUiStateMachine<>(
-                    frames, Duration.ofSeconds(4), this::recordTransitionDiagnostic);
+                    frames, Duration.ofSeconds(4), this::recordTransitionDiagnostic,
+                    (authorization, input) -> emuManager.withSingleAttemptInput(
+                            EMULATOR_NUMBER,
+                            () -> authorizePhysicalInput(authorization), input));
             this.sessionSearch = new TemplateSearchHelper(
                     emuManager,
                     EMULATOR_NUMBER,
@@ -2168,6 +2171,15 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                     authorization,
                     BearVerifiedActionExecutor.MAXIMUM_AUTHORIZING_FRAME_AGE)) {
                 throw new BearInputRefusedException(operation + "-authorization-aged-before-input");
+            }
+        }
+
+        private void authorizePhysicalInput(BearFrameStream.Snapshot<RawImageData> authorization) {
+            checkPreemption();
+            requireInputAllowed("observed-transition");
+            requireFreshAuthorization(authorization, "physical-dispatch");
+            if (ui.phase() != BearUiStateMachine.Phase.CLEANING_UP && !now().isBefore(eventEnd)) {
+                throw new BearInputRefusedException("event-ended-before-dispatch");
             }
         }
 

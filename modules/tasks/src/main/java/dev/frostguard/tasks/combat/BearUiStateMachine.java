@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 
 /**
@@ -35,6 +36,7 @@ final class BearUiStateMachine<T> {
     private final BearFrameStream<T> frames;
     private final BearVerifiedActionExecutor<T> actions;
     private final Consumer<String> diagnostics;
+    private final BiConsumer<BearFrameStream.Snapshot<T>, Runnable> inputBoundary;
     private BearFrameStream.Snapshot<T> current;
     private Phase phase = Phase.PREPARING;
     private TerminalReason terminalReason;
@@ -43,7 +45,16 @@ final class BearUiStateMachine<T> {
             BearFrameStream<T> frames,
             Duration transitionDeadline,
             Consumer<String> diagnostics) {
+        this(frames, transitionDeadline, diagnostics, (frame, input) -> input.run());
+    }
+
+    BearUiStateMachine(
+            BearFrameStream<T> frames,
+            Duration transitionDeadline,
+            Consumer<String> diagnostics,
+            BiConsumer<BearFrameStream.Snapshot<T>, Runnable> inputBoundary) {
         this.frames = Objects.requireNonNull(frames, "frames");
+        this.inputBoundary = Objects.requireNonNull(inputBoundary, "inputBoundary");
         this.diagnostics = Objects.requireNonNull(diagnostics, "diagnostics");
         this.actions = new BearVerifiedActionExecutor<>(
                 frames,
@@ -111,7 +122,7 @@ final class BearUiStateMachine<T> {
                 action.name(),
                 current,
                 frame -> action.legalFrom(frame.screen()),
-                input,
+                frame -> inputBoundary.accept(frame, () -> input.run(frame)),
                 expectedPostcondition,
                 postcondition,
                 sameTarget,
