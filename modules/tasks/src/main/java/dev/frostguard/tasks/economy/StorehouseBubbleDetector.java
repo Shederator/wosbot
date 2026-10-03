@@ -52,13 +52,21 @@ public final class StorehouseBubbleDetector {
     }
 
     public static List<Candidate> locate(BufferedImage frame) {
-        return assess(frame).stream().filter(Candidate::accepted).toList();
+        return locate(frame, SEARCH_AREA);
+    }
+
+    public static List<Candidate> locate(BufferedImage frame, AreaData area) {
+        return assess(frame, area).stream().filter(Candidate::accepted).toList();
     }
 
     public static List<Candidate> assess(BufferedImage frame) {
+        return assess(frame, SEARCH_AREA);
+    }
+
+    public static List<Candidate> assess(BufferedImage frame, AreaData area) {
         List<Candidate> candidates = new ArrayList<>();
         for (ColorComponents.Component component : ColorComponents.find(
-                frame, SEARCH_AREA, GameColors::isLabelWhite, ASSESS_MIN_WHITE_PIXELS)) {
+                frame, area, GameColors::isLabelWhite, ASSESS_MIN_WHITE_PIXELS)) {
             candidates.add(toCandidate(frame, component));
         }
         return List.copyOf(candidates);

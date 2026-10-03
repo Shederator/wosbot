@@ -12,13 +12,14 @@ import dev.frostguard.api.domain.PointData;
 import dev.frostguard.vision.match.OpenCvPatternLocator;
 
 /**
- * The live search: chest crops at {@link StorehouseChestRoutine#CHEST_SEARCH_THRESHOLD},
- * then the stamina can at 90.
+ * Offline template search used for saved-frame comparisons; the live routine
+ * uses {@link StorehouseBubbleDetector} for color-based bubble detection.
  */
 public final class TemplateStorehouseSearch implements StorehouseIconSearch {
 
     private static final PointData ORIGIN = new PointData(0, 0);
     private static final PointData LIMIT = new PointData(720, 1280);
+    private static final double CHEST_THRESHOLD = 75;
     private static final double STAMINA_THRESHOLD = 90;
 
     private static final TemplatesEnum[] LIVE_CHEST_TEMPLATES = {
@@ -52,7 +53,7 @@ public final class TemplateStorehouseSearch implements StorehouseIconSearch {
         List<PointData> points = new ArrayList<>();
         for (TemplatesEnum template : chestTemplates) {
             ImageSearchResultData hit = OpenCvPatternLocator.locatePattern(
-                    encodedPng, template, ORIGIN, LIMIT, StorehouseChestRoutine.CHEST_SEARCH_THRESHOLD);
+                    encodedPng, template, ORIGIN, LIMIT, CHEST_THRESHOLD);
             if (hit.isFound() && hit.getPoint() != null) {
                 points.add(hit.getPoint());
                 break;

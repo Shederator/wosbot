@@ -4,6 +4,7 @@ import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
@@ -24,7 +25,9 @@ import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 import dev.frostguard.engine.nav.SidebarDestination;
+import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
+import dev.frostguard.tasks.diagnostics.TaskControlSignals;
 
 /**
  * Task responsible for claiming rewards from the Storehouse.
@@ -69,14 +72,13 @@ public class StorehouseChestRoutine extends DelayedTask {
 
     // ========== Constants ==========
     private static final int TIMER_OCR_MAX_ATTEMPTS = 3;
-    private static final int MAX_TIMER_SECONDS = 7200; // 2 hours
-    private static final int FALLBACK_RESCHEDULE_MINUTES = 5;
-    // Template comparison still uses 75. Live search is the colour bubble.
-    static final int CHEST_SEARCH_THRESHOLD = 75;
     private static final int BUBBLE_SEARCH_ATTEMPTS = 6;
     private static final long BUBBLE_SEARCH_DELAY_MILLIS = 250L;
-    static final int UNREADABLE_WITHOUT_CHEST_HOURS = 1;
     private static final int CLAIM_CLOSE_SETTLE_MILLIS = 800;
+    private static final int BUBBLE_CONFIRMATION_MARGIN = 24;
+    private static final int CLAIM_BUTTON_POLL_INTERVAL_MILLIS = 400;
+    private static final int CLAIM_BUTTON_TIMEOUT_MILLIS = 5_000;
+    private static final int CLAIM_BUTTON_THRESHOLD = 85;
     private static final String BUILDING_COUNTDOWN_WHITELIST = "0123456789:d";
     private static final int BASE_STOREHOUSE_STAMINA = 120;
     private static final int SCROLL_ATTEMPT_COUNT = 2;
@@ -94,11 +96,10 @@ public class StorehouseChestRoutine extends DelayedTask {
 
             .build();
 
-    private ResilientOcrExecutor<LocalDateTime> textHelper;
-
-    // ========== Execution State (reset each execution) ==========
-    private LocalDateTime nextChestTime;
-    private boolean nextChestTimeFallback;
+    private ResilientOcrExecutor<String> textHelper;
+    private StorehouseVisitFlow.VisitState visitState = StorehouseVisitFlow.VisitState.READY;
+    private StorehouseVisitFlow.ActivityPhase activityPhase = StorehouseVisitFlow.ActivityPhase.RESCHEDULING;
+    private Integer pendingAgnesStamina;
 
     public StorehouseChestRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDailyTask) {
         super(profile, tpDailyTask);
@@ -109,28 +110,37 @@ public class StorehouseChestRoutine extends DelayedTask {
         return false;
     }
 
-    /**
-     * Resets execution-specific state.
-     */
-    private void resetExecutionState() {
-        this.nextChestTime = null;
-        logDebug("Execution state reset");
-    }
-
     @Override
     protected void execute() {
         this.textHelper = new ResilientOcrExecutor<>(provider);
-        resetExecutionState();
+        pendingAgnesStamina = null;
+        setVisitState(StorehouseVisitFlow.VisitState.READY, "New execute() visit; state recalculated in memory");
 
-        if (!openStorehouse()) {
-            logWarning("Failed to open Storehouse.");
-            reschedule(LocalDateTime.now().plusMinutes(FALLBACK_RESCHEDULE_MINUTES));
-            return;
+        StorehouseVisitFlow.VisitDecision decision;
+        try {
+            if (openStorehouse()) {
+                decision = StorehouseVisitFlow.execute(new StorehouseActions());
+            } else {
+                captureInterfaceFailure("storehouse-open");
+                decision = StorehouseVisitFlow.retryBeforeFlow("Storehouse could not be opened.");
+            }
+        } catch (RuntimeException failure) {
+            TaskControlSignals.rethrowControlSignal(failure);
+            logError("Storehouse visit failed unexpectedly; retrying in five minutes: " + failure.getMessage());
+            captureInterfaceFailure("visit-error");
+            decision = StorehouseVisitFlow.retryBeforeFlow("Unexpected visit error: "
+                    + failure.getClass().getSimpleName());
         }
 
-        processChestReward();
-        processStaminaReward();
-        scheduleToNearestTime();
+        setActivityPhase(StorehouseVisitFlow.ActivityPhase.RESCHEDULING);
+        setVisitState(decision.state(), decision.reason());
+        LocalDateTime scheduledTime = LocalDateTime.now().plus(decision.delay());
+        logInfo(String.format("Storehouse visit state %s; %s. Confirmed collections: chest=%d, stamina=%d. "
+                        + "Rescheduling once for %s at %s.",
+                visitState, decision.reason(), decision.confirmedChestCollections(),
+                decision.confirmedStaminaCollections(), decision.delay(),
+                scheduledTime.format(DATETIME_FORMATTER)));
+        reschedule(scheduledTime);
     }
 
     /**
@@ -171,153 +181,154 @@ public class StorehouseChestRoutine extends DelayedTask {
         return false;
     }
 
-    /**
-     * Processes the chest reward.
-     * Searches for chest, claims it, and reads the next availability timer.
-     */
-    private void processChestReward() {
-        logInfo("Searching for Storehouse chest reward.");
-        nextChestTimeFallback = false;
+    private final class StorehouseActions implements StorehouseVisitFlow.Actions<StorehouseBubbleDetector.Candidate> {
 
-        ImageSearchResultData chest = searchForBubble(StorehouseBubbleDetector.Kind.CHEST);
+        @Override
+        public StorehouseVisitFlow.Observation<StorehouseBubbleDetector.Candidate> findChest() {
+            return observeBubble(StorehouseBubbleDetector.Kind.CHEST, StorehouseBubbleDetector.SEARCH_AREA);
+        }
 
-        if (chest.isFound()) {
+        @Override
+        public StorehouseVisitFlow.Observation<StorehouseBubbleDetector.Candidate> findStamina() {
+            return observeBubble(StorehouseBubbleDetector.Kind.STAMINA, StorehouseBubbleDetector.SEARCH_AREA);
+        }
+
+        @Override
+        public StorehouseVisitFlow.CollectionState collectChest(StorehouseBubbleDetector.Candidate candidate) {
             logInfo("Chest found. Claiming reward.");
-            tapInside(chest);
+            tapInside(candidate.center(), candidate.center());
             sleepTask(500);
             tapInside(STOREHOUSE_SCROLL_START, STOREHOUSE_SCROLL_END, SCROLL_ATTEMPT_COUNT, SCROLL_REPEAT_DELAY);
             sleepTask(CLAIM_CLOSE_SETTLE_MILLIS);
-
-            nextChestTime = readFallbackTimer();
-            if (nextChestTime == null) {
-                nextChestTimeFallback = true;
-                String snapshot = TaskDiagnosticSnapshots.capture(
-                        emuManager, EMULATOR_NUMBER, "storehousechest", "claim-timer");
-                nextChestTime = LocalDateTime.now().plusMinutes(FALLBACK_RESCHEDULE_MINUTES);
-                logWarning("Claimed chest timer was unreadable; using the five-minute retry. " + snapshot);
-            }
-            return;
+            return confirmBubbleDisappeared(candidate, StorehouseBubbleDetector.Kind.CHEST);
         }
 
-        logWarning("Chest not found after maximum attempts. Trying fallback timer reading.");
-        nextChestTime = readFallbackTimer();
+        @Override
+        public StorehouseVisitFlow.CollectionState collectStamina(
+                StorehouseBubbleDetector.Candidate candidate) {
+            logInfo("Stamina bubble found. Opening its claim dialog.");
+            tapInside(candidate.center(), candidate.center());
+            dismissStaminaTutorial();
+            ImageSearchResultData claimButton = awaitStaminaClaimButton();
+            if (claimButton == null) {
+                captureInterfaceFailure("stamina-claim-button-missing");
+                return StorehouseVisitFlow.CollectionState.UNCONFIRMED;
+            }
 
-        nextChestTimeFallback = fallbackAfterRead(nextChestTimeFallback, nextChestTime);
-        if (nextChestTime == null) {
-            String snapshot = TaskDiagnosticSnapshots.capture(
-                    emuManager, EMULATOR_NUMBER, "storehousechest", "fallback-timer");
-            nextChestTime = nextVisitWhenChestAbsent(LocalDateTime.now(), null);
-            logWarning("Both Storehouse timer reads failed; using the one-hour retry. " + snapshot);
+            pendingAgnesStamina = readAgnesBonus();
+            logDebug("Agnes stamina OCR result: "
+                    + (pendingAgnesStamina == null ? "unreadable" : pendingAgnesStamina));
+            logInfo("Stamina Claim button confirmed. Claiming the reward.");
+            tapInside(claimButton);
+            sleepTask(4_000);
+            StorehouseVisitFlow.CollectionState confirmation = confirmBubbleDisappeared(
+                    candidate, StorehouseBubbleDetector.Kind.STAMINA);
+            if (confirmation == StorehouseVisitFlow.CollectionState.CONFIRMED) {
+                StaminaService.getServices().addExternalStamina(profile.getId(), BASE_STOREHOUSE_STAMINA);
+                if (pendingAgnesStamina != null && pendingAgnesStamina > 0) {
+                    StaminaService.getServices().addExternalStamina(profile.getId(), pendingAgnesStamina);
+                    logInfo(String.format("Confirmed stamina collection: %d base + %d Agnes bonus.",
+                            BASE_STOREHOUSE_STAMINA, pendingAgnesStamina));
+                } else {
+                    logInfo("Confirmed stamina collection: " + BASE_STOREHOUSE_STAMINA + " base stamina.");
+                }
+            }
+            pendingAgnesStamina = null;
+            return confirmation;
+        }
+
+        @Override
+        public StorehouseVisitFlow.CooldownRead readCooldown() {
+            return StorehouseChestRoutine.this.readCooldown();
+        }
+
+        @Override
+        public void onPhase(StorehouseVisitFlow.ActivityPhase phase) {
+            setActivityPhase(phase);
+            if (phase == StorehouseVisitFlow.ActivityPhase.READING_COOLDOWN) {
+                setVisitState(StorehouseVisitFlow.VisitState.WAITING_COOLDOWN,
+                        "Both reward types were absent on reliable city scans");
+            }
         }
     }
 
-    /**
-     * Polls the white-bubble colour detector. Six captures over about 1.5 s
-     * cover one bob of the icon.
-     */
-    private ImageSearchResultData searchForBubble(StorehouseBubbleDetector.Kind kind) {
+    private StorehouseVisitFlow.CollectionState confirmBubbleDisappeared(
+            StorehouseBubbleDetector.Candidate clicked, StorehouseBubbleDetector.Kind kind) {
+        AreaData checkArea = expandedArea(clicked.bounds(), BUBBLE_CONFIRMATION_MARGIN);
+        StorehouseVisitFlow.Observation<StorehouseBubbleDetector.Candidate> observation = observeBubble(kind, checkArea);
+        if (observation.state() == StorehouseVisitFlow.ObservationState.ABSENT) {
+            logInfo("Confirmed " + kind.name().toLowerCase(Locale.ROOT)
+                    + " bubble disappeared after collection.");
+            return StorehouseVisitFlow.CollectionState.CONFIRMED;
+        }
+        captureInterfaceFailure(kind.name().toLowerCase(Locale.ROOT) + "-collection-unconfirmed");
+        return observation.state() == StorehouseVisitFlow.ObservationState.UNKNOWN
+                ? StorehouseVisitFlow.CollectionState.UNKNOWN
+                : StorehouseVisitFlow.CollectionState.UNCONFIRMED;
+    }
+
+    private StorehouseVisitFlow.Observation<StorehouseBubbleDetector.Candidate> observeBubble(
+            StorehouseBubbleDetector.Kind kind, AreaData area) {
+        ImageSearchResultData cityAnchor = templateSearchHelper.locatePattern(
+                TemplatesEnum.GAME_HOME_FURNACE, SearchConfigConstants.DEFAULT_SINGLE);
+        if (cityAnchor == null || !cityAnchor.isFound()) {
+            captureInterfaceFailure(kind.name().toLowerCase(Locale.ROOT) + "-scan-not-in-city");
+            logWarning("Storehouse " + kind.name().toLowerCase(Locale.ROOT)
+                    + " scan is unknown: city anchor missing.");
+            return StorehouseVisitFlow.Observation.unknown();
+        }
+
+        boolean captureFailed = false;
         for (int attempt = 1; attempt <= BUBBLE_SEARCH_ATTEMPTS; attempt++) {
             try {
                 RawImageData capture = emuManager.captureScreen(EMULATOR_NUMBER);
                 BufferedImage frame = ImageConverter.toBufferedImage(capture);
-                for (StorehouseBubbleDetector.Candidate candidate : StorehouseBubbleDetector.locate(frame)) {
+                List<StorehouseBubbleDetector.Candidate> candidates = StorehouseBubbleDetector.locate(frame, area);
+                for (StorehouseBubbleDetector.Candidate candidate : candidates) {
                     if (candidate.kind() == kind) {
                         logDebug("Storehouse " + kind.name().toLowerCase(Locale.ROOT) + " bubble found");
-                        return ImageSearchResultData.hit(
-                                candidate.center().getX(),
-                                candidate.center().getY(),
-                                1.0,
-                                candidate.width(),
-                                candidate.height());
+                        return StorehouseVisitFlow.Observation.found(candidate);
                     }
                 }
-            } catch (RuntimeException ex) {
-                logDebug("Storehouse bubble capture failed: " + ex.getClass().getSimpleName()
-                        + ": " + ex.getMessage());
+            } catch (RuntimeException failure) {
+                TaskControlSignals.rethrowControlSignal(failure);
+                captureFailed = true;
+                logWarning("Storehouse " + kind.name().toLowerCase(Locale.ROOT)
+                        + " scan capture failed: " + failure.getClass().getSimpleName() + ": " + failure.getMessage());
             }
             if (attempt < BUBBLE_SEARCH_ATTEMPTS) {
                 sleepTask(BUBBLE_SEARCH_DELAY_MILLIS);
             }
         }
-        return ImageSearchResultData.miss();
+        if (captureFailed) {
+            captureInterfaceFailure(kind.name().toLowerCase(Locale.ROOT) + "-scan-unknown");
+            return StorehouseVisitFlow.Observation.unknown();
+        }
+        logDebug("Storehouse " + kind.name().toLowerCase(Locale.ROOT) + " bubble absent after stable scan");
+        return StorehouseVisitFlow.Observation.absent();
     }
 
-    /**
-     * Processes the stamina reward whenever the can is on screen.
-     * A stored claim time must not hide a can that is still visible.
-     */
-    private void processStaminaReward() {
-        logInfo("Searching for Storehouse stamina reward icon (with retries).");
-
-        ImageSearchResultData stamina = searchForBubble(StorehouseBubbleDetector.Kind.STAMINA);
-
-        if (!stamina.isFound()) {
-            logWarning("Stamina icon not found after retries.");
-            return;
-        }
-
-        logInfo("Stamina icon found. Tapping to open popup.");
-        tapInside(stamina);
-
-        logDebug("Waiting for claim button to appear in popup...");
-        if (!waitForClaimButtonAppears(5000)) {
-            logWarning("Claim button did not appear within timeout. Popup may not have loaded properly.");
-            return;
-        }
-
-        logDebug("Claim button confirmed visible. Proceeding with claim.");
-        claimStaminaReward();
-    }
-
-    /**
-     * Waits for the claim button to appear on screen after popup opens.
-     * Polls the claim button region to detect when popup is ready.
-     * Returns true if button appears/is confirmed, false if timeout.
-     */
-    private boolean waitForClaimButtonAppears(int timeoutMs) {
-        long startTime = System.currentTimeMillis();
-        int pollIntervalMs = 400;
-        
-        while (System.currentTimeMillis() - startTime < timeoutMs) {
-            try {
-                sleepTask(pollIntervalMs);
-                
-                // Try to detect if popup is active by checking for visual changes in claim button area
-                // If screen is responsive and no error, button region is likely ready
-                logDebug("Poll: checking claim button area visibility (elapsed " + 
-                    (System.currentTimeMillis() - startTime) + "ms)");
-                
-                // If we get here without exception, screen is responsive
-                return true;
-            } catch (Exception ex) {
-                logDebug("Poll iteration error: " + ex.getMessage());
-                continue;
+    private ImageSearchResultData awaitStaminaClaimButton() {
+        SearchConfig claimSearch = SearchConfig.builder()
+                .withArea(new AreaData(STAMINA_CLAIM_BUTTON_TOP_LEFT, STAMINA_CLAIM_BUTTON_BOTTOM_RIGHT))
+                .withThreshold(CLAIM_BUTTON_THRESHOLD)
+                .withMaxAttempts(1)
+                .withDelay(0)
+                .build();
+        long deadline = System.nanoTime() + Duration.ofMillis(CLAIM_BUTTON_TIMEOUT_MILLIS).toNanos();
+        while (System.nanoTime() < deadline) {
+            ImageSearchResultData claimButton = templateSearchHelper.locatePattern(
+                    TemplatesEnum.DAILY_MISSION_CLAIM_BUTTON, claimSearch);
+            if (claimButton != null && claimButton.isFound()) {
+                return claimButton;
             }
+            sleepTask(CLAIM_BUTTON_POLL_INTERVAL_MILLIS);
         }
-        
-        logWarning("Claim button visibility timeout after " + timeoutMs + "ms");
-        return false;
+        return null;
     }
 
-    /**
-     * Claims the stamina reward and updates stamina service.
-     */
-    private void claimStaminaReward() {
-        // Let the stamina details screen finish rendering before the amount OCR.
-        sleepTask(1000);
-
-        // Dismiss tutorial overlay (if present) by tapping on a safe neutral area, not on the stamina display itself
-        logDebug("Clearing tutorial overlays if present");
-        try {
-            // Tap center-left area to dismiss any hand tutorials without interfering with stamina display
-            tapInside(new PointData(200, 600), new PointData(250, 700), 1, 200);
-            sleepTask(300);
-        } catch (Exception e) {
-            logDebug("Overlay clear attempt failed or not needed: " + e.getMessage());
-        }
-
-        // Read Agnes bonus stamina amount
-        Integer agnesStamina = integerHelper.attemptRecognition(
+    private Integer readAgnesBonus() {
+        return integerHelper.attemptRecognition(
                 STAMINA_AMOUNT_TOP_LEFT,
                 STAMINA_AMOUNT_BOTTOM_RIGHT,
                 TIMER_OCR_MAX_ATTEMPTS,
@@ -325,61 +336,47 @@ public class StorehouseChestRoutine extends DelayedTask {
                 STAMINA_OCR_SETTINGS,
                 text -> RegexNumberParser.conformsTo(text, Pattern.compile(".*?(\\d+).*")),
                 text -> RegexNumberParser.extractByPattern(text, Pattern.compile(".*?(\\d+).*")));
+    }
 
-        logDebug("Agnes stamina OCR result: " + (agnesStamina != null ? agnesStamina : "null"));
+    private void dismissStaminaTutorial() {
+        sleepTask(1_000);
+        // Dismiss tutorial overlay (if present) by tapping on a safe neutral area, not on the stamina display itself
+        logDebug("Clearing tutorial overlays if present");
+        try {
+            // Tap center-left area to dismiss any hand tutorials without interfering with stamina display
+            tapInside(new PointData(200, 600), new PointData(250, 700), 1, 200);
+            sleepTask(300);
+        } catch (RuntimeException e) {
+            TaskControlSignals.rethrowControlSignal(e);
+            logDebug("Overlay clear attempt failed or not needed: " + e.getMessage());
+        }
+        sleepTask(300);
+    }
 
-        // Claim button - ensure proper delay before clicking
-        sleepTask(500);
-        logDebug("Clicking stamina claim button at region " + STAMINA_CLAIM_BUTTON_TOP_LEFT + " - " + STAMINA_CLAIM_BUTTON_BOTTOM_RIGHT);
-        tapInside(STAMINA_CLAIM_BUTTON_TOP_LEFT, STAMINA_CLAIM_BUTTON_BOTTOM_RIGHT);
-        sleepTask(4000); // Wait for claim animation
+    private StorehouseVisitFlow.CooldownRead readCooldown() {
+        logInfo("Neither Storehouse reward bubble is present; reading the cooldown.");
+        String timer = readBuildingCountdown(buildingCountdownSettings());
+        if (timer == null) {
+            timer = readBuildingCountdown(buildingCountdownWhiteSettings());
+        }
+        if (timer == null) {
+            logWarning("Storehouse cooldown OCR was unreadable; using the one-hour fallback.");
+            return StorehouseVisitFlow.CooldownRead.unreadable("OCR returned no accepted countdown");
+        }
 
-        // Update stamina service
-        StaminaService.getServices().addExternalStamina(profile.getId(), BASE_STOREHOUSE_STAMINA);
-
-        if (agnesStamina != null && agnesStamina > 0) {
-            StaminaService.getServices().addExternalStamina(profile.getId(), agnesStamina);
-            logInfo(String.format("Claimed %d base stamina + %d from Agnes bonus.",
-                    BASE_STOREHOUSE_STAMINA, agnesStamina));
-        } else {
-            logInfo("Claimed " + BASE_STOREHOUSE_STAMINA + " base stamina.");
+        logInfo("Storehouse cooldown OCR read: '" + timer + "'.");
+        try {
+            Duration cooldown = GameTimeUtils.parseDuration(timer);
+            if (cooldown.isZero() || cooldown.isNegative()) {
+                return StorehouseVisitFlow.CooldownRead.invalid("Countdown was not positive: " + timer);
+            }
+            return StorehouseVisitFlow.CooldownRead.valid(cooldown);
+        } catch (RuntimeException invalid) {
+            return StorehouseVisitFlow.CooldownRead.invalid("Countdown could not be parsed: " + timer);
         }
     }
 
-    /**
-     * Reads timer using fallback OCR region.
-     * Used when chest is not found but UI is still visible.
-     */
-    private LocalDateTime readFallbackTimer() {
-        logDebug("Attempting fallback timer reading.");
-
-        LocalDateTime cooldown = readBuildingCountdown(buildingCountdownSettings());
-        if (cooldown == null) {
-            cooldown = readBuildingCountdown(buildingCountdownWhiteSettings());
-        }
-
-        if (cooldown == null) {
-            logWarning("OCR returned empty time text");
-            return null;
-        }
-
-        logDebug("Time OCR result: '" + GameTimeUtils.formatCountdown(cooldown) + "'");
-
-        long secondsDiff = Duration.between(LocalDateTime.now(), cooldown).getSeconds();
-
-        if (secondsDiff > MAX_TIMER_SECONDS) {
-            String snapshot = TaskDiagnosticSnapshots.capture(
-                    emuManager, EMULATOR_NUMBER, "storehousechest", "timer-out-of-range");
-            logWarning(String.format("Timer exceeds 2 hours (%d min), using 1 hour fallback.", secondsDiff / 60));
-            logWarning(snapshot);
-            nextChestTimeFallback = true;
-            return LocalDateTime.now().plusHours(UNREADABLE_WITHOUT_CHEST_HOURS);
-        }
-
-        return cooldown;
-    }
-
-    private LocalDateTime readBuildingCountdown(OcrSettingsData settings) {
+    private String readBuildingCountdown(OcrSettingsData settings) {
         return textHelper.attemptRecognition(
                 FALLBACK_TIMER_TOP_LEFT,
                 FALLBACK_TIMER_BOTTOM_RIGHT,
@@ -387,34 +384,39 @@ public class StorehouseChestRoutine extends DelayedTask {
                 200L,
                 settings,
                 GameTimeUtils::isAcceptedFormat,
-                text -> LocalDateTime.now().plus(GameTimeUtils.parseDuration(text)));
+                text -> text);
     }
 
-    /**
-     * Next visit from the chest countdown alone. A missing or past countdown
-     * retries after five minutes. A stored stamina instant is not an input:
-     * a visible can is claimed on the current visit.
-     */
-    static boolean fallbackAfterRead(boolean markedOutOfRange, LocalDateTime recognized) {
-        return recognized == null || markedOutOfRange;
+    private void captureInterfaceFailure(String situation) {
+        String snapshot = TaskDiagnosticSnapshots.capture(
+                emuManager, EMULATOR_NUMBER, "storehousechest", situation);
+        logWarning("Storehouse interface outcome uncertain; diagnostic snapshot: " + snapshot);
     }
 
-    static String scheduleReason(boolean fallback) {
-        return fallback ? "timer unreadable or invalid (fallback)" : "validated chest timer";
-    }
-
-    static LocalDateTime nextChestVisit(LocalDateTime now, LocalDateTime nextChestTime) {
-        if (nextChestTime == null || nextChestTime.isBefore(now)) {
-            return now.plusMinutes(FALLBACK_RESCHEDULE_MINUTES);
+    private void setVisitState(StorehouseVisitFlow.VisitState next, String reason) {
+        if (visitState != next) {
+            logInfo("Storehouse visit state: " + visitState + " -> " + next + " (" + reason + ")");
+        } else {
+            logInfo("Storehouse visit state remains " + next + " (" + reason + ")");
         }
-        return nextChestTime;
+        visitState = next;
     }
 
-    static LocalDateTime nextVisitWhenChestAbsent(LocalDateTime now, LocalDateTime recognized) {
-        if (recognized == null || recognized.isBefore(now)) {
-            return now.plusHours(UNREADABLE_WITHOUT_CHEST_HOURS);
+    private void setActivityPhase(StorehouseVisitFlow.ActivityPhase next) {
+        if (activityPhase != next) {
+            logInfo("Storehouse activity phase: " + activityPhase + " -> " + next);
+            activityPhase = next;
         }
-        return recognized;
+    }
+
+    private AreaData expandedArea(AreaData area, int margin) {
+        RawImageData raw = emuManager.captureScreen(EMULATOR_NUMBER);
+        BufferedImage frame = ImageConverter.toBufferedImage(raw);
+        int left = Math.max(0, area.topLeft().getX() - margin);
+        int top = Math.max(0, area.topLeft().getY() - margin);
+        int right = Math.min(frame.getWidth() - 1, area.bottomRight().getX() + margin);
+        int bottom = Math.min(frame.getHeight() - 1, area.bottomRight().getY() + margin);
+        return new AreaData(new PointData(left, top), new PointData(right, bottom));
     }
 
     static OcrSettingsData buildingCountdownSettings() {
@@ -432,24 +434,6 @@ public class StorehouseChestRoutine extends DelayedTask {
                 .setTextColor(textColor)
                 .charWhitelist(BUILDING_COUNTDOWN_WHITELIST)
                 .build();
-    }
-
-    private void scheduleToNearestTime() {
-        LocalDateTime now = LocalDateTime.now();
-
-        if (nextChestTime != null && nextChestTime.isBefore(now)) {
-            logDebug("Chest time is in the past, treating as invalid.");
-            nextChestTime = null;
-            nextChestTimeFallback = true;
-        }
-
-        LocalDateTime scheduledTime = nextChestVisit(now, nextChestTime);
-        String reason = scheduleReason(nextChestTimeFallback);
-
-        logInfo(String.format("Rescheduling for %s at: %s",
-                reason, scheduledTime.format(DATETIME_FORMATTER)));
-
-        reschedule(scheduledTime);
     }
 
     @Override
