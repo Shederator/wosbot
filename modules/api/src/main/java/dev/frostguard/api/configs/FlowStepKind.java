@@ -16,6 +16,7 @@ public enum FlowStepKind {
     SIDEBAR_NAVIGATION("Sidebar Navigation", "Open a sidebar section or destination"),
     ALLIANCE_NAVIGATION("Alliance Navigation", "Open a selected Alliance menu"),
     EVENT_NAVIGATION("Event Navigation", "Open a selected Event menu"),
+    DEALS_NAVIGATION("Deals Navigation", "Open a selected Deals destination"),
     NAVIGATE("Navigate", "Ensure correct screen location (Home/World)");
 
     private final String label;

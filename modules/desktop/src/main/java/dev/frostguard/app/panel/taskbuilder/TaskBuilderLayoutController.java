@@ -7,6 +7,7 @@ import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.helper.NavigationHelper.AllianceMenu;
 import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
+import dev.frostguard.engine.helper.NavigationHelper.DealsTarget;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.domain.AutomationBlueprint;
@@ -109,6 +110,9 @@ public class TaskBuilderLayoutController {
     @FXML private VBox eventNavigationPropsBox;
     @FXML private ComboBox<EventMenu> eventMenuCombo;
     @FXML private Label eventMenuInvalidLabel;
+    @FXML private VBox dealsNavigationPropsBox;
+    @FXML private ComboBox<DealsTarget> dealsTargetCombo;
+    @FXML private Label dealsTargetInvalidLabel;
     @FXML private VBox ocrPropsBox;
     @FXML private TextField ocrTlXField, ocrTlYField, ocrBrXField, ocrBrYField;
     @FXML private ComboBox<String> ocrConditionCombo;
@@ -314,6 +318,11 @@ public class TaskBuilderLayoutController {
             eventMenuCombo.setConverter(menuConverter(EventMenu.class));
             eventMenuCombo.setValue(EventMenu.HERO_MISSION);
         }
+        if (dealsTargetCombo != null) {
+            dealsTargetCombo.setItems(FXCollections.observableArrayList(DealsTarget.values()));
+            dealsTargetCombo.setConverter(menuConverter(DealsTarget.class));
+            dealsTargetCombo.setValue(DealsTarget.BANK);
+        }
         addAutoApplyListeners();
         setStatus("Ready — add nodes from the toolbox");
     }
@@ -407,6 +416,11 @@ public class TaskBuilderLayoutController {
         if (eventMenuCombo != null) {
             eventMenuCombo.valueProperty().addListener((obs, oldV, newV) -> {
                 if (!isBinding) handleApplyEventNavigationProps(null);
+            });
+        }
+        if (dealsTargetCombo != null) {
+            dealsTargetCombo.valueProperty().addListener((obs, oldV, newV) -> {
+                if (!isBinding) handleApplyDealsNavigationProps(null);
             });
         }
         if (sidebarModeCombo != null && sidebarTargetCombo != null) {
@@ -1068,6 +1082,7 @@ public class TaskBuilderLayoutController {
     @FXML private void handleAddSidebarNavigationNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.SIDEBAR_NAVIGATION); }
     @FXML private void handleAddAllianceNavigationNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.ALLIANCE_NAVIGATION); }
     @FXML private void handleAddEventNavigationNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.EVENT_NAVIGATION); }
+    @FXML private void handleAddDealsNavigationNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.DEALS_NAVIGATION); }
 
     private void addNodeToCanvas(FlowStepKind type) {
         ensureSession();
@@ -1088,6 +1103,8 @@ public class TaskBuilderLayoutController {
                     AutomationStep.PARAM_ALLIANCE_MENU, AllianceMenu.WAR.name());
             case EVENT_NAVIGATION -> node.setParam(
                     AutomationStep.PARAM_EVENT_MENU, EventMenu.HERO_MISSION.name());
+            case DEALS_NAVIGATION -> node.setParam(
+                    AutomationStep.PARAM_DEALS_TARGET, DealsTarget.BANK.name());
             default -> {}
         }
 
@@ -1752,6 +1769,10 @@ public class TaskBuilderLayoutController {
             eventNavigationPropsBox.setVisible(false);
             eventNavigationPropsBox.setManaged(false);
         }
+        if (dealsNavigationPropsBox != null) {
+            dealsNavigationPropsBox.setVisible(false);
+            dealsNavigationPropsBox.setManaged(false);
+        }
         ocrPropsBox.setVisible(false); ocrPropsBox.setManaged(false);
         if (templatePropsBox != null) { templatePropsBox.setVisible(false); templatePropsBox.setManaged(false); }
         
@@ -1817,6 +1838,14 @@ public class TaskBuilderLayoutController {
                 AllianceMenu selection = menuSelection(storedTarget, AllianceMenu.class);
                 allianceMenuCombo.setValue(selection);
                 showInvalidMenuSelection(allianceMenuInvalidLabel, storedTarget, selection);
+            }
+            case DEALS_NAVIGATION -> {
+                dealsNavigationPropsBox.setVisible(true);
+                dealsNavigationPropsBox.setManaged(true);
+                String storedTarget = node.getParam(AutomationStep.PARAM_DEALS_TARGET);
+                DealsTarget selection = menuSelection(storedTarget, DealsTarget.class);
+                dealsTargetCombo.setValue(selection);
+                showInvalidMenuSelection(dealsTargetInvalidLabel, storedTarget, selection);
             }
             case EVENT_NAVIGATION -> {
                 eventNavigationPropsBox.setVisible(true);
@@ -1960,6 +1989,14 @@ public class TaskBuilderLayoutController {
         selectedNode.setParam(AutomationStep.PARAM_EVENT_MENU, eventMenuCombo.getValue().name());
         showInvalidMenuSelection(eventMenuInvalidLabel, eventMenuCombo.getValue().name(),
                 eventMenuCombo.getValue());
+        refreshCard(selectedNode);
+    }
+
+    @FXML private void handleApplyDealsNavigationProps(ActionEvent e) {
+        if (selectedNode == null || dealsTargetCombo == null || dealsTargetCombo.getValue() == null) return;
+        selectedNode.setParam(AutomationStep.PARAM_DEALS_TARGET, dealsTargetCombo.getValue().name());
+        showInvalidMenuSelection(dealsTargetInvalidLabel, dealsTargetCombo.getValue().name(),
+                dealsTargetCombo.getValue());
         refreshCard(selectedNode);
     }
 

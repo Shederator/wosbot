@@ -14,6 +14,7 @@ import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.engine.helper.NavigationHelper.DealsTarget;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.helper.TemplateSearchHelper;
 import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
@@ -72,21 +73,6 @@ public class BankRoutine extends DelayedTask {
 
 	/** Number of taps to close withdrawal confirmation screen */
 	private static final int CLOSE_SCREEN_TAP_COUNT = 3;
-
-	/** Maximum attempts to open and verify the bank interface. */
-	private static final int BANK_NAVIGATION_ATTEMPTS = 2;
-
-	/** Time for the deals carousel to stop moving after the final swipe. */
-	private static final long DEALS_CAROUSEL_SETTLE_MS = 1000L;
-
-	/** Time for the selected deals tab to render its bank-specific controls. */
-	private static final long BANK_INTERFACE_SETTLE_MS = 1500L;
-
-	// Navigation coordinates
-	private static final PointData SWIPE_TAB_START = new PointData(630, 143);
-	private static final PointData SWIPE_TAB_END = new PointData(2, 128);
-	private static final PointData DEALS_TAB_BAR_TOP_LEFT = new PointData(0, 80);
-	private static final PointData DEALS_TAB_BAR_BOTTOM_RIGHT = new PointData(720, 190);
 
 	// Withdrawal screen close button area
 	private static final PointData CLOSE_BUTTON_POINT = new PointData(670, 40);
@@ -180,138 +166,14 @@ public class BankRoutine extends DelayedTask {
 	// NAVIGATION
 	// ===============================
 
-	/**
-	 * Navigates to the bank section in the game.
-	 * 
-	 * <p>
-	 * <b>Navigation Flow:</b>
-	 * <ol>
-	 * <li>Find and tap Deals button</li>
-	 * <li>Swipe left twice to reveal bank tab</li>
-	 * <li>Find and tap Bank option</li>
-	 * </ol>
-	 * 
-	 * @return true if navigation successful, false otherwise
-	 */
+	/** Navigates to Bank through the shared Deals navigation helper. */
 	private boolean navigateToBank() {
 		logInfo("Navigating to bank");
-
-		for (int attempt = 1; attempt <= BANK_NAVIGATION_ATTEMPTS; attempt++) {
-			if (attempt > 1) {
-				logInfo("Retrying bank navigation after the previous tab did not show bank controls");
-				navigationHelper.ensureCorrectScreenLocation(LaunchPoint.HOME);
-			}
-
-			if (!findAndTapDealsButton()) {
-				logWarning("Bank navigation attempt " + attempt + "/" + BANK_NAVIGATION_ATTEMPTS
-						+ " could not open Deals");
-				continue;
-			}
-
-			swipeToRevealBankTab();
-			if (findAndTapBankOption(attempt)) {
-				return true;
-			}
-		}
-
+		if (navigationHelper.navigateToDeals(DealsTarget.BANK)) return true;
 		String snapshot = TaskDiagnosticSnapshots.capture(
 				emuManager, EMULATOR_NUMBER, "bank", "navigation-failed");
-		logWarning("Bank navigation failed after " + BANK_NAVIGATION_ATTEMPTS
-				+ " attempts; " + snapshot);
+		logWarning("Bank navigation failed; " + snapshot);
 		return false;
-	}
-
-	/**
-	 * Finds and taps the Deals button on the home screen.
-	 * 
-	 * @return true if button found and tapped, false otherwise
-	 */
-	private boolean findAndTapDealsButton() {
-		ImageSearchResultData dealsResult = templateSearchHelper.locatePattern(
-				TemplatesEnum.HOME_DEALS_BUTTON,
-				SearchConfigConstants.DEFAULT_SINGLE);
-
-		if (!dealsResult.isFound()) {
-			logWarning("Deals button not found");
-			return false;
-		}
-
-		tapInside(dealsResult);
-		sleepTask(2000); // Wait for deals menu to open
-		return true;
-	}
-
-	/**
-	 * Swipes left twice to reveal the bank tab.
-	 * 
-	 * <p>
-	 * The bank option is often hidden and requires swiping
-	 * through the deals carousel to reveal it.
-	 */
-	private void swipeToRevealBankTab() {
-		logDebug("Swiping to reveal bank tab");
-
-		swipe(SWIPE_TAB_START, SWIPE_TAB_END);
-		sleepTask(400); // Let the first carousel movement establish its final position.
-
-		swipe(SWIPE_TAB_START, SWIPE_TAB_END);
-		sleepTask(DEALS_CAROUSEL_SETTLE_MS);
-	}
-
-	/**
-	 * Finds and taps the Bank option in the deals menu.
-	 * 
-	 * @return true if bank option found and tapped, false otherwise
-	 */
-	private boolean findAndTapBankOption(int attempt) {
-		ImageSearchResultData bankResult = templateSearchHelper.locatePattern(
-				TemplatesEnum.EVENTS_DEALS_BANK,
-				TemplateSearchHelper.SearchConfig.builder()
-						.withMaxAttempts(1)
-						.withThreshold(90)
-						.withDelay(300L)
-						.withCoordinates(DEALS_TAB_BAR_TOP_LEFT, DEALS_TAB_BAR_BOTTOM_RIGHT)
-						.build());
-
-		if (!bankResult.isFound()) {
-			logWarning("Bank option not found in deals menu on attempt " + attempt + "/"
-					+ BANK_NAVIGATION_ATTEMPTS);
-			return false;
-		}
-
-		tapInside(bankResult);
-		sleepTask(BANK_INTERFACE_SETTLE_MS);
-
-		String evidence = findBankInterfaceEvidence();
-		if (evidence != null) {
-			logInfo("Successfully navigated to bank; verified by " + evidence);
-			return true;
-		}
-
-		logWarning("Tapped bank candidate at " + bankResult.getPoint() + " with score "
-				+ String.format("%.1f", bankResult.getMatchScore())
-				+ "%, but no bank-specific controls appeared on attempt " + attempt + "/"
-				+ BANK_NAVIGATION_ATTEMPTS);
-		return false;
-	}
-
-	private String findBankInterfaceEvidence() {
-		if (templateSearchHelper.locatePattern(
-				TemplatesEnum.EVENTS_DEALS_BANK_WITHDRAW,
-				SearchConfigConstants.DEFAULT_SINGLE).isFound()) {
-			return "withdraw control";
-		}
-		if (templateSearchHelper.locatePattern(
-				TemplatesEnum.EVENTS_DEALS_BANK_INDEPOSIT,
-				SearchConfigConstants.DEFAULT_SINGLE).isFound()) {
-			return "active-deposit control";
-		}
-		if (templateSearchHelper.locatePattern(
-				TemplatesEnum.EVENTS_DEALS_BANK_DEPOSIT,
-				SearchConfigConstants.DEFAULT_SINGLE).isFound()) {
-			return "deposit control";
-		}
-		return null;
 	}
 
 	// ===============================

@@ -29,6 +29,7 @@ import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.nav.SidebarSection;
 import dev.frostguard.engine.helper.NavigationHelper.AllianceMenu;
 import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
+import dev.frostguard.engine.helper.NavigationHelper.DealsTarget;
 import dev.frostguard.vision.logging.ProfileContextLogger;
 
 class TaskBuilderServiceTest {
@@ -112,6 +113,111 @@ class TaskBuilderServiceTest {
 
             assertFalse(called.get());
             assertFalse(step.isExecuted());
+        } finally {
+            restoreWorkspace(originalWorkspace);
+        }
+    }
+
+    @Test
+    void executesBothDealsTargetsThroughTheSelectedProfile() {
+        String originalWorkspace = System.getProperty(WorkspacePaths.WORKSPACE_PROPERTY);
+        System.setProperty(WorkspacePaths.WORKSPACE_PROPERTY, tempDir.toString());
+        try {
+            AtomicReference<DealsTarget> observed = new AtomicReference<>();
+            TaskBuilderService service = new TaskBuilderService(new ObjectMapper(),
+                    (device, profile, tab) -> true,
+                    new TaskBuilderService.SidebarNavigationAction() {
+                        @Override
+                        public boolean openSection(String device, AccountDescriptor profile, SidebarSection section) {
+                            return true;
+                        }
+                        @Override
+                        public boolean navigateTo(String device, AccountDescriptor profile,
+                                                  SidebarDestination destination) {
+                            return true;
+                        }
+                    },
+                    (device, profile, target) -> true,
+                    (device, profile, target) -> true,
+                    (device, profile, target) -> { observed.set(target); return true; });
+            AccountDescriptor profile = new AccountDescriptor(42L, "Test Profile", "3", true, 1L, 30L);
+            service.startSession("Deals probe", profile);
+
+            for (DealsTarget target : DealsTarget.values()) {
+                AutomationStep node = new AutomationStep(1, FlowStepKind.DEALS_NAVIGATION);
+                node.setParam(AutomationStep.PARAM_DEALS_TARGET, target.name());
+                assertTrue(service.executeNode(node));
+                assertEquals(target, observed.get());
+                assertTrue(node.isExecuted());
+            }
+        } finally {
+            restoreWorkspace(originalWorkspace);
+        }
+    }
+
+    @Test
+    void rejectsInvalidDealsTargetWithoutCallingNavigator() {
+        String originalWorkspace = System.getProperty(WorkspacePaths.WORKSPACE_PROPERTY);
+        System.setProperty(WorkspacePaths.WORKSPACE_PROPERTY, tempDir.toString());
+        try {
+            AtomicBoolean called = new AtomicBoolean();
+            TaskBuilderService service = new TaskBuilderService(new ObjectMapper(),
+                    (device, profile, tab) -> true,
+                    new TaskBuilderService.SidebarNavigationAction() {
+                        @Override
+                        public boolean openSection(String device, AccountDescriptor profile, SidebarSection section) {
+                            return true;
+                        }
+                        @Override
+                        public boolean navigateTo(String device, AccountDescriptor profile,
+                                                  SidebarDestination destination) {
+                            return true;
+                        }
+                    },
+                    (device, profile, target) -> true,
+                    (device, profile, target) -> true,
+                    (device, profile, target) -> { called.set(true); return true; });
+            service.startSession("Deals probe", new AccountDescriptor(42L, "Test Profile", "3", true, 1L, 30L));
+            AutomationStep node = new AutomationStep(1, FlowStepKind.DEALS_NAVIGATION);
+            node.setParam(AutomationStep.PARAM_DEALS_TARGET, "UNKNOWN");
+
+            assertFalse(service.executeNode(node));
+            assertFalse(called.get());
+            assertFalse(node.isExecuted());
+        } finally {
+            restoreWorkspace(originalWorkspace);
+        }
+    }
+
+    @Test
+    void leavesDealsNodeUnexecutedWhenDestinationIsNotVerified() {
+        String originalWorkspace = System.getProperty(WorkspacePaths.WORKSPACE_PROPERTY);
+        System.setProperty(WorkspacePaths.WORKSPACE_PROPERTY, tempDir.toString());
+        try {
+            TaskBuilderService service = new TaskBuilderService(new ObjectMapper(),
+                    (device, profile, tab) -> true,
+                    new TaskBuilderService.SidebarNavigationAction() {
+                        @Override
+                        public boolean openSection(String device, AccountDescriptor profile, SidebarSection section) {
+                            return true;
+                        }
+
+                        @Override
+                        public boolean navigateTo(String device, AccountDescriptor profile,
+                                                  SidebarDestination destination) {
+                            return true;
+                        }
+                    },
+                    (device, profile, target) -> true,
+                    (device, profile, target) -> true,
+                    (device, profile, target) -> false);
+            service.startSession("Deals probe", new AccountDescriptor(42L, "Test Profile", "3", true, 1L, 30L));
+            AutomationStep node = new AutomationStep(1, FlowStepKind.DEALS_NAVIGATION);
+            node.setParam(AutomationStep.PARAM_DEALS_TARGET, DealsTarget.JOURNEY_OF_LIGHT.name());
+            node.setExecuted(true);
+
+            assertFalse(service.executeNode(node));
+            assertFalse(node.isExecuted());
         } finally {
             restoreWorkspace(originalWorkspace);
         }

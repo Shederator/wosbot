@@ -147,6 +147,37 @@ class TaskCodeGeneratorTest {
     }
 
     @Test
+    void generatesDealsNavigationForBothTargetsWithSafeFailureHandling() {
+        AutomationBlueprint blueprint = new AutomationBlueprint("Deals probe");
+        for (String target : new String[] {"BANK", "JOURNEY_OF_LIGHT"}) {
+            AutomationStep step = new AutomationStep(target.equals("BANK") ? 1 : 2,
+                    FlowStepKind.DEALS_NAVIGATION);
+            step.setParam(AutomationStep.PARAM_DEALS_TARGET, target);
+            blueprint.addNode(step);
+        }
+
+        String source = new TaskCodeGenerator().generate(blueprint, "deals_probe", "Deals probe");
+
+        assertTrue(source.contains("import dev.frostguard.engine.helper.NavigationHelper.DealsTarget;"));
+        assertTrue(source.contains("navigationHelper.navigateToDeals(DealsTarget.BANK)"));
+        assertTrue(source.contains("navigationHelper.navigateToDeals(DealsTarget.JOURNEY_OF_LIGHT)"));
+        assertTrue(source.contains("logWarning(\"Deals navigation failed: BANK\")"));
+        assertTrue(source.contains("logWarning(\"Deals navigation failed: JOURNEY_OF_LIGHT\")"));
+        assertTrue(source.contains("__state = -1;"));
+    }
+
+    @Test
+    void rejectsInvalidDealsTarget() {
+        AutomationBlueprint blueprint = new AutomationBlueprint("Invalid Deals");
+        AutomationStep step = new AutomationStep(7, FlowStepKind.DEALS_NAVIGATION);
+        step.setParam(AutomationStep.PARAM_DEALS_TARGET, "UNKNOWN");
+        blueprint.addNode(step);
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> new TaskCodeGenerator().generate(blueprint, "invalid_deals", "Invalid Deals"));
+    }
+
+    @Test
     void rejectsInvalidAllianceAndEventTargets() {
         for (FlowStepKind kind : new FlowStepKind[] {
                 FlowStepKind.ALLIANCE_NAVIGATION, FlowStepKind.EVENT_NAVIGATION }) {

@@ -9,6 +9,7 @@ import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.nav.SidebarSection;
 import dev.frostguard.engine.helper.NavigationHelper.AllianceMenu;
 import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
+import dev.frostguard.engine.helper.NavigationHelper.DealsTarget;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -80,6 +81,7 @@ public class TaskCodeGenerator {
         out.append("import dev.frostguard.engine.nav.SidebarDestination;\n");
         out.append("import dev.frostguard.engine.helper.NavigationHelper.AllianceMenu;\n");
         out.append("import dev.frostguard.engine.helper.NavigationHelper.EventMenu;\n");
+        out.append("import dev.frostguard.engine.helper.NavigationHelper.DealsTarget;\n");
         out.append("import dev.frostguard.engine.schedule.DelayedTask;\n");
         out.append("import dev.frostguard.engine.schedule.LaunchPoint;\n");
         out.append("import dev.frostguard.engine.service.TemplatePathResolver;\n");
@@ -193,6 +195,7 @@ public class TaskCodeGenerator {
             case SIDEBAR_NAVIGATION -> writeSidebarNavigation(out, node, nodeEdges);
             case ALLIANCE_NAVIGATION -> writeAllianceNavigation(out, node, nodeEdges);
             case EVENT_NAVIGATION -> writeEventNavigation(out, node, nodeEdges);
+            case DEALS_NAVIGATION -> writeDealsNavigation(out, node, nodeEdges);
             default              -> out.append(i5).append("// Unrecognised action\n");
         }
 
@@ -201,7 +204,8 @@ public class TaskCodeGenerator {
                 && node.getType() != FlowStepKind.SHOP_NAVIGATION
                 && node.getType() != FlowStepKind.SIDEBAR_NAVIGATION
                 && node.getType() != FlowStepKind.ALLIANCE_NAVIGATION
-                && node.getType() != FlowStepKind.EVENT_NAVIGATION) {
+                && node.getType() != FlowStepKind.EVENT_NAVIGATION
+                && node.getType() != FlowStepKind.DEALS_NAVIGATION) {
             int nextId = node.getNextNodeId();
             LoopDetector.BackEdge edge = pickEdge(nodeEdges, false);
             if (edge != null && nextId > 0) {
@@ -351,6 +355,21 @@ public class TaskCodeGenerator {
         writeMenuNavigation(out, node, nodeEdges,
                 "navigateToEventMenu(EventMenu." + target.name() + ")",
                 "Event navigation failed: " + target.name());
+    }
+
+    private void writeDealsNavigation(StringBuilder out, AutomationStep node,
+                                     List<LoopDetector.BackEdge> nodeEdges) {
+        String configuredTarget = node.getParam(AutomationStep.PARAM_DEALS_TARGET);
+        DealsTarget target;
+        try {
+            target = DealsTarget.valueOf(configuredTarget);
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            throw new IllegalArgumentException("Deals Navigation node #" + node.getId()
+                    + " has invalid dealsTarget: " + configuredTarget, exception);
+        }
+        writeMenuNavigation(out, node, nodeEdges,
+                "navigateToDeals(DealsTarget." + target.name() + ")",
+                "Deals navigation failed: " + target.name());
     }
 
     private void writeMenuNavigation(StringBuilder out, AutomationStep node,

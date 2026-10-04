@@ -8,6 +8,7 @@ import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.helper.NavigationHelper;
 import dev.frostguard.engine.helper.NavigationHelper.AllianceMenu;
 import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
+import dev.frostguard.engine.helper.NavigationHelper.DealsTarget;
 import dev.frostguard.engine.nav.ShopTab;
 import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.nav.SidebarSection;
@@ -60,6 +61,7 @@ public class TaskBuilderService {
     private final SidebarNavigationAction sidebarNavigationAction;
     private final AllianceNavigationAction allianceNavigationAction;
     private final EventNavigationAction eventNavigationAction;
+    private final DealsNavigationAction dealsNavigationAction;
     private AutomationBlueprint currentDefinition;
     private Path currentDefinitionDirectory;
     private String activeEmulatorNumber;
@@ -109,6 +111,17 @@ public class TaskBuilderService {
                        SidebarNavigationAction sidebarNavigationAction,
                        AllianceNavigationAction allianceNavigationAction,
                        EventNavigationAction eventNavigationAction) {
+        this(mapper, shopNavigationAction, sidebarNavigationAction, allianceNavigationAction,
+                eventNavigationAction, (emulatorNumber, profile, target) ->
+                        new NavigationHelper(EmulatorController.getInstance(), emulatorNumber, profile)
+                                .navigateToDeals(target));
+    }
+
+    TaskBuilderService(ObjectMapper mapper, ShopNavigationAction shopNavigationAction,
+                       SidebarNavigationAction sidebarNavigationAction,
+                       AllianceNavigationAction allianceNavigationAction,
+                       EventNavigationAction eventNavigationAction,
+                       DealsNavigationAction dealsNavigationAction) {
         this.emuManager = EmulatorController.getInstance();
         this.customTasksDir = WorkspacePaths.current().customTasks();
         this.mapper = mapper;
@@ -116,6 +129,7 @@ public class TaskBuilderService {
         this.sidebarNavigationAction = Objects.requireNonNull(sidebarNavigationAction);
         this.allianceNavigationAction = Objects.requireNonNull(allianceNavigationAction);
         this.eventNavigationAction = Objects.requireNonNull(eventNavigationAction);
+        this.dealsNavigationAction = Objects.requireNonNull(dealsNavigationAction);
         try {
             Files.createDirectories(customTasksDir);
         } catch (IOException e) {
@@ -144,6 +158,11 @@ public class TaskBuilderService {
     @FunctionalInterface
     interface EventNavigationAction {
         boolean navigate(String emulatorNumber, AccountDescriptor profile, EventMenu target);
+    }
+
+    @FunctionalInterface
+    interface DealsNavigationAction {
+        boolean navigate(String emulatorNumber, AccountDescriptor profile, DealsTarget target);
     }
 
     private static ObjectMapper defaultMapper() {
@@ -486,6 +505,7 @@ public class TaskBuilderService {
             case SIDEBAR_NAVIGATION -> executeSidebarNavigation(node);
             case ALLIANCE_NAVIGATION -> executeAllianceNavigation(node);
             case EVENT_NAVIGATION -> executeEventNavigation(node);
+            case DEALS_NAVIGATION -> executeDealsNavigation(node);
             case NAVIGATE        -> { runInfo("Navigate node recorded"); yield true; }
         };
     }
@@ -541,6 +561,21 @@ public class TaskBuilderService {
         runInfo("Task Builder navigating profile '{}' on emulator {} to event menu {}",
                 activeProfile.getName(), activeEmulatorNumber, target);
         return eventNavigationAction.navigate(activeEmulatorNumber, activeProfile, target);
+    }
+
+    private boolean executeDealsNavigation(AutomationStep node) {
+        String configuredTarget = node.getParam(AutomationStep.PARAM_DEALS_TARGET);
+        DealsTarget target;
+        try {
+            target = DealsTarget.valueOf(configuredTarget);
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            runWarn("Deals Navigation node #{} has invalid dealsTarget: '{}'", node.getId(), configuredTarget);
+            return false;
+        }
+        if (!hasNavigationProfile("Deals destination " + target)) return false;
+        runInfo("Task Builder navigating profile '{}' on emulator {} to Deals destination {}",
+                activeProfile.getName(), activeEmulatorNumber, target);
+        return dealsNavigationAction.navigate(activeEmulatorNumber, activeProfile, target);
     }
 
     private boolean executeSidebarNavigation(AutomationStep node) {

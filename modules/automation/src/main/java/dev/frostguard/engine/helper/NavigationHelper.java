@@ -26,6 +26,13 @@ import dev.frostguard.vision.logging.ProfileContextLogger;
 public class NavigationHelper {
 
     private static final int MAX_INTEL_NAV_PASSES = 3;
+    private static final int BANK_NAVIGATION_ATTEMPTS = 2;
+    private static final long DEALS_CAROUSEL_SETTLE_MS = 1000L;
+    private static final long BANK_INTERFACE_SETTLE_MS = 1500L;
+    private static final PointData DEALS_SWIPE_START = new PointData(630, 143);
+    private static final PointData DEALS_SWIPE_END = new PointData(2, 128);
+    private static final PointData DEALS_TAB_BAR_TOP_LEFT = new PointData(0, 80);
+    private static final PointData DEALS_TAB_BAR_BOTTOM_RIGHT = new PointData(720, 190);
     static final AreaData WORLD_INTEL_BUTTON_AREA = area(615, 800, 715, 1000);
     private static final TemplateSearchHelper.SearchConfig WORLD_INTEL_BUTTON_SEARCH =
             TemplateSearchHelper.SearchConfig.builder()
@@ -300,6 +307,103 @@ public class NavigationHelper {
         return new AreaData(new PointData(x1, y1), new PointData(x2, y2));
     }
 
+    // ── Deals destinations ────────────────────────────────────────────
+
+    /** Opens and verifies one of the supported destinations inside Deals. */
+    public boolean navigateToDeals(DealsTarget target) {
+        return switch (target) {
+            case BANK -> navigateToBankDealsTab();
+            case JOURNEY_OF_LIGHT -> navigateToJourneyOfLight();
+        };
+    }
+
+    private boolean navigateToBankDealsTab() {
+        broadcastInfo("Navigating to Bank through Deals");
+        for (int attempt = 1; attempt <= BANK_NAVIGATION_ATTEMPTS; attempt++) {
+            if (attempt > 1) {
+                broadcastInfo("Retrying Bank navigation after the destination was not verified");
+                ensureCorrectScreenLocation(LaunchPoint.HOME);
+            }
+            if (!openDealsPanel(2000L)) {
+                broadcastWarn("Bank navigation attempt " + attempt + "/" + BANK_NAVIGATION_ATTEMPTS
+                        + " could not open Deals");
+                continue;
+            }
+            emu.swipeScreen(device, DEALS_SWIPE_START, DEALS_SWIPE_END);
+            interruptibleWait(400L);
+            emu.swipeScreen(device, DEALS_SWIPE_START, DEALS_SWIPE_END);
+            interruptibleWait(DEALS_CAROUSEL_SETTLE_MS);
+            ImageSearchResultData bank = searcher.locatePattern(
+                    TemplatesEnum.EVENTS_DEALS_BANK,
+                    TemplateSearchHelper.SearchConfig.builder().withMaxAttempts(1).withThreshold(90)
+                            .withDelay(300L).withCoordinates(DEALS_TAB_BAR_TOP_LEFT, DEALS_TAB_BAR_BOTTOM_RIGHT)
+                            .build());
+            if (!bank.isFound()) {
+                broadcastWarn("Bank tab not found in Deals on attempt " + attempt + "/"
+                        + BANK_NAVIGATION_ATTEMPTS);
+                continue;
+            }
+            taps.tapInside(bank);
+            interruptibleWait(BANK_INTERFACE_SETTLE_MS);
+            String evidence = findBankInterfaceEvidence();
+            if (evidence != null) {
+                broadcastInfo("Reached Bank in Deals; verified by " + evidence);
+                return true;
+            }
+            broadcastWarn("Bank candidate was tapped, but bank controls were not detected on attempt "
+                    + attempt + "/" + BANK_NAVIGATION_ATTEMPTS);
+        }
+        broadcastWarn("Bank navigation failed after " + BANK_NAVIGATION_ATTEMPTS + " attempts");
+        return false;
+    }
+
+    private String findBankInterfaceEvidence() {
+        if (searcher.locatePattern(TemplatesEnum.EVENTS_DEALS_BANK_WITHDRAW,
+                SearchConfigConstants.DEFAULT_SINGLE).isFound()) return "withdraw control";
+        if (searcher.locatePattern(TemplatesEnum.EVENTS_DEALS_BANK_INDEPOSIT,
+                SearchConfigConstants.DEFAULT_SINGLE).isFound()) return "active-deposit control";
+        if (searcher.locatePattern(TemplatesEnum.EVENTS_DEALS_BANK_DEPOSIT,
+                SearchConfigConstants.DEFAULT_SINGLE).isFound()) return "deposit control";
+        return null;
+    }
+
+    private boolean navigateToJourneyOfLight() {
+        broadcastInfo("Navigating to Journey of Light through Deals");
+        if (!openDealsPanel(1500L)) {
+            broadcastWarn("Journey of Light navigation could not open Deals");
+            return false;
+        }
+        for (int attempt = 1; attempt <= 4; attempt++) {
+            if (attempt > 1) {
+                broadcastDebug("Retrying Journey of Light tab detection, attempt " + attempt + "/4");
+                interruptibleWait(1000L);
+            }
+            taps.tapInside(new AreaData(new PointData(529, 27), new PointData(635, 63)), 5, 300);
+            ImageSearchResultData selected = searcher.locatePattern(
+                    TemplatesEnum.JOURNEY_OF_LIGHT_TAB, SearchConfigConstants.DEFAULT_SINGLE);
+            ImageSearchResultData unselected = searcher.locatePattern(
+                    TemplatesEnum.JOURNEY_OF_LIGHT_UNSELECTED_TAB, SearchConfigConstants.DEFAULT_SINGLE);
+            if (!selected.isFound() && !unselected.isFound()) continue;
+            taps.tapInside(selected.isFound() ? selected : unselected);
+            interruptibleWait(500L);
+            taps.tapInside(new AreaData(new PointData(50, 220), new PointData(350, 260)));
+            interruptibleWait(500L);
+            broadcastInfo("Reached Journey of Light and selected its main tab");
+            return true;
+        }
+        broadcastWarn("Journey of Light tab was not detected after 4 attempts");
+        return false;
+    }
+
+    private boolean openDealsPanel(long settleMs) {
+        ImageSearchResultData deals = searcher.locatePattern(
+                TemplatesEnum.HOME_DEALS_BUTTON, SearchConfigConstants.DEFAULT_SINGLE);
+        if (!deals.isFound()) return false;
+        taps.tapInside(deals);
+        interruptibleWait(settleMs);
+        return true;
+    }
+
     // ── event menu ───────────────────────────────────────────────────
 
     public boolean navigateToEventMenu(EventMenu event) {
@@ -475,6 +579,7 @@ public class NavigationHelper {
     private enum ScreenState { HOME, WORLD, RECONNECT, UNKNOWN }
     public enum AllianceMenu { WAR, CHESTS, TERRITORY, SHOP, TECH, HELP, TRIUMPH }
     public enum EventMenu { HERO_MISSION, MERCENARY, ALLIANCE_CHAMPIONSHIP, ALLIANCE_MOBILIZATION, TUNDRA_TRUCK }
+    public enum DealsTarget { BANK, JOURNEY_OF_LIGHT }
 
     public enum EventMenuOpenResult { REACHED, PANEL_CLOSED, TAB_ABSENT }
 }

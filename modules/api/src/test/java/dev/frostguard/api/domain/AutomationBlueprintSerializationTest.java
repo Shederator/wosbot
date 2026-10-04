@@ -202,6 +202,25 @@ class AutomationBlueprintSerializationTest {
     }
 
     @Test
+    void preservesDealsDestinationAcrossSaveAndReload() throws Exception {
+        AutomationBlueprint blueprint = new AutomationBlueprint("deals probe");
+        AutomationStep bank = new AutomationStep(3, FlowStepKind.DEALS_NAVIGATION);
+        bank.setParam(AutomationStep.PARAM_DEALS_TARGET, "BANK");
+        blueprint.addNode(bank);
+        AutomationStep journey = new AutomationStep(4, FlowStepKind.DEALS_NAVIGATION);
+        journey.setParam(AutomationStep.PARAM_DEALS_TARGET, "JOURNEY_OF_LIGHT");
+        blueprint.addNode(journey);
+
+        AutomationBlueprint reloaded = mapper.readValue(
+                mapper.writeValueAsString(blueprint), AutomationBlueprint.class);
+
+        assertEquals(FlowStepKind.DEALS_NAVIGATION, reloaded.getSteps().get(0).getKind());
+        assertEquals("BANK", reloaded.getSteps().get(0).getParam(AutomationStep.PARAM_DEALS_TARGET));
+        assertEquals("JOURNEY_OF_LIGHT",
+                reloaded.getSteps().get(1).getParam(AutomationStep.PARAM_DEALS_TARGET));
+    }
+
+    @Test
     void keepsInsertedEntryStepAndConnectionsAcrossSaveAndReload() throws Exception {
         AutomationBlueprint imported = mapper.readValue(
                 mapper.writeValueAsString(sampleFlow()), AutomationBlueprint.class);

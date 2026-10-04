@@ -27,6 +27,7 @@ import java.util.Map;
  *   <li><b>SIDEBAR_NAVIGATION</b> — sidebarMode, sidebarTarget</li>
  *   <li><b>ALLIANCE_NAVIGATION</b> — allianceMenu</li>
  *   <li><b>EVENT_NAVIGATION</b> — eventMenu</li>
+ *   <li><b>DEALS_NAVIGATION</b> — dealsTarget</li>
  *   <li><b>NAVIGATE</b> — location</li>
  * </ul>
  *
@@ -57,6 +58,7 @@ public class AutomationStep {
     public static final String PARAM_SIDEBAR_TARGET = "sidebarTarget";
     public static final String PARAM_ALLIANCE_MENU = "allianceMenu";
     public static final String PARAM_EVENT_MENU = "eventMenu";
+    public static final String PARAM_DEALS_TARGET = "dealsTarget";
     public static final int NODE_NAME_MAX_LENGTH = 30;
 
     @JsonAlias("id")
@@ -370,6 +372,8 @@ public class AutomationStep {
             case ALLIANCE_NAVIGATION -> navigationSummary("Alliance", PARAM_ALLIANCE_MENU);
 
             case EVENT_NAVIGATION -> navigationSummary("Event", PARAM_EVENT_MENU);
+
+            case DEALS_NAVIGATION -> navigationSummary("Deals", PARAM_DEALS_TARGET);
 
             case NAVIGATE -> String.format("Navigate: %s",
                     resolveAttrOr("location", "HOME"));
