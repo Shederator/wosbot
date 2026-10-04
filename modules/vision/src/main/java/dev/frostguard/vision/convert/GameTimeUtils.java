@@ -477,4 +477,17 @@ private static final DateTimeFormatter STRICT_HMS =
         int sec = Integer.parseInt(segment);
         return sec >= 0 && sec <= 59;
     }
+
+    /**
+     * Parses an explicit {@code "mm:ss"} value without treating it as {@code "HH:mm"}.
+     *
+     * @param input raw OCR text, for example {@code "04:59"}
+     * @return a non-negative duration, or {@code null} when the value is invalid
+     */
+    public static Duration parseMinutesSeconds(String input) {
+        if (input == null || input.isBlank()) {
+            return null;
+        }
+        return attemptColonMinutesSeconds(input.replaceAll("\\s+", "").trim());
+    }
 }
