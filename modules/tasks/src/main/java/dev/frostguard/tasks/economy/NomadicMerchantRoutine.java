@@ -94,6 +94,11 @@ public class NomadicMerchantRoutine extends DelayedTask {
                             || System.currentTimeMillis() >= executionDeadlineMs) {
                         break;
                     }
+                    if (!skippedResourceOffers.isEmpty()) {
+                        markUnconfirmed("resource-claim",
+                                "Resource claims remain unverified in slots " + skippedResourceOffers);
+                        break;
+                    }
 
                     int vipBought = buyVipIfEnabled(executionDeadlineMs);
                     vipPointsPurchasedCount += Math.max(vipBought, 0);
@@ -104,7 +109,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
                     if (vipBought > 0) {
                         logInfo("VIP points purchased. Re-checking for resource-priced cards.");
                     } else {
-                        int refreshed = useFreeRefresh(skippedResourceOffers);
+                        int refreshed = useFreeRefresh();
                         dailyRefreshUsedCount += Math.max(refreshed, 0);
                         if (retrySnapshotType != null) {
                             unconfirmed = true;
@@ -220,7 +225,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
     }
 
     /** @return 1 when Free Refresh was used, 0 when the shop is done or the tap is unverified */
-    private int useFreeRefresh(List<Integer> skippedResourceOffers) {
+    private int useFreeRefresh() {
         phase = NomadicMerchantPhase.SEARCHING_FREE_REFRESH;
         logInfo("No more resources or VIP points found. Checking for daily refresh.");
         ImageSearchResultData dailyRefreshResult = templateSearchHelper.locatePattern(
@@ -256,7 +261,6 @@ public class NomadicMerchantRoutine extends DelayedTask {
                 }
             }
         }
-        skippedResourceOffers.clear();
         logInfo("Free refresh action dispatched. Rescanning the full shop for replacement items.");
         return 1;
     }

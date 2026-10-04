@@ -15,7 +15,9 @@ ignored. Threshold 80.
 
 Confirmation of a resource take is a per-slot product-region mean channel
 change of 12 after the reward flyout (2.5–4 s). An unchanged slot is skipped
-and the scan continues.
+for the rest of that scan so other offers can be collected. The visit then
+remains unconfirmed and retries soon, starting with a fresh scan of every slot;
+it must not refresh or schedule the next reset while a skipped offer remains.
 
 An emulator capture failure during this confirmation leaves the purchase and
 remaining cards unknown. The routine propagates that failure and retries soon;

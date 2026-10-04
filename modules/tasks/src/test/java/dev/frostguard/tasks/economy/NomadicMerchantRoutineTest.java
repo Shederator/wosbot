@@ -19,6 +19,7 @@ import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.runtime.WorkspacePaths;
 import dev.frostguard.engine.error.ADBConnectionException;
+import dev.frostguard.engine.service.StatisticsService;
 
 class NomadicMerchantRoutineTest {
 
@@ -67,6 +68,33 @@ class NomadicMerchantRoutineTest {
         assertTrue(routine.scheduledTime().isAfter(before.plusMinutes(4)));
         assertTrue(routine.scheduledTime().isBefore(LocalDateTime.now().plusMinutes(6)));
         assertEquals(1, routine.visitResults().freeResourcesClaimedCount());
+    }
+
+    @Test
+    void keepsSkippedResourceOffersUnconfirmedAndScansThemAgainNextVisit() {
+        SkippedOfferRoutine routine = new SkippedOfferRoutine();
+        LocalDateTime beforeFirstVisit = LocalDateTime.now();
+
+        routine.execute();
+
+        assertEquals(NomadicMerchantProgress.UNCONFIRMED, routine.progress());
+        assertEquals(NomadicMerchantPhase.FINISHED, routine.phase());
+        assertTrue(routine.scheduledTime().isAfter(beforeFirstVisit.plusMinutes(4)));
+        assertTrue(routine.scheduledTime().isBefore(beforeFirstVisit.plusMinutes(6)));
+        assertEquals(1, routine.scans);
+        assertEquals(List.of(List.of()), routine.skippedOffersAtScan);
+        assertEquals(0, routine.recordedCount("Nomadic Merchant Free Resources Claimed"));
+        assertEquals(0, routine.recordedCount("Nomadic Merchant Daily Refresh Used"));
+
+        LocalDateTime beforeSecondVisit = LocalDateTime.now();
+        routine.execute();
+
+        assertEquals(NomadicMerchantProgress.UNCONFIRMED, routine.progress());
+        assertEquals(NomadicMerchantPhase.FINISHED, routine.phase());
+        assertTrue(routine.scheduledTime().isAfter(beforeSecondVisit.plusMinutes(4)));
+        assertTrue(routine.scheduledTime().isBefore(beforeSecondVisit.plusMinutes(6)));
+        assertEquals(2, routine.scans);
+        assertEquals(List.of(List.of(), List.of()), routine.skippedOffersAtScan);
     }
 
     @Test
@@ -186,6 +214,37 @@ class NomadicMerchantRoutineTest {
 
         private VisitResults visitResults() {
             return visitResults;
+        }
+    }
+
+    private static final class SkippedOfferRoutine extends NomadicMerchantRoutine {
+        private int scans;
+        private final java.util.ArrayList<List<Integer>> skippedOffersAtScan = new java.util.ArrayList<>();
+
+        private SkippedOfferRoutine() {
+            super(new AccountDescriptor(1L, "Test", "1", true, 1L, 30L),
+                    TpDailyTaskEnum.NOMADIC_MERCHANT);
+        }
+
+        @Override
+        boolean navigateToNomadicMerchantShop() {
+            return true;
+        }
+
+        @Override
+        void claimResourceOffers(List<Integer> skippedResourceOffers, long executionDeadlineMs,
+                VisitResults visitResults) {
+            scans++;
+            skippedOffersAtScan.add(List.copyOf(skippedResourceOffers));
+            skippedResourceOffers.add(2);
+        }
+
+        private LocalDateTime scheduledTime() {
+            return scheduledTime;
+        }
+
+        private int recordedCount(String name) {
+            return StatisticsService.obtain().loadMetrics(profile).getCustomCounters().getOrDefault(name, 0);
         }
     }
 }
