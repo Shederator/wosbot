@@ -165,3 +165,32 @@ broader Trap 2 visual evidence remain gated. Full-event labelled replay, ambiguo
 formation/deploy/rejection sequences, concurrent-device end-to-end timing and
 supervised successful own/join/return/cleanup behavior remain unproven. Do not use
 these corrections or synthetic passing tests as a live-ready claim.
+
+### Preparation isolation and pipeline measurement
+
+Unsupported Auto Join and recall previously threw before pet activation and trap navigation,
+skipping both even when their evidence was available. Preparation now handles each independent
+step separately. Only the existing explicit unsupported-operation allowlist may be omitted;
+an uncertain pet/navigation postcondition, device failure, persistence failure or cancellation
+still aborts preparation. Each omission is journaled by operation with no input. Troop recall
+and Auto Join themselves remain disabled until their positive before/after frames are available.
+
+Every sampled frame now has a `sample-timing` diagnostic recording monotonic capture,
+classification and synchronous evidence-writing durations. `postEvidenceAgeMs` includes the
+source timestamp age up to that point, but excludes its own diagnostic callback. Actual input
+boundaries emit `dispatch-timing` after returning/throwing, with entry/exit frame age and elapsed
+boundary time; `boundaryCompleted` is not a game-side deployment confirmation. Existing newer-frame
+postconditions remain authoritative. No input age budget was increased.
+
+Observe-only sessions now run the production frame-scoped rally-row OCR on War-list frames,
+logging `observe-only-row-scan` with frame id, row count, duration and freshness-budget status.
+They do not arm candidates, persist tactical intent or send input. This measures capture,
+classification, recording and row analysis together; it does not simulate permission reads,
+device contention during dispatch or game-side action latency. It is instrumentation for the
+remaining timing gate, not evidence that a live session has passed it.
+
+Verification: the final offline `package` reactor, with both private replay directories enabled,
+passed **1,128 tests, zero failures/errors, six skipped**. This includes the real-driver
+unsupported-preparation regression, per-stage timing tests and read-only probe tests. Linux
+bundle verification passed (603 entries, 85 runtime JARs, 466 sprites). The fresh adversarial
+review found no concrete blocker in this delta. No new live timing or event validation was run.

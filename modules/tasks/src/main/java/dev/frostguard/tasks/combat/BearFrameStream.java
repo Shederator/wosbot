@@ -9,6 +9,8 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.function.Consumer;
+import java.util.function.LongSupplier;
 
 final class BearFrameStream<T> {
 
@@ -31,6 +33,18 @@ final class BearFrameStream<T> {
     }
 
     record AwaitResult<T>(Optional<Snapshot<T>> match, Snapshot<T> lastObserved) {
+    }
+
+    /** Elapsed stages, including synchronous evidence writing, not a video frame-rate estimate. */
+    record SampleTiming(long sequence, boolean classified, long captureNanos,
+            long classifyNanos, long evidenceNanos, long postEvidenceAgeMillis) {
+        String diagnostic() {
+            return "sample-timing frame=" + sequence + " classified=" + classified
+                    + " captureMs=" + captureNanos / 1_000_000
+                    + " classifyMs=" + classifyNanos / 1_000_000
+                    + " evidenceMs=" + evidenceNanos / 1_000_000
+                    + " postEvidenceAgeMs=" + postEvidenceAgeMillis;
+        }
     }
 
     record Captured<T>(T frame, Instant capturedAt) {
@@ -59,6 +73,13 @@ final class BearFrameStream<T> {
     private long sequence;
     private Snapshot<T> latest;
     private java.util.function.BiConsumer<Snapshot<T>, Boolean> observer = (frame, classified) -> { };
+    private LongSupplier ticker = System::nanoTime;
+    private Consumer<SampleTiming> timingObserver = ignored -> { };
+
+    void measureWith(LongSupplier ticker, Consumer<SampleTiming> timingObserver) {
+        this.ticker = Objects.requireNonNull(ticker, "ticker");
+        this.timingObserver = Objects.requireNonNull(timingObserver, "timingObserver");
+    }
 
     /** Evidence observes the exact sample used by both decisions and low-level reads. */
     void observeWith(java.util.function.BiConsumer<Snapshot<T>, Boolean> observer) {
@@ -114,18 +135,25 @@ final class BearFrameStream<T> {
     }
 
     Snapshot<T> next() {
-        Captured<T> captured = capture();
-        T frame = captured.frame();
-        latest = new Snapshot<>(++sequence, captured.capturedAt(), frame, classifier.apply(frame));
-        observer.accept(latest, true);
-        return latest;
+        return sample(true);
     }
 
     Snapshot<T> nextUnclassified() {
+        return sample(false);
+    }
+
+    private Snapshot<T> sample(boolean classified) {
+        long start = ticker.getAsLong();
         Captured<T> captured = capture();
+        long capturedNanos = ticker.getAsLong();
         latest = new Snapshot<>(++sequence, captured.capturedAt(), captured.frame(),
-                BearNavigationPolicy.Screen.UNKNOWN);
-        observer.accept(latest, false);
+                classified ? classifier.apply(captured.frame()) : BearNavigationPolicy.Screen.UNKNOWN);
+        long classifiedNanos = ticker.getAsLong();
+        observer.accept(latest, classified);
+        long evidencedNanos = ticker.getAsLong();
+        timingObserver.accept(new SampleTiming(latest.sequence(), classified,
+                Math.max(0, capturedNanos - start), Math.max(0, classifiedNanos - capturedNanos),
+                Math.max(0, evidencedNanos - classifiedNanos), age(latest).toMillis()));
         return latest;
     }
 

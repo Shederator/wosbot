@@ -31,6 +31,27 @@ import org.junit.jupiter.api.Test;
 /** Drives the real session driver with scripted frames and screens; no device is involved. */
 class BearSessionDriverTest {
     @Test
+    void missingPreparationEvidenceDoesNotShortCircuitSupportedDriverStages() throws Exception {
+        for (boolean pets : new boolean[]{true, false}) {
+            ScriptedBear bear = new ScriptedBear(WORLD);
+            bear.getProfile().setConfig(ConfigurationKeyEnum.ALLIANCE_AUTOJOIN_BOOL, true);
+            var recall = BearTrapRoutine.class.getDeclaredField("recallTroops");
+            recall.setAccessible(true);
+            recall.set(bear, true);
+            var petSetting = BearTrapRoutine.class.getDeclaredField("usePets");
+            petSetting.setAccessible(true);
+            petSetting.set(bear, pets);
+            // No supported target in this scripted frame: reaching its explicit refusal proves
+            // the actual driver progressed past both unavailable stages without guessing input.
+            var failure = assertThrows(BearSessionExecutionException.class,
+                    () -> bear.driver().prepareFrameDriven());
+            assertEquals(pets ? "pet-battle-skills-postcondition-not-verified"
+                    : "configured-trap-arrival-not-verified", failure.operation());
+            assertEquals(0, bear.inputs);
+        }
+    }
+
+    @Test
     void cleanupFailureTakesPrecedenceOverEarlierTacticalFailure() {
         var primary = new BearSessionExecutionException(
                 BearSessionExecutionException.FailureKind.VISUAL_UNKNOWN,

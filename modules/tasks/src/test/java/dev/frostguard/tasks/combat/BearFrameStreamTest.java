@@ -20,6 +20,29 @@ import org.junit.jupiter.api.Test;
 class BearFrameStreamTest {
 
     @Test
+    void timingIncludesCaptureClassificationAndSynchronousEvidenceWithoutExtraFrames() {
+        var nanos = new java.util.concurrent.atomic.AtomicLong();
+        var timings = new java.util.ArrayList<BearFrameStream.SampleTiming>();
+        var stream = new BearFrameStream<String>(() -> {
+            nanos.addAndGet(20_000_000); return "world";
+        }, ignored -> {
+            nanos.addAndGet(30_000_000); return BearNavigationPolicy.Screen.WORLD;
+        }, () -> false);
+        stream.observeWith((frame, classified) -> nanos.addAndGet(40_000_000));
+        stream.measureWith(nanos::get, timings::add);
+        stream.next();
+        stream.nextUnclassified();
+        assertEquals(2, stream.latestSequence());
+        assertEquals(2, timings.size());
+        assertEquals(20_000_000, timings.get(0).captureNanos());
+        assertEquals(30_000_000, timings.get(0).classifyNanos());
+        assertEquals(40_000_000, timings.get(0).evidenceNanos());
+        assertEquals(0, timings.get(1).classifyNanos());
+        assertEquals(false, timings.get(1).classified());
+        assertTrue(timings.get(0).diagnostic().contains("frame=1"));
+    }
+
+    @Test
     void slowRecordingCannotMakeAnExpiredFrameAuthorizeInput() {
         var time = new java.util.concurrent.atomic.AtomicReference<>(Instant.parse("2026-10-03T13:25:00Z"));
         Clock clock = new Clock() {

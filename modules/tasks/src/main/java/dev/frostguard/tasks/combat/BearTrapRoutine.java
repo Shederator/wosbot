@@ -816,10 +816,11 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                     3,
                     Clock.systemUTC());
             this.frames.observeWith(this::recordObservedFrame);
+            this.frames.measureWith(System::nanoTime,
+                    timing -> recordTransitionDiagnostic(timing.diagnostic()));
             this.ui = new BearUiStateMachine<>(
                     frames, Duration.ofSeconds(4), this::recordTransitionDiagnostic,
-                    (authorization, input) -> executeObservedInput(
-                            () -> authorizePhysicalInput(authorization), input));
+                    this::dispatchObservedInput);
             this.sessionSearch = new TemplateSearchHelper(
                     emuManager,
                     EMULATOR_NUMBER,
@@ -920,7 +921,7 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
             }
         }
 
-        private void prepareFrameDriven() {
+        void prepareFrameDriven() {
             BearFrameStream.Snapshot<RawImageData> observed = ui.observe();
             if (observed.screen() == BearNavigationPolicy.Screen.RECONNECT) {
                 throw protectedFailure(
@@ -929,13 +930,32 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                         "prepare-entry",
                         null);
             }
+            BearPreparationSequence.run(java.util.List.of(
+                    this::disableAutoJoinForPreparation,
+                    this::recallTroopsForPreparation,
+                    this::activatePetsForPreparation,
+                    this::navigateForPreparation), operation -> {
+                recordTransitionDiagnostic("preparation-unavailable operation=" + operation
+                        + " reason=missing-positive-frame-evidence inputSent=false");
+                logWarning(routineLogBearTrapLine("Preparation step unavailable: " + operation
+                        + "; continuing independently verified preparation steps"));
+            });
+        }
+
+        private void disableAutoJoinForPreparation() {
             if (Boolean.TRUE.equals(profile.getConfig(
                     ConfigurationKeyEnum.ALLIANCE_AUTOJOIN_BOOL, Boolean.class))) {
                 requireLiveEvidence("autojoin panel and stopped-state frames", "disable-autojoin");
             }
+        }
+
+        private void recallTroopsForPreparation() {
             if (recallTroops) {
                 requireLiveEvidence("march-sidebar and recall-confirmation frames", "recall-troops");
             }
+        }
+
+        private void activatePetsForPreparation() {
             if (usePets) {
                 boolean petUseArmed = BearSessionCheckpoint.load(profile)
                         .filter(value -> value.eventEnd().equals(eventEnd))
@@ -963,6 +983,9 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                             "pet-battle-skills-postcondition-not-verified", null);
                 }
             }
+        }
+
+        private void navigateForPreparation() {
             if (!BearTrapPreparation.navigate(ui, frame -> classifier.configuredBearIdentity(frame.frame()),
                     (action, authorization) -> {
                         if (action == BearUiAction.GO_TO_CONFIGURED_TRAP) {
@@ -2309,6 +2332,25 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
             }
         }
 
+        private void dispatchObservedInput(BearFrameStream.Snapshot<RawImageData> authorization,
+                Runnable input) {
+            long started = System.nanoTime();
+            long entryAge = frames.age(authorization).toMillis();
+            boolean completed = false;
+            try {
+                executeObservedInput(() -> authorizePhysicalInput(authorization), input);
+                completed = true;
+            } finally {
+                // Write after the boundary so logging cannot age a previously authorized tap.
+                // Completion is transport completion, never proof of game-side deployment.
+                recordTransitionDiagnostic("dispatch-timing frame=" + authorization.sequence()
+                        + " entryAgeMs=" + entryAge
+                        + " boundaryMs=" + (System.nanoTime() - started) / 1_000_000
+                        + " exitAgeMs=" + frames.age(authorization).toMillis()
+                        + " boundaryCompleted=" + completed);
+            }
+        }
+
         private void authorizePhysicalInput(BearFrameStream.Snapshot<RawImageData> authorization) {
             checkPreemption();
             cleanupAuthorization.run();
@@ -2540,6 +2582,9 @@ final class LiveBearSessionDriver implements BearSessionCoordinator.Driver {
                         ? BearUiStateMachine.Phase.WAITING_FOR_ACTIVATION
                         : BearUiStateMachine.Phase.ACTIVE);
                 BearFrameStream.Snapshot<RawImageData> frame = ui.observe();
+                BearObservationProbe.inspect(frames, frame,
+                        observed -> rallyFrameScan.rows(observed).size(), System::nanoTime,
+                        this::recordTransitionDiagnostic);
                 if (frame.screen() != previous) {
                     snapshots.write(frame.frame(), "bear-observe", frame.screen().name(), frame.capturedAt());
                     previous = frame.screen();
