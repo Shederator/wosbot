@@ -17,7 +17,11 @@ Confirmation of a resource take is a per-slot product-region mean channel
 change of 12 after the reward flyout (2.5–4 s). An unchanged slot is skipped
 for the rest of that scan so other offers can be collected. The visit then
 remains unconfirmed and retries soon, starting with a fresh scan of every slot;
-it must not refresh or schedule the next reset while a skipped offer remains.
+it must not refresh or record completion while a skipped offer remains.
+An initial unconfirmed visit can schedule up to three five-minute retries. If
+all three retries are still unconfirmed, the routine keeps that progress and
+defers the next scan until one minute after the daily reset. The retry budget
+starts over after that reset or a completed shop scan.
 
 An emulator capture failure during this confirmation leaves the purchase and
 remaining cards unknown. The routine propagates that failure and retries soon;

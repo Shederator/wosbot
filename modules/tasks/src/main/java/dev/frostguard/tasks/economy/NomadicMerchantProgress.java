@@ -22,7 +22,8 @@ public enum NomadicMerchantProgress {
     /**
      * The last visit could not prove what the screen did: navigation failed,
      * a VIP or refresh tap was not confirmed, or the two-minute limit was
-     * reached. The next visit is a short retry.
+     * reached. The next visit is a short retry until the retry budget is
+     * exhausted, then a scan after the daily reset.
      */
     UNCONFIRMED,
 

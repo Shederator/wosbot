@@ -24,6 +24,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
 
     private static final long MAX_TASK_EXECUTION_MS = 2 * 60 * 1000L;
     private static final long RESET_SETTLE_DELAY_MINUTES = 1L;
+    private static final int MAX_SHORT_RETRIES = 3;
     /**
      * Reward sprites on the 2026-09-29 resource frames were still in flight
      * about 1.5s after the tap. A miss before this settle is the sprite
@@ -52,6 +53,8 @@ public class NomadicMerchantRoutine extends DelayedTask {
     private NomadicMerchantPhase phase = NomadicMerchantPhase.OPENING;
     private String retrySnapshotType;
     private String retryReason;
+    private int shortRetriesScheduled;
+    private LocalDateTime retryDeferredUntil;
 
     public NomadicMerchantRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDailyTask) {
         super(profile, tpDailyTask);
@@ -67,6 +70,10 @@ public class NomadicMerchantRoutine extends DelayedTask {
 
     @Override
     protected void execute() {
+        if (retryDeferredUntil != null && !LocalDateTime.now().isBefore(retryDeferredUntil)) {
+            shortRetriesScheduled = 0;
+            retryDeferredUntil = null;
+        }
         phase = NomadicMerchantPhase.OPENING;
         retrySnapshotType = null;
         retryReason = null;
@@ -278,9 +285,23 @@ public class NomadicMerchantRoutine extends DelayedTask {
                 : NomadicMerchantProgress.UNCONFIRMED;
         phase = NomadicMerchantPhase.FINISHED;
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime next = progress == NomadicMerchantProgress.COMPLETE_UNTIL_RESET
-                ? nextRun(progress, now, GameTimeUtils.dailyResetTime())
-                : nextRun(progress, now, now);
+        LocalDateTime next;
+        String scheduleReason;
+        if (progress == NomadicMerchantProgress.COMPLETE_UNTIL_RESET) {
+            shortRetriesScheduled = 0;
+            retryDeferredUntil = null;
+            next = nextRun(progress, now, GameTimeUtils.dailyResetTime());
+            scheduleReason = "shop exhausted";
+        } else if (shortRetriesScheduled < MAX_SHORT_RETRIES) {
+            shortRetriesScheduled++;
+            next = nextRun(progress, now, now);
+            scheduleReason = "short retry " + shortRetriesScheduled + "/" + MAX_SHORT_RETRIES;
+        } else {
+            // Limit repeated unknown taps without treating the shop as complete.
+            retryDeferredUntil = GameTimeUtils.dailyResetTime().plusMinutes(RESET_SETTLE_DELAY_MINUTES);
+            next = retryDeferredUntil;
+            scheduleReason = "short retry limit reached; deferred until daily reset";
+        }
         reschedule(next);
         recordConfirmedResults(freeResourcesClaimedCount, vipPointsPurchasedCount, dailyRefreshUsedCount);
         String stats = resultSummary(freeResourcesClaimedCount, vipPointsPurchasedCount, dailyRefreshUsedCount);
@@ -288,13 +309,14 @@ public class NomadicMerchantRoutine extends DelayedTask {
             logWarning("Nomadic Merchant visit interrupted by " + visitFailure.getClass().getSimpleName()
                     + " during " + failedDuring + ". Progress " + progress
                     + "; confirmed results kept; " + stats
-                    + "; next check at " + next.format(DATETIME_FORMATTER) + ".");
+                    + "; " + scheduleReason + "; next check at " + next.format(DATETIME_FORMATTER) + ".");
         } else if (retrySnapshotType != null) {
             String snapshot = TaskDiagnosticSnapshots.capture(
                     emuManager, EMULATOR_NUMBER, "nomadicmerchant", retrySnapshotType);
             logWarning(retryReason + ". Progress " + progress + " after " + failedDuring
                     + "; confirmed results kept; " + stats
-                    + "; next check at " + next.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+                    + "; " + scheduleReason + "; next check at " + next.format(DATETIME_FORMATTER)
+                    + "; " + snapshot + ".");
         } else {
             logInfo(stats + ". Progress " + progress + " after " + failedDuring
                     + ". Next check at " + next.format(DATETIME_FORMATTER) + ".");

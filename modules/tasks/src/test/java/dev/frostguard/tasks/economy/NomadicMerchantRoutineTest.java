@@ -20,6 +20,7 @@ import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.runtime.WorkspacePaths;
 import dev.frostguard.engine.error.ADBConnectionException;
 import dev.frostguard.engine.service.StatisticsService;
+import dev.frostguard.vision.convert.GameTimeUtils;
 
 class NomadicMerchantRoutineTest {
 
@@ -71,30 +72,31 @@ class NomadicMerchantRoutineTest {
     }
 
     @Test
-    void keepsSkippedResourceOffersUnconfirmedAndScansThemAgainNextVisit() {
+    void capsUnconfirmedResourceRetriesBeforeDailyResetWhileRescanningEachVisit() {
         SkippedOfferRoutine routine = new SkippedOfferRoutine();
-        LocalDateTime beforeFirstVisit = LocalDateTime.now();
+        for (int visit = 0; visit < 4; visit++) {
+            LocalDateTime beforeVisit = LocalDateTime.now();
+            LocalDateTime dailyReset = GameTimeUtils.dailyResetTime();
 
-        routine.execute();
+            routine.execute();
 
-        assertEquals(NomadicMerchantProgress.UNCONFIRMED, routine.progress());
-        assertEquals(NomadicMerchantPhase.FINISHED, routine.phase());
-        assertTrue(routine.scheduledTime().isAfter(beforeFirstVisit.plusMinutes(4)));
-        assertTrue(routine.scheduledTime().isBefore(beforeFirstVisit.plusMinutes(6)));
-        assertEquals(1, routine.scans);
-        assertEquals(List.of(List.of()), routine.skippedOffersAtScan);
-        assertEquals(0, routine.recordedCount("Nomadic Merchant Free Resources Claimed"));
-        assertEquals(0, routine.recordedCount("Nomadic Merchant Daily Refresh Used"));
+            assertEquals(NomadicMerchantProgress.UNCONFIRMED, routine.progress(), "visit " + (visit + 1));
+            assertEquals(NomadicMerchantPhase.FINISHED, routine.phase(), "visit " + (visit + 1));
+            if (visit < 3) {
+                assertTrue(routine.scheduledTime().isAfter(beforeVisit.plusMinutes(4)), "visit " + (visit + 1));
+                assertTrue(routine.scheduledTime().isBefore(beforeVisit.plusMinutes(6)), "visit " + (visit + 1));
+            } else {
+                assertEquals(dailyReset.plusMinutes(1), routine.scheduledTime());
+            }
+            assertEquals(visit + 1, routine.scans);
+            assertEquals(List.of(), routine.skippedOffersAtScan.get(visit),
+                    "each visit must start a fresh resource scan");
+            assertEquals(0, routine.recordedCount("Nomadic Merchant Free Resources Claimed"));
+            assertEquals(0, routine.recordedCount("Nomadic Merchant VIP Points Purchased"));
+            assertEquals(0, routine.recordedCount("Nomadic Merchant Daily Refresh Used"));
+        }
 
-        LocalDateTime beforeSecondVisit = LocalDateTime.now();
-        routine.execute();
-
-        assertEquals(NomadicMerchantProgress.UNCONFIRMED, routine.progress());
-        assertEquals(NomadicMerchantPhase.FINISHED, routine.phase());
-        assertTrue(routine.scheduledTime().isAfter(beforeSecondVisit.plusMinutes(4)));
-        assertTrue(routine.scheduledTime().isBefore(beforeSecondVisit.plusMinutes(6)));
-        assertEquals(2, routine.scans);
-        assertEquals(List.of(List.of(), List.of()), routine.skippedOffersAtScan);
+        assertEquals(List.of(List.of(), List.of(), List.of(), List.of()), routine.skippedOffersAtScan);
     }
 
     @Test
