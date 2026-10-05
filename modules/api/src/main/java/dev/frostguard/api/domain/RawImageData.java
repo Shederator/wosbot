@@ -30,12 +30,21 @@ public class RawImageData {
     /* ── derived ── */
 
     public int pixelCount()  { return scanlineWidth * scanlineCount; }
-    public int stride()      { return scanlineWidth * colorDepth; }
+    public int stride()      { return scanlineWidth * bytesPerPixel(); }
 
     public boolean isValid() {
+        int bytesPerPixel = bytesPerPixel();
         return frameBytes != null
-            && scanlineWidth > 0 && scanlineCount > 0 && colorDepth > 0
-            && frameBytes.length >= scanlineWidth * scanlineCount * colorDepth;
+            && scanlineWidth > 0 && scanlineCount > 0 && bytesPerPixel > 0
+            && frameBytes.length >= (long) scanlineWidth * scanlineCount * bytesPerPixel;
+    }
+
+    private int bytesPerPixel() {
+        return switch (colorDepth) {
+            case 2, 16 -> 2;
+            case 4, 32 -> 4;
+            default -> 0;
+        };
     }
 
     /* ── accessors ── */
@@ -60,7 +69,7 @@ public class RawImageData {
     public void setFrameWidth(int w)            { this.scanlineWidth = w; }
     public int getFrameHeight()                 { return scanlineCount; }
     public void setFrameHeight(int h)           { this.scanlineCount = h; }
-    public int getBytesPerPixel()               { return colorDepth; }
+    public int getBytesPerPixel()               { return bytesPerPixel(); }
     public void setBytesPerPixel(int d)         { this.colorDepth = d; }
     public int getWidth()                       { return scanlineWidth; }
     public int getHeight()                      { return scanlineCount; }

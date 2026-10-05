@@ -2,6 +2,7 @@ package dev.frostguard.tasks.lifecycle;
 
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.diagnostics.DiagnosticSnapshotStore;
+import dev.frostguard.vision.convert.ImageConverter;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -56,7 +57,15 @@ final class StartupBlockerSnapshots {
     }
 
     private static boolean usable(RawImageData frame) {
-        return frame != null && frame.isValid();
+        if (frame == null) {
+            return false;
+        }
+        try {
+            ImageConverter.toBufferedImage(frame);
+            return true;
+        } catch (RuntimeException failure) {
+            return false;
+        }
     }
 
     record Retention(String relativePath, String basis) {
