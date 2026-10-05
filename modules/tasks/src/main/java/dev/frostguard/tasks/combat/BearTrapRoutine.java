@@ -23,7 +23,6 @@ import dev.frostguard.vision.ocr.ResilientOcrExecutor;
 import java.awt.*;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.Executors;
@@ -37,6 +36,12 @@ import static dev.frostguard.api.configs.TemplatesEnum.*;
 public class BearTrapRoutine extends DelayedTask {
 
 private final AtomicBoolean ownRallyActive = new AtomicBoolean(false);
+private boolean ownDeploymentAttempted;
+private boolean petsAttempted;
+private boolean autojoinPrepared;
+private boolean recallPrepared;
+private LocalDateTime eventDeadline;
+private Runnable sessionStartPreparation = () -> navigationHelper.ensureCorrectScreenLocation(LaunchPoint.WORLD);
 
 private ScheduledExecutorService rallyScheduler;
 
@@ -51,8 +56,6 @@ private ResilientOcrExecutor<Duration> durationHelper;
 private static final int TRAP_DURATION_MINUTES_VALUE = 30;
 
 private static final int TRAP_ACTIVATION_OFFSET_MINUTES_VALUE = 30;
-
-private static final int STATUS_LOG_INTERVAL_VALUE = 10;
 
 private static final int OWN_RALLY_MIN_REMAINING_SECONDS_VALUE = 360;
 
@@ -159,7 +162,6 @@ private int trapPreparationTime;
 
 private LocalDateTime referenceTrapTime;
 
-private boolean isVisuallyTriggered = false;
 
 private static final OcrSettingsData FREE_MARCHES_OCR_SETTINGS_VALUE = OcrSettingsData.assembler()
             .charWhitelist("0123456789/")
@@ -190,49 +192,98 @@ public BearTrapRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
         try {
             initializeOCRHelpersFlow();
 
-            TrapTimingShape timing;
-            if (isVisuallyTriggered) {
-                logInfo(routineLogBearTrapLine("Task was Visually Triggered! Bypassing scheduled configuration and forcing 30-minute Active execution."));
-                LocalDateTime now = LocalDateTime.now(ZoneId.of("UTC"));
-                timing = new TrapTimingShape(now, now, now.plusMinutes(TRAP_DURATION_MINUTES_VALUE));
-            } else {
-                timing = computeTrapTiming();
-                logTrapTimingFlow(timing);
-            }
+            TrapTimingShape timing = computeTrapTiming();
+            logTrapTimingFlow(timing);
 
-            LocalDateTime now = LocalDateTime.now(ZoneId.of("UTC"));
-
-            if (now.isBefore(timing.activationTime)) {
-                performPreparationPhase(timing.activationTime);
-            } else {
-                logInfo(routineLogBearTrapLine("Trap is already ACTIVE (preparation time passed)"));
-
-
-                logInfo(routineLogBearTrapLine("Executing essential setup (pets and navigation)..."));
-                if (usePets) {
-                    logInfo(routineLogBearTrapLine("Activating pets..."));
-                    enablePetsFlow();
-                }
-                logInfo(routineLogBearTrapLine("Moving camera to Bear Trap " + trapNumber));
-                reachBearTrap(trapNumber);
-                sleepTask(1000);
-
-            }
-
-            now = LocalDateTime.now(ZoneId.of("UTC"));
-
-            if (now.isBefore(timing.endTime)) {
-                performTrapActivePhase(timing.endTime);
-            } else {
-                logInfo(routineLogBearTrapLine("Trap already ended for this window"));
-            }
-        } catch (Exception e) {
-            logError(routineLogBearTrapLine("Issue while Bear Trap execution: " + e.getMessage()), e);
+            runEventWindow(timing.activationTime, timing.endTime);
         } finally {
 
 
             cleanupFlow();
             deferToNextWindow();
+        }
+    }
+
+    void runEventWindow(LocalDateTime activation, LocalDateTime end) {
+        eventDeadline = end;
+        try {
+            BearEventSession.Outcome outcome = emuManager.withInputGuard(this::checkPreemption,
+                    () -> BearEventSession.run(activation, end, new BearEventSession.Driver() {
+                public LocalDateTime now() { return eventNow(); }
+                public void checkCancellation() { BearTrapRoutine.super.checkPreemption(); }
+                public void prepare() {
+                    sessionStartPreparation.run();
+                    if (now().isBefore(activation)) prepareForTrapFlow();
+                    else {
+                        activatePetsOnce();
+                        requireBearLocation();
+                    }
+                }
+                public void recover() {
+                    recoverEventLocation();
+                }
+                public void participate(long remaining) {
+                    tryStartOwnRallyFlow(remaining);
+                    checkPreemption();
+                    if (now().isBefore(end)) handleJoinRallies2();
+                }
+                public void waitMillis(long millis) { sleepTask(millis); }
+                public void failed(int attempt, RuntimeException failure) {
+                    logWarning(routineLogBearTrapLine("Recoverable event failure " + attempt + "/"
+                            + BearEventSession.MAX_CONSECUTIVE_FAILURES + ": " + failure.getMessage()
+                            + "; keeping event deadline " + end
+                            + (attempt == BearEventSession.MAX_CONSECUTIVE_FAILURES
+                            ? "; no further input until event end or cancellation" : "; retrying inside this window")));
+                }
+            }));
+            logInfo(routineLogBearTrapLine("Event window ended: " + outcome));
+            if (outcome == BearEventSession.Outcome.RECOVERY_FAILED) {
+                throw new IllegalStateException(
+                        "Bear event ended without recovering; no successful participation claimed");
+            }
+        } finally {
+            eventDeadline = null;
+        }
+    }
+
+    @Override
+    protected void executeWithPreparation(Runnable preparation) {
+        sessionStartPreparation = preparation;
+        try {
+            execute();
+        } finally {
+            sessionStartPreparation = () -> navigationHelper.ensureCorrectScreenLocation(LaunchPoint.WORLD);
+        }
+    }
+
+    LocalDateTime eventNow() {
+        return LocalDateTime.now(ZoneId.of("UTC"));
+    }
+
+    void recoverEventLocation() {
+        navigationHelper.ensureCorrectScreenLocation(LaunchPoint.WORLD);
+        checkPreemption();
+        requireBearLocation();
+    }
+
+    @Override
+    protected void checkPreemption() {
+        super.checkPreemption();
+        if (eventDeadline != null && !eventNow().isBefore(eventDeadline)) {
+            throw new BearEventSession.WindowEnded();
+        }
+    }
+
+    private void requireBearLocation() {
+        if (!reachBearTrap(trapNumber)) {
+            throw new dev.frostguard.engine.error.HomeNotFoundException("Configured Bear location unavailable");
+        }
+    }
+
+    private void activatePetsOnce() {
+        if (usePets && !petsAttempted) {
+            petsAttempted = true;
+            enablePetsFlow();
         }
     }
 
@@ -299,7 +350,7 @@ private void refreshNextWindowDateTime() {
                 formattedDateTime);
     }
 
-private void requeueDisabledTasksFlow() {
+void requeueDisabledTasksFlow() {
         logInfo(routineLogBearTrapLine("Re-queueing tasks after Bear Trap event..."));
 
         TaskQueue queue = dev.frostguard.engine.service.ScheduleService.obtain().getCoordinator().getQueue(profile.getId());
@@ -332,26 +383,6 @@ private void requeueAutojoinTaskFlow(TaskQueue queue) {
             queue.runNow(TpDailyTaskEnum.ALLIANCE_AUTOJOIN, true);
             logInfo(routineLogBearTrapLine("Re-queued Alliance Autojoin task"));
         }
-    }
-
-private void performPreparationPhase(LocalDateTime activationTime) {
-        LocalDateTime now = LocalDateTime.now(ZoneId.of("UTC"));
-        long secondsUntilActivation = ChronoUnit.SECONDS.between(now, activationTime);
-
-        logInfo(routineLogBearTrapLine("PREPARATION PHASE: " + secondsUntilActivation + " seconds until trap auto-activates"));
-
-        prepareForTrapFlow();
-
-        now = LocalDateTime.now(ZoneId.of("UTC"));
-        secondsUntilActivation = ChronoUnit.SECONDS.between(now, activationTime);
-
-        if (secondsUntilActivation > 0) {
-            logInfo(routineLogBearTrapLine("Waiting for trap auto-activation in " + secondsUntilActivation + " seconds..."));
-            sleepTask((secondsUntilActivation * 1000) + 2000);
-
-        }
-
-        logInfo(routineLogBearTrapLine("Trap has been ACTIVATED automatically!"));
     }
 
 private String routineLogBearTrapLine(String note) {
@@ -401,51 +432,8 @@ private void recallGatherTroopsFlow() {
                 "), exiting to avoid deadlock"));
     }
 
-private void performTrapActivePhase(LocalDateTime trapEndTime) {
-        logInfo(routineLogBearTrapLine("=== TRAP IS NOW ACTIVE - Starting strategy execution ==="));
-
-        LocalDateTime now = LocalDateTime.now(ZoneId.of("UTC"));
-        long iterationCount = 0;
-
-        while (now.isBefore(trapEndTime)) {
-            checkPreemption();
-
-            iterationCount++;
-            long secondsRemaining = ChronoUnit.SECONDS.between(now, trapEndTime);
-
-            tryStartOwnRallyFlow(secondsRemaining);
-            handleJoinRallies2();
-
-            logPeriodicStatusFlow(iterationCount, secondsRemaining);
-
-            now = LocalDateTime.now(ZoneId.of("UTC"));
-            sleepTask(1000);
-
-        }
-
-        logInfo(routineLogBearTrapLine("=== TRAP ENDED - Strategy execution completed ==="));
-    }
-
 private boolean confirmExecutionWindow() {
-
-
-        isVisuallyTriggered = false;
-
-
-        try {
-            ImageSearchResultData result = emuManager.locatePattern(
-                    profile.getEmulatorNumber(),
-                    TemplatesEnum.BEAR_HUNT_IS_RUNNING,
-                    90);
-            if (result.isFound()) {
-                logInfo(routineLogBearTrapLine("Confirmed: Bear Hunt is VISUALLY ACTIVE. Overriding time window check."));
-                isVisuallyTriggered = true;
-                return true;
-            }
-        } catch (Exception e) {
-            logWarning(routineLogBearTrapLine("Visual check did not complete in confirmExecutionWindow: " + e.getMessage()));
-        }
-
+        // The shortcut proves activity, not time remaining. Run Now cannot grant another 30 minutes.
         if (!hasInsideWindow()) {
             logWarning(routineLogBearTrapLine("Execute called OUTSIDE valid window. Planning next run..."));
             return false;
@@ -491,14 +479,6 @@ private void requeueGatherTaskFlow(TaskQueue queue) {
         }
     }
 
-private void logPeriodicStatusFlow(long iterationCount, long secondsRemaining) {
-        if (iterationCount % STATUS_LOG_INTERVAL_VALUE == 0) {
-            long minutesRemaining = secondsRemaining / 60;
-            logInfo(routineLogBearTrapLine("Trap active - " + minutesRemaining + " minutes " +
-                    (secondsRemaining % 60) + " seconds remaining"));
-        }
-    }
-
 private void tryStartOwnRallyFlow(long secondsRemaining) {
         if (!callOwnRally || ownRallyActive.get() || secondsRemaining <= OWN_RALLY_MIN_REMAINING_SECONDS_VALUE) {
             return;
@@ -522,13 +502,15 @@ private void tryStartOwnRallyFlow(long secondsRemaining) {
             }
         } catch (dev.frostguard.engine.error.ADBConnectionException e) {
             logWarning(routineLogBearTrapLine("ADB connection error during rally startup (emulator may be lagging): " + e.getMessage()));
-            logDebug(routineLogBearTrapLine("Skipping this rally startup attempt, will retry on next cycle"));
-            ownRallyActive.set(false);
+            logDebug(routineLogBearTrapLine("Recovering rally startup; retaining guard if deployment was attempted"));
+            ownRallyActive.set(ownDeploymentAttempted);
+            throw e;
 
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             logError(routineLogBearTrapLine("Unexpected error during rally startup: " + e.getMessage()), e);
-            ownRallyActive.set(false);
+            ownRallyActive.set(ownDeploymentAttempted);
+            throw e;
 
 
         }
@@ -630,27 +612,29 @@ private void disableAutojoinFlow() {
 
 private BearTrapHelper.WindowResult resolveWindowState() {
         Instant referenceUTC = referenceTrapTime.atZone(ZoneId.of("UTC")).toInstant();
-        return BearTrapHelper.calculateWindow(referenceUTC, trapPreparationTime);
+        return BearTrapHelper.calculateWindow(referenceUTC, trapPreparationTime, 30, 2,
+                Clock.fixed(eventNow().toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
     }
 
 private void prepareForTrapFlow() {
         logInfo(routineLogBearTrapLine("Preparing for Bear Trap event..."));
 
         logInfo(routineLogBearTrapLine("Disabling autojoin..."));
-        disableAutojoinFlow();
+        if (!autojoinPrepared) {
+            disableAutojoinFlow();
+            autojoinPrepared = true;
+        }
 
-        if (recallTroops) {
+        if (recallTroops && !recallPrepared) {
             logInfo(routineLogBearTrapLine("Recalling all gather troops to the city..."));
             recallGatherTroopsFlow();
+            recallPrepared = true;
         }
 
-        if (usePets) {
-            logInfo(routineLogBearTrapLine("Activating pets..."));
-            enablePetsFlow();
-        }
+        activatePetsOnce();
 
         logInfo(routineLogBearTrapLine("Moving camera to Bear Trap " + trapNumber));
-        reachBearTrap(trapNumber);
+        requireBearLocation();
         sleepTask(1000);
 
     }
@@ -726,7 +710,7 @@ private int inspectFreeMarches() {
         return freeMarches;
     }
 
-private void handleJoinRallies2() {
+void handleJoinRallies2() {
 		// Changed by pernerch | Date: 2026-07-02 | Why: skip rally joining on shared emulators while keeping other Bear Trap actions active.
         if (!joinRally || sharedEmulator) {
             if (sharedEmulator) {
@@ -756,11 +740,12 @@ private void handleJoinRallies2() {
             }
         } catch (dev.frostguard.engine.error.ADBConnectionException e) {
             logWarning(routineLogBearTrapLine("ADB connection error during rally joining (emulator may be lagging): " + e.getMessage()));
-            logDebug(routineLogBearTrapLine("Skipping this rally join iteration, will retry on next cycle"));
+            throw e;
 
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             logError(routineLogBearTrapLine("Unexpected error during rally joining: " + e.getMessage()), e);
+            throw e;
 
 
         }
@@ -891,8 +876,7 @@ private void recallMarchFlow() {
     }
 
 private boolean hasInsideWindow() {
-        Instant referenceUTC = referenceTrapTime.atZone(ZoneId.of("UTC")).toInstant();
-        BearTrapHelper.WindowResult result = BearTrapHelper.calculateWindow(referenceUTC, trapPreparationTime);
+        BearTrapHelper.WindowResult result = resolveWindowState();
         return result.getState() == BearTrapHelper.WindowState.INSIDE;
     }
 
@@ -925,7 +909,7 @@ private List<Integer> decodeJoinFlags() {
         return flags;
     }
 
-private void enablePetsFlow() {
+void enablePetsFlow() {
         ImageSearchResultData petsButton = templateSearchHelper.locatePattern(
                 GAME_HOME_PETS,
                 SearchConfig.builder()
@@ -978,7 +962,7 @@ private long scanMarchTime() {
         return 0;
     }
 
-private boolean reachBearTrap(int trapNumber) {
+boolean reachBearTrap(int trapNumber) {
         tapInside(ALLIANCE_BUTTON_TL_VALUE, ALLIANCE_BUTTON_BR_VALUE);
         sleepTask(3000);
 
@@ -1012,11 +996,13 @@ private boolean reachBearTrap(int trapNumber) {
         return success;
     }
 
-private long beginOwnRally() {
+long beginOwnRally() {
         if (!ownRallyActive.compareAndSet(false, true)) {
             return 0;
 
         }
+
+        ownDeploymentAttempted = false;
 
         logInfo(routineLogBearTrapLine("Calling own rally..."));
 
@@ -1089,6 +1075,7 @@ private long beginOwnRally() {
             return 0;
         }
 
+        ownDeploymentAttempted = true;
         tapInside(deploy);
         sleepTask(500);
 
@@ -1101,6 +1088,10 @@ private void cleanupFlow() {
         logInfo(routineLogBearTrapLine("Cleaning up Bear Trap state"));
 
         ownRallyActive.set(false);
+        ownDeploymentAttempted = false;
+        petsAttempted = false;
+        autojoinPrepared = false;
+        recallPrepared = false;
 
         if (rallyResetTask != null && !rallyResetTask.isDone()) {
             rallyResetTask.cancel(false);
