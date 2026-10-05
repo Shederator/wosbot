@@ -7,6 +7,7 @@ import dev.frostguard.engine.schedule.DelayedTaskRegistry;
 
 import dev.frostguard.tasks.alliance.*;
 import dev.frostguard.tasks.analytics.GameAnalyticsRoutine;
+import dev.frostguard.tasks.analytics.TelemetrySnapshotRoutine;
 import dev.frostguard.tasks.city.*;
 import dev.frostguard.tasks.combat.*;
 import dev.frostguard.tasks.dailies.*;
@@ -27,10 +28,11 @@ public class TaskRegistrations {
         DelayedTaskRegistry.registerFactory(TaskRegistrations::createTask);
     }
 
-    private static DelayedTask createTask(TpDailyTaskEnum type, AccountDescriptor profile) {
+    static DelayedTask createTask(TpDailyTaskEnum type, AccountDescriptor profile) {
         return switch (type) {
             case GAME_ANALYTICS_LABYRINTH, GAME_ANALYTICS_POWER ->
                     new GameAnalyticsRoutine(profile, type);
+            case TELEMETRY_SNAPSHOT -> new TelemetrySnapshotRoutine(profile, type);
             // Heroes
             case HERO_RECRUITMENT -> new HeroRecruitmentRoutine(profile, type);
             case EXPERT_AGNES_INTEL -> new ExpertsAgnesIntelRoutine(profile, type);
