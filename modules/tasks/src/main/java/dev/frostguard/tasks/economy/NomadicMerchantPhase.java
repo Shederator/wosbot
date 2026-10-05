@@ -36,7 +36,7 @@ public enum NomadicMerchantPhase {
     /** Tapping the free refresh control. */
     CLAIMING_FREE_REFRESH,
 
-    /** Waiting for the grid to replace after a refresh. */
+    /** Waiting briefly after dispatching one Free Refresh tap. */
     WAITING_REFRESH,
 
     /** The visit has chosen its exit and is leaving the shop. */
