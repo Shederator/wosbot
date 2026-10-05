@@ -27,6 +27,25 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TaskQueueFailureIncidentTest {
 
+    @Test
+    void failedBearRetainsNextEventWithoutCoolingDownTheWholeProfile() {
+        AccountDescriptor profile = new AccountDescriptor(
+                null, "Bear failure " + UUID.randomUUID(), "test", false, 100L, 30L);
+        assertTrue(ProfileService.obtain().createAccount(profile));
+        DelayedTask task = new DelayedTask(profile, TpDailyTaskEnum.BEAR_TRAP) {
+            @Override protected void execute() { }
+        };
+        LocalDateTime nextEvent = LocalDateTime.now().plusDays(2);
+        task.reschedule(nextEvent);
+        RecordingQueue queue = new RecordingQueue(profile);
+        queue.routeError(task, new IllegalStateException("Bear window ended without recovery"));
+        assertEquals(nextEvent, task.getScheduled());
+        assertEquals(0, queue.gameStopCount);
+        assertEquals(0, queue.slotReleaseCount);
+        assertTrue(TaskFailureStreakRepository.getRepository().clear(profile.getId(), "BEAR_TRAP"),
+                "The unsuccessful event must persist a failure, not report success");
+    }
+
     @BeforeAll
     static void initializeTestWorkspace() {
         WorkspaceSession.initializeLayout(WorkspacePaths.current());
