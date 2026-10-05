@@ -144,9 +144,9 @@ class CrystalLaboratoryRoutineTest {
     }
 
     @Test
-    void retainsAScreencapWhoseBitDepthFailsTheByteLengthCheck() {
+    void retainsAScreencapWhoseColorDepthIsInBitsPerPixel() {
         RawImageData frame = RawImageData.capture(new byte[2 * 2 * 4], 2, 2, 32);
-        assertFalse(frame.isValid());
+        assertTrue(frame.isValid());
 
         String retained = new RetentionRoutine(frame, snapshotWorkspace).retainDiagnosticSnapshot("bit-depth");
         assertFalse(retained.contains("no-valid-frame"), retained);

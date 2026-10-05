@@ -195,8 +195,10 @@ class DiagnosticSnapshotStoreTest {
     @Test
     void enabledDesktopSettingSavesASeparateDesktopFrame() throws IOException {
         DiagnosticSnapshotStore store = enabledStore(workspace, () -> Optional.of(desktopImage()));
+        RawImageData emulatorFrame = frame(2, 2);
+        assertTrue(emulatorFrame.isValid());
 
-        Optional<String> relative = store.write(frame(2, 2), "initialize", "initialize-blocked", CAPTURED_AT);
+        Optional<String> relative = store.write(emulatorFrame, "initialize", "initialize-blocked", CAPTURED_AT);
 
         assertEquals(
                 "logs/snapshot/initialize/20260921T143012.483Z-initialize-blocked.png",
@@ -273,6 +275,6 @@ class DiagnosticSnapshotStoreTest {
     }
 
     private static RawImageData frame(int width, int height) {
-        return RawImageData.capture(new byte[width * height * 4], width, height, 4);
+        return RawImageData.capture(new byte[width * height * 4], width, height, 32);
     }
 }
