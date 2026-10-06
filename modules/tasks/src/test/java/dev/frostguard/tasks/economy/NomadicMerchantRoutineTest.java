@@ -268,7 +268,7 @@ class NomadicMerchantRoutineTest {
 
     @Test
     void unconfirmedResourceOfferDoesNotPreventFreeRefreshOrCompletion() {
-        UnknownResourceRefreshRoutine routine = new UnknownResourceRefreshRoutine();
+        UnknownResourceRefreshRoutine routine = new UnknownResourceRefreshRoutine(false);
         int unknownBefore = routine.recordedCount("Nomadic Merchant Unconfirmed Resource Claims");
         int refreshBefore = routine.recordedCount("Nomadic Merchant Free Refresh Taps Dispatched");
 
@@ -282,6 +282,29 @@ class NomadicMerchantRoutineTest {
                 routine.recordedCount("Nomadic Merchant Unconfirmed Resource Claims"));
         assertEquals(refreshBefore + 1,
                 routine.recordedCount("Nomadic Merchant Free Refresh Taps Dispatched"));
+    }
+
+    @Test
+    void collectionConfirmationDoesNotChangeTheScanAndRefreshLoop() {
+        UnknownResourceRefreshRoutine unconfirmed = new UnknownResourceRefreshRoutine(false);
+        UnknownResourceRefreshRoutine confirmed = new UnknownResourceRefreshRoutine(true);
+
+        unconfirmed.execute();
+        confirmed.execute();
+
+        assertEquals(unconfirmed.loopEvents, confirmed.loopEvents);
+        assertEquals(1, unconfirmed.resourceAttempts);
+        assertEquals(1, confirmed.resourceAttempts);
+        assertEquals(1, unconfirmed.visitResults.unconfirmedResourceClaimsCount());
+        assertEquals(0, unconfirmed.visitResults.freeResourcesClaimedCount());
+        assertEquals(0, confirmed.visitResults.unconfirmedResourceClaimsCount());
+        assertEquals(1, confirmed.visitResults.freeResourcesClaimedCount());
+        assertEquals(NomadicMerchantProgress.COMPLETED, unconfirmed.progress());
+        assertEquals(NomadicMerchantProgress.COMPLETED, confirmed.progress());
+        assertEquals(2, unconfirmed.refreshSearches);
+        assertEquals(2, confirmed.refreshSearches);
+        assertEquals(1, unconfirmed.refreshTaps);
+        assertEquals(1, confirmed.refreshTaps);
     }
 
     @Test
@@ -613,13 +636,18 @@ class NomadicMerchantRoutineTest {
     }
 
     private static final class UnknownResourceRefreshRoutine extends NomadicMerchantRoutine {
+        private final boolean confirmClaim;
+        private final java.util.ArrayList<String> loopEvents = new java.util.ArrayList<>();
+        private VisitResults visitResults;
         private int resourceAttempts;
         private int refreshSearches;
         private int refreshTaps;
 
-        private UnknownResourceRefreshRoutine() {
+        private UnknownResourceRefreshRoutine(boolean confirmClaim) {
             super(new AccountDescriptor(3L, "UnknownRefreshTest", "3", true, 1L, 30L),
                     TpDailyTaskEnum.NOMADIC_MERCHANT);
+            this.confirmClaim = confirmClaim;
+            profile.setConfig(ConfigurationKeyEnum.BOOL_NOMADIC_MERCHANT_VIP_POINTS, false);
             templateSearchHelper = new TemplateSearchHelper(null, "3", profile) {
                 @Override
                 public ImageSearchResultData locatePattern(TemplatesEnum template, SearchConfig config) {
@@ -631,6 +659,7 @@ class NomadicMerchantRoutineTest {
                     }
                     if (template == TemplatesEnum.MYSTERY_SHOP_DAILY_REFRESH) {
                         refreshSearches++;
+                        loopEvents.add("refresh-search");
                         boolean available = refreshSearches == 1;
                         return new ImageSearchResultData(available,
                                 available ? new PointData(400, 900) : null, 95);
@@ -646,19 +675,28 @@ class NomadicMerchantRoutineTest {
         }
 
         @Override
+        int claimResourceOffer(int nextResourceSlot, VisitResults visitResults) {
+            this.visitResults = visitResults;
+            loopEvents.add("resource-scan");
+            return super.claimResourceOffer(nextResourceSlot, visitResults);
+        }
+
+        @Override
         boolean collectOffer(int slot) {
             resourceAttempts++;
-            return false;
+            return confirmClaim;
         }
 
         @Override
         public boolean tapInside(ImageSearchResultData result) {
+            loopEvents.add("refresh-tap");
             refreshTaps++;
             return true;
         }
 
         @Override
         protected void sleepTask(long millis) {
+            loopEvents.add("wait-" + millis);
         }
 
         private int recordedCount(String name) {
