@@ -1,7 +1,6 @@
 package dev.frostguard.tasks.diagnostics;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -59,7 +58,7 @@ class TaskDiagnosticSnapshotsTest {
     }
 
     @Test
-    void retainsNormalThirtyTwoBitScreencapEvenWhenValidityCheckRejectsBitDepthAsByteCount()
+    void retainsNormalThirtyTwoBitScreencapWhenValidityUsesBytesPerPixel()
             throws IOException {
         RawImageData frame = RawImageData.capture(new byte[] {
                 (byte) 0xff, 0, 0, (byte) 0xff,
@@ -69,7 +68,7 @@ class TaskDiagnosticSnapshotsTest {
         }, 2, 2, 32);
         assertEquals(32, frame.getColorDepth());
         assertEquals(4, frame.getFrameBytes().length / frame.pixelCount());
-        assertFalse(frame.isValid());
+        assertTrue(frame.isValid());
 
         String result = TaskDiagnosticSnapshots.capture(
                 () -> frame, "nomadicmerchant", "resource-claim", new DiagnosticSnapshotStore(workspace));

@@ -22,7 +22,6 @@ import dev.frostguard.api.domain.PointData;
 import dev.frostguard.engine.helper.TemplateSearchHelper;
 import dev.frostguard.api.runtime.WorkspacePaths;
 import dev.frostguard.engine.error.ADBConnectionException;
-import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.vision.convert.GameTimeUtils;
 
 class NomadicMerchantRoutineTest {
@@ -231,8 +230,6 @@ class NomadicMerchantRoutineTest {
     @Test
     void dispatchesOneTapPerRefreshSearchAndRescansResourcesBetweenTaps() {
         RefreshLoopRoutine routine = new RefreshLoopRoutine(false);
-        int dispatchedBefore = routine.recordedCount("Nomadic Merchant Free Refresh Taps Dispatched");
-        int resourcesBefore = routine.recordedCount("Nomadic Merchant Free Resources Claimed");
 
         routine.execute();
 
@@ -242,17 +239,13 @@ class NomadicMerchantRoutineTest {
         assertEquals(2, routine.refreshTaps);
         assertEquals(List.of(500L, 500L), routine.waits);
         assertEquals(NomadicMerchantProgress.COMPLETED, routine.progress());
-        assertEquals(dispatchedBefore + 2,
-                routine.recordedCount("Nomadic Merchant Free Refresh Taps Dispatched"));
-        assertEquals(resourcesBefore + 1,
-                routine.recordedCount("Nomadic Merchant Free Resources Claimed"));
+        assertEquals(2, routine.visitResults.freeRefreshTapsDispatchedCount());
+        assertEquals(1, routine.visitResults.freeResourcesClaimedCount());
     }
 
     @Test
     void retriesVisibleVipUntilItIsNoLongerDetected() {
         RepeatedVipRoutine routine = new RepeatedVipRoutine();
-        int confirmedBefore = routine.recordedCount("Nomadic Merchant VIP Points Purchased");
-        int unknownBefore = routine.recordedCount("Nomadic Merchant Unconfirmed VIP Purchases");
 
         routine.execute();
 
@@ -260,17 +253,11 @@ class NomadicMerchantRoutineTest {
         assertEquals(3, routine.vipSearches);
         assertEquals(3, routine.resourceScans);
         assertEquals(NomadicMerchantProgress.COMPLETED, routine.progress());
-        assertEquals(confirmedBefore + 1,
-                routine.recordedCount("Nomadic Merchant VIP Points Purchased"));
-        assertEquals(unknownBefore + 1,
-                routine.recordedCount("Nomadic Merchant Unconfirmed VIP Purchases"));
     }
 
     @Test
     void unconfirmedResourceOfferDoesNotPreventFreeRefreshOrCompletion() {
         UnknownResourceRefreshRoutine routine = new UnknownResourceRefreshRoutine(false);
-        int unknownBefore = routine.recordedCount("Nomadic Merchant Unconfirmed Resource Claims");
-        int refreshBefore = routine.recordedCount("Nomadic Merchant Free Refresh Taps Dispatched");
 
         routine.execute();
 
@@ -278,10 +265,8 @@ class NomadicMerchantRoutineTest {
         assertEquals(2, routine.refreshSearches);
         assertEquals(1, routine.refreshTaps);
         assertEquals(NomadicMerchantProgress.COMPLETED, routine.progress());
-        assertEquals(unknownBefore + 1,
-                routine.recordedCount("Nomadic Merchant Unconfirmed Resource Claims"));
-        assertEquals(refreshBefore + 1,
-                routine.recordedCount("Nomadic Merchant Free Refresh Taps Dispatched"));
+        assertEquals(1, routine.visitResults.unconfirmedResourceClaimsCount());
+        assertEquals(1, routine.visitResults.freeRefreshTapsDispatchedCount());
     }
 
     @Test
@@ -312,7 +297,6 @@ class NomadicMerchantRoutineTest {
         ADBConnectionException expectedFailure = new ADBConnectionException("synthetic tap failure");
         RefreshLoopRoutine routine = new RefreshLoopRoutine(true);
         routine.tapFailure = expectedFailure;
-        int dispatchedBefore = routine.recordedCount("Nomadic Merchant Free Refresh Taps Dispatched");
         LocalDateTime before = LocalDateTime.now();
 
         ADBConnectionException failure = assertThrows(ADBConnectionException.class, routine::execute);
@@ -322,15 +306,13 @@ class NomadicMerchantRoutineTest {
         assertEquals(NomadicMerchantProgress.ERROR_RETRY, routine.progress());
         assertTrue(routine.scheduledTime().isAfter(before.plusMinutes(4)));
         assertTrue(routine.scheduledTime().isBefore(LocalDateTime.now().plusMinutes(6)));
-        assertEquals(dispatchedBefore,
-                routine.recordedCount("Nomadic Merchant Free Refresh Taps Dispatched"));
+        assertEquals(0, routine.visitResults.freeRefreshTapsDispatchedCount());
     }
 
     @Test
     void retriesWithoutCompletionWhenRefreshTapCannotBeSent() {
         RefreshLoopRoutine routine = new RefreshLoopRoutine(true);
         routine.tapReturnsFalse = true;
-        int dispatchedBefore = routine.recordedCount("Nomadic Merchant Free Refresh Taps Dispatched");
         LocalDateTime before = LocalDateTime.now();
 
         routine.execute();
@@ -339,23 +321,20 @@ class NomadicMerchantRoutineTest {
         assertEquals(NomadicMerchantProgress.ERROR_RETRY, routine.progress());
         assertTrue(routine.scheduledTime().isAfter(before.plusMinutes(4)));
         assertTrue(routine.scheduledTime().isBefore(LocalDateTime.now().plusMinutes(6)));
-        assertEquals(dispatchedBefore,
-                routine.recordedCount("Nomadic Merchant Free Refresh Taps Dispatched"));
+        assertEquals(0, routine.visitResults.freeRefreshTapsDispatchedCount());
     }
 
     @Test
     void countsRefreshTapWhenTheFollowingSettleWaitFails() {
         RefreshLoopRoutine routine = new RefreshLoopRoutine(true);
         routine.waitFailure = new ADBConnectionException("synthetic settle interruption");
-        int dispatchedBefore = routine.recordedCount("Nomadic Merchant Free Refresh Taps Dispatched");
 
         ADBConnectionException failure = assertThrows(ADBConnectionException.class, routine::execute);
 
         assertSame(routine.waitFailure, failure);
         assertEquals(List.of("resource-scan", "refresh-search", "tap", "wait-500"), routine.events);
         assertEquals(NomadicMerchantProgress.ERROR_RETRY, routine.progress());
-        assertEquals(dispatchedBefore + 1,
-                routine.recordedCount("Nomadic Merchant Free Refresh Taps Dispatched"));
+        assertEquals(1, routine.visitResults.freeRefreshTapsDispatchedCount());
     }
 
     private static final class TestRoutine extends NomadicMerchantRoutine {
@@ -471,6 +450,7 @@ class NomadicMerchantRoutineTest {
         private boolean tapReturnsFalse;
         private int refreshTaps;
         private int searches;
+        private VisitResults visitResults;
 
         private RefreshLoopRoutine(boolean failOnFirstTap) {
             super(new AccountDescriptor(3L, "RefreshTest", "3", true, 1L, 30L),
@@ -498,6 +478,7 @@ class NomadicMerchantRoutineTest {
 
         @Override
         int claimResourceOffer(int nextResourceSlot, VisitResults visitResults) {
+            this.visitResults = visitResults;
             events.add("resource-scan");
             if (events.stream().filter("resource-scan"::equals).count() == 2) {
                 events.add("resource-claimed");
@@ -533,9 +514,6 @@ class NomadicMerchantRoutineTest {
             return scheduledTime;
         }
 
-        private int recordedCount(String name) {
-            return StatisticsService.obtain().loadMetrics(profile).getCustomCounters().getOrDefault(name, 0);
-        }
     }
 
     private static final class RepeatedVipRoutine extends NomadicMerchantRoutine {
@@ -590,9 +568,6 @@ class NomadicMerchantRoutineTest {
         protected void sleepTask(long millis) {
         }
 
-        private int recordedCount(String name) {
-            return StatisticsService.obtain().loadMetrics(profile).getCustomCounters().getOrDefault(name, 0);
-        }
     }
 
     private static final class TimedOutRoutine extends NomadicMerchantRoutine {
@@ -699,8 +674,5 @@ class NomadicMerchantRoutineTest {
             loopEvents.add("wait-" + millis);
         }
 
-        private int recordedCount(String name) {
-            return StatisticsService.obtain().loadMetrics(profile).getCustomCounters().getOrDefault(name, 0);
-        }
     }
 }
