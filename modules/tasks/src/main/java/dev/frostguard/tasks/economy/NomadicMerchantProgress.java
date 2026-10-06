@@ -6,12 +6,14 @@ public enum NomadicMerchantProgress {
     INACTIVE,
     /** Initial state of a configured task. */
     READY,
-    /** A visit ended with an unknown outcome and will retry shortly. */
+    /** Execution timed out without a confirmed collection; retry shortly. */
     FAILED_RETRY,
+    /** A scan or action failed and the visit will retry shortly. */
+    ERROR_RETRY,
     /** The shop scan found no eligible operation remaining. */
-    COMPLETED_SUCCESS,
-    /** Some offers were confirmed, but later visits remained unknown. */
+    COMPLETED,
+    /** Execution timed out after at least one confirmed collection in this cycle. */
     PARTIAL_RESCHEDULED,
-    /** The daily retry budget was exhausted without confirming an offer this cycle. */
+    /** The third timeout in a cycle occurred without a confirmed collection. */
     FAILED_RESCHEDULED
 }

@@ -13,6 +13,7 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
@@ -40,7 +41,7 @@ class NomadicMerchantRoutineTest {
 
         assertTrue(routine.navigationAttempted);
         assertTrue(routine.scheduledTime().isAfter(before));
-        assertEquals(NomadicMerchantProgress.FAILED_RETRY, routine.progress());
+        assertEquals(NomadicMerchantProgress.ERROR_RETRY, routine.progress());
         assertEquals(NomadicMerchantPhase.FINISHED, routine.phase());
     }
 
@@ -49,10 +50,10 @@ class NomadicMerchantRoutineTest {
         TestRoutine routine = new TestRoutine();
 
         routine.execute();
-        assertEquals(NomadicMerchantProgress.FAILED_RETRY, routine.progress());
+        assertEquals(NomadicMerchantProgress.ERROR_RETRY, routine.progress());
 
         routine.execute();
-        assertEquals(NomadicMerchantProgress.FAILED_RETRY, routine.progress());
+        assertEquals(NomadicMerchantProgress.ERROR_RETRY, routine.progress());
         assertEquals(2, routine.navigationAttempts);
         assertEquals(NomadicMerchantPhase.FINISHED, routine.phase());
     }
@@ -66,7 +67,7 @@ class NomadicMerchantRoutineTest {
         ADBConnectionException failure = assertThrows(ADBConnectionException.class, routine::execute);
 
         assertSame(expectedFailure, failure);
-        assertEquals(NomadicMerchantProgress.FAILED_RETRY, routine.progress());
+        assertEquals(NomadicMerchantProgress.ERROR_RETRY, routine.progress());
         assertEquals(NomadicMerchantPhase.FINISHED, routine.phase());
         assertTrue(routine.scheduledTime().isAfter(before.plusMinutes(4)));
         assertTrue(routine.scheduledTime().isBefore(LocalDateTime.now().plusMinutes(6)));
@@ -74,57 +75,91 @@ class NomadicMerchantRoutineTest {
     }
 
     @Test
-    void capsUnconfirmedResourceRetriesBeforeDailyResetWhileRescanningEachVisit() {
-        SkippedOfferRoutine routine = new SkippedOfferRoutine();
-        int retriesScheduledBefore = routine.recordedCount("Nomadic Merchant Retries Scheduled");
-        for (int visit = 0; visit < 4; visit++) {
-            LocalDateTime beforeVisit = LocalDateTime.now();
-            LocalDateTime dailyReset = GameTimeUtils.dailyResetTime();
+    void retriesNullScanOnceThenSchedulesErrorWithoutCompletion() {
+        NullScanRoutine routine = new NullScanRoutine();
+        LocalDateTime before = LocalDateTime.now();
+
+        assertThrows(IllegalStateException.class, routine::execute);
+
+        assertEquals(2, routine.scanAttempts);
+        assertEquals(NomadicMerchantProgress.ERROR_RETRY, routine.progress());
+        assertTrue(routine.scheduledTime().isAfter(before.plusMinutes(4)));
+        assertTrue(routine.scheduledTime().isBefore(LocalDateTime.now().plusMinutes(6)));
+    }
+
+    @Test
+    void thirdTimeoutWithoutConfirmedCollectionsDefersUntilReset() {
+        LocalDateTime now = LocalDateTime.of(2026, 10, 6, 10, 0);
+        LocalDateTime reset = now.plusHours(16);
+        assertEquals(NomadicMerchantProgress.FAILED_RETRY,
+                NomadicMerchantRoutine.timeoutProgress(0, 1));
+        assertEquals(NomadicMerchantProgress.FAILED_RETRY,
+                NomadicMerchantRoutine.timeoutProgress(0, 2));
+        assertEquals(NomadicMerchantProgress.FAILED_RESCHEDULED,
+                NomadicMerchantRoutine.timeoutProgress(0, 3));
+        assertEquals(now.plusMinutes(5), NomadicMerchantRoutine.nextRun(
+                NomadicMerchantRoutine.timeoutProgress(0, 2), now, reset));
+        assertEquals(reset.plusMinutes(1), NomadicMerchantRoutine.nextRun(
+                NomadicMerchantRoutine.timeoutProgress(0, 3), now, reset));
+    }
+
+    @Test
+    void continuesResourceScanAfterUnknownOfferAndCountsConfirmedOffer() {
+        ScanningResourceRoutine routine = new ScanningResourceRoutine();
+        NomadicMerchantRoutine.VisitResults results = new NomadicMerchantRoutine.VisitResults();
+
+        int firstSlot = routine.claimResourceOffer(0, results);
+        int secondSlot = routine.claimResourceOffer(firstSlot + 1, results);
+
+        assertEquals(0, firstSlot);
+        assertEquals(1, secondSlot);
+        assertEquals(List.of(0, 1), routine.attemptedSlots);
+        assertEquals(1, results.freeResourcesClaimedCount());
+        assertEquals(1, results.unconfirmedResourceClaimsCount());
+        assertEquals(1, results.failedActivityActionsCount());
+    }
+
+    @Test
+    void timeoutWithConfirmedCollectionIsPartialImmediately() {
+        LocalDateTime now = LocalDateTime.of(2026, 10, 6, 10, 0);
+        LocalDateTime reset = now.plusHours(16);
+        assertEquals(NomadicMerchantProgress.PARTIAL_RESCHEDULED,
+                NomadicMerchantRoutine.timeoutProgress(1, 1));
+        assertEquals(reset.plusMinutes(1), NomadicMerchantRoutine.nextRun(
+                NomadicMerchantRoutine.timeoutProgress(1, 1), now, reset));
+    }
+
+    @Test
+    void threeVisitsThatTimeOutWithoutClaimsScheduleTheThirdAfterReset() {
+        TimedOutRoutine routine = new TimedOutRoutine(false);
+        for (int visit = 1; visit <= 3; visit++) {
+            LocalDateTime before = LocalDateTime.now();
+            LocalDateTime reset = GameTimeUtils.dailyResetTime();
 
             routine.execute();
 
             assertEquals(visit < 3 ? NomadicMerchantProgress.FAILED_RETRY
-                    : NomadicMerchantProgress.FAILED_RESCHEDULED,
-                    routine.progress(), "visit " + (visit + 1));
-            assertEquals(NomadicMerchantPhase.FINISHED, routine.phase(), "visit " + (visit + 1));
+                    : NomadicMerchantProgress.FAILED_RESCHEDULED, routine.progress());
             if (visit < 3) {
-                assertTrue(routine.scheduledTime().isAfter(beforeVisit.plusMinutes(4)), "visit " + (visit + 1));
-                assertTrue(routine.scheduledTime().isBefore(beforeVisit.plusMinutes(6)), "visit " + (visit + 1));
+                assertTrue(routine.scheduledTime().isAfter(before.plusMinutes(4)));
+                assertTrue(routine.scheduledTime().isBefore(LocalDateTime.now().plusMinutes(6)));
             } else {
-                assertEquals(dailyReset.plusMinutes(1), routine.scheduledTime());
+                assertEquals(reset.plusMinutes(1), routine.scheduledTime());
             }
-            assertEquals(visit + 1, routine.scans);
-            assertEquals(retriesScheduledBefore + Math.min(visit + 1, 3),
-                    routine.recordedCount("Nomadic Merchant Retries Scheduled"));
-            assertEquals(List.of(), routine.skippedOffersAtScan.get(visit),
-                    "each visit must start a fresh resource scan");
-            assertEquals(0, routine.recordedCount("Nomadic Merchant Free Resources Claimed"));
-            assertEquals(0, routine.recordedCount("Nomadic Merchant VIP Points Purchased"));
-            assertEquals(0, routine.recordedCount("Nomadic Merchant Free Refresh Taps Dispatched"));
         }
-
-        assertEquals(List.of(List.of(), List.of(), List.of(), List.of()), routine.skippedOffersAtScan);
+        assertEquals(3, routine.scans);
     }
 
     @Test
-    void marksRetryExhaustionPartialAfterConfirmedResourceClaims() {
-        PartialVisitRoutine routine = new PartialVisitRoutine();
+    void timeoutAfterConfirmedClaimIsPartialWithoutShortRetry() {
+        TimedOutRoutine routine = new TimedOutRoutine(true);
         LocalDateTime reset = GameTimeUtils.dailyResetTime();
 
-        for (int visit = 0; visit < 4; visit++) {
-            routine.execute();
-        }
+        routine.execute();
 
         assertEquals(NomadicMerchantProgress.PARTIAL_RESCHEDULED, routine.progress());
         assertEquals(reset.plusMinutes(1), routine.scheduledTime());
-        assertEquals(4, routine.scans);
-    }
-
-    @Test
-    void retriesAnUnverifiedVipPurchaseInFiveMinutes() {
-        LocalDateTime now = LocalDateTime.of(2026, 9, 28, 10, 0);
-
-        assertEquals(now.plusMinutes(5), NomadicMerchantRoutine.unverifiedPurchaseRetry(now));
+        assertEquals(1, routine.scans);
     }
 
     @Test
@@ -136,8 +171,10 @@ class NomadicMerchantRoutineTest {
                 NomadicMerchantProgress.READY, now, reset));
         assertEquals(now.plusMinutes(5), NomadicMerchantRoutine.nextRun(
                 NomadicMerchantProgress.FAILED_RETRY, now, reset));
+        assertEquals(now.plusMinutes(5), NomadicMerchantRoutine.nextRun(
+                NomadicMerchantProgress.ERROR_RETRY, now, reset));
         assertEquals(reset.plusMinutes(1), NomadicMerchantRoutine.nextRun(
-                NomadicMerchantProgress.COMPLETED_SUCCESS, now, reset));
+                NomadicMerchantProgress.COMPLETED, now, reset));
         assertEquals(reset.plusMinutes(1), NomadicMerchantRoutine.nextRun(
                 NomadicMerchantProgress.PARTIAL_RESCHEDULED, now, reset));
         assertEquals(reset.plusMinutes(1), NomadicMerchantRoutine.nextRun(
@@ -200,15 +237,51 @@ class NomadicMerchantRoutineTest {
         routine.execute();
 
         assertEquals(List.of("resource-scan", "refresh-search", "tap", "wait-500",
-                "resource-scan", "resource-claimed", "refresh-search", "tap", "wait-500",
+                "resource-scan", "resource-claimed", "resource-scan", "refresh-search", "tap", "wait-500",
                 "resource-scan", "refresh-search"), routine.events);
         assertEquals(2, routine.refreshTaps);
         assertEquals(List.of(500L, 500L), routine.waits);
-        assertEquals(NomadicMerchantProgress.COMPLETED_SUCCESS, routine.progress());
+        assertEquals(NomadicMerchantProgress.COMPLETED, routine.progress());
         assertEquals(dispatchedBefore + 2,
                 routine.recordedCount("Nomadic Merchant Free Refresh Taps Dispatched"));
         assertEquals(resourcesBefore + 1,
                 routine.recordedCount("Nomadic Merchant Free Resources Claimed"));
+    }
+
+    @Test
+    void retriesVisibleVipUntilItIsNoLongerDetected() {
+        RepeatedVipRoutine routine = new RepeatedVipRoutine();
+        int confirmedBefore = routine.recordedCount("Nomadic Merchant VIP Points Purchased");
+        int unknownBefore = routine.recordedCount("Nomadic Merchant Unconfirmed VIP Purchases");
+
+        routine.execute();
+
+        assertEquals(2, routine.vipPurchaseAttempts);
+        assertEquals(3, routine.vipSearches);
+        assertEquals(3, routine.resourceScans);
+        assertEquals(NomadicMerchantProgress.COMPLETED, routine.progress());
+        assertEquals(confirmedBefore + 1,
+                routine.recordedCount("Nomadic Merchant VIP Points Purchased"));
+        assertEquals(unknownBefore + 1,
+                routine.recordedCount("Nomadic Merchant Unconfirmed VIP Purchases"));
+    }
+
+    @Test
+    void unconfirmedResourceOfferDoesNotPreventFreeRefreshOrCompletion() {
+        UnknownResourceRefreshRoutine routine = new UnknownResourceRefreshRoutine();
+        int unknownBefore = routine.recordedCount("Nomadic Merchant Unconfirmed Resource Claims");
+        int refreshBefore = routine.recordedCount("Nomadic Merchant Free Refresh Taps Dispatched");
+
+        routine.execute();
+
+        assertEquals(1, routine.resourceAttempts);
+        assertEquals(2, routine.refreshSearches);
+        assertEquals(1, routine.refreshTaps);
+        assertEquals(NomadicMerchantProgress.COMPLETED, routine.progress());
+        assertEquals(unknownBefore + 1,
+                routine.recordedCount("Nomadic Merchant Unconfirmed Resource Claims"));
+        assertEquals(refreshBefore + 1,
+                routine.recordedCount("Nomadic Merchant Free Refresh Taps Dispatched"));
     }
 
     @Test
@@ -223,7 +296,7 @@ class NomadicMerchantRoutineTest {
 
         assertSame(expectedFailure, failure);
         assertEquals(List.of("resource-scan", "refresh-search", "tap"), routine.events);
-        assertEquals(NomadicMerchantProgress.FAILED_RETRY, routine.progress());
+        assertEquals(NomadicMerchantProgress.ERROR_RETRY, routine.progress());
         assertTrue(routine.scheduledTime().isAfter(before.plusMinutes(4)));
         assertTrue(routine.scheduledTime().isBefore(LocalDateTime.now().plusMinutes(6)));
         assertEquals(dispatchedBefore,
@@ -239,8 +312,8 @@ class NomadicMerchantRoutineTest {
 
         routine.execute();
 
-        assertEquals(List.of("resource-scan", "refresh-search", "tap"), routine.events);
-        assertEquals(NomadicMerchantProgress.FAILED_RETRY, routine.progress());
+        assertEquals(List.of("resource-scan", "refresh-search", "tap", "tap"), routine.events);
+        assertEquals(NomadicMerchantProgress.ERROR_RETRY, routine.progress());
         assertTrue(routine.scheduledTime().isAfter(before.plusMinutes(4)));
         assertTrue(routine.scheduledTime().isBefore(LocalDateTime.now().plusMinutes(6)));
         assertEquals(dispatchedBefore,
@@ -257,7 +330,7 @@ class NomadicMerchantRoutineTest {
 
         assertSame(routine.waitFailure, failure);
         assertEquals(List.of("resource-scan", "refresh-search", "tap", "wait-500"), routine.events);
-        assertEquals(NomadicMerchantProgress.FAILED_RETRY, routine.progress());
+        assertEquals(NomadicMerchantProgress.ERROR_RETRY, routine.progress());
         assertEquals(dispatchedBefore + 1,
                 routine.recordedCount("Nomadic Merchant Free Refresh Taps Dispatched"));
     }
@@ -299,8 +372,7 @@ class NomadicMerchantRoutineTest {
         }
 
         @Override
-        void claimResourceOffers(List<Integer> skippedResourceOffers, long executionDeadlineMs,
-                VisitResults visitResults) {
+        int claimResourceOffer(int nextResourceSlot, VisitResults visitResults) {
             this.visitResults = visitResults;
             visitResults.recordFreeResourceClaim();
             throw failure;
@@ -315,13 +387,19 @@ class NomadicMerchantRoutineTest {
         }
     }
 
-    private static final class SkippedOfferRoutine extends NomadicMerchantRoutine {
-        private int scans;
-        private final java.util.ArrayList<List<Integer>> skippedOffersAtScan = new java.util.ArrayList<>();
+    private static final class NullScanRoutine extends NomadicMerchantRoutine {
+        private int scanAttempts;
 
-        private SkippedOfferRoutine() {
-            super(new AccountDescriptor(1L, "Test", "1", true, 1L, 30L),
+        private NullScanRoutine() {
+            super(new AccountDescriptor(1L, "NullScanTest", "1", true, 1L, 30L),
                     TpDailyTaskEnum.NOMADIC_MERCHANT);
+            templateSearchHelper = new TemplateSearchHelper(null, "1", profile) {
+                @Override
+                public ImageSearchResultData locatePattern(TemplatesEnum template, SearchConfig config) {
+                    scanAttempts++;
+                    return null;
+                }
+            };
         }
 
         @Override
@@ -329,20 +407,35 @@ class NomadicMerchantRoutineTest {
             return true;
         }
 
-        @Override
-        void claimResourceOffers(List<Integer> skippedResourceOffers, long executionDeadlineMs,
-                VisitResults visitResults) {
-            scans++;
-            skippedOffersAtScan.add(List.copyOf(skippedResourceOffers));
-            skippedResourceOffers.add(2);
-        }
-
         private LocalDateTime scheduledTime() {
             return scheduledTime;
         }
+    }
 
-        private int recordedCount(String name) {
-            return StatisticsService.obtain().loadMetrics(profile).getCustomCounters().getOrDefault(name, 0);
+    private static final class ScanningResourceRoutine extends NomadicMerchantRoutine {
+        private final java.util.ArrayList<Integer> attemptedSlots = new java.util.ArrayList<>();
+
+        private ScanningResourceRoutine() {
+            super(new AccountDescriptor(5L, "ScanTest", "5", true, 1L, 30L),
+                    TpDailyTaskEnum.NOMADIC_MERCHANT);
+            templateSearchHelper = new TemplateSearchHelper(null, "5", profile) {
+                @Override
+                public ImageSearchResultData locatePattern(TemplatesEnum template, SearchConfig config) {
+                    int slotLeft = config.getStartPoint().getX();
+                    boolean gemPriced = config.getStartPoint().getY()
+                            >= NomadicMerchantDecisions.priceTopLeft(3).getY()
+                            || slotLeft >= NomadicMerchantDecisions.slotLeft(2)
+                            || (slotLeft == NomadicMerchantDecisions.slotLeft(1)
+                                    && attemptedSlots.contains(1));
+                    return new ImageSearchResultData(gemPriced, null, gemPriced ? 90 : 0);
+                }
+            };
+        }
+
+        @Override
+        boolean collectOffer(int slot) {
+            attemptedSlots.add(slot);
+            return slot == 1;
         }
     }
 
@@ -381,13 +474,14 @@ class NomadicMerchantRoutineTest {
         }
 
         @Override
-        void claimResourceOffers(List<Integer> skippedResourceOffers, long executionDeadlineMs,
-                VisitResults visitResults) {
+        int claimResourceOffer(int nextResourceSlot, VisitResults visitResults) {
             events.add("resource-scan");
             if (events.stream().filter("resource-scan"::equals).count() == 2) {
                 events.add("resource-claimed");
                 visitResults.recordFreeResourceClaim();
+                return 1;
             }
+            return -1;
         }
 
         @Override
@@ -421,12 +515,34 @@ class NomadicMerchantRoutineTest {
         }
     }
 
-    private static final class PartialVisitRoutine extends NomadicMerchantRoutine {
-        private int scans;
+    private static final class RepeatedVipRoutine extends NomadicMerchantRoutine {
+        private int resourceScans;
+        private int vipSearches;
+        private int vipConfirmationSearches;
+        private int vipPurchaseAttempts;
 
-        private PartialVisitRoutine() {
-            super(new AccountDescriptor(4L, "PartialTest", "4", true, 1L, 30L),
+        private RepeatedVipRoutine() {
+            super(new AccountDescriptor(6L, "VipTest", "6", true, 1L, 30L),
                     TpDailyTaskEnum.NOMADIC_MERCHANT);
+            profile.setConfig(ConfigurationKeyEnum.BOOL_NOMADIC_MERCHANT_VIP_POINTS, true);
+            templateSearchHelper = new TemplateSearchHelper(null, "6", profile) {
+                @Override
+                public ImageSearchResultData locatePattern(TemplatesEnum template, SearchConfig config) {
+                    if (template == TemplatesEnum.NOMADIC_MERCHANT_VIP) {
+                        if (config.hasCoordinates()) {
+                            vipConfirmationSearches++;
+                            boolean stillPresent = vipConfirmationSearches == 1;
+                            return new ImageSearchResultData(stillPresent,
+                                    stillPresent ? new PointData(300, 500) : null, 95);
+                        }
+                        vipSearches++;
+                        boolean found = vipSearches <= 2;
+                        return new ImageSearchResultData(found,
+                                found ? new PointData(300, 500) : null, 95);
+                    }
+                    return new ImageSearchResultData(false, null, 0);
+                }
+            };
         }
 
         @Override
@@ -435,15 +551,118 @@ class NomadicMerchantRoutineTest {
         }
 
         @Override
-        void claimResourceOffers(List<Integer> skippedResourceOffers, long executionDeadlineMs,
-                VisitResults visitResults) {
+        int claimResourceOffer(int nextResourceSlot, VisitResults visitResults) {
+            resourceScans++;
+            return -1;
+        }
+
+        @Override
+        public void tapNear(PointData point) {
+            if (point.equals(VIP_CONFIRM)) {
+                vipPurchaseAttempts++;
+            }
+        }
+
+        @Override
+        protected void sleepTask(long millis) {
+        }
+
+        private int recordedCount(String name) {
+            return StatisticsService.obtain().loadMetrics(profile).getCustomCounters().getOrDefault(name, 0);
+        }
+    }
+
+    private static final class TimedOutRoutine extends NomadicMerchantRoutine {
+        private final boolean confirmClaim;
+        private int scans;
+
+        private TimedOutRoutine(boolean confirmClaim) {
+            super(new AccountDescriptor(confirmClaim ? 7L : 8L, "TimeoutTest", "7", true, 1L, 30L),
+                    TpDailyTaskEnum.NOMADIC_MERCHANT);
+            this.confirmClaim = confirmClaim;
+        }
+
+        @Override
+        boolean navigateToNomadicMerchantShop() {
+            return true;
+        }
+
+        @Override
+        long executionDeadlineMs() {
+            return System.currentTimeMillis() + 200;
+        }
+
+        @Override
+        int claimResourceOffer(int nextResourceSlot, VisitResults visitResults) {
             scans++;
-            visitResults.recordFreeResourceClaim();
-            skippedResourceOffers.add(1);
+            try {
+                Thread.sleep(250);
+            } catch (InterruptedException interruption) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(interruption);
+            }
+            if (confirmClaim) {
+                visitResults.recordFreeResourceClaim();
+            }
+            return 0;
         }
 
         private LocalDateTime scheduledTime() {
             return scheduledTime;
+        }
+    }
+
+    private static final class UnknownResourceRefreshRoutine extends NomadicMerchantRoutine {
+        private int resourceAttempts;
+        private int refreshSearches;
+        private int refreshTaps;
+
+        private UnknownResourceRefreshRoutine() {
+            super(new AccountDescriptor(3L, "UnknownRefreshTest", "3", true, 1L, 30L),
+                    TpDailyTaskEnum.NOMADIC_MERCHANT);
+            templateSearchHelper = new TemplateSearchHelper(null, "3", profile) {
+                @Override
+                public ImageSearchResultData locatePattern(TemplatesEnum template, SearchConfig config) {
+                    if (template == TemplatesEnum.NOMADIC_MERCHANT_GEM_PRICE) {
+                        boolean selectable = resourceAttempts == 0
+                                && config.getStartPoint().getX() == NomadicMerchantDecisions.slotLeft(0)
+                                && config.getStartPoint().getY() == NomadicMerchantDecisions.priceTopLeft(0).getY();
+                        return new ImageSearchResultData(!selectable, null, 90);
+                    }
+                    if (template == TemplatesEnum.MYSTERY_SHOP_DAILY_REFRESH) {
+                        refreshSearches++;
+                        boolean available = refreshSearches == 1;
+                        return new ImageSearchResultData(available,
+                                available ? new PointData(400, 900) : null, 95);
+                    }
+                    return new ImageSearchResultData(false, null, 0);
+                }
+            };
+        }
+
+        @Override
+        boolean navigateToNomadicMerchantShop() {
+            return true;
+        }
+
+        @Override
+        boolean collectOffer(int slot) {
+            resourceAttempts++;
+            return false;
+        }
+
+        @Override
+        public boolean tapInside(ImageSearchResultData result) {
+            refreshTaps++;
+            return true;
+        }
+
+        @Override
+        protected void sleepTask(long millis) {
+        }
+
+        private int recordedCount(String name) {
+            return StatisticsService.obtain().loadMetrics(profile).getCustomCounters().getOrDefault(name, 0);
         }
     }
 }
