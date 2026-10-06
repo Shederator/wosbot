@@ -1,5 +1,6 @@
 package dev.frostguard.engine.emulator.instance;
 
+import dev.frostguard.engine.emulator.EmulatorStopCycle;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -10,6 +11,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -33,6 +35,27 @@ class MuMuManagerProcessTest {
                 childProcess("stopped", tempDir.resolve("stopped.pid")), Duration.ofSeconds(5));
 
         assertFalse(running);
+    }
+
+    @Test
+    void readsStructuredStoppedStateWithoutTreatingMalformedOutputAsStopped() throws Exception {
+        assertEquals(EmulatorStopCycle.Probe.STOPPED, MuMuEmulatorInstance.readVendorState(
+                childProcess("json-stopped", tempDir.resolve("json-stopped.pid")), Duration.ofSeconds(5)));
+        assertEquals(EmulatorStopCycle.Probe.UNKNOWN, MuMuEmulatorInstance.readVendorState(
+                childProcess("json-malformed", tempDir.resolve("json-malformed.pid")), Duration.ofSeconds(5)));
+    }
+
+    @Test
+    void hostProbeMatchesOnlyTheRequestedInstance() {
+        String output = "MuMuVMMHeadless.exe --comment MuMuPlayerGlobal-12.0-0 --startvm uuid0\n"
+                + "MuMuVMMHeadless.exe --comment MuMuPlayerGlobal-12.0-1 --startvm uuid1\n";
+
+        assertEquals(EmulatorStopCycle.Probe.RUNNING,
+                MuMuEmulatorInstance.hostStateFromCommandLines(output, "1"));
+        assertEquals(EmulatorStopCycle.Probe.STOPPED,
+                MuMuEmulatorInstance.hostStateFromCommandLines(output, "2"));
+        assertEquals(EmulatorStopCycle.Probe.UNKNOWN,
+                MuMuEmulatorInstance.hostStateFromCommandLines("FG_NULL_COMMAND_LINE", "2"));
     }
 
     @Test
@@ -120,6 +143,14 @@ class MuMuManagerProcessTest {
     static final class ChildProcess {
         public static void main(String[] args) throws Exception {
             Files.writeString(Path.of(args[1]), Long.toString(ProcessHandle.current().pid()));
+            if ("json-stopped".equals(args[0])) {
+                System.out.println("{\"error_code\":0,\"is_process_started\":false}");
+                return;
+            }
+            if ("json-malformed".equals(args[0])) {
+                System.out.println("{\"error_code\":0}");
+                return;
+            }
             if ("stopped".equals(args[0])) {
                 System.out.println("state=stopped");
                 return;
