@@ -107,6 +107,30 @@ public class ScheduleService {
 			return;
 		}
 
+		Set<String> configuredEmulators = enabled.stream()
+				.map(AccountDescriptor::getEmulatorNumber)
+				.filter(emulator -> emulator != null && !emulator.isBlank())
+				.collect(Collectors.toCollection(LinkedHashSet::new));
+		log(TpMessageSeverityEnum.INFO, "ScheduleService", "-",
+				"Checking for stale emulator processes before starting " + enabled.size()
+						+ " enabled profile(s)");
+		Map<String, List<String>> profilesByEmulator = enabled.stream()
+				.filter(account -> account.getEmulatorNumber() != null && !account.getEmulatorNumber().isBlank())
+				.collect(Collectors.groupingBy(AccountDescriptor::getEmulatorNumber,
+						LinkedHashMap::new,
+						Collectors.mapping(account -> account.getName() == null ? "unknown" : account.getName(),
+								Collectors.toList())));
+		Map<String, String> cleanupOutcomes = EmulatorController.getInstance()
+				.cleanupStaleEmulatorsAtStartup(configuredEmulators);
+		cleanupOutcomes.forEach((emulator, outcome) -> {
+			List<String> profileNames = profilesByEmulator.getOrDefault(emulator, List.of());
+			TpMessageSeverityEnum severity = outcome.startsWith("UNCONFIRMED")
+					|| outcome.startsWith("INTERRUPTED")
+							? TpMessageSeverityEnum.WARNING : TpMessageSeverityEnum.INFO;
+			log(severity, "ScheduleService", String.join(", ", profileNames),
+					"Startup emulator cleanup for #" + emulator + ": " + outcome);
+		});
+
 		enabled.stream()
 				.sorted(Comparator.comparing(AccountDescriptor::getPriority).reversed())
 				.forEach(account -> prepareQueue(account, globalConfig));

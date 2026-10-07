@@ -108,6 +108,44 @@ public abstract class EmulatorInstance {
         return unconfirmedStops.contains(idx);
     }
 
+    public final EmulatorStartupCleanup.Result cleanupStaleInstanceAtStartup(String idx) {
+        EmulatorStartupCleanup.Result result = EmulatorStartupCleanup.clean(idx,
+                new EmulatorStartupCleanup.Driver() {
+                    @Override
+                    public EmulatorStopCycle.Observation observe(String instanceId)
+                            throws InterruptedException {
+                        return new EmulatorStopCycle.Observation(
+                                probeVendorState(instanceId),
+                                probeAdbState(instanceId),
+                                probeHostState(instanceId));
+                    }
+
+                    @Override
+                    public EmulatorStopCycle.CommandOutcome requestAdbPowerOff(String instanceId)
+                            throws InterruptedException {
+                        return adbPowerOff(instanceId);
+                    }
+
+                    @Override
+                    public String captureAnomaly(String instanceId) {
+                        EmulatorShutdownDiagnostics.CaptureResult capture =
+                                EmulatorShutdownDiagnostics.capture(EmulatorInstance.this, instanceId);
+                        return "snapshot=" + capture.emulatorPath().orElse("unavailable")
+                                + ", desktopSnapshot=" + capture.desktopPath().orElse("unavailable")
+                                + ", snapshotFailure=" + capture.emulatorFailure()
+                                + ", desktopSnapshotFailure=" + capture.desktopFailure();
+                    }
+                });
+        invalidateAllCaches(idx);
+        if (result.status() == EmulatorStartupCleanup.Status.UNCONFIRMED
+                || result.status() == EmulatorStartupCleanup.Status.INTERRUPTED) {
+            unconfirmedStops.add(idx);
+        } else {
+            unconfirmedStops.remove(idx);
+        }
+        return result;
+    }
+
     protected EmulatorInstance(String consolePath) {
         this.consolePath = consolePath;
         initBridge();
