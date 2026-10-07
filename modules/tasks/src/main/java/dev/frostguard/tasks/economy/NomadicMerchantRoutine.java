@@ -50,7 +50,8 @@ public class NomadicMerchantRoutine extends DelayedTask {
     private String retryReason;
     private int failedTimeoutsThisCycle;
     private LocalDateTime retryDeferredUntil;
-    private int confirmedOffersThisCycle;
+    private int offerActionsThisCycle;
+    private int freeRefreshActionsThisCycle;
 
     public NomadicMerchantRoutine(AccountDescriptor profile, TpDailyTaskEnum tpDailyTask) {
         super(profile, tpDailyTask);
@@ -68,7 +69,8 @@ public class NomadicMerchantRoutine extends DelayedTask {
     protected void execute() {
         if (retryDeferredUntil != null && !LocalDateTime.now().isBefore(retryDeferredUntil)) {
             failedTimeoutsThisCycle = 0;
-            confirmedOffersThisCycle = 0;
+            offerActionsThisCycle = 0;
+            freeRefreshActionsThisCycle = 0;
             retryDeferredUntil = null;
         }
         phase = NomadicMerchantPhase.OPENING;
@@ -81,57 +83,64 @@ public class NomadicMerchantRoutine extends DelayedTask {
         int nextResourceSlot = 0;
         VisitResults visitResults = new VisitResults();
         long executionDeadlineMs = executionDeadlineMs();
-        boolean unconfirmed = false;
         boolean complete = false;
+        boolean timedOut = false;
         RuntimeException visitFailure = null;
 
         try {
             if (!navigateToNomadicMerchantShop()) {
                 markUnconfirmed("shop-navigation", "Nomadic Merchant shop navigation was not verified");
-                unconfirmed = true;
             } else {
-                while (!unconfirmed && !complete
-                        && System.currentTimeMillis() < executionDeadlineMs) {
+                while (!complete) {
                     phase = NomadicMerchantPhase.SEARCHING_RESOURCES;
-                    int attemptedSlot = claimResourceOffer(nextResourceSlot, visitResults);
-                    if (attemptedSlot >= 0) {
-                        nextResourceSlot = (attemptedSlot + 1) % NomadicMerchantDecisions.SLOT_COUNT;
+                    int resourceSlot = claimResourceOffer(nextResourceSlot, visitResults);
+                    if (resourceSlot >= 0) {
+                        if (isTimedOut(executionDeadlineMs)) {
+                            timedOut = true;
+                            break;
+                        }
+                        nextResourceSlot = (resourceSlot + 1) % NomadicMerchantDecisions.SLOT_COUNT;
                         continue;
                     }
-                    if (System.currentTimeMillis() >= executionDeadlineMs) {
-                        break;
-                    }
 
-                    int vipBought = buyVipIfEnabled(executionDeadlineMs);
-                    vipPointsPurchasedCount += Math.max(vipBought, 0);
-                    if (vipBought < 0) {
-                        unconfirmedVipPurchasesCount++;
-                        visitResults.recordFailedActivityAction();
-                    }
-                    if (vipBought != 0) {
+                    ImageSearchResultData vipOffer = findVipOffer();
+                    if (vipOffer.isFound()) {
+                        if (isTimedOut(executionDeadlineMs)) {
+                            timedOut = true;
+                            break;
+                        }
+                        int vipBought = buyVip(vipOffer);
+                        visitResults.recordOfferActionDispatched();
+                        vipPointsPurchasedCount += Math.max(vipBought, 0);
+                        if (vipBought < 0) {
+                            unconfirmedVipPurchasesCount++;
+                            visitResults.recordFailedActivityAction();
+                        }
                         logInfo("VIP purchase attempt dispatched. Rescanning the shop.");
                         continue;
                     }
-                    if (System.currentTimeMillis() >= executionDeadlineMs) {
+
+                    ImageSearchResultData freeRefresh = findFreeRefresh();
+                    if (isTimedOut(executionDeadlineMs)) {
+                        timedOut = true;
                         break;
                     }
-
-                    int refreshed = useFreeRefresh(visitResults);
+                    if (!freeRefresh.isFound()) {
+                        complete = true;
+                        continue;
+                    }
+                    int refreshed = useFreeRefresh(freeRefresh, visitResults);
                     if (retrySnapshotType != null) {
                         visitResults.recordFailedActivityAction();
-                        unconfirmed = true;
                         break;
                     }
-                    if (refreshed <= 0) {
-                        complete = true;
-                    } else {
+                    if (refreshed > 0) {
                         nextResourceSlot = 0;
                     }
                 }
-                if (!complete && retrySnapshotType == null
-                        && System.currentTimeMillis() >= executionDeadlineMs) {
+                if (timedOut) {
                     markUnconfirmed("execution-limit",
-                            "Nomadic Merchant task reached execution limit. Ending current cycle with partial results");
+                            "Nomadic Merchant task reached execution limit after the latest shop scan");
                 }
             }
         } catch (RuntimeException failure) {
@@ -141,10 +150,9 @@ public class NomadicMerchantRoutine extends DelayedTask {
             if (visitFailure != null && isActionPhase(phase)) {
                 visitResults.recordFailedActivityAction();
             }
-            finishVisit(visitResults.freeResourcesClaimedCount(), visitResults.unconfirmedResourceClaimsCount(),
+            finishVisit(visitResults,
                     vipPointsPurchasedCount, unconfirmedVipPurchasesCount,
-                    visitResults.freeRefreshTapsDispatchedCount(),
-                    visitResults.failedActivityActionsCount(), complete, visitFailure);
+                    complete, visitFailure);
         }
     }
 
@@ -152,7 +160,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
         return System.currentTimeMillis() + MAX_TASK_EXECUTION_MS;
     }
 
-    int claimResourceOffer(int nextResourceSlot, VisitResults visitResults) {
+    int findResourceOffer(int nextResourceSlot) {
         logDebug("Scanning Nomadic Merchant cards for resource-priced offers.");
         for (int offset = 0; offset < NomadicMerchantDecisions.SLOT_COUNT; offset++) {
             int slot = (nextResourceSlot + offset) % NomadicMerchantDecisions.SLOT_COUNT;
@@ -161,21 +169,34 @@ public class NomadicMerchantRoutine extends DelayedTask {
                     NomadicMerchantDecisions.priceBottomRight(slot),
                     GEM_PRICE_THRESHOLD);
             if (NomadicMerchantDecisions.takeIfNotGemPriced(gemOnPrice)) {
-                phase = NomadicMerchantPhase.CLAIMING_RESOURCE;
-                logInfo("Found a resource-priced offer in slot " + slot + ". Purchasing it.");
-                if (collectOffer(slot)) {
-                    visitResults.recordFreeResourceClaim();
-                    logInfo("Resource claim confirmed. Rescanning the full shop for replacement items.");
-                } else {
-                    visitResults.recordUnconfirmedResourceClaim();
-                    visitResults.recordFailedActivityAction();
-                    logWarning("Resource claim in slot " + slot
-                            + " was not confirmed. Rescanning without assuming the offer changed.");
-                }
                 return slot;
             }
         }
         return -1;
+    }
+
+    int claimResourceOffer(int nextResourceSlot, VisitResults visitResults) {
+        int slot = findResourceOffer(nextResourceSlot);
+        if (slot >= 0) {
+            collectResourceOffer(slot, visitResults);
+        }
+        return slot;
+    }
+
+    private void collectResourceOffer(int slot, VisitResults visitResults) {
+        phase = NomadicMerchantPhase.CLAIMING_RESOURCE;
+        logInfo("Found a resource-priced offer in slot " + slot + ". Purchasing it.");
+        boolean confirmed = collectOffer(slot);
+        visitResults.recordOfferActionDispatched();
+        if (confirmed) {
+            visitResults.recordFreeResourceClaim();
+            logInfo("Resource claim confirmed. Rescanning the full shop for replacement items.");
+        } else {
+            visitResults.recordUnconfirmedResourceClaim();
+            visitResults.recordFailedActivityAction();
+            logWarning("Resource claim in slot " + slot
+                    + " was not confirmed. Rescanning without assuming the offer changed.");
+        }
     }
 
     boolean collectOffer(int slot) {
@@ -190,6 +211,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
         private int unconfirmedResourceClaimsCount;
         private int failedActivityActionsCount;
         private int freeRefreshTapsDispatchedCount;
+        private int offerActionsDispatchedCount;
 
         void recordFreeResourceClaim() {
             freeResourcesClaimedCount++;
@@ -222,27 +244,32 @@ public class NomadicMerchantRoutine extends DelayedTask {
         int freeRefreshTapsDispatchedCount() {
             return freeRefreshTapsDispatchedCount;
         }
+
+        void recordOfferActionDispatched() {
+            offerActionsDispatchedCount++;
+        }
+
+        int offerActionsDispatchedCount() {
+            return offerActionsDispatchedCount;
+        }
     }
 
-    /** @return 1 when a VIP card was bought, 0 when none was present */
-    private int buyVipIfEnabled(long executionDeadlineMs) {
-        if (System.currentTimeMillis() >= executionDeadlineMs) {
-            return 0;
-        }
+    private ImageSearchResultData findVipOffer() {
         phase = NomadicMerchantPhase.SEARCHING_VIP;
         boolean vipBuyEnabled = profile.getConfig(ConfigurationKeyEnum.BOOL_NOMADIC_MERCHANT_VIP_POINTS,
                 Boolean.class);
         if (!vipBuyEnabled) {
-            return 0;
+            return new ImageSearchResultData(false, null, 0);
         }
         logDebug("VIP purchase is enabled. Searching for VIP points to buy.");
         ImageSearchResultData vipResult = locatePatternChecked(
                 TemplatesEnum.NOMADIC_MERCHANT_VIP,
                 SearchConfigConstants.DEFAULT_SINGLE);
-        if (!vipResult.isFound()) {
-            return 0;
-        }
+        return vipResult;
+    }
 
+    /** @return 1 when a VIP purchase is confirmed, -1 when it is unconfirmed */
+    private int buyVip(ImageSearchResultData vipResult) {
         phase = NomadicMerchantPhase.BUYING_VIP;
         logInfo("Found VIP points. Purchasing with gems.");
         tapNear(new PointData(vipResult.getPoint().getX(), vipResult.getPoint().getY() + VIP_PURCHASE_OFFSET_Y));
@@ -260,18 +287,16 @@ public class NomadicMerchantRoutine extends DelayedTask {
         return 1;
     }
 
-    /** @return 1 when a detected Free Refresh tap was dispatched, 0 when none was available */
-    int useFreeRefresh(VisitResults visitResults) {
+    private ImageSearchResultData findFreeRefresh() {
         phase = NomadicMerchantPhase.SEARCHING_FREE_REFRESH;
         logDebug("No selectable offer found. Checking for Free Refresh.");
-        ImageSearchResultData dailyRefreshResult = locatePatternChecked(
+        return locatePatternChecked(
                 TemplatesEnum.MYSTERY_SHOP_DAILY_REFRESH,
                 SearchConfigConstants.DEFAULT_SINGLE);
-        if (!dailyRefreshResult.isFound()) {
-            logInfo("No free refresh detected after a full shop scan. All eligible Nomadic Merchant operations are complete.");
-            return 0;
-        }
+    }
 
+    /** @return 1 when the detected Free Refresh tap was dispatched */
+    int useFreeRefresh(ImageSearchResultData dailyRefreshResult, VisitResults visitResults) {
         phase = NomadicMerchantPhase.CLAIMING_FREE_REFRESH;
         if (visitResults.freeRefreshTapsDispatchedCount() == 0) {
             logInfo("Free Refresh detected; starting the refresh scan cycle.");
@@ -295,33 +320,32 @@ public class NomadicMerchantRoutine extends DelayedTask {
         retryReason = reason;
     }
 
-    private void finishVisit(int freeResourcesClaimedCount, int unconfirmedResourceClaimsCount,
-            int vipPointsPurchasedCount, int unconfirmedVipPurchasesCount,
-            int freeRefreshTapsDispatchedCount, int failedActivityActionsCount,
+    private void finishVisit(VisitResults visitResults, int vipPointsPurchasedCount,
+            int unconfirmedVipPurchasesCount,
             boolean complete, RuntimeException visitFailure) {
         NomadicMerchantPhase failedDuring = phase;
-        confirmedOffersThisCycle += freeResourcesClaimedCount + vipPointsPurchasedCount;
+        offerActionsThisCycle += visitResults.offerActionsDispatchedCount();
+        freeRefreshActionsThisCycle += visitResults.freeRefreshTapsDispatchedCount();
         phase = NomadicMerchantPhase.FINISHED;
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime next;
         String scheduleReason;
         int shortRetriesScheduledThisVisit = 0;
         if (complete && retrySnapshotType == null && visitFailure == null) {
-            progress = NomadicMerchantProgress.COMPLETED;
+            progress = completionProgress(offerActionsThisCycle, freeRefreshActionsThisCycle);
             failedTimeoutsThisCycle = 0;
             next = nextRun(progress, now, GameTimeUtils.dailyResetTime());
             retryDeferredUntil = next;
             scheduleReason = "shop exhausted";
         } else if (visitFailure != null || retrySnapshotType != null
                 && !"execution-limit".equals(retrySnapshotType)) {
-            progress = NomadicMerchantProgress.ERROR_RETRY;
-            failedTimeoutsThisCycle = 0;
+            progress = NomadicMerchantProgress.TIMEOUT_RETRY;
             next = nextRun(progress, now, now);
             scheduleReason = "scan or action error; retry soon";
         } else {
             failedTimeoutsThisCycle++;
-            progress = timeoutProgress(confirmedOffersThisCycle, failedTimeoutsThisCycle);
-            if (progress == NomadicMerchantProgress.FAILED_RETRY) {
+            progress = timeoutProgress(offerActionsThisCycle, failedTimeoutsThisCycle);
+            if (progress == NomadicMerchantProgress.TIMEOUT_RETRY) {
                 shortRetriesScheduledThisVisit = 1;
                 next = nextRun(progress, now, now);
                 scheduleReason = "timeout retry " + failedTimeoutsThisCycle + "/" + MAX_FAILED_TIMEOUTS;
@@ -329,17 +353,17 @@ public class NomadicMerchantRoutine extends DelayedTask {
                 retryDeferredUntil = GameTimeUtils.dailyResetTime().plusMinutes(RESET_SETTLE_DELAY_MINUTES);
                 next = retryDeferredUntil;
                 scheduleReason = progress == NomadicMerchantProgress.PARTIAL_RESCHEDULED
-                        ? "timeout after confirmed collections; deferred until daily reset"
-                        : "third timeout without confirmed collections; deferred until daily reset";
+                        ? "third timeout after dispatched collections; deferred until daily reset"
+                        : "third timeout without dispatched collections; deferred until daily reset";
             }
         }
         reschedule(next);
-        recordVisitResults(freeResourcesClaimedCount, unconfirmedResourceClaimsCount, vipPointsPurchasedCount,
-                unconfirmedVipPurchasesCount, freeRefreshTapsDispatchedCount, failedActivityActionsCount,
+        recordVisitResults(visitResults.freeResourcesClaimedCount(), visitResults.unconfirmedResourceClaimsCount(), vipPointsPurchasedCount,
+                unconfirmedVipPurchasesCount, visitResults.freeRefreshTapsDispatchedCount(), visitResults.failedActivityActionsCount(),
                 shortRetriesScheduledThisVisit);
-        String stats = resultSummary(freeResourcesClaimedCount, unconfirmedResourceClaimsCount,
-                vipPointsPurchasedCount, unconfirmedVipPurchasesCount, freeRefreshTapsDispatchedCount,
-                failedActivityActionsCount, shortRetriesScheduledThisVisit);
+        String stats = resultSummary(visitResults.freeResourcesClaimedCount(), visitResults.unconfirmedResourceClaimsCount(),
+                vipPointsPurchasedCount, unconfirmedVipPurchasesCount, visitResults.freeRefreshTapsDispatchedCount(),
+                visitResults.failedActivityActionsCount(), shortRetriesScheduledThisVisit);
         if (visitFailure != null) {
             logWarning("Nomadic Merchant visit interrupted by " + visitFailure.getClass().getSimpleName()
                     + " during " + failedDuring + ". Progress " + progress
@@ -360,7 +384,8 @@ public class NomadicMerchantRoutine extends DelayedTask {
 
     static LocalDateTime nextRun(NomadicMerchantProgress progress, LocalDateTime now,
             LocalDateTime dailyReset) {
-        if (progress == NomadicMerchantProgress.COMPLETED
+        if (progress == NomadicMerchantProgress.COMPLETED_SUCCESS_RESCHEDULED
+                || progress == NomadicMerchantProgress.COMPLETED_UNVERIFIED
                 || progress == NomadicMerchantProgress.PARTIAL_RESCHEDULED
                 || progress == NomadicMerchantProgress.FAILED_RESCHEDULED) {
             return dailyReset.plusMinutes(RESET_SETTLE_DELAY_MINUTES);
@@ -368,13 +393,23 @@ public class NomadicMerchantRoutine extends DelayedTask {
         return now.plusMinutes(5);
     }
 
-    static NomadicMerchantProgress timeoutProgress(int confirmedOffersThisCycle, int failedTimeoutsThisCycle) {
-        if (confirmedOffersThisCycle > 0) {
-            return NomadicMerchantProgress.PARTIAL_RESCHEDULED;
+    static NomadicMerchantProgress timeoutProgress(int offerActionsThisCycle, int failedTimeoutsThisCycle) {
+        if (failedTimeoutsThisCycle < MAX_FAILED_TIMEOUTS) {
+            return NomadicMerchantProgress.TIMEOUT_RETRY;
         }
-        return failedTimeoutsThisCycle >= MAX_FAILED_TIMEOUTS
-                ? NomadicMerchantProgress.FAILED_RESCHEDULED
-                : NomadicMerchantProgress.FAILED_RETRY;
+        return offerActionsThisCycle > 0
+                ? NomadicMerchantProgress.PARTIAL_RESCHEDULED
+                : NomadicMerchantProgress.FAILED_RESCHEDULED;
+    }
+
+    static NomadicMerchantProgress completionProgress(int offerActionsThisCycle, int freeRefreshActionsThisCycle) {
+        return offerActionsThisCycle > 0 || freeRefreshActionsThisCycle > 0
+                ? NomadicMerchantProgress.COMPLETED_SUCCESS_RESCHEDULED
+                : NomadicMerchantProgress.COMPLETED_UNVERIFIED;
+    }
+
+    private static boolean isTimedOut(long executionDeadlineMs) {
+        return System.currentTimeMillis() >= executionDeadlineMs;
     }
 
     boolean navigateToNomadicMerchantShop() {

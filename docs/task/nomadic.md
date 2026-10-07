@@ -22,25 +22,30 @@ Confirmation of a resource take is a per-slot product-region mean channel
 change of 12 after the reward flyout (2.5–4 s). An unchanged slot is an
 unconfirmed attempt, not a reason to stop scanning. A VIP icon still present
 after the gem-sheet taps is likewise unconfirmed, and the next scan may select
-it again. These signals affect statistics, not the action loop. Free Refresh
-taps count as dispatched attempts, not confirmed refreshes.
+it again. Confirmation is only logged and counted as a metric; it never affects
+the loop, the progress state, or scheduling. Free Refresh taps count as
+dispatched attempts, not confirmed refreshes.
 
-A visit ends normally only after a full scan finds neither an eligible offer
-nor Free Refresh. It then enters `COMPLETED` and schedules one minute after the
-daily reset. The two-minute execution limit is the other normal loop exit. A
-timeout with a confirmed collection in the current in-memory cycle enters
-`PARTIAL_RESCHEDULED` and waits until after reset. Without a confirmed
-collection, the first two timeouts enter `FAILED_RETRY` and retry in five
-minutes; the third enters `FAILED_RESCHEDULED` and waits until after reset.
-An invalid scan result or a refused Free Refresh dispatch is tried once more
-within the visit. Persisting scan and action errors enter `ERROR_RETRY` and
-retry in five minutes; emulator connection and interruption exceptions
-propagate to the task runner. A new
-cycle starts after a completed shop scan or the deferred post-reset visit.
+The execution limit is evaluated after a grid scan has established whether an
+offer is selectable, or after the Free Refresh check when no offer is found.
+The resulting state is based on dispatched actions, never on confirmation:
+
+| State | Condition | Next run |
+| --- | --- | --- |
+| `COMPLETED_SUCCESS_RESCHEDULED` | No offer and no Free Refresh remain; at least one offer collection or Free Refresh was dispatched in the cycle. | Daily reset + 1 minute. |
+| `COMPLETED_UNVERIFIED` | No offer and no Free Refresh remain; no offer collection and no Free Refresh was dispatched in the cycle. | Daily reset + 1 minute. |
+| `TIMEOUT_RETRY` | First or second timeout after the current scan shows a selectable offer or Free Refresh. | 5 minutes. |
+| `PARTIAL_RESCHEDULED` | Third consecutive timeout with at least one offer collection dispatched without a scan or tap error. | Daily reset + 1 minute. |
+| `FAILED_RESCHEDULED` | Third consecutive timeout with no offer collection dispatched. Free Refresh attempts do not affect this state. | Daily reset + 1 minute. |
+
+An invalid scan result or a refused Free Refresh dispatch is tried once within
+the visit. A persistent error schedules a short retry through `TIMEOUT_RETRY`;
+emulator connection and interruption exceptions propagate to the task runner.
+A new cycle starts after a completed shop scan or the deferred post-reset visit.
 Visit logs separate confirmed collections, unconfirmed attempts, dispatched
-refresh taps, errors, and retry decisions.
+offer actions, dispatched refresh taps, errors, and retry decisions.
 
 An emulator capture failure during confirmation leaves the purchase and
-remaining cards unknown. The routine propagates that failure and schedules an
-error retry. A 2026-10-02 account log showed a capture failure after the first
+remaining cards unknown. The routine propagates that failure and schedules a
+short retry. A 2026-10-02 account log showed a capture failure after the first
 resource tap, before any purchase was confirmed.

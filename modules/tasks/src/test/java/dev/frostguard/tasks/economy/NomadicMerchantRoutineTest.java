@@ -40,7 +40,7 @@ class NomadicMerchantRoutineTest {
 
         assertTrue(routine.navigationAttempted);
         assertTrue(routine.scheduledTime().isAfter(before));
-        assertEquals(NomadicMerchantProgress.ERROR_RETRY, routine.progress());
+        assertEquals(NomadicMerchantProgress.TIMEOUT_RETRY, routine.progress());
         assertEquals(NomadicMerchantPhase.FINISHED, routine.phase());
     }
 
@@ -49,10 +49,10 @@ class NomadicMerchantRoutineTest {
         TestRoutine routine = new TestRoutine();
 
         routine.execute();
-        assertEquals(NomadicMerchantProgress.ERROR_RETRY, routine.progress());
+        assertEquals(NomadicMerchantProgress.TIMEOUT_RETRY, routine.progress());
 
         routine.execute();
-        assertEquals(NomadicMerchantProgress.ERROR_RETRY, routine.progress());
+        assertEquals(NomadicMerchantProgress.TIMEOUT_RETRY, routine.progress());
         assertEquals(2, routine.navigationAttempts);
         assertEquals(NomadicMerchantPhase.FINISHED, routine.phase());
     }
@@ -66,7 +66,7 @@ class NomadicMerchantRoutineTest {
         ADBConnectionException failure = assertThrows(ADBConnectionException.class, routine::execute);
 
         assertSame(expectedFailure, failure);
-        assertEquals(NomadicMerchantProgress.ERROR_RETRY, routine.progress());
+        assertEquals(NomadicMerchantProgress.TIMEOUT_RETRY, routine.progress());
         assertEquals(NomadicMerchantPhase.FINISHED, routine.phase());
         assertTrue(routine.scheduledTime().isAfter(before.plusMinutes(4)));
         assertTrue(routine.scheduledTime().isBefore(LocalDateTime.now().plusMinutes(6)));
@@ -81,7 +81,7 @@ class NomadicMerchantRoutineTest {
         assertThrows(IllegalStateException.class, routine::execute);
 
         assertEquals(2, routine.scanAttempts);
-        assertEquals(NomadicMerchantProgress.ERROR_RETRY, routine.progress());
+        assertEquals(NomadicMerchantProgress.TIMEOUT_RETRY, routine.progress());
         assertTrue(routine.scheduledTime().isAfter(before.plusMinutes(4)));
         assertTrue(routine.scheduledTime().isBefore(LocalDateTime.now().plusMinutes(6)));
     }
@@ -90,9 +90,9 @@ class NomadicMerchantRoutineTest {
     void thirdTimeoutWithoutConfirmedCollectionsDefersUntilReset() {
         LocalDateTime now = LocalDateTime.of(2026, 10, 6, 10, 0);
         LocalDateTime reset = now.plusHours(16);
-        assertEquals(NomadicMerchantProgress.FAILED_RETRY,
+        assertEquals(NomadicMerchantProgress.TIMEOUT_RETRY,
                 NomadicMerchantRoutine.timeoutProgress(0, 1));
-        assertEquals(NomadicMerchantProgress.FAILED_RETRY,
+        assertEquals(NomadicMerchantProgress.TIMEOUT_RETRY,
                 NomadicMerchantRoutine.timeoutProgress(0, 2));
         assertEquals(NomadicMerchantProgress.FAILED_RESCHEDULED,
                 NomadicMerchantRoutine.timeoutProgress(0, 3));
@@ -122,10 +122,20 @@ class NomadicMerchantRoutineTest {
     void timeoutWithConfirmedCollectionIsPartialImmediately() {
         LocalDateTime now = LocalDateTime.of(2026, 10, 6, 10, 0);
         LocalDateTime reset = now.plusHours(16);
-        assertEquals(NomadicMerchantProgress.PARTIAL_RESCHEDULED,
+        assertEquals(NomadicMerchantProgress.TIMEOUT_RETRY,
                 NomadicMerchantRoutine.timeoutProgress(1, 1));
         assertEquals(reset.plusMinutes(1), NomadicMerchantRoutine.nextRun(
-                NomadicMerchantRoutine.timeoutProgress(1, 1), now, reset));
+                NomadicMerchantRoutine.timeoutProgress(1, 3), now, reset));
+    }
+
+    @Test
+    void completionStateUsesDispatchedActionsRatherThanConfirmation() {
+        assertEquals(NomadicMerchantProgress.COMPLETED_UNVERIFIED,
+                NomadicMerchantRoutine.completionProgress(0, 0));
+        assertEquals(NomadicMerchantProgress.COMPLETED_SUCCESS_RESCHEDULED,
+                NomadicMerchantRoutine.completionProgress(1, 0));
+        assertEquals(NomadicMerchantProgress.COMPLETED_SUCCESS_RESCHEDULED,
+                NomadicMerchantRoutine.completionProgress(0, 1));
     }
 
     @Test
@@ -137,7 +147,7 @@ class NomadicMerchantRoutineTest {
 
             routine.execute();
 
-            assertEquals(visit < 3 ? NomadicMerchantProgress.FAILED_RETRY
+            assertEquals(visit < 3 ? NomadicMerchantProgress.TIMEOUT_RETRY
                     : NomadicMerchantProgress.FAILED_RESCHEDULED, routine.progress());
             if (visit < 3) {
                 assertTrue(routine.scheduledTime().isAfter(before.plusMinutes(4)));
@@ -150,15 +160,19 @@ class NomadicMerchantRoutineTest {
     }
 
     @Test
-    void timeoutAfterConfirmedClaimIsPartialWithoutShortRetry() {
+    void thirdTimeoutAfterCalledClaimIsPartialAndDefersUntilReset() {
         TimedOutRoutine routine = new TimedOutRoutine(true);
         LocalDateTime reset = GameTimeUtils.dailyResetTime();
 
         routine.execute();
+        assertEquals(NomadicMerchantProgress.TIMEOUT_RETRY, routine.progress());
+        routine.execute();
+        assertEquals(NomadicMerchantProgress.TIMEOUT_RETRY, routine.progress());
+        routine.execute();
 
         assertEquals(NomadicMerchantProgress.PARTIAL_RESCHEDULED, routine.progress());
         assertEquals(reset.plusMinutes(1), routine.scheduledTime());
-        assertEquals(1, routine.scans);
+        assertEquals(3, routine.scans);
     }
 
     @Test
@@ -169,11 +183,11 @@ class NomadicMerchantRoutineTest {
         assertEquals(now.plusMinutes(5), NomadicMerchantRoutine.nextRun(
                 NomadicMerchantProgress.READY, now, reset));
         assertEquals(now.plusMinutes(5), NomadicMerchantRoutine.nextRun(
-                NomadicMerchantProgress.FAILED_RETRY, now, reset));
-        assertEquals(now.plusMinutes(5), NomadicMerchantRoutine.nextRun(
-                NomadicMerchantProgress.ERROR_RETRY, now, reset));
+                NomadicMerchantProgress.TIMEOUT_RETRY, now, reset));
         assertEquals(reset.plusMinutes(1), NomadicMerchantRoutine.nextRun(
-                NomadicMerchantProgress.COMPLETED, now, reset));
+                NomadicMerchantProgress.COMPLETED_SUCCESS_RESCHEDULED, now, reset));
+        assertEquals(reset.plusMinutes(1), NomadicMerchantRoutine.nextRun(
+                NomadicMerchantProgress.COMPLETED_UNVERIFIED, now, reset));
         assertEquals(reset.plusMinutes(1), NomadicMerchantRoutine.nextRun(
                 NomadicMerchantProgress.PARTIAL_RESCHEDULED, now, reset));
         assertEquals(reset.plusMinutes(1), NomadicMerchantRoutine.nextRun(
@@ -238,7 +252,7 @@ class NomadicMerchantRoutineTest {
                 "resource-scan", "refresh-search"), routine.events);
         assertEquals(2, routine.refreshTaps);
         assertEquals(List.of(500L, 500L), routine.waits);
-        assertEquals(NomadicMerchantProgress.COMPLETED, routine.progress());
+        assertEquals(NomadicMerchantProgress.COMPLETED_SUCCESS_RESCHEDULED, routine.progress());
         assertEquals(2, routine.visitResults.freeRefreshTapsDispatchedCount());
         assertEquals(1, routine.visitResults.freeResourcesClaimedCount());
     }
@@ -252,7 +266,7 @@ class NomadicMerchantRoutineTest {
         assertEquals(2, routine.vipPurchaseAttempts);
         assertEquals(3, routine.vipSearches);
         assertEquals(3, routine.resourceScans);
-        assertEquals(NomadicMerchantProgress.COMPLETED, routine.progress());
+        assertEquals(NomadicMerchantProgress.COMPLETED_SUCCESS_RESCHEDULED, routine.progress());
     }
 
     @Test
@@ -264,7 +278,7 @@ class NomadicMerchantRoutineTest {
         assertEquals(1, routine.resourceAttempts);
         assertEquals(2, routine.refreshSearches);
         assertEquals(1, routine.refreshTaps);
-        assertEquals(NomadicMerchantProgress.COMPLETED, routine.progress());
+        assertEquals(NomadicMerchantProgress.COMPLETED_SUCCESS_RESCHEDULED, routine.progress());
         assertEquals(1, routine.visitResults.unconfirmedResourceClaimsCount());
         assertEquals(1, routine.visitResults.freeRefreshTapsDispatchedCount());
     }
@@ -284,8 +298,8 @@ class NomadicMerchantRoutineTest {
         assertEquals(0, unconfirmed.visitResults.freeResourcesClaimedCount());
         assertEquals(0, confirmed.visitResults.unconfirmedResourceClaimsCount());
         assertEquals(1, confirmed.visitResults.freeResourcesClaimedCount());
-        assertEquals(NomadicMerchantProgress.COMPLETED, unconfirmed.progress());
-        assertEquals(NomadicMerchantProgress.COMPLETED, confirmed.progress());
+        assertEquals(NomadicMerchantProgress.COMPLETED_SUCCESS_RESCHEDULED, unconfirmed.progress());
+        assertEquals(NomadicMerchantProgress.COMPLETED_SUCCESS_RESCHEDULED, confirmed.progress());
         assertEquals(2, unconfirmed.refreshSearches);
         assertEquals(2, confirmed.refreshSearches);
         assertEquals(1, unconfirmed.refreshTaps);
@@ -303,7 +317,7 @@ class NomadicMerchantRoutineTest {
 
         assertSame(expectedFailure, failure);
         assertEquals(List.of("resource-scan", "refresh-search", "tap"), routine.events);
-        assertEquals(NomadicMerchantProgress.ERROR_RETRY, routine.progress());
+        assertEquals(NomadicMerchantProgress.TIMEOUT_RETRY, routine.progress());
         assertTrue(routine.scheduledTime().isAfter(before.plusMinutes(4)));
         assertTrue(routine.scheduledTime().isBefore(LocalDateTime.now().plusMinutes(6)));
         assertEquals(0, routine.visitResults.freeRefreshTapsDispatchedCount());
@@ -318,7 +332,7 @@ class NomadicMerchantRoutineTest {
         routine.execute();
 
         assertEquals(List.of("resource-scan", "refresh-search", "tap", "tap"), routine.events);
-        assertEquals(NomadicMerchantProgress.ERROR_RETRY, routine.progress());
+        assertEquals(NomadicMerchantProgress.TIMEOUT_RETRY, routine.progress());
         assertTrue(routine.scheduledTime().isAfter(before.plusMinutes(4)));
         assertTrue(routine.scheduledTime().isBefore(LocalDateTime.now().plusMinutes(6)));
         assertEquals(0, routine.visitResults.freeRefreshTapsDispatchedCount());
@@ -333,7 +347,7 @@ class NomadicMerchantRoutineTest {
 
         assertSame(routine.waitFailure, failure);
         assertEquals(List.of("resource-scan", "refresh-search", "tap", "wait-500"), routine.events);
-        assertEquals(NomadicMerchantProgress.ERROR_RETRY, routine.progress());
+        assertEquals(NomadicMerchantProgress.TIMEOUT_RETRY, routine.progress());
         assertEquals(1, routine.visitResults.freeRefreshTapsDispatchedCount());
     }
 
@@ -601,6 +615,7 @@ class NomadicMerchantRoutineTest {
             }
             if (confirmClaim) {
                 visitResults.recordFreeResourceClaim();
+                visitResults.recordOfferActionDispatched();
             }
             return 0;
         }
