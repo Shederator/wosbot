@@ -10,10 +10,10 @@ public enum NomadicMerchantProgress {
     COMPLETED_SUCCESS_RESCHEDULED,
     /** The shop was exhausted without a dispatched collection or refresh in this cycle. */
     COMPLETED_UNVERIFIED,
-    /** The first or second timeout in a cycle; retry shortly. */
+    /** The first or second retryable exit in a cycle; retry shortly. */
     TIMEOUT_RETRY,
-    /** The third timeout in a cycle occurred after at least one dispatched collection. */
+    /** The third retryable exit in a cycle occurred after at least one dispatched collection. */
     PARTIAL_RESCHEDULED,
-    /** The third timeout in a cycle occurred without a dispatched collection. */
+    /** The third retryable exit in a cycle occurred without a dispatched collection. */
     FAILED_RESCHEDULED
 }

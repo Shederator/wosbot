@@ -32,18 +32,23 @@ The execution limit is evaluated after a grid scan has established whether an
 offer is selectable, or after the Free Refresh check when no offer is found.
 The resulting state is based on dispatched actions, never on confirmation:
 
-| State | Exit condition | Selectable offers in latest scan | Free Refresh detected | Dispatched collections | Dispatched Free Refreshes | Consecutive timeouts | Next run |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `READY` | New cycle or daily-reset cycle. | — | — | 0 | 0 | 0 | Normal execution. |
-| `COMPLETED_SUCCESS_RESCHEDULED` | Shop exhausted; at least one collection or Free Refresh was dispatched. | 0 | 0 | ≥ 1, or 0 when a refresh was dispatched | ≥ 1, or 0 when a collection was dispatched | < 3 | Daily reset + 1 minute. |
-| `COMPLETED_UNVERIFIED` | Shop exhausted without an action in the cycle. | 0 | 0 | 0 | 0 | < 3 | Daily reset + 1 minute. |
-| `TIMEOUT_RETRY` | First or second timeout after the latest decision scan. | ≥ 1, or 0 | Detected when offers are 0; otherwise not checked | No effect | No effect | 1 or 2 | 5 minutes. |
-| `PARTIAL_RESCHEDULED` | Third consecutive timeout. | No effect | No effect | ≥ 1 | No effect | 3 | Daily reset + 1 minute. |
-| `FAILED_RESCHEDULED` | Third consecutive timeout. | No effect | No effect | 0 | No effect | 3 | Daily reset + 1 minute. |
+| State | Exit condition | Selectable offers in latest scan | Free Refresh detected | Dispatched collections | Dispatched Free Refreshes | Consecutive retryable exits | Reschedule reason | Next run |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `READY` | New cycle or daily-reset cycle. | — | — | 0 | 0 | 0 | — | Normal execution. |
+| `COMPLETED_SUCCESS_RESCHEDULED` | Shop exhausted; at least one collection or Free Refresh was dispatched. | 0 | 0 | ≥ 1, or 0 when a refresh was dispatched | ≥ 1, or 0 when a collection was dispatched | < 3 | — | Daily reset + 1 minute. |
+| `COMPLETED_UNVERIFIED` | Shop exhausted without an action in the cycle. | 0 | 0 | 0 | 0 | < 3 | — | Daily reset + 1 minute. |
+| `TIMEOUT_RETRY` | First or second retryable visit exit: timeout, navigation, scan, or tap failure. | ≥ 1, 0, or unavailable after an error | Detected when offers are 0; otherwise not checked | No effect | No effect | 1 or 2 | `navigation_error`, `adb_error`, `no_collect_error`, or `timeout` | 5 minutes. |
+| `PARTIAL_RESCHEDULED` | Third consecutive retryable visit exit. | No effect | No effect | ≥ 1 | No effect | 3 | `navigation_error`, `adb_error`, `no_collect_error`, or `timeout` from the last visit | Daily reset + 1 minute. |
+| `FAILED_RESCHEDULED` | Third consecutive retryable visit exit. | No effect | No effect | 0 | No effect | 3 | `navigation_error`, `adb_error`, `no_collect_error`, or `timeout` from the last visit | Daily reset + 1 minute. |
 
 An invalid scan result or a refused Free Refresh dispatch is tried once within
-the visit. A persistent error schedules a short retry through `TIMEOUT_RETRY`;
-emulator connection and interruption exceptions propagate to the task runner.
+the visit. Navigation, scan, and tap failures share the timeout retry budget;
+their third consecutive exit uses the same deferred state. Emulator connection
+and interruption exceptions propagate to the task runner.
+The reason code is retained in each retryable state and logged with the chosen
+schedule. Therefore a cycle that first dispatched a collection and later loses
+navigation or ADB connectivity ends in `PARTIAL_RESCHEDULED` with that last
+failure's code.
 A new cycle starts after a completed shop scan or the deferred post-reset visit.
 Visit logs separate confirmed collections, unconfirmed attempts, dispatched
 offer actions, dispatched refresh taps, errors, and retry decisions.

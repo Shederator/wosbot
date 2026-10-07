@@ -45,15 +45,21 @@ class NomadicMerchantRoutineTest {
     }
 
     @Test
-    void remembersUnconfirmedProgressAcrossVisitsWithoutSkippingTheScan() {
+    void thirdNavigationFailureDefersUntilResetWithoutSkippingTheScan() {
         TestRoutine routine = new TestRoutine();
 
         routine.execute();
         assertEquals(NomadicMerchantProgress.TIMEOUT_RETRY, routine.progress());
+        assertEquals(NomadicMerchantRescheduleReason.NAVIGATION_ERROR, routine.rescheduleReason());
 
         routine.execute();
         assertEquals(NomadicMerchantProgress.TIMEOUT_RETRY, routine.progress());
-        assertEquals(2, routine.navigationAttempts);
+
+        routine.execute();
+        assertEquals(NomadicMerchantProgress.FAILED_RESCHEDULED, routine.progress());
+        assertEquals(NomadicMerchantRescheduleReason.NAVIGATION_ERROR, routine.rescheduleReason());
+        assertEquals(GameTimeUtils.dailyResetTime().plusMinutes(1), routine.scheduledTime());
+        assertEquals(3, routine.navigationAttempts);
         assertEquals(NomadicMerchantPhase.FINISHED, routine.phase());
     }
 
@@ -67,6 +73,7 @@ class NomadicMerchantRoutineTest {
 
         assertSame(expectedFailure, failure);
         assertEquals(NomadicMerchantProgress.TIMEOUT_RETRY, routine.progress());
+        assertEquals(NomadicMerchantRescheduleReason.ADB_ERROR, routine.rescheduleReason());
         assertEquals(NomadicMerchantPhase.FINISHED, routine.phase());
         assertTrue(routine.scheduledTime().isAfter(before.plusMinutes(4)));
         assertTrue(routine.scheduledTime().isBefore(LocalDateTime.now().plusMinutes(6)));
@@ -82,6 +89,7 @@ class NomadicMerchantRoutineTest {
 
         assertEquals(2, routine.scanAttempts);
         assertEquals(NomadicMerchantProgress.TIMEOUT_RETRY, routine.progress());
+        assertEquals(NomadicMerchantRescheduleReason.NO_COLLECT_ERROR, routine.rescheduleReason());
         assertTrue(routine.scheduledTime().isAfter(before.plusMinutes(4)));
         assertTrue(routine.scheduledTime().isBefore(LocalDateTime.now().plusMinutes(6)));
     }
@@ -160,7 +168,7 @@ class NomadicMerchantRoutineTest {
     }
 
     @Test
-    void thirdTimeoutAfterCalledClaimIsPartialAndDefersUntilReset() {
+    void partialRescheduleKeepsTimeoutReasonAfterProgressThenStall() {
         TimedOutRoutine routine = new TimedOutRoutine(true);
         LocalDateTime reset = GameTimeUtils.dailyResetTime();
 
@@ -171,8 +179,29 @@ class NomadicMerchantRoutineTest {
         routine.execute();
 
         assertEquals(NomadicMerchantProgress.PARTIAL_RESCHEDULED, routine.progress());
+        assertEquals(NomadicMerchantRescheduleReason.TIMEOUT, routine.rescheduleReason());
         assertEquals(reset.plusMinutes(1), routine.scheduledTime());
         assertEquals(3, routine.scans);
+    }
+
+    @Test
+    void partialRescheduleKeepsNavigationReasonWhenProgressedVisitIsFollowedByNavigationFailures() {
+        ProgressThenNavigationFailureRoutine routine = new ProgressThenNavigationFailureRoutine();
+
+        routine.execute();
+        assertEquals(NomadicMerchantProgress.TIMEOUT_RETRY, routine.progress());
+        assertEquals(NomadicMerchantRescheduleReason.TIMEOUT, routine.rescheduleReason());
+
+        routine.execute();
+        assertEquals(NomadicMerchantProgress.TIMEOUT_RETRY, routine.progress());
+        assertEquals(NomadicMerchantRescheduleReason.NAVIGATION_ERROR, routine.rescheduleReason());
+
+        routine.execute();
+
+        assertEquals(NomadicMerchantProgress.PARTIAL_RESCHEDULED, routine.progress());
+        assertEquals(NomadicMerchantRescheduleReason.NAVIGATION_ERROR, routine.rescheduleReason());
+        assertEquals(GameTimeUtils.dailyResetTime().plusMinutes(1), routine.scheduledTime());
+        assertEquals(1, routine.scans);
     }
 
     @Test
@@ -616,6 +645,43 @@ class NomadicMerchantRoutineTest {
             if (confirmClaim) {
                 visitResults.recordFreeResourceClaim();
                 visitResults.recordOfferActionDispatched();
+            }
+            return 0;
+        }
+
+        private LocalDateTime scheduledTime() {
+            return scheduledTime;
+        }
+    }
+
+    private static final class ProgressThenNavigationFailureRoutine extends NomadicMerchantRoutine {
+        private int visits;
+        private int scans;
+
+        private ProgressThenNavigationFailureRoutine() {
+            super(new AccountDescriptor(9L, "PartialNavigationTest", "9", true, 1L, 30L),
+                    TpDailyTaskEnum.NOMADIC_MERCHANT);
+        }
+
+        @Override
+        boolean navigateToNomadicMerchantShop() {
+            return ++visits == 1;
+        }
+
+        @Override
+        long executionDeadlineMs() {
+            return System.currentTimeMillis() + 200;
+        }
+
+        @Override
+        int claimResourceOffer(int nextResourceSlot, VisitResults visitResults) {
+            scans++;
+            visitResults.recordOfferActionDispatched();
+            try {
+                Thread.sleep(250);
+            } catch (InterruptedException interruption) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(interruption);
             }
             return 0;
         }

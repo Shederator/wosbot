@@ -14,6 +14,7 @@ import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.nav.ShopTab;
 import dev.frostguard.engine.helper.TemplateSearchHelper;
+import dev.frostguard.engine.error.ADBConnectionException;
 import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 
 import java.time.LocalDateTime;
@@ -48,6 +49,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
     private NomadicMerchantPhase phase = NomadicMerchantPhase.OPENING;
     private String retrySnapshotType;
     private String retryReason;
+    private NomadicMerchantRescheduleReason rescheduleReason;
     private int failedTimeoutsThisCycle;
     private LocalDateTime retryDeferredUntil;
     private int offerActionsThisCycle;
@@ -65,6 +67,10 @@ public class NomadicMerchantRoutine extends DelayedTask {
         return phase;
     }
 
+    NomadicMerchantRescheduleReason rescheduleReason() {
+        return rescheduleReason;
+    }
+
     @Override
     protected void execute() {
         if (retryDeferredUntil != null && !LocalDateTime.now().isBefore(retryDeferredUntil)) {
@@ -76,6 +82,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
         phase = NomadicMerchantPhase.OPENING;
         retrySnapshotType = null;
         retryReason = null;
+        rescheduleReason = null;
         logInfo("Resuming Nomadic Merchant from " + progress + ".");
 
         int vipPointsPurchasedCount = 0;
@@ -339,10 +346,22 @@ public class NomadicMerchantRoutine extends DelayedTask {
             scheduleReason = "shop exhausted";
         } else if (visitFailure != null || retrySnapshotType != null
                 && !"execution-limit".equals(retrySnapshotType)) {
-            progress = NomadicMerchantProgress.TIMEOUT_RETRY;
-            next = nextRun(progress, now, now);
-            scheduleReason = "scan or action error; retry soon";
+            rescheduleReason = failureReason(visitFailure, retrySnapshotType);
+            failedTimeoutsThisCycle++;
+            progress = timeoutProgress(offerActionsThisCycle, failedTimeoutsThisCycle);
+            if (progress == NomadicMerchantProgress.TIMEOUT_RETRY) {
+                shortRetriesScheduledThisVisit = 1;
+                next = nextRun(progress, now, now);
+                scheduleReason = "navigation, scan, or action error; retry soon";
+            } else {
+                retryDeferredUntil = GameTimeUtils.dailyResetTime().plusMinutes(RESET_SETTLE_DELAY_MINUTES);
+                next = retryDeferredUntil;
+                scheduleReason = progress == NomadicMerchantProgress.PARTIAL_RESCHEDULED
+                        ? "third failed visit after dispatched collections; deferred until daily reset"
+                        : "third failed visit without dispatched collections; deferred until daily reset";
+            }
         } else {
+            rescheduleReason = NomadicMerchantRescheduleReason.TIMEOUT;
             failedTimeoutsThisCycle++;
             progress = timeoutProgress(offerActionsThisCycle, failedTimeoutsThisCycle);
             if (progress == NomadicMerchantProgress.TIMEOUT_RETRY) {
@@ -367,13 +386,13 @@ public class NomadicMerchantRoutine extends DelayedTask {
         if (visitFailure != null) {
             logWarning("Nomadic Merchant visit interrupted by " + visitFailure.getClass().getSimpleName()
                     + " during " + failedDuring + ". Progress " + progress
-                    + "; confirmed results kept; " + stats
+                    + "; reschedule reason " + rescheduleReason.code() + "; confirmed results kept; " + stats
                     + "; " + scheduleReason + "; next check at " + next.format(DATETIME_FORMATTER) + ".");
         } else if (retrySnapshotType != null) {
             String snapshot = TaskDiagnosticSnapshots.capture(
                     emuManager, EMULATOR_NUMBER, "nomadicmerchant", retrySnapshotType);
             logWarning(retryReason + ". Progress " + progress + " after " + failedDuring
-                    + "; confirmed results kept; " + stats
+                    + "; reschedule reason " + rescheduleReason.code() + "; confirmed results kept; " + stats
                     + "; " + scheduleReason + "; next check at " + next.format(DATETIME_FORMATTER)
                     + "; " + snapshot + ".");
         } else {
@@ -406,6 +425,17 @@ public class NomadicMerchantRoutine extends DelayedTask {
         return offerActionsThisCycle > 0 || freeRefreshActionsThisCycle > 0
                 ? NomadicMerchantProgress.COMPLETED_SUCCESS_RESCHEDULED
                 : NomadicMerchantProgress.COMPLETED_UNVERIFIED;
+    }
+
+    private static NomadicMerchantRescheduleReason failureReason(RuntimeException visitFailure,
+            String retrySnapshotType) {
+        if (visitFailure instanceof ADBConnectionException) {
+            return NomadicMerchantRescheduleReason.ADB_ERROR;
+        }
+        if ("shop-navigation".equals(retrySnapshotType)) {
+            return NomadicMerchantRescheduleReason.NAVIGATION_ERROR;
+        }
+        return NomadicMerchantRescheduleReason.NO_COLLECT_ERROR;
     }
 
     private static boolean isTimedOut(long executionDeadlineMs) {
