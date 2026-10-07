@@ -24,19 +24,22 @@ unconfirmed attempt, not a reason to stop scanning. A VIP icon still present
 after the gem-sheet taps is likewise unconfirmed, and the next scan may select
 it again. Confirmation is only logged and counted as a metric; it never affects
 the loop, the progress state, or scheduling. Free Refresh taps count as
-dispatched attempts, not confirmed refreshes.
+dispatched attempts, not confirmed refreshes. A requested collection is counted
+only if neither its scan nor its tap produced an error. Its visual confirmation
+remains a log indicator and has no effect on the state.
 
 The execution limit is evaluated after a grid scan has established whether an
 offer is selectable, or after the Free Refresh check when no offer is found.
 The resulting state is based on dispatched actions, never on confirmation:
 
-| State | Condition | Next run |
-| --- | --- | --- |
-| `COMPLETED_SUCCESS_RESCHEDULED` | No offer and no Free Refresh remain; at least one offer collection or Free Refresh was dispatched in the cycle. | Daily reset + 1 minute. |
-| `COMPLETED_UNVERIFIED` | No offer and no Free Refresh remain; no offer collection and no Free Refresh was dispatched in the cycle. | Daily reset + 1 minute. |
-| `TIMEOUT_RETRY` | First or second timeout after the current scan shows a selectable offer or Free Refresh. | 5 minutes. |
-| `PARTIAL_RESCHEDULED` | Third consecutive timeout with at least one offer collection dispatched without a scan or tap error. | Daily reset + 1 minute. |
-| `FAILED_RESCHEDULED` | Third consecutive timeout with no offer collection dispatched. Free Refresh attempts do not affect this state. | Daily reset + 1 minute. |
+| State | Exit condition | Selectable offers in latest scan | Free Refresh detected | Dispatched collections | Dispatched Free Refreshes | Consecutive timeouts | Next run |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `READY` | New cycle or daily-reset cycle. | — | — | 0 | 0 | 0 | Normal execution. |
+| `COMPLETED_SUCCESS_RESCHEDULED` | Shop exhausted; at least one collection or Free Refresh was dispatched. | 0 | 0 | ≥ 1, or 0 when a refresh was dispatched | ≥ 1, or 0 when a collection was dispatched | < 3 | Daily reset + 1 minute. |
+| `COMPLETED_UNVERIFIED` | Shop exhausted without an action in the cycle. | 0 | 0 | 0 | 0 | < 3 | Daily reset + 1 minute. |
+| `TIMEOUT_RETRY` | First or second timeout after the latest decision scan. | ≥ 1, or 0 | Detected when offers are 0; otherwise not checked | No effect | No effect | 1 or 2 | 5 minutes. |
+| `PARTIAL_RESCHEDULED` | Third consecutive timeout. | No effect | No effect | ≥ 1 | No effect | 3 | Daily reset + 1 minute. |
+| `FAILED_RESCHEDULED` | Third consecutive timeout. | No effect | No effect | 0 | No effect | 3 | Daily reset + 1 minute. |
 
 An invalid scan result or a refused Free Refresh dispatch is tried once within
 the visit. A persistent error schedules a short retry through `TIMEOUT_RETRY`;
