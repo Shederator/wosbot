@@ -1,12 +1,8 @@
 package dev.frostguard.tasks.events;
 
-import dev.frostguard.engine.schedule.LaunchPoint;
-
-
+import dev.frostguard.engine.helper.NavigationHelper.DealsTarget;
 import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
-import dev.frostguard.vision.convert.GameTimeUtils;
-import dev.frostguard.vision.convert.GameTimeUtils;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.ImageSearchResultData;
@@ -42,27 +38,8 @@ public class JourneyofLightRoutine extends DelayedTask {
 
         this.textHelper = new ResilientOcrExecutor<>(provider);
 
-        ImageSearchResultData dealsResult = templateSearchHelper.locatePattern(
-                TemplatesEnum.HOME_DEALS_BUTTON, SearchConfigConstants.DEFAULT_SINGLE);
-
-        if (!dealsResult.isFound()) {
-            scheduleNavigationRetry("Deals button was not detected", "deals-button");
-            return;
-        }
-
-        tapInside(dealsResult);
-        sleepTask(1500);
-
-        // Try to navigate to the event screen, retrying up to 3 times if necessary
-        boolean navigated = navigateToEventScreen();
-        for (int i = 0; i < 3 && !navigated; i++) {
-            logDebug("Retrying navigation to the Journey of Light event screen. Attempt " + (i + 1) + " of 3.");
-            sleepTask(1000);
-            navigated = navigateToEventScreen();
-        }
-
-        if (!navigated) {
-            scheduleNavigationRetry("event screen was not verified after 4 attempts", "event-navigation");
+        if (!navigationHelper.navigateToDeals(DealsTarget.JOURNEY_OF_LIGHT)) {
+            scheduleNavigationRetry("Journey of Light screen was not verified", "event-navigation");
             return;
         }
 
@@ -136,32 +113,6 @@ public class JourneyofLightRoutine extends DelayedTask {
             sleepTask(500);
             pressBack();
         }
-    }
-
-    private boolean navigateToEventScreen() {
-        // Close any windows that may be open
-        tapInside(new PointData(529, 27), new PointData(635, 63), 5, 300);
-
-        // Search for the Journey of Light menu within deals
-        ImageSearchResultData result1 = templateSearchHelper.locatePattern(
-                TemplatesEnum.JOURNEY_OF_LIGHT_TAB, SearchConfigConstants.DEFAULT_SINGLE);
-        ImageSearchResultData result2 = templateSearchHelper.locatePattern(
-                TemplatesEnum.JOURNEY_OF_LIGHT_UNSELECTED_TAB, SearchConfigConstants.DEFAULT_SINGLE);
-
-        if (result1.isFound() || result2.isFound()) {
-            logInfo("Successfully navigated to the Journey of Light event.");
-            sleepTask(500);
-            tapInside(result1.isFound() ? result1 : result2);
-            sleepTask(1000);
-
-            // Tap "Journey of Light" tab to make sure "My Treasures" tab is not active
-            tapInside(new PointData(50, 220), new PointData(350, 260));
-            sleepTask(500);
-
-            return true;
-        }
-
-        return false;
     }
 
     private JourneyOfLightEventStatus readEventStatus() {

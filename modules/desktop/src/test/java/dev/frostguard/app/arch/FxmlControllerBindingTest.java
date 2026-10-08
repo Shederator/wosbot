@@ -208,6 +208,16 @@ class FxmlControllerBindingTest {
     }
 
     @Test
+    void taskBuilderDocumentDeclaresDealsNavigationControls() throws IOException {
+        String document = Files.readString(layoutDirectory.resolve("TaskBuilderLayout.fxml"));
+        Set<String> declaredIds = matches(FX_ID, document);
+        assertTrue(declaredIds.contains("dealsNavigationPropsBox"));
+        assertTrue(declaredIds.contains("dealsTargetCombo"));
+        assertTrue(declaredIds.contains("dealsTargetInvalidLabel"));
+        assertTrue(document.contains("onAction=\"#handleAddDealsNavigationNode\""));
+    }
+
+    @Test
     void taskBuilderRunLogStartsTallerAndExposesResizeHandle() throws IOException {
         String document = Files.readString(layoutDirectory.resolve("TaskBuilderLayout.fxml"));
 
