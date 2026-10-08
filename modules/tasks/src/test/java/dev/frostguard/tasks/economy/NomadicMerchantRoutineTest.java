@@ -152,6 +152,22 @@ class NomadicMerchantRoutineTest {
     }
 
     @Test
+    void capturesTerminalSnapshotsOnlyForNavigationAndNoCollectFailures() {
+        assertFalse(NomadicMerchantRoutine.shouldCaptureTerminalFailureSnapshot(
+                NomadicMerchantProgress.TIMEOUT_RETRY, NomadicMerchantRescheduleReason.NAVIGATION_ERROR));
+        assertFalse(NomadicMerchantRoutine.shouldCaptureTerminalFailureSnapshot(
+                NomadicMerchantProgress.PARTIAL_RESCHEDULED, NomadicMerchantRescheduleReason.TIMEOUT));
+        assertFalse(NomadicMerchantRoutine.shouldCaptureTerminalFailureSnapshot(
+                NomadicMerchantProgress.FAILED_RESCHEDULED, NomadicMerchantRescheduleReason.ADB_ERROR));
+        assertTrue(NomadicMerchantRoutine.shouldCaptureTerminalFailureSnapshot(
+                NomadicMerchantProgress.PARTIAL_RESCHEDULED,
+                NomadicMerchantRescheduleReason.NAVIGATION_ERROR));
+        assertTrue(NomadicMerchantRoutine.shouldCaptureTerminalFailureSnapshot(
+                NomadicMerchantProgress.FAILED_RESCHEDULED,
+                NomadicMerchantRescheduleReason.NO_COLLECT_ERROR));
+    }
+
+    @Test
     void fourVisitsThatTimeOutWithoutClaimsScheduleTheFourthAfterReset() {
         TimedOutRoutine routine = new TimedOutRoutine(false);
         for (int visit = 1; visit <= 4; visit++) {

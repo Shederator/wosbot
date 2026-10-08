@@ -48,7 +48,11 @@ and interruption exceptions propagate to the task runner.
 The reason code is retained in each retryable state and logged with the chosen
 schedule. Therefore a cycle that first dispatched a collection and later loses
 navigation or ADB connectivity ends in `PARTIAL_RESCHEDULED` with that last
-failure's code.
+failure's code. A diagnostic snapshot is captured immediately after a terminal
+`PARTIAL_RESCHEDULED` or `FAILED_RESCHEDULED` decision for `navigation_error`
+or `no_collect_error`, before rescheduling or another game action. An
+`adb_error` logs `snapshot=unavailable; reason=adb_error` without attempting a
+second ADB capture. Timeouts and short retries do not create snapshots.
 A new cycle starts after a completed shop scan or the deferred post-reset visit.
 Visit logs separate confirmed collections, unconfirmed attempts, dispatched
 offer actions, dispatched refresh taps, errors, and retry decisions.

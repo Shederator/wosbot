@@ -376,6 +376,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
                         : "fourth timeout without dispatched collections; deferred until daily reset";
             }
         }
+        String snapshot = captureTerminalFailureSnapshot(progress, rescheduleReason);
         reschedule(next);
         recordVisitResults(visitResults.freeResourcesClaimedCount(), visitResults.unconfirmedResourceClaimsCount(), vipPointsPurchasedCount,
                 unconfirmedVipPurchasesCount, visitResults.freeRefreshTapsDispatchedCount(), visitResults.failedActivityActionsCount(),
@@ -387,14 +388,13 @@ public class NomadicMerchantRoutine extends DelayedTask {
             logWarning("Nomadic Merchant visit interrupted by " + visitFailure.getClass().getSimpleName()
                     + " during " + failedDuring + ". Progress " + progress
                     + "; reschedule reason " + rescheduleReason.code() + "; confirmed results kept; " + stats
-                    + "; " + scheduleReason + "; next check at " + next.format(DATETIME_FORMATTER) + ".");
+                    + "; " + scheduleReason + "; next check at " + next.format(DATETIME_FORMATTER)
+                    + snapshotSuffix(snapshot) + ".");
         } else if (retrySnapshotType != null) {
-            String snapshot = TaskDiagnosticSnapshots.capture(
-                    emuManager, EMULATOR_NUMBER, "nomadicmerchant", retrySnapshotType);
             logWarning(retryReason + ". Progress " + progress + " after " + failedDuring
                     + "; reschedule reason " + rescheduleReason.code() + "; confirmed results kept; " + stats
                     + "; " + scheduleReason + "; next check at " + next.format(DATETIME_FORMATTER)
-                    + "; " + snapshot + ".");
+                    + snapshotSuffix(snapshot) + ".");
         } else {
             logInfo(stats + ". Progress " + progress + " after " + failedDuring
                     + ". Next check at " + next.format(DATETIME_FORMATTER) + ".");
@@ -425,6 +425,32 @@ public class NomadicMerchantRoutine extends DelayedTask {
         return offerActionsThisCycle > 0 || freeRefreshActionsThisCycle > 0
                 ? NomadicMerchantProgress.COMPLETED_SUCCESS_RESCHEDULED
                 : NomadicMerchantProgress.COMPLETED_UNVERIFIED;
+    }
+
+    static boolean shouldCaptureTerminalFailureSnapshot(NomadicMerchantProgress progress,
+            NomadicMerchantRescheduleReason reason) {
+        return (progress == NomadicMerchantProgress.PARTIAL_RESCHEDULED
+                || progress == NomadicMerchantProgress.FAILED_RESCHEDULED)
+                && (reason == NomadicMerchantRescheduleReason.NAVIGATION_ERROR
+                || reason == NomadicMerchantRescheduleReason.NO_COLLECT_ERROR);
+    }
+
+    private String captureTerminalFailureSnapshot(NomadicMerchantProgress progress,
+            NomadicMerchantRescheduleReason reason) {
+        if (reason == NomadicMerchantRescheduleReason.ADB_ERROR
+                && (progress == NomadicMerchantProgress.PARTIAL_RESCHEDULED
+                || progress == NomadicMerchantProgress.FAILED_RESCHEDULED)) {
+            return "snapshot=unavailable; reason=adb_error";
+        }
+        if (!shouldCaptureTerminalFailureSnapshot(progress, reason)) {
+            return null;
+        }
+        return TaskDiagnosticSnapshots.capture(
+                emuManager, EMULATOR_NUMBER, "nomadicmerchant", "terminal-" + reason.code());
+    }
+
+    private static String snapshotSuffix(String snapshot) {
+        return snapshot == null ? "" : "; " + snapshot;
     }
 
     private static NomadicMerchantRescheduleReason failureReason(RuntimeException visitFailure,
