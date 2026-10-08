@@ -23,7 +23,7 @@ public class NomadicMerchantRoutine extends DelayedTask {
 
     private static final long MAX_TASK_EXECUTION_MS = 2 * 60 * 1000L;
     private static final long RESET_SETTLE_DELAY_MINUTES = 1L;
-    private static final int MAX_FAILED_TIMEOUTS = 3;
+    private static final int MAX_FAILED_TIMEOUTS = 4;
     /**
      * Reward sprites on the 2026-09-29 resource frames were still in flight
      * about 1.5s after the tap. A miss before this settle is the sprite
@@ -357,8 +357,8 @@ public class NomadicMerchantRoutine extends DelayedTask {
                 retryDeferredUntil = GameTimeUtils.dailyResetTime().plusMinutes(RESET_SETTLE_DELAY_MINUTES);
                 next = retryDeferredUntil;
                 scheduleReason = progress == NomadicMerchantProgress.PARTIAL_RESCHEDULED
-                        ? "third failed visit after dispatched collections; deferred until daily reset"
-                        : "third failed visit without dispatched collections; deferred until daily reset";
+                        ? "fourth failed visit after dispatched collections; deferred until daily reset"
+                        : "fourth failed visit without dispatched collections; deferred until daily reset";
             }
         } else {
             rescheduleReason = NomadicMerchantRescheduleReason.TIMEOUT;
@@ -372,8 +372,8 @@ public class NomadicMerchantRoutine extends DelayedTask {
                 retryDeferredUntil = GameTimeUtils.dailyResetTime().plusMinutes(RESET_SETTLE_DELAY_MINUTES);
                 next = retryDeferredUntil;
                 scheduleReason = progress == NomadicMerchantProgress.PARTIAL_RESCHEDULED
-                        ? "third timeout after dispatched collections; deferred until daily reset"
-                        : "third timeout without dispatched collections; deferred until daily reset";
+                        ? "fourth timeout after dispatched collections; deferred until daily reset"
+                        : "fourth timeout without dispatched collections; deferred until daily reset";
             }
         }
         reschedule(next);

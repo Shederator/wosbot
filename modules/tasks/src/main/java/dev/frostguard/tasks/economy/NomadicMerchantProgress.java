@@ -12,8 +12,8 @@ public enum NomadicMerchantProgress {
     COMPLETED_UNVERIFIED,
     /** The first or second retryable exit in a cycle; retry shortly. */
     TIMEOUT_RETRY,
-    /** The third retryable exit in a cycle occurred after at least one dispatched collection. */
+    /** The fourth retryable exit in a cycle occurred after at least one dispatched collection. */
     PARTIAL_RESCHEDULED,
-    /** The third retryable exit in a cycle occurred without a dispatched collection. */
+    /** The fourth retryable exit in a cycle occurred without a dispatched collection. */
     FAILED_RESCHEDULED
 }

@@ -35,15 +35,15 @@ The resulting state is based on dispatched actions, never on confirmation:
 | State | Exit condition | Selectable offers in latest scan | Free Refresh detected | Dispatched collections | Dispatched Free Refreshes | Consecutive retryable exits | Reschedule reason | Next run |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `READY` | New cycle or daily-reset cycle. | — | — | 0 | 0 | 0 | — | Normal execution. |
-| `COMPLETED_SUCCESS_RESCHEDULED` | Shop exhausted; at least one collection or Free Refresh was dispatched. | 0 | 0 | ≥ 1, or 0 when a refresh was dispatched | ≥ 1, or 0 when a collection was dispatched | < 3 | — | Daily reset + 1 minute. |
-| `COMPLETED_UNVERIFIED` | Shop exhausted without an action in the cycle. | 0 | 0 | 0 | 0 | < 3 | — | Daily reset + 1 minute. |
-| `TIMEOUT_RETRY` | First or second retryable visit exit: timeout, navigation, scan, or tap failure. | ≥ 1, 0, or unavailable after an error | Detected when offers are 0; otherwise not checked | No effect | No effect | 1 or 2 | `navigation_error`, `adb_error`, `no_collect_error`, or `timeout` | 5 minutes. |
-| `PARTIAL_RESCHEDULED` | Third consecutive retryable visit exit. | No effect | No effect | ≥ 1 | No effect | 3 | `navigation_error`, `adb_error`, `no_collect_error`, or `timeout` from the last visit | Daily reset + 1 minute. |
-| `FAILED_RESCHEDULED` | Third consecutive retryable visit exit. | No effect | No effect | 0 | No effect | 3 | `navigation_error`, `adb_error`, `no_collect_error`, or `timeout` from the last visit | Daily reset + 1 minute. |
+| `COMPLETED_SUCCESS_RESCHEDULED` | Shop exhausted; at least one collection or Free Refresh was dispatched. | 0 | 0 | ≥ 1, or 0 when a refresh was dispatched | ≥ 1, or 0 when a collection was dispatched | Reset to 0 | — | Daily reset + 1 minute. |
+| `COMPLETED_UNVERIFIED` | Shop exhausted without an action in the cycle. | 0 | 0 | 0 | 0 | Reset to 0 | — | Daily reset + 1 minute. |
+| `TIMEOUT_RETRY` | First, second, or third retryable visit exit: timeout, navigation, scan, or tap failure. | ≥ 1, 0, or unavailable after an error | Detected when offers are 0; otherwise not checked | No effect | No effect | 1, 2, or 3 | `navigation_error`, `adb_error`, `no_collect_error`, or `timeout` | 5 minutes. |
+| `PARTIAL_RESCHEDULED` | Fourth consecutive retryable visit exit. | No effect | No effect | ≥ 1 | No effect | 4 | `navigation_error`, `adb_error`, `no_collect_error`, or `timeout` from the last visit | Daily reset + 1 minute. |
+| `FAILED_RESCHEDULED` | Fourth consecutive retryable visit exit. | No effect | No effect | 0 | No effect | 4 | `navigation_error`, `adb_error`, `no_collect_error`, or `timeout` from the last visit | Daily reset + 1 minute. |
 
 An invalid scan result or a refused Free Refresh dispatch is tried once within
 the visit. Navigation, scan, and tap failures share the timeout retry budget;
-their third consecutive exit uses the same deferred state. Emulator connection
+their fourth consecutive exit uses the same deferred state. Emulator connection
 and interruption exceptions propagate to the task runner.
 The reason code is retained in each retryable state and logged with the chosen
 schedule. Therefore a cycle that first dispatched a collection and later loses
