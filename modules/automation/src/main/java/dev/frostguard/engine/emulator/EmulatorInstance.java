@@ -1,6 +1,10 @@
 package dev.frostguard.engine.emulator;
 
 import java.io.*;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
@@ -11,6 +15,7 @@ import java.util.function.Supplier;
 import dev.frostguard.vision.ocr.OcrEngine;
 import dev.frostguard.api.configs.GameVersionEnum;
 import dev.frostguard.engine.error.ADBConnectionException;
+import dev.frostguard.engine.diagnostics.EmulatorShutdownDiagnostics;
 import dev.frostguard.api.domain.*;
 import com.android.ddmlib.*;
 import dev.frostguard.vision.ocr.OcrException;
@@ -38,12 +43,108 @@ public abstract class EmulatorInstance {
     private final ConcurrentHashMap<String, Boolean>      runCache  = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Long>         runExpiry = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, RawImageData> lastFrame = new ConcurrentHashMap<>();
+    private final Set<String> unconfirmedStops = ConcurrentHashMap.newKeySet();
     private final ReentrantLock bridgeMtx = new ReentrantLock();
 
     protected abstract String  getDeviceSerial(String idx);
     public    abstract void    launchEmulator(String idx);
-    public    abstract void    closeEmulator(String idx);
     public    abstract boolean isRunning(String idx);
+
+    protected abstract EmulatorStopCycle.CommandOutcome requestVendorStop(String idx)
+            throws InterruptedException;
+
+    protected abstract EmulatorStopCycle.Probe probeVendorState(String idx)
+            throws InterruptedException;
+
+    protected EmulatorStopCycle.Probe probeHostState(String idx) throws InterruptedException {
+        return EmulatorStopCycle.Probe.UNSUPPORTED;
+    }
+
+    public final EmulatorStopResult closeEmulator(String idx) {
+        EmulatorStopResult result = EmulatorStopCycle.stop(idx, new EmulatorStopCycle.Driver() {
+            @Override
+            public EmulatorStopCycle.CommandOutcome requestVendorStop(String instanceId)
+                    throws InterruptedException {
+                return EmulatorInstance.this.requestVendorStop(instanceId);
+            }
+
+            @Override
+            public EmulatorStopCycle.Observation observe(String instanceId)
+                    throws InterruptedException {
+                return new EmulatorStopCycle.Observation(
+                        probeVendorState(instanceId),
+                        probeAdbState(instanceId),
+                        probeHostState(instanceId));
+            }
+
+            @Override
+            public EmulatorStopCycle.CommandOutcome requestAdbPowerOff(String instanceId)
+                    throws InterruptedException {
+                return adbPowerOff(instanceId);
+            }
+
+            @Override
+            public String captureAnomaly(String instanceId) {
+                EmulatorShutdownDiagnostics.CaptureResult capture =
+                        EmulatorShutdownDiagnostics.capture(EmulatorInstance.this, instanceId);
+                return "snapshot=" + capture.emulatorPath().orElse("unavailable")
+                        + ", desktopSnapshot=" + capture.desktopPath().orElse("unavailable")
+                        + ", snapshotFailure=" + capture.emulatorFailure()
+                        + ", desktopSnapshotFailure=" + capture.desktopFailure();
+            }
+        });
+        if (result.confirmed()) {
+            unconfirmedStops.remove(idx);
+            LOG.info("Emulator {} shutdown confirmed by {}: {}", idx, result.method(), result.evidence());
+        } else {
+            unconfirmedStops.add(idx);
+            LOG.error("Emulator {} shutdown {}: {}", idx, result.status(), result.evidence());
+        }
+        invalidateAllCaches(idx);
+        return result;
+    }
+
+    public final boolean hasUnconfirmedStop(String idx) {
+        return unconfirmedStops.contains(idx);
+    }
+
+    public final EmulatorStartupCleanup.Result cleanupStaleInstanceAtStartup(String idx) {
+        EmulatorStartupCleanup.Result result = EmulatorStartupCleanup.clean(idx,
+                new EmulatorStartupCleanup.Driver() {
+                    @Override
+                    public EmulatorStopCycle.Observation observe(String instanceId)
+                            throws InterruptedException {
+                        return new EmulatorStopCycle.Observation(
+                                probeVendorState(instanceId),
+                                probeAdbState(instanceId),
+                                probeHostState(instanceId));
+                    }
+
+                    @Override
+                    public EmulatorStopCycle.CommandOutcome requestAdbPowerOff(String instanceId)
+                            throws InterruptedException {
+                        return adbPowerOff(instanceId);
+                    }
+
+                    @Override
+                    public String captureAnomaly(String instanceId) {
+                        EmulatorShutdownDiagnostics.CaptureResult capture =
+                                EmulatorShutdownDiagnostics.capture(EmulatorInstance.this, instanceId);
+                        return "snapshot=" + capture.emulatorPath().orElse("unavailable")
+                                + ", desktopSnapshot=" + capture.desktopPath().orElse("unavailable")
+                                + ", snapshotFailure=" + capture.emulatorFailure()
+                                + ", desktopSnapshotFailure=" + capture.desktopFailure();
+                    }
+                });
+        invalidateAllCaches(idx);
+        if (result.status() == EmulatorStartupCleanup.Status.UNCONFIRMED
+                || result.status() == EmulatorStartupCleanup.Status.INTERRUPTED) {
+            unconfirmedStops.add(idx);
+        } else {
+            unconfirmedStops.remove(idx);
+        }
+        return result;
+    }
 
     protected EmulatorInstance(String consolePath) {
         this.consolePath = consolePath;
@@ -145,6 +246,55 @@ public abstract class EmulatorInstance {
         return false;
     }
 
+    private EmulatorStopCycle.Probe probeAdbState(String idx) throws InterruptedException {
+        String serial = getDeviceSerial(idx);
+        String[] endpoint = serial.split(":", 2);
+        if (endpoint.length != 2 || !"127.0.0.1".equals(endpoint[0])) {
+            return EmulatorStopCycle.Probe.UNKNOWN;
+        }
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(endpoint[0], Integer.parseInt(endpoint[1])), 500);
+        } catch (ConnectException failure) {
+            return EmulatorStopCycle.Probe.STOPPED;
+        } catch (SocketTimeoutException failure) {
+            return EmulatorStopCycle.Probe.UNKNOWN;
+        } catch (IOException | NumberFormatException failure) {
+            return EmulatorStopCycle.Probe.UNKNOWN;
+        }
+        try {
+            BoundedProcessRunner.ProcessResult connection = BoundedProcessRunner.run(
+                    new ProcessBuilder(adbPath(), "connect", serial), Duration.ofSeconds(2));
+            if (connection.timedOut() || connection.exitCode() != 0
+                    || !connection.output().toLowerCase(Locale.ROOT).contains("connected")) {
+                return EmulatorStopCycle.Probe.UNKNOWN;
+            }
+            BoundedProcessRunner.ProcessResult state = BoundedProcessRunner.run(
+                    new ProcessBuilder(adbPath(), "-s", serial, "get-state"), Duration.ofSeconds(2));
+            return !state.timedOut() && state.exitCode() == 0
+                    && "device".equals(state.output().trim())
+                    ? EmulatorStopCycle.Probe.RUNNING
+                    : EmulatorStopCycle.Probe.UNKNOWN;
+        } catch (IOException failure) {
+            return EmulatorStopCycle.Probe.UNKNOWN;
+        }
+    }
+
+    private EmulatorStopCycle.CommandOutcome adbPowerOff(String idx) throws InterruptedException {
+        String serial = getDeviceSerial(idx);
+        try {
+            BoundedProcessRunner.ProcessResult result = BoundedProcessRunner.run(
+                    new ProcessBuilder(adbPath(), "-s", serial, "shell", "reboot", "-p"),
+                    Duration.ofSeconds(10));
+            return new EmulatorStopCycle.CommandOutcome(
+                    !result.timedOut() && result.exitCode() == 0,
+                    "serial=" + serial + ", exitCode=" + result.exitCode()
+                            + ", timedOut=" + result.timedOut());
+        } catch (IOException failure) {
+            return EmulatorStopCycle.CommandOutcome.failure(
+                    "serial=" + serial + ", error=" + failure.getClass().getSimpleName());
+        }
+    }
+
     // --- caching ---
 
     protected IDevice getCachedDevice(String idx) throws InterruptedException {
@@ -183,7 +333,15 @@ public abstract class EmulatorInstance {
         if (Thread.currentThread().isInterrupted())
             throw new ADBConnectionException("Interrupted before recovery for " + tag);
         LOG.warn("Recovering emulator for {} on dev {}", tag, idx);
-        try { closeEmulator(idx); sleep(5000); launchEmulator(idx); sleep(15000); }
+        try {
+            EmulatorStopResult stop = closeEmulator(idx);
+            if (!stop.confirmed()) {
+                throw new ADBConnectionException("Recovery cannot relaunch emulator " + idx
+                        + ": shutdown " + stop.status() + "; " + stop.evidence());
+            }
+            launchEmulator(idx);
+            sleep(15000);
+        }
         catch (Exception e) { throw new ADBConnectionException("Recovery failed for " + tag, e); }
 
         // Phase 3: post-restart retries
@@ -244,11 +402,20 @@ public abstract class EmulatorInstance {
     // --- screen capture ---
 
     public RawImageData captureScreenshot(String idx) {
+        return captureScreenshot(idx, false);
+    }
+
+    /** A single diagnostic capture using only a device already known to the ADB bridge. */
+    public RawImageData captureConnectedScreenshot(String idx) {
+        return captureScreenshot(idx, true);
+    }
+
+    private RawImageData captureScreenshot(String idx, boolean connectedOnly) {
         String serial = getDeviceSerial(idx);
         if (serial == null) throw new ADBConnectionException("No serial for dev " + idx);
         ByteArrayOutputStream buf = new ByteArrayOutputStream(720 * 1280 * 4 + 64);
         try {
-            IDevice d = getCachedDevice(idx);
+            IDevice d = connectedOnly ? (bridge == null ? null : scan(serial)) : getCachedDevice(idx);
             if (d == null || !d.isOnline()) {
                 throw new ADBConnectionException("Device is offline");
             }

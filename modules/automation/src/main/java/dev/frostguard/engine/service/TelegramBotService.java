@@ -11,7 +11,9 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -29,6 +31,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.engine.emulator.EmulatorStopResult;
 import dev.frostguard.api.domain.BotStateData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.RawImageData;
@@ -183,8 +186,11 @@ public class TelegramBotService implements BotStateListener {
                 Thread.ofVirtual().start(() -> {
                     // Changed by pernerch | Date: 2026-07-04 | Why: use Telegram-specific stop policy instead of generic stop path.
                     try {
-                        ScheduleService.obtain().haltEngineFromTelegram();
-                        sendMessage(chatId, "⏹️ Bot stopped.");
+                        List<String> failures = ScheduleService.obtain().haltEngineFromTelegram();
+                        sendMessage(chatId, failures.isEmpty()
+                                ? "⏹️ Bot stopped."
+                                : "⚠️ Bot stopped; emulator shutdown unconfirmed for: "
+                                        + String.join(", ", failures));
                     } catch (ScheduleService.IncompleteTaskShutdownException exception) {
                         sendMessage(chatId, "⚠️ Bot stop is incomplete. A task is still stopping; no replacement queue will start.");
                     }
@@ -1172,20 +1178,31 @@ public class TelegramBotService implements BotStateListener {
             Thread.sleep(1500);
 
             List<AccountDescriptor> profiles = ProfileService.obtain().fetchAllAccounts();
+            Set<String> closed = new HashSet<>();
+            boolean shutdownUnconfirmed = false;
             if (profiles != null) {
                 for (AccountDescriptor p : profiles) {
                     if (p.getEnabled()) {
                         String emu = p.getEmulatorNumber();
                         try {
-                            if (emu != null && !emu.trim().isEmpty()) {
-                                EmulatorController.getInstance().closeEmulator(emu);
+                            if (emu != null && !emu.trim().isEmpty() && closed.add(emu)) {
+                                EmulatorStopResult stop = EmulatorController.getInstance().closeEmulator(emu);
+                                if (!stop.confirmed()) {
+                                    shutdownUnconfirmed = true;
+                                    logger.error("Reboot aborted; emulator {} shutdown unconfirmed: {}", emu, stop.evidence());
+                                }
                             }
                         } catch (Exception ex) {
-                            logger.warn("Reboot: Emulator close soft handled: {}", ex.getMessage());
+                            shutdownUnconfirmed = true;
+                            logger.warn("Reboot: emulator shutdown failed: {}", ex.getMessage());
                         }
-                        Thread.sleep(1000);
                     }
                 }
+            }
+
+            if (shutdownUnconfirmed) {
+                sendMessage(chatId, "⚠️ Restart cancelled: at least one emulator shutdown is unconfirmed.");
+                return;
             }
 
             ScheduleService.obtain().launchEngine();

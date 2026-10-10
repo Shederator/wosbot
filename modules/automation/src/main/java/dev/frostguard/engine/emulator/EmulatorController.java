@@ -40,6 +40,8 @@ public class EmulatorController {
     // host CPU/RAM/IO and causes random freezes. This lock guarantees one boot at a time, followed by
     // a configurable settle delay before the next launch is permitted.
     private final ReentrantLock emulatorLaunchLock = new ReentrantLock();
+    private final Map<String, ReentrantLock> emulatorLifecycleLocks = new ConcurrentHashMap<>();
+    private final Set<String> emulatorLaunchBlockedByStop = ConcurrentHashMap.newKeySet();
     private final PriorityQueue<QueuedEmulatorTask> queue   = new PriorityQueue<>();
     private final Set<Thread>        slots        = new HashSet<>();
     private final Map<String,Thread> dev2thread   = new HashMap<>();
@@ -143,8 +145,16 @@ public class EmulatorController {
      */
     public void launchEmulator(String i) {
         requireBackend();
-        emulatorLaunchLock.lock();
+        ReentrantLock lifecycleLock = emulatorLifecycleLocks.computeIfAbsent(i, ignored -> new ReentrantLock());
+        boolean launchHeld = false;
         try {
+            lifecycleLock.lockInterruptibly();
+            emulatorLaunchLock.lockInterruptibly();
+            launchHeld = true;
+            if (emulatorLaunchBlockedByStop.contains(i) || backend.hasUnconfirmedStop(i)) {
+                throw new IllegalStateException(
+                        "Cannot launch emulator " + i + ": its previous shutdown is unconfirmed");
+            }
             LOG.info("{} acquired emulator launch lock (dev {})", label(i), i);
             backend.launchEmulator(i);
 
@@ -158,12 +168,106 @@ public class EmulatorController {
             Thread.currentThread().interrupt();
             LOG.warn("Emulator launch wait interrupted for dev {}", i);
         } finally {
-            emulatorLaunchLock.unlock();
-            LOG.info("{} released emulator launch lock (dev {})", label(i), i);
+            if (launchHeld) {
+                emulatorLaunchLock.unlock();
+                LOG.info("{} released emulator launch lock (dev {})", label(i), i);
+            }
+            if (lifecycleLock.isHeldByCurrentThread()) {
+                lifecycleLock.unlock();
+            }
         }
     }
 
-    public void    closeEmulator(String i)                { requireBackend(); backend.closeEmulator(i); backend.invalidateAllCaches(i); }
+    public EmulatorStopResult closeEmulator(String i) {
+        requireBackend();
+        ReentrantLock lifecycleLock = emulatorLifecycleLocks.computeIfAbsent(i, ignored -> new ReentrantLock());
+        try {
+            lifecycleLock.lockInterruptibly();
+            EmulatorStopResult result = backend.closeEmulator(i);
+            recordStopResult(i, result);
+            return result;
+        } catch (InterruptedException failure) {
+            Thread.currentThread().interrupt();
+            EmulatorStopResult result = new EmulatorStopResult(EmulatorStopResult.Status.INTERRUPTED,
+                    EmulatorStopResult.Method.NONE, "interrupted waiting for instance shutdown lock");
+            recordStopResult(i, result);
+            return result;
+        } catch (RuntimeException failure) {
+            LOG.error("Emulator {} shutdown failed unexpectedly", i, failure);
+            EmulatorStopResult result = new EmulatorStopResult(EmulatorStopResult.Status.UNCONFIRMED,
+                    EmulatorStopResult.Method.NONE,
+                    "shutdown exception=" + failure.getClass().getSimpleName());
+            recordStopResult(i, result);
+            return result;
+        } finally {
+            if (lifecycleLock.isHeldByCurrentThread()) {
+                lifecycleLock.unlock();
+            }
+            backend.invalidateAllCaches(i);
+        }
+    }
+
+    /**
+     * Clears stale ADB-backed emulator processes for the enabled profiles before their queues start.
+     * Each instance is isolated so one unresponsive emulator does not prevent other profiles from
+     * launching.
+     */
+    public Map<String, String> cleanupStaleEmulatorsAtStartup(Collection<String> instanceIds) {
+        requireBackend();
+        Map<String, String> outcomes = new LinkedHashMap<>();
+        if (instanceIds == null) {
+            return outcomes;
+        }
+        for (String instanceId : new LinkedHashSet<>(instanceIds)) {
+            if (instanceId == null || instanceId.isBlank()) {
+                continue;
+            }
+            ReentrantLock lifecycleLock = emulatorLifecycleLocks.computeIfAbsent(
+                    instanceId, ignored -> new ReentrantLock());
+            try {
+                lifecycleLock.lockInterruptibly();
+                EmulatorStartupCleanup.Result result = backend.cleanupStaleInstanceAtStartup(instanceId);
+                outcomes.put(instanceId, result.status() + ": " + result.evidence());
+                switch (result.status()) {
+                    case CLEANED -> recordStopResult(instanceId, new EmulatorStopResult(
+                            EmulatorStopResult.Status.CONFIRMED_STOPPED,
+                            EmulatorStopResult.Method.ADB, result.evidence()));
+                    case UNCONFIRMED, INTERRUPTED -> recordStopResult(instanceId, new EmulatorStopResult(
+                            result.status() == EmulatorStartupCleanup.Status.INTERRUPTED
+                                    ? EmulatorStopResult.Status.INTERRUPTED
+                                    : EmulatorStopResult.Status.UNCONFIRMED,
+                            EmulatorStopResult.Method.NONE, result.evidence()));
+                    case ALREADY_RUNNING, NO_LIVE_ADB_DEVICE ->
+                            emulatorLaunchBlockedByStop.remove(instanceId);
+                }
+            } catch (InterruptedException failure) {
+                Thread.currentThread().interrupt();
+                outcomes.put(instanceId, "INTERRUPTED: startup cleanup was interrupted");
+            } catch (RuntimeException failure) {
+                outcomes.put(instanceId, "UNCONFIRMED: startup cleanup exception="
+                        + failure.getClass().getSimpleName());
+                recordStopResult(instanceId, new EmulatorStopResult(
+                        EmulatorStopResult.Status.UNCONFIRMED,
+                        EmulatorStopResult.Method.NONE,
+                        "startup cleanup exception=" + failure.getClass().getSimpleName()));
+                LOG.warn("Startup cleanup failed for emulator {}; continuing other profiles",
+                        instanceId, failure);
+            } finally {
+                if (lifecycleLock.isHeldByCurrentThread()) {
+                    lifecycleLock.unlock();
+                }
+            }
+        }
+        return outcomes;
+    }
+
+    void recordStopResult(String instanceId, EmulatorStopResult result) {
+        if (result.confirmed()) {
+            emulatorLaunchBlockedByStop.remove(instanceId);
+        } else {
+            emulatorLaunchBlockedByStop.add(instanceId);
+        }
+    }
     public void    launchApp(String i, String pkg)        { requireBackend(); backend.launchApp(i, pkg); }
     public void    forceStopApp(String i, String pkg)     { requireBackend(); backend.forceStopApp(i, pkg); }
     public void    sendGameToBackground(String i)         { requireBackend(); backend.sendGameToBackground(i); }
