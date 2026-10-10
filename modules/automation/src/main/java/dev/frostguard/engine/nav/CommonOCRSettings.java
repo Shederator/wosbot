@@ -21,6 +21,13 @@ public final class CommonOCRSettings {
                     .allowedGlyphs(LATIN_LETTERS)
                     .build();
 
+    // Result-overlay exit hints can be centered with decorative spacing and are English in this scope.
+    public static final OcrSettingsData STARTUP_EXIT_HINT_SETTINGS =
+            OcrSettingsData.builder()
+                    .textLayout(TextLayout.SPARSE)
+                    .allowedGlyphs(LATIN_LETTERS)
+                    .build();
+
     // stamina fraction: "123/500" style
     public static final OcrSettingsData STAMINA_FRACTION_SETTINGS =
             buildConfig("0123456789/", true, 255, 255, 255, TextLayout.SINGLE_LINE);
