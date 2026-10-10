@@ -6,8 +6,8 @@ inclusive area. Results contain bounds, center, and score in full-frame
 coordinates; the detector never taps or decides whether the current screen is
 safe to dismiss.
 
-The detector uses multi-scale grayscale OpenCV template matching with a mask
-derived from the template's bright close glyph. The mask excludes changing
+The detector uses multi-scale grayscale OpenCV template matching with masks
+derived from each template's bright close glyph. The masks exclude changing
 offer artwork and header colors without tying the vision module to a task or
 overlay lifecycle. Invalid normalized-correlation cells from uniform regions
 are ignored. The existing startup overlay dismissal remains separate and
@@ -16,9 +16,14 @@ retains its own narrow search, threshold, and bounded tap attempts.
 ## Evidence and limits
 
 Initialization now uses the shared detector in its measured
-`(540, 65)`–`(680, 240)` area, after higher-priority startup blockers have been
-checked. The lower edge was extended after a live offer's close-cross match
-spanned y=145–205 and was clipped by the previous y=200 boundary. A full
+`(540, 65)`–`(719, 280)` area, after higher-priority startup blockers have been
+checked. The previous `(540, 65)`–`(680, 240)` bounds cannot contain the
+Craftsman's Treasure X measured at `(637, 202)`–`(691, 256)` on 10 October
+2026. Its white glyph on a blue canopy also does not score with the original
+masked template, so the detector adds a second grayscale masked template while
+retaining the 78% acceptance threshold. Initialization accepts candidates only
+through y=240 by center point, excluding lower Welcome back decoration exposed
+by the larger rectangle. A full
 upper-right quarter produced a false match on Welcome back in saved-frame tests,
 so the narrower custom-area overload is used. The existing three dismissal
 limit and fresh home/world postcondition remain in place. The runtime passes the

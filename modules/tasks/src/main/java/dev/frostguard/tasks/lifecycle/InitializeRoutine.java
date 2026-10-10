@@ -17,10 +17,14 @@ import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.helper.CharacterSwitchHelper;
+import dev.frostguard.engine.nav.CommonGameAreas;
+import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.vision.convert.ImageConverter;
 import dev.frostguard.vision.detection.CloseCrossDetector;
 import dev.frostguard.vision.match.OpenCvPatternLocator;
+import dev.frostguard.vision.ocr.OcrException;
 
+import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.function.BooleanSupplier;
@@ -81,7 +85,8 @@ public class InitializeRoutine extends DelayedTask {
 	private static final PointData UPDATE_TITLE_AREA_BOTTOM_RIGHT = new PointData(470, 350);
 	private static final PointData UPDATE_BUTTON_AREA_TOP_LEFT = new PointData(200, 850);
 	private static final PointData UPDATE_BUTTON_AREA_BOTTOM_RIGHT = new PointData(520, 1050);
-	private static final AreaData CLOSEABLE_OVERLAY_SEARCH_AREA = AreaData.of(540, 65, 680, 240);
+	private static final AreaData CLOSEABLE_OVERLAY_SEARCH_AREA = AreaData.of(540, 65, 719, 280);
+	private static final int MAX_CLOSEABLE_OVERLAY_CENTER_Y = 240;
 	private static final int UPDATE_PATTERN_THRESHOLD = 90;
 	private static final int UPDATE_POSTCONDITION_TIMEOUT_MINUTES = 10;
 	private static final int UPDATE_POSTCONDITION_POLL_DELAY_MS = 5000;
@@ -91,6 +96,7 @@ public class InitializeRoutine extends DelayedTask {
 	private static final String GOOGLE_PLAY_PACKAGE = "com.android.vending";
 	private static final int MAX_WELCOME_BACK_DISMISSALS = 1;
 	private static final int MAX_CLOSEABLE_OVERLAY_DISMISSALS = 3;
+	private static final int MAX_TREK_EXIT_HINT_DISMISSALS = 3;
 	private static final int UNKNOWN_BLOCKER_BACK_SETTLE_MS = 2000;
 	private static final int MAX_UNKNOWN_BLOCKER_POSTCONDITION_ATTEMPTS = 3;
 	private static final int STARTUP_PATTERN_THRESHOLD = 90;
@@ -104,6 +110,7 @@ public class InitializeRoutine extends DelayedTask {
 	private int unknownBlockerBackAttempts = 0;
 	private int welcomeBackDismissals = 0;
 	private int closeableOverlayDismissals = 0;
+	private int trekExitHintDismissals = 0;
 	private String lastVerifiedStartupState = "initialization started";
 	private RawImageData lastStartupFrame;
 	private final DiagnosticSnapshotStore startupSnapshots = DiagnosticSnapshotStore.forCurrentWorkspace();
@@ -354,6 +361,13 @@ public class InitializeRoutine extends DelayedTask {
 				continue;
 			}
 
+			if (dismissTrekExitHintIfPresent()) {
+				logInfo("Verified Trek exit hint dismissed. Waiting for a fresh home/world postcondition.");
+				sleepTask(2000);
+				attempts++;
+				continue;
+			}
+
 			// Passive checks and later recoveries do not retain a screenshot.
 			logWarning("Home screen not found on an unsupported startup screen. "
 					+ "Waiting 5 seconds for a passive state change before retrying...");
@@ -429,6 +443,10 @@ public class InitializeRoutine extends DelayedTask {
 			}
 			if (dismissCloseableStartupOverlayIfPresent()) {
 				logInfo("Verified closeable startup overlay dismissed during the game update flow.");
+				continue;
+			}
+			if (dismissTrekExitHintIfPresent()) {
+				logInfo("Verified Trek exit hint dismissed during the game update flow.");
 				continue;
 			}
 
@@ -528,8 +546,7 @@ public class InitializeRoutine extends DelayedTask {
 		if (capture == null) {
 			return false;
 		}
-		CloseCrossDetector.Detection detectedClose = CloseCrossDetector.locate(
-				capture, CLOSEABLE_OVERLAY_SEARCH_AREA)
+		CloseCrossDetector.Detection detectedClose = locateCloseableStartupControls(capture)
 				.stream()
 				.findFirst()
 				.orElse(null);
@@ -553,6 +570,51 @@ public class InitializeRoutine extends DelayedTask {
 			return false;
 		}
 		lastVerifiedStartupState = "closeable startup overlay close action sent";
+		return true;
+	}
+
+	static java.util.List<CloseCrossDetector.Detection> locateCloseableStartupControls(RawImageData capture) {
+		return CloseCrossDetector.locate(capture, CLOSEABLE_OVERLAY_SEARCH_AREA)
+				.stream()
+				.filter(candidate -> candidate.center().getY() <= MAX_CLOSEABLE_OVERLAY_CENTER_Y)
+				.toList();
+	}
+
+	private boolean dismissTrekExitHintIfPresent() {
+		if (trekExitHintDismissals >= MAX_TREK_EXIT_HINT_DISMISSALS) {
+			return false;
+		}
+
+		RawImageData capture = captureStartupFrame("lower Trek exit-hint inspection");
+		if (capture == null) {
+			return false;
+		}
+
+		TrekExitHintClassifier.Evidence evidence;
+		try {
+			String ocrText = emuManager.readText(
+					EMULATOR_NUMBER,
+					CommonGameAreas.STARTUP_EXIT_HINT_OCR_AREA.topLeft(),
+					CommonGameAreas.STARTUP_EXIT_HINT_OCR_AREA.bottomRight(),
+					CommonOCRSettings.STARTUP_EXIT_HINT_SETTINGS,
+					true);
+			evidence = TrekExitHintClassifier.inspect(ocrText);
+		} catch (IOException | OcrException | RuntimeException exception) {
+			logDebug("Lower startup exit-hint OCR unavailable: " + exception.getMessage());
+			return false;
+		}
+		if (!evidence.detected()) {
+			return false;
+		}
+
+		trekExitHintDismissals++;
+		lastVerifiedStartupState = "Trek exit hint in lower band";
+		logInfo("Trek exit hint verified from one fresh lower-band frame"
+				+ "; normalizedEvidence='" + evidence.normalizedText() + "'"
+				+ "; dismissal=" + trekExitHintDismissals + "/" + MAX_TREK_EXIT_HINT_DISMISSALS + ".");
+		tapInside(CommonGameAreas.STARTUP_EXIT_HINT_TAP_AREA);
+		lastVerifiedStartupState = "Trek lower-centre exit action sent";
+		logInfo("Tapped the verified lower-centre Trek exit-hint area; outcome pending a fresh home/world frame.");
 		return true;
 	}
 
@@ -678,6 +740,9 @@ public class InitializeRoutine extends DelayedTask {
 			if (dismissCloseableStartupOverlayIfPresent()) {
 				logInfo("Verified closeable startup overlay dismissed after the required resource download.");
 			}
+			if (dismissTrekExitHintIfPresent()) {
+				logInfo("Verified Trek exit hint dismissed after the required resource download.");
+			}
 			if (attempt % RESOURCE_DOWNLOAD_PROGRESS_LOG_INTERVAL == 0) {
 				logInfo("Required resource download still in progress ("
 						+ attempt * RESOURCE_DOWNLOAD_POLL_DELAY_MS / 1000 + " seconds elapsed).");
@@ -779,6 +844,9 @@ public class InitializeRoutine extends DelayedTask {
 				}
 				if (dismissCloseableStartupOverlayIfPresent()) {
 					logInfo("Verified closeable startup overlay dismissed after bounded Android Back recovery.");
+				}
+				if (dismissTrekExitHintIfPresent()) {
+					logInfo("Verified Trek exit hint dismissed after bounded Android Back recovery.");
 				}
 			}
 		}

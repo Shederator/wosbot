@@ -64,6 +64,16 @@ class CloseCrossDetectorTest {
     }
 
     @Test
+    void locatesCraftsmanStyleCrossWithSecondMaskedTemplate() throws IOException {
+        BufferedImage frame = read("cross-craftsman-top-right.png");
+        List<CloseCrossDetector.Detection> detections = CloseCrossDetector.locate(
+                frame, AreaData.of(540, 65, 719, 280));
+
+        assertTrue(detections.stream().anyMatch(candidate -> near(candidate.center(), 664, 229)),
+                () -> "Craftsman cross was not found: " + detections);
+    }
+
+    @Test
     void selectsHalfRightAndAcceptsExplicitArea() throws IOException {
         BufferedImage source = read("cross-tip-middle-right.png");
         BufferedImage frame = new BufferedImage(720, 1280, BufferedImage.TYPE_INT_RGB);

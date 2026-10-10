@@ -27,6 +27,9 @@ public final class CommonGameAreas {
     public static final AreaData STAMINA_BUTTON        = region(223, 1101, 244, 1123);
     public static final AreaData STAMINA_OCR_AREA      = region(324, 255, 477, 289);
     public static final AreaData SPENT_STAMINA_OCR_AREA = region(540, 1215, 590, 1245);
+    // English "Tap anywhere to exit" hints are rendered in this lower strip on result overlays.
+    public static final AreaData STARTUP_EXIT_HINT_OCR_AREA = region(0, 1160, 719, 1279);
+    public static final AreaData STARTUP_EXIT_HINT_TAP_AREA = region(180, 1160, 540, 1279);
 
     // The cooldown stays in the top banner while Intel markers remain, then moves to the center
     // after every completed Intel reward has been claimed.

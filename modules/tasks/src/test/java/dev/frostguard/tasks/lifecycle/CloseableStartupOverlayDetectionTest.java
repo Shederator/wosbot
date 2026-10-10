@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CloseableStartupOverlayDetectionTest {
 
-    private static final AreaData STARTUP_CLOSE_AREA = AreaData.of(540, 65, 680, 240);
+    private static final AreaData PREVIOUS_STARTUP_CLOSE_AREA = AreaData.of(540, 65, 680, 240);
 
     @Test
     void detectsStartupCloseControlUsingReusableDetector() throws IOException {
@@ -50,6 +50,21 @@ class CloseableStartupOverlayDetectionTest {
     }
 
     @Test
+    void detectsCraftsmanControlOnlyInTheRevisedBoundedStartupArea() throws IOException {
+        String fixture = "/startup/craftsman-treasure-close-control-20261010.png";
+
+        assertTrue(inspect(fixture, PREVIOUS_STARTUP_CLOSE_AREA).isEmpty(),
+                "the former bounds cannot contain the complete Craftsman control");
+        List<CloseCrossDetector.Detection> detections = InitializeRoutine.locateCloseableStartupControls(
+                rawRgbaFrame(frame(fixture)));
+
+        assertTrue(detections.stream().anyMatch(candidate ->
+                        Math.abs(candidate.center().getX() - 664) <= 8
+                                && Math.abs(candidate.center().getY() - 229) <= 8),
+                () -> "expected Craftsman close cross near (664,229), got " + detections);
+    }
+
+    @Test
     void rejectsHigherPriorityAndNonCloseableStartupDialogs() throws IOException {
         for (String path : new String[] {
                 "/startup/mandatory-update-dialog-20260820.png",
@@ -61,7 +76,7 @@ class CloseableStartupOverlayDetectionTest {
     }
 
     private static List<CloseCrossDetector.Detection> inspect(String path) throws IOException {
-        return inspect(path, STARTUP_CLOSE_AREA);
+        return InitializeRoutine.locateCloseableStartupControls(rawRgbaFrame(frame(path)));
     }
 
     private static List<CloseCrossDetector.Detection> inspect(String path, AreaData searchArea) throws IOException {
