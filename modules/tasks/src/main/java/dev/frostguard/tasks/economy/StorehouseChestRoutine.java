@@ -55,10 +55,9 @@ public class StorehouseChestRoutine extends DelayedTask {
             new PointData(105, 530), new PointData(125, 550));
     private static final AreaData STOREHOUSE_TITLE_AREA = new AreaData(
             new PointData(245, 515), new PointData(505, 575));
+    static final AreaData CHEST_REWARD_OVERLAY_CLOSE_AREA = AreaData.of(565, 530, 715, 705);
     private static final int STOREHOUSE_SELECTION_SETTLE_MILLIS = 2_200;
     private static final int STOREHOUSE_DESELECTION_SETTLE_MILLIS = 800;
-    private static final PointData STOREHOUSE_SCROLL_START = new PointData(1, 636);
-    private static final PointData STOREHOUSE_SCROLL_END = new PointData(2, 636);
 
     // ========== Stamina Reward Coordinates ==========
     private static final PointData STAMINA_AMOUNT_TOP_LEFT = new PointData(436, 632);
@@ -87,8 +86,6 @@ public class StorehouseChestRoutine extends DelayedTask {
     private static final int TOOLTIP_TITLE_THRESHOLD = 88;
     private static final String BUILDING_COUNTDOWN_WHITELIST = "0123456789:d";
     private static final int BASE_STOREHOUSE_STAMINA = 120;
-    private static final int SCROLL_ATTEMPT_COUNT = 2;
-    private static final int SCROLL_REPEAT_DELAY = 300;
 
     // On-building countdown glyphs measured on a 720x1280 city frame.
     static final Color BUILDING_TIMER_GREEN = new Color(61, 216, 13);
@@ -204,7 +201,7 @@ public class StorehouseChestRoutine extends DelayedTask {
             logInfo("Chest found. Claiming reward.");
             tapInside(candidate.center(), candidate.center());
             sleepTask(500);
-            tapInside(STOREHOUSE_SCROLL_START, STOREHOUSE_SCROLL_END, SCROLL_ATTEMPT_COUNT, SCROLL_REPEAT_DELAY);
+            tapInside(CHEST_REWARD_OVERLAY_CLOSE_AREA);
             sleepTask(CLAIM_CLOSE_SETTLE_MILLIS);
             return confirmBubbleDisappeared(candidate, StorehouseBubbleDetector.Kind.CHEST);
         }

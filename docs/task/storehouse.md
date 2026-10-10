@@ -25,6 +25,14 @@ tapping. Never clear this popup with a neutral coordinate tap: that region
 overlaps the stamina tile and can open the tooltip again. Saved-frame coverage
 is in `StorehouseStaminaClaimFrameTest`.
 
+After claiming a chest, dismiss its reward overlay with exactly one randomized
+tap in the neutral blue ground to its right: `(565,530)` through `(715,705)` on
+the 720×1280 annotated frame. This area must remain clear of buildings. Do not
+repeat the tap at the left edge: the overlay may already have closed, making a
+second tap act on the restored city. Keep the existing settle wait, city-anchor
+check, and bubble-disappearance confirmation; the tap alone is not collection
+evidence.
+
 ## Visit flow and scheduling
 
 Keep a task `VisitState` (`READY`, `WAITING_COOLDOWN`, or `RETRY_ON_ERROR`)
