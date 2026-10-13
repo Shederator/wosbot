@@ -22,6 +22,7 @@ import dev.frostguard.app.panel.alliance.AllianceChampionshipLayoutController;
 import dev.frostguard.app.panel.combat.BearTrapLayoutController;
 import dev.frostguard.app.panel.combat.BeastHuntingLayoutController;
 import dev.frostguard.app.panel.dailies.ChiefOrderLayoutController;
+import dev.frostguard.app.panel.dailies.LabyrinthLayoutController;
 import dev.frostguard.app.panel.city.CityEventsExtraLayoutController;
 import dev.frostguard.app.panel.city.CityEventsLayoutController;
 import dev.frostguard.app.panel.city.CityUpgradesLayoutController;
@@ -713,6 +714,7 @@ public class LauncherLayoutController implements IProfileLoadListener, StaminaCh
                 new ModuleDefinition("CityUpgradesLayout",        "City Upgrades",        MaterialDesignC.CITY_VARIANT_OUTLINE,       CityUpgradesLayoutController::new),
                 new ModuleDefinition("CityEventsLayout",         "City Events",          MaterialDesignC.CALENDAR_OUTLINE,           CityEventsLayoutController::new),
                 new ModuleDefinition("CityEventsExtraLayout",    "Extra City Events",    MaterialDesignC.CALENDAR_PLUS,              CityEventsExtraLayoutController::new),
+                new ModuleDefinition("LabyrinthLayout",          "Labyrinth",            MaterialDesignC.CASTLE,                     LabyrinthLayoutController::new),
                 new ModuleDefinition("PolarTerrorLayout",        "Rally",                MaterialDesignF.FLAG_OUTLINE,               PolarTerrorLayoutController::new),
                 new ModuleDefinition("ShopLayout",               "Shop",                 MaterialDesignS.STORE_OUTLINE,              ShopLayoutController::new),
                 new ModuleDefinition("GatherLayout",             "Gather",               MaterialDesignP.PACKAGE_VARIANT,            GatherLayoutController::new),

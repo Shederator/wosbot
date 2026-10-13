@@ -1268,6 +1268,10 @@ public class DailyLabyrinthRoutine extends DelayedTask {
         String normalizedLabel = zoneLabel == null
                 ? "" : zoneLabel.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z]", "");
         String normalizedName = zone.zoneName().toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z]", "");
+        // Title may read "Land of Heroes" or "Land of Braves"; keep the stable "land" token.
+        if ("landofheroes".equals(normalizedName)) {
+            normalizedName = "land";
+        }
         if (normalizedLabel.contains("opensin")) {
             logWarning(tag + ": reads LOCKED ('Opens in') — not open yet, skipping.");
             return;
