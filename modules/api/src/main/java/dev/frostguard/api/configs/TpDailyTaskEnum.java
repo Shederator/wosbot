@@ -20,6 +20,7 @@ public enum TpDailyTaskEnum {
 
     GAME_ANALYTICS_LABYRINTH(510, "Collect Alliance Labyrinth Ranking", null, RoutineCategory.ANALYTICS),
     GAME_ANALYTICS_POWER    (511, "Collect Alliance Power Ranking",     null, RoutineCategory.ANALYTICS),
+    TELEMETRY_SNAPSHOT      (512, "Telemetry Snapshot",                  null, RoutineCategory.ANALYTICS),
 
     /* ── alliance ── */
 
