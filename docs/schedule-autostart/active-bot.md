@@ -14,6 +14,12 @@ runs a source checkout through the Maven Wrapper.
 - `launch.ps1`: starts an installed release or a source checkout with
   `--autostart`, enforces a timeout, and stops the emulator process.
 
+When Frostguard starts automation, the engine performs a best-effort stale
+emulator check for the enabled profiles. This is part of Frostguard itself, so
+it also applies to GUI, headless, and Telegram starts that do not use this
+PowerShell script. An unconfirmed instance is logged and isolated from other
+profiles' startup.
+
 ## Prerequisites
 
 Prepare the launch mode that you intend to schedule:
