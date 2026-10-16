@@ -4,6 +4,7 @@ import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.FormationSlots;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
@@ -25,6 +26,7 @@ import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -767,6 +769,12 @@ private void handleJoinRallies2() {
     }
 
 private void manageJoinRallies(int freeMarches) {
+        Boolean advancedEnabled = profile.getConfig(ConfigurationKeyEnum.BEAR_TRAP_ADVANCED_JOIN_ENABLED_BOOL, Boolean.class);
+        if (Boolean.TRUE.equals(advancedEnabled)) {
+            manageAdvancedJoinRallies(freeMarches);
+            return;
+        }
+
         ImageSearchResultData plusIcon = templateSearchHelper.locatePattern(
                 BEAR_JOIN_PLUS_ICON,
                 SearchConfig.builder()
@@ -807,10 +815,174 @@ private void manageJoinRallies(int freeMarches) {
         } else {
             tapInside(deploy);
             sleepTask(500);
-
+            if (!confirmBearDeployment()) {
+                logWarning(routineLogBearTrapLine("Bear deployment was not confirmed."));
+                pressBack();
+            }
         }
 
         navigationHelper.ensureCorrectScreenLocation(LaunchPoint.ANY);
+    }
+
+    private BearRallyDedupCache dedupCache = new BearRallyDedupCache();
+    private BearRallyDedupCache positionalDedupCache = new BearRallyDedupCache(
+            Clock.systemUTC(), Duration.ofSeconds(5));
+    private static final int ADVANCED_JOIN_MAX_SCAN_CYCLES = 3;
+
+    private void manageAdvancedJoinRallies(int freeMarches) {
+        if (freeMarches <= 0) {
+            logInfo(routineLogBearTrapLine("Zero free marches available for Advanced Rally Join"));
+            navigationHelper.ensureCorrectScreenLocation(LaunchPoint.ANY);
+            return;
+        }
+
+        logInfo(routineLogBearTrapLine("Scanning for joinable Bear Rally candidates (Advanced Mode)..."));
+
+        BotOcrEngine ocrProvider = new BotOcrEngine(emuManager, EMULATOR_NUMBER);
+        BearRallyScanner scanner = new BearRallyScanner(this.emuManager, ocrProvider, this.templateSearchHelper);
+
+        String activityInstanceId = this.trapNumber + ":" + String.valueOf(this.referenceTrapTime);
+        BearRallyDedupCache.Scope scope = new BearRallyDedupCache.Scope(
+                profile.getId().toString(), activityInstanceId);
+        Clock clock = Clock.systemUTC();
+
+        scanCycle:
+        for (int scanAttempt = 1; scanAttempt <= ADVANCED_JOIN_MAX_SCAN_CYCLES; scanAttempt++) {
+            List<BearRallyCandidate> candidates = scanner.scanCandidates(Instant.now());
+            if (candidates.isEmpty()) {
+                logWarning(routineLogBearTrapLine("Zero joinable rallies detected (advanced scan)"));
+                break;
+            }
+
+            Set<String> uniqueCandidateKeys = BearRallyDedupCache.uniqueCandidateKeys(candidates);
+
+            for (BearRallyCandidate candidate : candidates) {
+                BearRallyDecisionPolicy.Decision decision = BearRallyDecisionPolicy.evaluate(
+                        candidate, profile, this.referenceTrapTime, clock);
+
+                String key = candidate.getCandidateKey();
+                boolean dedupEligible = uniqueCandidateKeys.contains(key);
+                String positionalKey = BearRallyDedupCache.positionalCandidateKey(candidate);
+                if (decision.result() == BearRallyDecisionPolicy.DecisionResult.JOIN
+                        && ((dedupEligible && dedupCache.isDuplicate(scope, key))
+                        || positionalDedupCache.isDuplicate(scope, positionalKey))) {
+                    logDebug(routineLogBearTrapLine(
+                            "Skipping duplicate candidate at card y=" + candidate.joinButtonPoint().getY()));
+                    continue;
+                }
+
+                if (decision.result() == BearRallyDecisionPolicy.DecisionResult.JOIN) {
+
+                    ImageSearchResultData currentJoinButton = templateSearchHelper.locatePattern(
+                            BEAR_JOIN_PLUS_ICON,
+                            SearchConfig.builder()
+                                    .withArea(expandToScreen(candidate.joinButtonArea(), 12))
+                                    .withThreshold(80)
+                                    .withMaxAttempts(1)
+                                    .build());
+                    if (currentJoinButton == null || !currentJoinButton.isFound()) {
+                        logDebug(routineLogBearTrapLine(
+                                "Candidate join button changed after scanning; discarding the stale scan at y="
+                                        + candidate.joinButtonPoint().getY()));
+                        continue scanCycle;
+                    }
+
+                    int selectedFlag = resolveNextJoinFlag();
+                    logInfo(routineLogBearTrapLine("Joining candidate at card y="
+                            + candidate.joinButtonPoint().getY() + " with flag #" + selectedFlag
+                            + (decision.frenzyActive() ? " (Frenzy Active)" : "")));
+
+                    tapInside(currentJoinButton);
+                    sleepTask(500);
+
+                    if (!marchHelper.selectFlag(selectedFlag)) {
+                        logWarning(routineLogBearTrapLine("Configured join formation #" + selectedFlag
+                                + " is unavailable; cancelling this join"));
+                        pressBack();
+                        sleepTask(500);
+                        continue scanCycle;
+                    }
+
+                    ImageSearchResultData deploy = templateSearchHelper.locatePattern(
+                            BEAR_DEPLOY_BUTTON,
+                            SearchConfig.builder()
+                                    .withThreshold(90)
+                                    .withMaxAttempts(TEMPLATE_SEARCH_RETRIES_MAX_VALUE)
+                                    .build());
+
+                    if (!deploy.isFound()) {
+                        logWarning(routineLogBearTrapLine(
+                                "Deploy button not detected after selecting flag. Cancelling join."));
+                        pressBack();
+                        sleepTask(500);
+                        continue scanCycle;
+                    }
+
+                    tapInside(deploy);
+                    sleepTask(500);
+
+                    if (deploymentHelper.isMarchQueueFull()) {
+                        logWarning(routineLogBearTrapLine("March queue is full after tapping deploy."));
+                        pressBack();
+                        navigationHelper.ensureCorrectScreenLocation(LaunchPoint.ANY);
+                        return;
+                    }
+
+                    if (deploymentHelper.isSameTargetDialog()) {
+                        logWarning(routineLogBearTrapLine(
+                                "A march is already targeting this rally; cancelling duplicate deployment."));
+                        positionalDedupCache.markJoined(scope, positionalKey);
+                        pressBack();
+                        sleepTask(300);
+                        pressBack();
+                        sleepTask(500);
+                        continue scanCycle;
+                    }
+
+                    if (!confirmBearDeployment()) {
+                        logWarning(routineLogBearTrapLine(
+                                "Deploy button remained visible; deployment was not confirmed."));
+                        pressBack();
+                        sleepTask(500);
+                        continue scanCycle;
+                    }
+
+                    if (dedupEligible) {
+                        dedupCache.markJoined(scope, key);
+                    } else {
+                        positionalDedupCache.markJoined(scope, positionalKey);
+                    }
+                    logInfo(routineLogBearTrapLine(
+                            "Deployment successful for candidate at card y="
+                                    + candidate.joinButtonPoint().getY()));
+                    navigationHelper.ensureCorrectScreenLocation(LaunchPoint.ANY);
+                    return; // Only join one per iteration to avoid spamming and UI states
+                } else {
+                    logDebug(routineLogBearTrapLine("Skipping candidate at card y="
+                            + candidate.joinButtonPoint().getY() + " due to: " + decision.reason()));
+                }
+            }
+
+            break;
+        }
+
+        navigationHelper.ensureCorrectScreenLocation(LaunchPoint.ANY);
+    }
+
+    private AreaData expandToScreen(AreaData area, int margin) {
+        PointData topLeft = area.topLeft();
+        PointData bottomRight = area.bottomRight();
+        return new AreaData(
+                new PointData(Math.max(0, topLeft.getX() - margin), Math.max(0, topLeft.getY() - margin)),
+                new PointData(Math.min(720, bottomRight.getX() + margin),
+                        Math.min(1280, bottomRight.getY() + margin)));
+    }
+
+    private boolean confirmBearDeployment() {
+        ImageSearchResultData deployStillVisible = templateSearchHelper.locatePattern(
+                BEAR_DEPLOY_BUTTON,
+                SearchConfig.builder().withThreshold(90).withMaxAttempts(2).build());
+        return !deployStillVisible.isFound();
     }
 
 private void logTrapTimingFlow(TrapTimingShape timing) {
@@ -896,31 +1068,34 @@ private boolean hasInsideWindow() {
         return result.getState() == BearTrapHelper.WindowState.INSIDE;
     }
 
-private List<Integer> decodeJoinFlags() {
-        String flagConfig = profile.getConfig(BEAR_TRAP_JOIN_FLAG_INT, String.class);
+    private List<Integer> decodeJoinFlags() {
         List<Integer> flags = new ArrayList<>();
+        ConfigurationKeyEnum[] flagKeys = {
+            BEAR_TRAP_JOIN_MARCH_1_FLAG_STRING,
+            BEAR_TRAP_JOIN_MARCH_2_FLAG_STRING,
+            BEAR_TRAP_JOIN_MARCH_3_FLAG_STRING,
+            BEAR_TRAP_JOIN_MARCH_4_FLAG_STRING,
+            BEAR_TRAP_JOIN_MARCH_5_FLAG_STRING,
+            BEAR_TRAP_JOIN_MARCH_6_FLAG_STRING
+        };
 
-        if (flagConfig != null && !flagConfig.trim().isEmpty()) {
-            String[] parts = flagConfig.split(",");
-            for (String part : parts) {
+        for (ConfigurationKeyEnum key : flagKeys) {
+            String flagStr = profile.getConfig(key, String.class);
+            if (flagStr != null && !flagStr.equals("No Flag") && !flagStr.trim().isEmpty()) {
                 try {
-                    int flag = Integer.parseInt(part.trim());
+                    int flag = Integer.parseInt(flagStr.trim());
                     if (FormationSlots.supports(flag)) {
                         flags.add(flag);
                     }
                 } catch (NumberFormatException e) {
-                    logWarning(routineLogBearTrapLine("Invalid join flag value: " + part));
+                    logWarning(routineLogBearTrapLine("Invalid join flag value: " + flagStr));
                 }
             }
         }
 
-
         if (flags.isEmpty()) {
             flags.add(DEFAULT_JOIN_RALLY_FLAG_VALUE);
         }
-
-
-        flags.sort(Integer::compareTo);
 
         return flags;
     }
