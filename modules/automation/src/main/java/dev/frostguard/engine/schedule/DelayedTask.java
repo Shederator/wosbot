@@ -172,21 +172,21 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
                 return;
             }
 
-            verifyGameProcessActive();
-            navigationHelper.ensureCorrectScreenLocation(getRequiredStartLocation());
+            executeWithPreparation(() -> {
+                verifyGameProcessActive();
+                navigationHelper.ensureCorrectScreenLocation(getRequiredStartLocation());
 
-            if (switchedProfileOnEmulator) {
-                // Changed by pernerch | Date: 2026-07-02 | Why: refresh stamina immediately on
-                // profile handover so downstream task logic always starts from current account data.
-                logInfo("Profile switch detected on emulator " + EMULATOR_NUMBER + ". Refreshing stamina from profile screen.");
-                staminaHelper.updateStaminaFromProfile();
-            }
+                if (switchedProfileOnEmulator) {
+                    // Changed by pernerch | Date: 2026-07-02 | Why: refresh stamina immediately on
+                    // profile handover so downstream task logic always starts from current account data.
+                    logInfo("Profile switch detected on emulator " + EMULATOR_NUMBER + ". Refreshing stamina from profile screen.");
+                    staminaHelper.updateStaminaFromProfile();
+                }
 
-            if (consumesStamina() && StaminaService.getServices().requiresUpdate(profile.getId())) {
-                staminaHelper.updateStaminaFromProfile();
-            }
-
-            execute();
+                if (consumesStamina() && StaminaService.getServices().requiresUpdate(profile.getId())) {
+                    staminaHelper.updateStaminaFromProfile();
+                }
+            });
 
             if (shouldUpdateConfig) {
                 persistChangedProfileSettings(configBeforeExecution);
@@ -201,6 +201,11 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
             dev.frostguard.engine.service.StatisticsService.obtain()
                     .logJobExecution(profile, taskName, elapsed, ocrDelta, templateDelta);
         }
+    }
+
+    protected void executeWithPreparation(Runnable preparation) {
+        preparation.run();
+        execute();
     }
 
     private void refreshProfileFromDb() {

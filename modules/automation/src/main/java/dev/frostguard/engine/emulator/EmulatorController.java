@@ -47,6 +47,7 @@ public class EmulatorController {
     private final Map<String,String> dev2profile  = new ConcurrentHashMap<>();
     private final Map<String,Long>   cooldowns    = new HashMap<>();
     private EmulatorInstance backend;
+    private final ThreadLocal<Runnable> inputGuard = new ThreadLocal<>();
     private int maxSlots = 3;
 
     private EmulatorController() {}
@@ -97,6 +98,27 @@ public class EmulatorController {
 
     // --- input dispatch ---
 
+    /** Applies a task's input admission check to helpers on this thread, restoring it on exit. */
+    public <T> T withInputGuard(Runnable check, java.util.function.Supplier<T> operation) {
+        Objects.requireNonNull(check);
+        Runnable previous = inputGuard.get();
+        inputGuard.set(() -> {
+            if (previous != null) previous.run();
+            check.run();
+        });
+        try {
+            return operation.get();
+        } finally {
+            if (previous == null) inputGuard.remove();
+            else inputGuard.set(previous);
+        }
+    }
+
+    private void checkInputAllowed() {
+        Runnable check = inputGuard.get();
+        if (check != null) check.run();
+    }
+
     public TapInteractionService tapInteractions(String idx) {
         return tapInteractions(idx, null);
     }
@@ -106,26 +128,29 @@ public class EmulatorController {
     }
 
     private void dispatchTap(String idx, PointData pt) {
+        checkInputAllowed();
         requireBackend();
         LOG.info("{} tap ({},{}) dev {}", label(idx), pt.getX(), pt.getY(), idx);
         backend.touchArea(idx, pt, pt);
     }
 
     public void swipeScreen(String idx, PointData from, PointData to) {
+        checkInputAllowed();
         requireBackend();
         LOG.info("{} swipe dev {}", label(idx), idx);
         backend.swipe(idx, from, to);
     }
 
     public void swipeScreen(String idx, PointData from, PointData to, int durationMs) {
+        checkInputAllowed();
         requireBackend();
         LOG.info("{} swipe duration={}ms dev {}", label(idx), durationMs, idx);
         backend.swipe(idx, from, to, durationMs);
     }
 
-    public void pressBack(String idx) { requireBackend(); LOG.info("{} back dev {}", label(idx), idx); backend.pressBackButton(idx); }
-    public void writeText(String idx, String t) { requireBackend(); LOG.info("{} text dev {}", label(idx), idx); backend.writeText(idx, t); }
-    public void clearText(String idx, int n)    { requireBackend(); LOG.info("{} erase {} dev {}", label(idx), n, idx); backend.clearText(idx, n); }
+    public void pressBack(String idx) { checkInputAllowed(); requireBackend(); LOG.info("{} back dev {}", label(idx), idx); backend.pressBackButton(idx); }
+    public void writeText(String idx, String t) { checkInputAllowed(); requireBackend(); LOG.info("{} text dev {}", label(idx), idx); backend.writeText(idx, t); }
+    public void clearText(String idx, int n)    { checkInputAllowed(); requireBackend(); LOG.info("{} erase {} dev {}", label(idx), n, idx); backend.clearText(idx, n); }
 
     // --- app management (direct delegates) ---
 
