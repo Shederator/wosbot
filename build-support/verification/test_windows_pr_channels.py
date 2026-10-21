@@ -15,9 +15,9 @@ class WindowsPrChannelsTest(unittest.TestCase):
             "modules/tasks/src/test/java/dev/frostguard/tasks/city/ResearchRoutineTest.java",
         ]))
 
-    def test_custom_task_example_needs_only_stable(self):
+    def test_builtin_telemetry_task_needs_only_stable(self):
         self.assertFalse(windows_pr_channels.requires_nightly([
-            "examples/custom-tasks/bg_telemetry.java",
+            "modules/tasks/src/main/java/dev/frostguard/tasks/analytics/TelemetrySnapshotRoutine.java",
         ]))
 
     def test_channel_and_packaging_paths_need_nightly(self):
