@@ -37,6 +37,7 @@ import dev.frostguard.data.repository.ConfigRepository;
 import dev.frostguard.data.repository.DailyTaskRepository;
 import dev.frostguard.data.repository.ProfileRepository;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.engine.emulator.EmulatorStopResult;
 import dev.frostguard.engine.listener.BotStateListener;
 import dev.frostguard.engine.listener.QueueStateListener;
 import dev.frostguard.engine.schedule.BearTrapParticipationSchedule;
@@ -106,6 +107,30 @@ public class ScheduleService {
 			return;
 		}
 
+		Set<String> configuredEmulators = enabled.stream()
+				.map(AccountDescriptor::getEmulatorNumber)
+				.filter(emulator -> emulator != null && !emulator.isBlank())
+				.collect(Collectors.toCollection(LinkedHashSet::new));
+		log(TpMessageSeverityEnum.INFO, "ScheduleService", "-",
+				"Checking for stale emulator processes before starting " + enabled.size()
+						+ " enabled profile(s)");
+		Map<String, List<String>> profilesByEmulator = enabled.stream()
+				.filter(account -> account.getEmulatorNumber() != null && !account.getEmulatorNumber().isBlank())
+				.collect(Collectors.groupingBy(AccountDescriptor::getEmulatorNumber,
+						LinkedHashMap::new,
+						Collectors.mapping(account -> account.getName() == null ? "unknown" : account.getName(),
+								Collectors.toList())));
+		Map<String, String> cleanupOutcomes = EmulatorController.getInstance()
+				.cleanupStaleEmulatorsAtStartup(configuredEmulators);
+		cleanupOutcomes.forEach((emulator, outcome) -> {
+			List<String> profileNames = profilesByEmulator.getOrDefault(emulator, List.of());
+			TpMessageSeverityEnum severity = outcome.startsWith("UNCONFIRMED")
+					|| outcome.startsWith("INTERRUPTED")
+							? TpMessageSeverityEnum.WARNING : TpMessageSeverityEnum.INFO;
+			log(severity, "ScheduleService", String.join(", ", profileNames),
+					"Startup emulator cleanup for #" + emulator + ": " + outcome);
+		});
+
 		enabled.stream()
 				.sorted(Comparator.comparing(AccountDescriptor::getPriority).reversed())
 				.forEach(account -> prepareQueue(account, globalConfig));
@@ -128,21 +153,21 @@ public class ScheduleService {
 		}
 	}
 
-	public void haltEngine() {
-		haltEngine(StopBehaviorEnum.DO_NOTHING);
+	public List<String> haltEngine() {
+		return haltEngine(StopBehaviorEnum.DO_NOTHING);
 	}
 
 	// Changed by pernerch | Date: 2026-07-04 | Why: apply GUI-specific stop behavior configured in Instance Settings.
-	public void haltEngineFromGui() {
-		haltEngine(resolveStopBehavior(ConfigurationKeyEnum.STOP_BEHAVIOR_STRING));
+	public List<String> haltEngineFromGui() {
+		return haltEngine(resolveStopBehavior(ConfigurationKeyEnum.STOP_BEHAVIOR_STRING));
 	}
 
 	// Changed by pernerch | Date: 2026-07-04 | Why: apply Telegram-specific stop behavior configured in Instance Settings.
-	public void haltEngineFromTelegram() {
-		haltEngine(resolveStopBehavior(ConfigurationKeyEnum.STOP_BEHAVIOR_TELEGRAM_STRING));
+	public List<String> haltEngineFromTelegram() {
+		return haltEngine(resolveStopBehavior(ConfigurationKeyEnum.STOP_BEHAVIOR_TELEGRAM_STRING));
 	}
 
-	public synchronized void haltEngine(StopBehaviorEnum stopBehavior) {
+	public synchronized List<String> haltEngine(StopBehaviorEnum stopBehavior) {
 		TaskDispatcher.StopAllResult result = dispatcher.stopAll();
 		if (!result.complete()) {
 			String detail = result.failureSummary();
@@ -152,15 +177,15 @@ public class ScheduleService {
 			notifyQueueState(null, false);
 			throw new IncompleteTaskShutdownException(detail);
 		}
-		if (stopBehavior == StopBehaviorEnum.CLOSE_EMULATOR) {
-			closeEnabledEmulators();
-		}
+		List<String> failures = stopBehavior == StopBehaviorEnum.CLOSE_EMULATOR
+				? closeEnabledEmulators() : List.of();
 		try {
 			AnalyticsService.getInstance().trackBotStopped("manual");
 		} catch (Exception ignored) {
 		}
 		notifyBotState(false, false);
 		notifyQueueState(null, false);
+		return failures;
 	}
 
 	public static final class IncompleteTaskShutdownException extends IllegalStateException {
@@ -180,7 +205,7 @@ public class ScheduleService {
 		return StopBehaviorEnum.parse(rawValue);
 	}
 
-	private void closeEnabledEmulators() {
+	private List<String> closeEnabledEmulators() {
 		// Changed by pernerch | Date: 2026-07-04 | Why: close each enabled profile emulator once when stop policy requests emulator shutdown.
 		Set<String> emulatorsToClose = ProfileService.obtain().fetchAllAccounts().stream()
 				.filter(account -> Boolean.TRUE.equals(account.getEnabled()))
@@ -188,16 +213,25 @@ public class ScheduleService {
 				.filter(emulator -> emulator != null && !emulator.isBlank())
 				.collect(Collectors.toCollection(LinkedHashSet::new));
 
+		List<String> failures = new ArrayList<>();
 		for (String emulator : emulatorsToClose) {
 			try {
-				EmulatorController.getInstance().closeEmulator(emulator);
-				log(TpMessageSeverityEnum.INFO, "ScheduleService", "-",
-						"Stopped bot and closed emulator " + emulator);
+				EmulatorStopResult stop = EmulatorController.getInstance().closeEmulator(emulator);
+				if (stop.confirmed()) {
+					log(TpMessageSeverityEnum.INFO, "ScheduleService", "-",
+							"Stopped bot and closed emulator " + emulator + " by " + stop.method());
+				} else {
+					failures.add(emulator);
+					log(TpMessageSeverityEnum.ERROR, "ScheduleService", "-",
+							"Stopped bot; emulator " + emulator + " shutdown unconfirmed: " + stop.evidence());
+				}
 			} catch (Exception ex) {
+				failures.add(emulator);
 				log(TpMessageSeverityEnum.WARNING, "ScheduleService", "-",
 						"Failed to close emulator " + emulator + ": " + ex.getMessage());
 			}
 		}
+		return failures;
 	}
 
 	public void suspendEngine() {

@@ -31,6 +31,7 @@ import dev.frostguard.api.domain.ProfileStatusData;
 import dev.frostguard.api.domain.TaskQueueStatusData;
 import dev.frostguard.api.domain.TaskStateData;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.engine.emulator.EmulatorStopResult;
 import dev.frostguard.engine.emulator.QueuePositionListener;
 import dev.frostguard.engine.error.ADBConnectionException;
 import dev.frostguard.engine.error.ActionRequiredContext;
@@ -79,6 +80,7 @@ public class TaskQueue {
     private volatile AccountDescriptor profile;
     private volatile ExecutionContext   runningContext;
     private volatile LocalDateTime      sessionOrigin;
+    private volatile LocalDateTime      nextSessionStopAttemptAt;
     private volatile String             profileCooldownStatus;
     // Changed by pernerch | Date: 2026-07-04 | Why: ensure first startup cycle runs Initialize regardless of idle heuristics.
     private volatile boolean    forceInitialInitialize = true;
@@ -1139,20 +1141,31 @@ public class TaskQueue {
                                           LocalDateTime scheduledAt) {
     }
 
-    private void suspendDevice(LocalDateTime until, boolean freeSlot) {
+    boolean suspendDevice(LocalDateTime until, boolean freeSlot) {
         IdleBehaviorEnum policy = resolveIdleBehavior();
+        boolean suspended = true;
         if (policy == IdleBehaviorEnum.SEND_TO_BACKGROUND) {
             deviceBridge.sendGameToBackground(profile.getEmulatorNumber());
             emitInfo("Device sent to background until " + until);
             if (freeSlot) { releaseActiveSlotLease(); emitInfo("Slot released"); }
         } else if (policy == IdleBehaviorEnum.PC_SLEEP) {
-            triggerPcSleep(until);
+            suspended = triggerPcSleep(until);
         } else {
-            deviceBridge.closeEmulator(profile.getEmulatorNumber());
-            emitInfo("Device closed until " + until);
-            releaseActiveSlotLease();
+            EmulatorStopResult stop = requestIdleEmulatorStop();
+            suspended = stop.confirmed();
+            if (suspended) {
+                emitInfo("Device closed until " + until);
+                releaseActiveSlotLease();
+            } else {
+                emitError("Emulator shutdown unconfirmed; retaining slot: " + stop.evidence());
+            }
         }
-        broadcastStatus("Idle till " + DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(until));
+        if (suspended) {
+            broadcastStatus("Idle till " + DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(until));
+        } else {
+            broadcastStatus("Emulator shutdown unconfirmed");
+        }
+        return suspended;
     }
 
     private boolean enforceSessionCap() {
@@ -1168,14 +1181,19 @@ public class TaskQueue {
         int cap = Math.max(1, Optional.ofNullable(cfg)
                 .map(c -> c.get(ConfigurationKeyEnum.PROFILE_MAX_ACTIVE_TIME_MINUTES_INT.name())).map(Integer::parseInt)
                 .orElse(Integer.parseInt(ConfigurationKeyEnum.PROFILE_MAX_ACTIVE_TIME_MINUTES_INT.getDefaultValue())));
+        if (nextSessionStopAttemptAt != null && LocalDateTime.now().isBefore(nextSessionStopAttemptAt)) {
+            finishIdleSchedulerTick();
+            return true;
+        }
         if (LocalDateTime.now().isBefore(sessionOrigin.plusMinutes(cap))) return false;
         emitInfo("Max session time (" + cap + " min) reached - forcing idle");
-        suspendDevice(statusModel.getDelayUntil(), true);
+        boolean suspended = suspendDevice(statusModel.getDelayUntil(), true);
+        nextSessionStopAttemptAt = suspended ? null : LocalDateTime.now().plusMinutes(1);
         statusModel.setIdleTimeExceeded(true);
         return true;
     }
 
-    private IdleBehaviorEnum resolveIdleBehavior() {
+    protected IdleBehaviorEnum resolveIdleBehavior() {
         return IdleBehaviorEnum.fromString(
                 Optional.ofNullable(ConfigService.obtain().loadGlobalSettings())
                         .map(c -> c.getOrDefault(ConfigurationKeyEnum.IDLE_BEHAVIOR_STRING.name(),
@@ -1251,9 +1269,17 @@ public class TaskQueue {
         return profileCooldownStatus;
     }
 
-    private void triggerPcSleep(LocalDateTime wakeAt) {
+    protected EmulatorStopResult requestIdleEmulatorStop() {
+        return deviceBridge.closeEmulator(profile.getEmulatorNumber());
+    }
+
+    boolean triggerPcSleep(LocalDateTime wakeAt) {
         try {
-            deviceBridge.closeEmulator(profile.getEmulatorNumber());
+            EmulatorStopResult stop = requestIdleEmulatorStop();
+            if (!stop.confirmed()) {
+                emitError("PC sleep cancelled; emulator shutdown unconfirmed: " + stop.evidence());
+                return false;
+            }
             releaseActiveSlotLease();
             LocalDateTime wake = wakeAt.minusMinutes(1);
             if (wake.isBefore(LocalDateTime.now())) wake = LocalDateTime.now().plusMinutes(1);
@@ -1281,7 +1307,11 @@ public class TaskQueue {
                     "[System.Windows.Forms.Application]::SetSuspendState('Suspend',$false,$false)\n");
             new ProcessBuilder("powershell.exe","-NoProfile","-ExecutionPolicy","Bypass","-File",ss.toString()).start();
             System.exit(0);
-        } catch (Exception ex) { emitError("PC sleep scheduling error: " + ex.getMessage()); }
+            return true;
+        } catch (Exception ex) {
+            emitError("PC sleep scheduling error: " + ex.getMessage());
+            return false;
+        }
     }
 
     private String resolveDesktopJarForAutostart() throws java.io.IOException {

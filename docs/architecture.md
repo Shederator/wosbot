@@ -190,6 +190,7 @@ sequenceDiagram
     UI->>Scheduler: launchEngine()
     Scheduler->>Emulator: initialize()
     Scheduler->>DB: load global config and enabled profiles
+    Scheduler->>Emulator: clean stale ADB-live instances for enabled profiles
     loop enabled profiles
         Scheduler->>Dispatcher: registerAccount(profile)
         Scheduler->>Queue: enqueue Initialize and configured tasks
@@ -202,6 +203,15 @@ sequenceDiagram
         Queue->>DB: persist next execution
     end
 ```
+
+Before starting profile queues, `ScheduleService` checks each distinct emulator
+used by an enabled profile. If the emulator's own state probe reports stopped
+or cannot answer while the matching ADB device is online, the engine requests
+an ADB power-off and verifies the result. Instances reported running are left
+alone. A failed or unconfirmed cleanup is logged and keeps that instance from
+being booted again in the same engine launch; queues for other profiles still
+start. This check belongs to the engine lifecycle, so GUI, headless, and
+scheduled launches use the same behavior without depending on a wrapper script.
 
 Each `TaskQueue` chooses runnable tasks by priority and schedule, executes
 `DelayedTask.run()`, records state, persists the next execution through

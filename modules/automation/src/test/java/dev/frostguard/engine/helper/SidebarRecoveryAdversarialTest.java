@@ -20,6 +20,7 @@ import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.emulator.EmulatorInstance;
+import dev.frostguard.engine.emulator.EmulatorStopCycle;
 import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.SidebarDestination;
@@ -84,7 +85,12 @@ class SidebarRecoveryAdversarialTest {
         }
 
         @Override
-        public void closeEmulator(String index) {
+        protected EmulatorStopCycle.CommandOutcome requestVendorStop(String index) {
+            throw new AssertionError("No live device");
+        }
+
+        @Override
+        protected EmulatorStopCycle.Probe probeVendorState(String index) {
             throw new AssertionError("No live device");
         }
 
