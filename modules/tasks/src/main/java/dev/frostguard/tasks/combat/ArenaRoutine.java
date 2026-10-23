@@ -117,6 +117,26 @@ public class ArenaRoutine extends DelayedTask {
             .withDelay(500)
             .build();
     private static final int[] ATTEMPT_PRICES = { 100, 200, 400, 600, 800 };
+
+    // ========== City reward chest ==========
+    // Finishing the day's attempts leaves a chest bubble bobbing over the Arena
+    // building in the city. Measured over 744 saved frames the chest template
+    // peaks at 0.713 on screens that do not show it and never drops below 0.849
+    // on screens that do, so 80 sits in the gap with room either side. The
+    // "Rewards" banner separates far harder -- 0.530 against the same frames --
+    // and 85 keeps a claim from being reported off a wrong screen.
+    private static final int CITY_CHEST_THRESHOLD = 80;
+    private static final int REWARDS_BANNER_THRESHOLD = 85;
+    // The bubble drifts about six pixels from side to side. Several short
+    // attempts span that travel instead of judging it from one frame.
+    private static final int CITY_CHEST_SEARCH_ATTEMPTS = 6;
+    private static final long CITY_CHEST_SEARCH_DELAY_MS = 250L;
+    private static final int REWARDS_PANEL_TIMEOUT_MS = 6_000;
+    private static final int REWARDS_PANEL_POLL_MS = 400;
+    private static final int REWARDS_PANEL_SETTLE_MS = 1_200;
+    // The panel says "Tap anywhere to exit"; an empty stretch of map below the
+    // reward tiles dismisses it without landing on a building underneath.
+    private static final PointData REWARDS_DISMISS_POINT = new PointData(360, 900);
     private static final int MIN_COLORED_PIXELS_THRESHOLD = 10;
     private static final double GREEN_DOMINANCE_RATIO = 1.5;
     private static final double RED_DOMINANCE_RATIO = 1.5;
@@ -275,6 +295,8 @@ public class ArenaRoutine extends DelayedTask {
         }
 
         processChallenges();
+
+        claimCityRewardChest();
 
         rescheduleWithActivationHour();
     }
@@ -491,6 +513,85 @@ public class ArenaRoutine extends DelayedTask {
         } else {
             logInfo("Arena run finished after using available eligible attempts.");
         }
+    }
+
+    /**
+     * Claims the chest the arena leaves over the city once the day's attempts
+     * are spent.
+     *
+     * <p>The reward is not handed out with the last battle. It waits as a
+     * bubble above the Arena building back in the city, and goes unclaimed
+     * until someone taps it, so a run that spends five attempts and two bought
+     * ones still finishes a chest short. Tapping it opens a "Rewards" panel
+     * that closes on a tap anywhere.</p>
+     *
+     * <p>Absence is the normal case rather than a fault: the chest is only
+     * there when a day's attempts have just been finished and nobody has
+     * collected it yet, so a miss is logged as information and the run ends
+     * as before.</p>
+     */
+    private void claimCityRewardChest() {
+        navigationHelper.ensureCorrectScreenLocation(LaunchPoint.HOME);
+
+        ImageSearchResultData chest = templateSearchHelper.locatePattern(
+                TemplatesEnum.ARENA_CITY_REWARD_CHEST,
+                SearchConfig.builder()
+                        .withMaxAttempts(CITY_CHEST_SEARCH_ATTEMPTS)
+                        .withDelay(CITY_CHEST_SEARCH_DELAY_MS)
+                        .withThreshold(CITY_CHEST_THRESHOLD)
+                        .build());
+
+        if (!chest.isFound()) {
+            logInfo("No arena reward chest waiting in the city.");
+            return;
+        }
+
+        logInfo(String.format("Arena reward chest found in the city (score %d). Opening it.",
+                chest.getMatchScore()));
+        tapInside(chest);
+
+        if (!waitForRewardsPanel()) {
+            // Something other than the rewards panel is now on screen. Back out
+            // rather than tapping blind on whatever opened.
+            logWarning("Arena reward chest tapped but no Rewards panel appeared. Leaving it for the next run.");
+            pressBack();
+            return;
+        }
+
+        tapNear(REWARDS_DISMISS_POINT);
+        sleepTask(REWARDS_PANEL_SETTLE_MS);
+
+        ImageSearchResultData leftover = templateSearchHelper.locatePattern(
+                TemplatesEnum.ARENA_CITY_REWARD_CHEST,
+                SearchConfig.builder()
+                        .withMaxAttempts(CITY_CHEST_SEARCH_ATTEMPTS)
+                        .withDelay(CITY_CHEST_SEARCH_DELAY_MS)
+                        .withThreshold(CITY_CHEST_THRESHOLD)
+                        .build());
+
+        if (leftover.isFound()) {
+            logWarning("Arena reward chest is still showing after the Rewards panel closed.");
+            return;
+        }
+
+        StatisticsService.obtain().addToCounter(profile, "Arena Chests", 1);
+        logInfo("Arena reward chest claimed.");
+    }
+
+    private boolean waitForRewardsPanel() {
+        int waited = 0;
+        while (waited < REWARDS_PANEL_TIMEOUT_MS) {
+            if (templateSearchHelper.locatePattern(
+                    TemplatesEnum.ARENA_REWARDS_BANNER,
+                    SearchConfig.builder()
+                            .withThreshold(REWARDS_BANNER_THRESHOLD)
+                            .build()).isFound()) {
+                return true;
+            }
+            sleepTask(REWARDS_PANEL_POLL_MS);
+            waited += REWARDS_PANEL_POLL_MS;
+        }
+        return false;
     }
 
     static boolean shouldRefreshAfterDefeat(int remainingAttempts) {
