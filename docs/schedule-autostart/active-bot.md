@@ -12,7 +12,8 @@ runs a source checkout through the Maven Wrapper.
 - `Frostguard-SystemStandby.xml`: example task that returns the machine to
   standby.
 - `launch.ps1`: starts an installed release or a source checkout with
-  `--autostart`, enforces a timeout, and stops the emulator process.
+  `--autostart`, replaces an existing matching Frostguard instance, enforces a
+  timeout, and stops the emulator process.
 
 ## Prerequisites
 
@@ -117,8 +118,12 @@ workspace.
 8. Adjust its trigger times so standby happens after the Frostguard run window.
 
 Run the startup task manually once while observing Frostguard and the emulator.
-Confirm the configured profiles start, the timeout closes Frostguard and the
-emulator, and `launch.log` contains no error before enabling unattended runs.
+If a matching Frostguard instance is already running, the script force-stops its
+process tree before starting the scheduled instance. In development mode it
+matches only processes associated with the configured repository; it does not
+stop unrelated Java applications. Confirm the configured profiles start, the
+timeout closes Frostguard and the emulator, and `launch.log` contains no error
+before enabling unattended runs.
 
 ## Notes
 

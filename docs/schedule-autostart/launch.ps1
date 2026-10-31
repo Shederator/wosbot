@@ -47,6 +47,103 @@ function Stop-ProcessTreeByPid {
     }
 }
 
+function Get-ProcessAncestors {
+    param(
+        [Parameter(Mandatory)]
+        [object]$Process,
+        [Parameter(Mandatory)]
+        [hashtable]$ProcessesById
+    )
+
+    $ancestors = [System.Collections.Generic.List[int]]::new()
+    $parentId = [int]$Process.ParentProcessId
+    while ($parentId -ne 0 -and $ProcessesById.ContainsKey($parentId)) {
+        $ancestors.Add($parentId)
+        $parentId = [int]$ProcessesById[$parentId].ParentProcessId
+    }
+
+    return $ancestors
+}
+
+function Get-ExistingFrostguardProcesses {
+    param(
+        [Parameter(Mandatory)]
+        [object]$Launch
+    )
+
+    $allProcesses = @(Get-CimInstance -ClassName Win32_Process)
+    $processesById = @{}
+    foreach ($process in $allProcesses) {
+        $processesById[[int]$process.ProcessId] = $process
+    }
+
+    if ($Launch.Mode -eq "Installed") {
+        $matchingProcesses = @($allProcesses | Where-Object {
+                -not [string]::IsNullOrWhiteSpace($_.ExecutablePath) -and
+                [string]::Equals($_.ExecutablePath, $Launch.FilePath, [System.StringComparison]::OrdinalIgnoreCase)
+            })
+    }
+    else {
+        $repositoryPattern = [Regex]::Escape($Launch.RepositoryPath)
+        $workspacePattern = [Regex]::Escape((Join-Path $Launch.RepositoryPath ".frostguard-dev"))
+        $matchingProcesses = @($allProcesses | Where-Object {
+                $commandLine = $_.CommandLine -replace "/", "\"
+                $isMavenLaunch = $_.Name -ieq "cmd.exe" -and
+                    $commandLine -match "(?i)mvnw\.cmd" -and
+                    $commandLine -match "(?i)$repositoryPattern"
+                $isFrostguardJvm = ($_.Name -ieq "java.exe" -or $_.Name -ieq "javaw.exe") -and
+                    $commandLine -match "(?i)dev\.frostguard\.app\.bootstrap\.Main" -and
+                    $commandLine -match "(?i)$workspacePattern"
+                $isWatcher = ($_.Name -ieq "java.exe" -or $_.Name -ieq "javaw.exe") -and
+                    $commandLine -match "(?i)frostguard-watcher" -and
+                    $commandLine -match "(?i)$repositoryPattern"
+                $isMavenLaunch -or $isFrostguardJvm -or $isWatcher
+            })
+    }
+
+    $matchingIds = @{}
+    foreach ($process in $matchingProcesses) {
+        $matchingIds[[int]$process.ProcessId] = $true
+    }
+
+    return @($matchingProcesses | Where-Object {
+            $ancestors = Get-ProcessAncestors -Process $_ -ProcessesById $processesById
+            -not ($ancestors | Where-Object { $matchingIds.ContainsKey($_) })
+        })
+}
+
+function Stop-ExistingFrostguardProcesses {
+    param(
+        [Parameter(Mandatory)]
+        [object]$Launch
+    )
+
+    $existingProcesses = @(Get-ExistingFrostguardProcesses -Launch $Launch)
+    if ($existingProcesses.Count -eq 0) {
+        Write-Log "No existing Frostguard process found for $($Launch.Mode) mode"
+        return
+    }
+
+    foreach ($existingProcess in $existingProcesses) {
+        Write-Log "Found existing Frostguard process PID=$($existingProcess.ProcessId), Name='$($existingProcess.Name)'"
+        Stop-ProcessTreeByPid -ProcessId $existingProcess.ProcessId
+    }
+
+    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    do {
+        $remainingProcesses = @(Get-ExistingFrostguardProcesses -Launch $Launch)
+        if ($remainingProcesses.Count -eq 0) {
+            Write-Log "Existing Frostguard process cleanup completed"
+            return
+        }
+
+        Start-Sleep -Milliseconds 500
+    } while ([DateTime]::UtcNow -lt $deadline)
+
+    $remainingPids = $remainingProcesses.ProcessId -join ", "
+    throw "Existing Frostguard process cleanup did not complete within 30 seconds; remaining PIDs: $remainingPids"
+}
+
 function Resolve-FrostguardLaunch {
     if ($Mode -eq "Installed") {
         $resolvedLauncherPath = $LauncherPath
@@ -67,6 +164,7 @@ function Resolve-FrostguardLaunch {
 
         $resolvedLauncherPath = (Get-Item -LiteralPath $resolvedLauncherPath).FullName
         return [PSCustomObject]@{
+            Mode = "Installed"
             FilePath = $resolvedLauncherPath
             Arguments = [string[]]@("--autostart")
             WorkingDirectory = Split-Path -Parent $resolvedLauncherPath
@@ -91,9 +189,11 @@ function Resolve-FrostguardLaunch {
     }
 
     return [PSCustomObject]@{
+        Mode = "Development"
         FilePath = $mavenWrapper
         Arguments = [string[]]@("-Djavafx.args=--autostart", "javafx:run")
         WorkingDirectory = $resolvedRepositoryPath
+        RepositoryPath = $resolvedRepositoryPath
         Display = "`"$mavenWrapper`" `"-Djavafx.args=--autostart`" javafx:run"
     }
 }
@@ -106,6 +206,7 @@ $proc = $null
 
 try {
     $launch = Resolve-FrostguardLaunch
+    Stop-ExistingFrostguardProcesses -Launch $launch
     Write-Log "Starting Frostguard: $($launch.Display)"
     $proc = Start-Process -FilePath $launch.FilePath `
         -ArgumentList $launch.Arguments `
