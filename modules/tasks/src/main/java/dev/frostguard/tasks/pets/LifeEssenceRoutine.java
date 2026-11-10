@@ -141,7 +141,8 @@ public class LifeEssenceRoutine extends DelayedTask {
 	 *
 	 * A confirmed claim is a marker that disappears on the next capture.
 	 * Two valid empty captures finish the run, including an island that was
-	 * already collected. A capture failure stops the run so it can be retried.
+	 * already collected. A capture failure, or a frame without the island's
+	 * Life Essence counter, stops the run so it can be retried.
 	 */
 	private ClaimRun claimLifeEssence() {
 		logInfo("Searching for claimable Life Essence");
@@ -177,6 +178,11 @@ public class LifeEssenceRoutine extends DelayedTask {
 		try {
 			RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
 			BufferedImage image = ImageConverter.toBufferedImage(frame);
+			if (!LifeEssenceIslandScreen.isConfirmed(image)) {
+				logWarning("Life Essence counter is not visible; the island screen is unconfirmed. "
+						+ TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "lifeessence", "island-unconfirmed"));
+				return LifeEssenceClaimPolicy.Observation.screenUnconfirmed();
+			}
 			return LifeEssenceClaimPolicy.Observation.markers(
 					LifeEssenceSearchKind.COLOR.open(null).find(image));
 		} catch (Exception ex) {
