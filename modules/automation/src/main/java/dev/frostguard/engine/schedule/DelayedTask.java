@@ -389,6 +389,9 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
     public void pressBack() {
         checkPreemption();
         emuManager.pressBack(EMULATOR_NUMBER);
+        if (navigationHelper != null) {
+            navigationHelper.dismissQuitGameDialogIfPresent();
+        }
     }
 
     // ── interruptible sleep with injection ───────────────────────────

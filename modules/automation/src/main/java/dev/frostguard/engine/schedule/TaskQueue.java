@@ -37,6 +37,7 @@ import dev.frostguard.engine.error.ActionRequiredContext;
 import dev.frostguard.engine.error.HomeNotFoundException;
 import dev.frostguard.engine.error.ProfileCooldownException;
 import dev.frostguard.engine.error.ProfileInReconnectStateException;
+import dev.frostguard.engine.error.QuitDialogStuckException;
 import dev.frostguard.engine.error.StopExecutionException;
 import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.schedule.inject.InjectionRule;
@@ -836,6 +837,11 @@ public class TaskQueue {
             pauseForProfileCooldown(task, cooldown);
         } else if (ex instanceof HomeNotFoundException) {
             emitErrorTask(task, "Home not found: " + ex.getMessage());
+            enqueue(DelayedTaskRegistry.create(TpDailyTaskEnum.INITIALIZE, profile));
+        } else if (ex instanceof QuitDialogStuckException) {
+            // The screen state is unknown, so recover like HomeNotFoundException instead of letting
+            // the next task run into a dialog that is still open.
+            emitErrorTask(task, "Quit dialog stuck: " + ex.getMessage());
             enqueue(DelayedTaskRegistry.create(TpDailyTaskEnum.INITIALIZE, profile));
         } else if (ex instanceof StopExecutionException) {
             emitErrorTask(task, "Execution stopped: " + ex.getMessage());

@@ -5,6 +5,7 @@ import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.diagnostics.DiagnosticSnapshotStore;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.engine.error.QuitDialogStuckException;
 import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.input.TapJitterPolicy;
 import dev.frostguard.engine.nav.CommonGameAreas;
@@ -20,6 +21,7 @@ import dev.frostguard.vision.ocr.ResilientOcrExecutor;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.concurrent.CancellationException;
 
 // Orchestrates stamina tracking: OCR reads, regen delay computation,
 // availability gating, item top-ups, and travel time parsing.
@@ -85,7 +87,7 @@ public class StaminaHelper {
 
             @Override
             public void cleanup() {
-                device.pressBack(deviceSlot);
+                QuitDialogGuard.pressBackSafely(device, deviceSlot);
             }
         };
     }
@@ -123,12 +125,18 @@ public class StaminaHelper {
                 emitInfo("Stamina read: " + reading);
                 persistence.setStamina(accountKey, reading);
             }
+        } catch (CancellationException cancelled) {
+            // A stop request, not a stamina error: rethrow so the caller actually stops.
+            throw cancelled;
         } catch (Exception ex) {
             emitWarn("Stamina update error: " + ex.getMessage());
         } finally {
-            // Safety navigation back
+            // A stuck quit dialog or a stop request must reach the caller; swallowing either here
+            // would let the next task run against a screen still showing the dialog.
             try {
                 hudStaminaUi.cleanup();
+            } catch (QuitDialogStuckException | CancellationException mustPropagate) {
+                throw mustPropagate;
             } catch (Exception ex) {
                 emitDebug("Press-back cleanup error: " + ex.getMessage());
             }
@@ -147,7 +155,7 @@ public class StaminaHelper {
         pause(1000);
 
         StaminaTopUpResult result = useItemsInOpenDialog(targetStamina, itemReserve);
-        device.pressBack(deviceSlot);
+        QuitDialogGuard.pressBackSafely(device, deviceSlot);
         pause(500);
         return result;
     }

@@ -111,7 +111,7 @@ public final class AllianceHelper {
 
         emitPhase(TogglePhase.RETURN_HOME);
         for (int i = 3; i > 0; i--) {
-            emu.pressBack(slot);
+            QuitDialogGuard.pressBackSafely(emu, slot);
             pause(300);
         }
 

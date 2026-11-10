@@ -88,6 +88,10 @@ public final class CommonGameAreas {
     public static final PointData SIDEBAR_SCROLL_TOWARD_BOTTOM_FROM = point(360, 720);
     public static final PointData SIDEBAR_SCROLL_TOWARD_BOTTOM_TO = point(360, 600);
 
+    // Cancel on the "Quit game?" confirmation raised by Back on a bare screen. The button spans
+    // roughly x=80..335, y=753..823 in the committed live-account frame.
+    public static final PointData QUIT_GAME_DIALOG_CANCEL = point(207, 789);
+
     public static AreaData sidebarTab(SidebarSection section) {
         return switch (section) {
             case CITY -> LEFT_MENU_CITY_TAB;
