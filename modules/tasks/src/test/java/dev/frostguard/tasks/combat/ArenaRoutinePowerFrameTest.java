@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Objects;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -64,6 +65,26 @@ class ArenaRoutinePowerFrameTest {
         List<Double> values = new ArrayList<>(Arrays.asList(null, 2_800_000D, 2_400_000D));
         values.sort(ArenaRoutine::comparePowerValues);
         assertEquals(Arrays.asList(2_400_000D, 2_800_000D, null), values);
+    }
+
+    @Test
+    void ranksPowerPrintedInFullBelowAMillion() {
+        assertEquals(660_265D, ArenaRoutine.parsePowerValue("660,265"));
+        assertEquals(60_000D, ArenaRoutine.parsePowerValue("60,000"));
+        assertEquals(154_500D, ArenaRoutine.parsePowerValue("154.500"),
+                "OCR can read the thousands comma as a dot; with no unit it is still a separator");
+        assertEquals(1_500_000D, ArenaRoutine.parsePowerValue("1.5M"));
+
+        assertNull(ArenaRoutine.parsePowerValue("660,26"), "a clipped group must not rank as a small value");
+        assertNull(ArenaRoutine.parsePowerValue("1,5"));
+    }
+
+    @Test
+    void recognizesEveryGuardNameTheListShows() {
+        assertTrue(ArenaRoutine.looksLikeGuard("Common Guard"));
+        assertTrue(ArenaRoutine.looksLikeGuard("Veteran Guard"));
+        assertTrue(ArenaRoutine.looksLikeGuard("Elite Guard"));
+        assertFalse(ArenaRoutine.looksLikeGuard("MrB"));
     }
 
     private Double readPower(RawImageData frame, int opponentNumber) throws Exception {

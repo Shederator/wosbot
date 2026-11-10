@@ -24,3 +24,11 @@ or unreadable opponents are skipped. Numeric power OCR only ranks otherwise
 eligible opponents from weakest to strongest. A missing or malformed numeric
 read therefore falls behind valid values instead of overriding the color
 decision.
+
+The Challenge List has a Daily Challenges chest with a 0/5 to 5/5 count below
+it. Only a finished count draws its leading digit green, so that color is the
+readiness signal; the chest art pulses and is not matched. The routine claims it
+from the list when its attempts end and still checks the city chest afterward.
+
+Power below one million is printed in full (`660,265`) instead of with a unit
+suffix, and both forms rank together.

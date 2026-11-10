@@ -117,6 +117,41 @@ public class ArenaRoutine extends DelayedTask {
             .withDelay(500)
             .build();
     private static final int[] ATTEMPT_PRICES = { 100, 200, 400, 600, 800 };
+
+    // ========== City reward chest ==========
+    // Finishing the day's attempts leaves a chest bubble bobbing over the Arena
+    // building in the city. Measured over 744 saved frames the chest template
+    // peaks at 0.713 on screens that do not show it and never drops below 0.849
+    // on screens that do, so 80 sits in the gap with room either side. The
+    // "Rewards" banner separates far harder -- 0.530 against the same frames --
+    // and 85 keeps a claim from being reported off a wrong screen.
+    private static final int CITY_CHEST_THRESHOLD = 80;
+    private static final int REWARDS_BANNER_THRESHOLD = 85;
+    // The bubble drifts about six pixels from side to side. Several short
+    // attempts span that travel instead of judging it from one frame.
+    private static final int CITY_CHEST_SEARCH_ATTEMPTS = 6;
+    private static final long CITY_CHEST_SEARCH_DELAY_MS = 250L;
+    private static final int REWARDS_PANEL_TIMEOUT_MS = 6_000;
+    private static final int REWARDS_PANEL_POLL_MS = 400;
+    private static final int REWARDS_PANEL_SETTLE_MS = 1_200;
+    // The panel says "Tap anywhere to exit"; an empty stretch of map below the
+    // reward tiles dismisses it without landing on a building underneath.
+    private static final PointData REWARDS_DISMISS_POINT = new PointData(360, 900);
+
+    // ========== Daily Challenges chest ==========
+    // The Challenge List carries its own chest, with a count under it that runs
+    // 0/5 to 5/5. Only the leading digit of a finished count is drawn green;
+    // measured on the live screen it gives 98 green pixels at 5/5 and none at
+    // 0/5 through 4/5, while the chest art above it pulses and cannot be matched.
+    private static final PointData DAILY_CHEST_POINT = new PointData(115, 985);
+    private static final AreaData DAILY_CHEST_COUNT_LEADING_DIGIT = new AreaData(
+            new PointData(99, 1071),
+            new PointData(115, 1093));
+    private static final int MIN_DAILY_CHEST_GREEN_PIXELS = 40;
+    private static final int DAILY_CHEST_GREEN_MARGIN = 30;
+    // The list is still fading back in when the last battle's result closes.
+    private static final int DAILY_CHEST_CHECK_ATTEMPTS = 4;
+    private static final int DAILY_CHEST_CHECK_DELAY_MS = 700;
     private static final int MIN_COLORED_PIXELS_THRESHOLD = 10;
     private static final double GREEN_DOMINANCE_RATIO = 1.5;
     private static final double RED_DOMINANCE_RATIO = 1.5;
@@ -128,6 +163,8 @@ public class ArenaRoutine extends DelayedTask {
     private static final Pattern BRACKETLESS_TRAILING_BRACKET_PATTERN = Pattern.compile("^[\\[\\|Il1t]?([A-Z0-9]{2,4})[^\\]]*]");
     private static final Pattern SERVER_PATTERN = Pattern.compile("(\\d{3,5})");
     private static final Pattern POWER_VALUE_PATTERN = Pattern.compile("([0-9]+[.,][0-9]+)([KMBkmb])");
+    // Below a million the list prints power in full, "660,265" rather than "660K".
+    private static final Pattern FULL_POWER_VALUE_PATTERN = Pattern.compile("[0-9]{1,3}(?:[.,][0-9]{3})+");
     private static final int OCR_RETRY_DELAY_MS = 250;
 
     // ========== Configuration ==========
@@ -275,6 +312,10 @@ public class ArenaRoutine extends DelayedTask {
         }
 
         processChallenges();
+
+        claimDailyChallengesChest();
+
+        claimCityRewardChest();
 
         rescheduleWithActivationHour();
     }
@@ -491,6 +532,140 @@ public class ArenaRoutine extends DelayedTask {
         } else {
             logInfo("Arena run finished after using available eligible attempts.");
         }
+    }
+
+    /**
+     * Claims the Daily Challenges chest from the Challenge List, where the run
+     * is still standing when its last attempt ends.
+     *
+     * <p>This is the dependable route to the day's reward. The same chest also
+     * floats over the Arena building, but the city camera pans freely and a
+     * building scrolled off screen reads exactly like a chest already taken.</p>
+     */
+    private void claimDailyChallengesChest() {
+        if (!isDailyChestReady()) {
+            logInfo("Daily Challenges chest is not ready in the Challenge List.");
+            return;
+        }
+
+        logInfo("Daily Challenges chest is ready. Opening it.");
+        tapNear(DAILY_CHEST_POINT);
+
+        if (!waitForRewardsPanel()) {
+            logWarning("Daily Challenges chest tapped but no Rewards panel appeared. Leaving it for the next run.");
+            pressBack();
+            return;
+        }
+
+        tapNear(REWARDS_DISMISS_POINT);
+        sleepTask(REWARDS_PANEL_SETTLE_MS);
+
+        StatisticsService.obtain().addToCounter(profile, "Arena Chests", 1);
+        logInfo("Daily Challenges chest claimed.");
+    }
+
+    private boolean isDailyChestReady() {
+        for (int attempt = 1; attempt <= DAILY_CHEST_CHECK_ATTEMPTS; attempt++) {
+            BufferedImage image = captureFrameForPixelScan("arena daily chest");
+            if (image != null && showsFinishedDailyChestCount(image)) {
+                return true;
+            }
+            if (attempt < DAILY_CHEST_CHECK_ATTEMPTS) {
+                sleepTask(DAILY_CHEST_CHECK_DELAY_MS);
+            }
+        }
+        return false;
+    }
+
+    static boolean showsFinishedDailyChestCount(BufferedImage image) {
+        int green = PixelStats.count(image, DAILY_CHEST_COUNT_LEADING_DIGIT, ArenaRoutine::isDailyChestCountGreen);
+        return green >= MIN_DAILY_CHEST_GREEN_PIXELS;
+    }
+
+    private static boolean isDailyChestCountGreen(int rgb) {
+        int red = (rgb >> 16) & 0xFF;
+        int green = (rgb >> 8) & 0xFF;
+        int blue = rgb & 0xFF;
+        return green > red + DAILY_CHEST_GREEN_MARGIN && green > blue + DAILY_CHEST_GREEN_MARGIN;
+    }
+
+    /**
+     * Claims the chest the arena leaves over the city once the day's attempts
+     * are spent.
+     *
+     * <p>The reward is not handed out with the last battle. It waits as a
+     * bubble above the Arena building back in the city, and goes unclaimed
+     * until someone taps it, so a run that spends five attempts and two bought
+     * ones still finishes a chest short. Tapping it opens a "Rewards" panel
+     * that closes on a tap anywhere.</p>
+     *
+     * <p>Absence is the normal case rather than a fault: the chest is only
+     * there when a day's attempts have just been finished and nobody has
+     * collected it yet, so a miss is logged as information and the run ends
+     * as before.</p>
+     */
+    private void claimCityRewardChest() {
+        navigationHelper.ensureCorrectScreenLocation(LaunchPoint.HOME);
+
+        ImageSearchResultData chest = templateSearchHelper.locatePattern(
+                TemplatesEnum.ARENA_CITY_REWARD_CHEST,
+                SearchConfig.builder()
+                        .withMaxAttempts(CITY_CHEST_SEARCH_ATTEMPTS)
+                        .withDelay(CITY_CHEST_SEARCH_DELAY_MS)
+                        .withThreshold(CITY_CHEST_THRESHOLD)
+                        .build());
+
+        if (!chest.isFound()) {
+            logInfo("No arena reward chest waiting in the city.");
+            return;
+        }
+
+        logInfo(String.format("Arena reward chest found in the city (score %d). Opening it.",
+                chest.getMatchScore()));
+        tapInside(chest);
+
+        if (!waitForRewardsPanel()) {
+            // Something other than the rewards panel is now on screen. Back out
+            // rather than tapping blind on whatever opened.
+            logWarning("Arena reward chest tapped but no Rewards panel appeared. Leaving it for the next run.");
+            pressBack();
+            return;
+        }
+
+        tapNear(REWARDS_DISMISS_POINT);
+        sleepTask(REWARDS_PANEL_SETTLE_MS);
+
+        ImageSearchResultData leftover = templateSearchHelper.locatePattern(
+                TemplatesEnum.ARENA_CITY_REWARD_CHEST,
+                SearchConfig.builder()
+                        .withMaxAttempts(CITY_CHEST_SEARCH_ATTEMPTS)
+                        .withDelay(CITY_CHEST_SEARCH_DELAY_MS)
+                        .withThreshold(CITY_CHEST_THRESHOLD)
+                        .build());
+
+        if (leftover.isFound()) {
+            logWarning("Arena reward chest is still showing after the Rewards panel closed.");
+            return;
+        }
+
+        StatisticsService.obtain().addToCounter(profile, "Arena Chests", 1);
+        logInfo("Arena reward chest claimed.");
+    }
+
+    private boolean waitForRewardsPanel() {
+        int waited = 0;
+        while (waited < REWARDS_PANEL_TIMEOUT_MS) {
+            if (templateSearchHelper.locatePattern(
+                    TemplatesEnum.ARENA_REWARDS_BANNER,
+                    SearchConfig.builder()
+                            .withThreshold(REWARDS_BANNER_THRESHOLD)
+                            .build()).isFound()) {
+                return true;
+            }
+            sleepTask(REWARDS_PANEL_POLL_MS);
+            waited += REWARDS_PANEL_POLL_MS;
+        }
+        return false;
     }
 
     static boolean shouldRefreshAfterDefeat(int remainingAttempts) {
@@ -767,6 +942,9 @@ public class ArenaRoutine extends DelayedTask {
             return null;
         }
         String normalized = text.trim().replace(" ", "");
+        if (FULL_POWER_VALUE_PATTERN.matcher(normalized).matches()) {
+            return Double.parseDouble(normalized.replace(",", "").replace(".", ""));
+        }
         Matcher matcher = POWER_VALUE_PATTERN.matcher(normalized);
         if (!matcher.matches()) {
             return null;
@@ -1012,13 +1190,14 @@ public class ArenaRoutine extends DelayedTask {
         return tag == null || tag.isBlank() ? null : tag;
     }
 
-    private boolean looksLikeGuard(String text) {
+    static boolean looksLikeGuard(String text) {
         if (text == null || text.isBlank()) {
             return false;
         }
         String normalized = text.replaceAll("[^A-Za-z]", "").toUpperCase(Locale.ROOT);
         return normalized.contains("COMMONGUARD")
                 || normalized.contains("VETERANGUARD")
+                || normalized.contains("ELITEGUARD")
                 || normalized.equals("GUARD");
     }
 
