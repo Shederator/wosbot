@@ -20,6 +20,7 @@ import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.AutomationBlueprint;
 import dev.frostguard.api.domain.AutomationStep;
 import dev.frostguard.api.runtime.WorkspacePaths;
+import dev.frostguard.engine.helper.QuitDialogGuard;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -692,7 +693,7 @@ public class TaskBuilderService {
     // ── Back Button ────────────────────────────────────────────────────────
 
     private boolean executeBackButton() {
-        emuManager.pressBack(activeEmulatorNumber);
+        QuitDialogGuard.pressBackSafely(emuManager, activeEmulatorNumber);
         return true;
     }
 

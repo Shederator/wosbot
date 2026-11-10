@@ -662,10 +662,17 @@ public class NavigationHelper {
                 checkpoint.run();
                 emu.pressBack(device);
                 interruptibleWait(300);
+                dismissQuitGameDialogIfPresent();
             }
             pass++;
         }
         throw new HomeNotFoundException("Home not found after " + budget + " attempts");
+    }
+
+    // Back on a bare screen raises the game's "Quit game?" confirmation. This recovery loop is the
+    // most common bare-screen Back, and DelayedTask.pressBack() reuses this check after every press.
+    public void dismissQuitGameDialogIfPresent() {
+        QuitDialogGuard.dismissIfPresent(emu, device);
     }
 
     // Require one immediate re-check before tapping a home/world anchor to reduce transient mis-taps.
