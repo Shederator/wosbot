@@ -23,6 +23,10 @@ public class IntelScreenHelper {
 
     private static final int INTEL_AVAILABLE_GREEN_MIN = 150;
     private static final long MISSION_RETURN_SETTLE_MILLIS = 1_000L;
+    // The Intel chrome that confirms the screen draws before the marker layer does, and every caller
+    // scans for markers next, so returning the moment the chrome appears reads an empty map. The
+    // wait lives here, once, rather than at each caller.
+    private static final long MARKER_LAYER_SETTLE_MILLIS = 2_000L;
 
     private final EmulatorController emu;
     private final String dev;
@@ -111,6 +115,7 @@ public class IntelScreenHelper {
         if (!nav.openIntelFromWilderness()) {
             throw new HomeNotFoundException("Failed to open Intel from the Wilderness shortcut");
         }
+        pause(MARKER_LAYER_SETTLE_MILLIS);
     }
 
     static AreaData availabilityAreaFor(ImageSearchResultData gainPattern) {

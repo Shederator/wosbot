@@ -63,6 +63,11 @@ public final class CommonOCRSettings {
     public static final OcrSettingsData INTEL_GAIN_SETTINGS =
             buildConfig("IntelGain: 0123456789", true, 0, 193, 0, TextLayout.SINGLE_LINE);
 
+    // The deploy screen's red odds line. Isolated on the line's own red so the pale troop rows
+    // underneath and the hero cards above do not bleed into the crop.
+    public static final OcrSettingsData DEPLOY_ODDS_SETTINGS =
+            buildConfig("", true, 255, 91, 79, TextLayout.SINGLE_LINE);
+
     // red cooldown clock, isolated from illustrated skill backgrounds
     public static final OcrSettingsData RED_DURATION_SETTINGS =
             buildConfig("0123456789:", true, 243, 59, 59, TextLayout.SINGLE_LINE);
