@@ -167,10 +167,10 @@ public class PetSkillsRoutine extends DelayedTask {
      * All flags default to false if not configured.
      */
     private void loadConfiguration() {
-        this.staminaEnabled = getConfigBoolean(ConfigurationKeyEnum.PET_SKILL_STAMINA_BOOL, false);
-        this.foodEnabled = getConfigBoolean(ConfigurationKeyEnum.PET_SKILL_FOOD_BOOL, false);
-        this.treasureEnabled = getConfigBoolean(ConfigurationKeyEnum.PET_SKILL_TREASURE_BOOL, false);
-        this.gatheringEnabled = getConfigBoolean(ConfigurationKeyEnum.PET_SKILL_GATHERING_BOOL, false);
+        this.staminaEnabled = getConfigBoolean(PetSkill.STAMINA.configKey(), false);
+        this.foodEnabled = getConfigBoolean(PetSkill.FOOD.configKey(), false);
+        this.treasureEnabled = getConfigBoolean(PetSkill.TREASURE.configKey(), false);
+        this.gatheringEnabled = getConfigBoolean(PetSkill.GATHERING.configKey(), false);
 
         logDebug(String.format("Configuration loaded - Stamina: %s, Food: %s, Treasure: %s, Gathering: %s",
                 staminaEnabled, foodEnabled, treasureEnabled, gatheringEnabled));
@@ -1235,27 +1235,40 @@ public class PetSkillsRoutine extends DelayedTask {
      */
     public enum PetSkill {
         /** Stamina skill - adds stamina to the profile */
-        STAMINA(STAMINA_SKILL_TOP_LEFT, STAMINA_SKILL_BOTTOM_RIGHT),
+        STAMINA(STAMINA_SKILL_TOP_LEFT, STAMINA_SKILL_BOTTOM_RIGHT, ConfigurationKeyEnum.PET_SKILL_STAMINA_BOOL),
 
         /** Gathering skill - increases gathering speed */
-        GATHERING(GATHERING_SKILL_TOP_LEFT, GATHERING_SKILL_BOTTOM_RIGHT),
+        GATHERING(GATHERING_SKILL_TOP_LEFT, GATHERING_SKILL_BOTTOM_RIGHT, ConfigurationKeyEnum.PET_SKILL_GATHERING_BOOL),
 
         /** Food skill - increases food production */
-        FOOD(FOOD_SKILL_TOP_LEFT, FOOD_SKILL_BOTTOM_RIGHT),
+        FOOD(FOOD_SKILL_TOP_LEFT, FOOD_SKILL_BOTTOM_RIGHT, ConfigurationKeyEnum.PET_SKILL_FOOD_BOOL),
 
         /** Treasure skill - provides resource rewards */
-        TREASURE(TREASURE_SKILL_TOP_LEFT, TREASURE_SKILL_BOTTOM_RIGHT);
+        TREASURE(TREASURE_SKILL_TOP_LEFT, TREASURE_SKILL_BOTTOM_RIGHT, ConfigurationKeyEnum.PET_SKILL_TREASURE_BOOL);
 
         private final AreaData area;
+        private final ConfigurationKeyEnum configKey;
 
         /**
-         * Constructs a PetSkill with screen coordinates.
+         * Constructs a PetSkill with screen coordinates and its enable flag.
          * 
          * @param topLeft     top-left corner of the skill icon region
          * @param bottomRight bottom-right corner of the skill icon region
+         * @param configKey   profile flag that enables this skill
          */
-        PetSkill(PointData topLeft, PointData bottomRight) {
+        PetSkill(PointData topLeft, PointData bottomRight, ConfigurationKeyEnum configKey) {
             this.area = new AreaData(topLeft, bottomRight);
+            this.configKey = configKey;
+        }
+
+        /**
+         * Gets the profile flag that enables this skill. The settings panel labels
+         * each flag with the tile this skill's region taps.
+         * 
+         * @return the enable flag for this skill
+         */
+        public ConfigurationKeyEnum configKey() {
+            return configKey;
         }
 
         /**
