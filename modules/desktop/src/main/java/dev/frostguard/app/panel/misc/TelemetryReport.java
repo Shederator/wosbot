@@ -374,7 +374,11 @@ public final class TelemetryReport {
             Long e = endS.activity().get(entry.getKey());
             if (s == null || e == null) continue;
             long change = e - s;
-            if (change > 0) out.add(new Activity(entry.getValue(), change));
+            // Zero counts. A counter present at both ends WAS measured, and reporting nothing
+            // for it is indistinguishable from never having measured it -- which is what made
+            // a quiet window look like a window with no data. Negative changes are still
+            // dropped: those are counter resets, not activity.
+            if (change >= 0) out.add(new Activity(entry.getValue(), change));
         }
         return out;
     }
