@@ -195,6 +195,11 @@ public enum ConfigurationKeyEnum {
 
     /* ─────────── intel ─────────── */
 
+    // Set by IntelligenceRoutine each pass -- true when the board actually had a mission, false
+    // when empty. GatherRoutine reads it so it only defers/recalls for an imminent Intel that
+    // will really consume a march slot, never for Intel's idle ~15-min beast-recheck.
+    INTEL_LAST_RUN_HAD_MISSIONS_BOOL            ("false",   Boolean.class,  ConfigCategory.INTEL),
+
     INTEL_BEASTS_BOOL                           ("false",   Boolean.class,  ConfigCategory.INTEL),
     INTEL_BEASTS_EVENT_BOOL                     ("false",   Boolean.class,  ConfigCategory.INTEL),
     INTEL_BEASTS_FLAG_INT                       ("1",       Integer.class,  ConfigCategory.INTEL),
@@ -235,6 +240,33 @@ public enum ConfigurationKeyEnum {
     GATHER_LAST_RECALL_TIME_STRING  ("",                    String.class,   ConfigCategory.GATHERING),
     GATHER_SPEED_BOOL               ("false",               Boolean.class,  ConfigCategory.GATHERING),
     GATHER_SPEED_BOOST_TYPE_STRING  ("24h (600 gems)",      String.class,   ConfigCategory.GATHERING),
+    // When enabled, the rotation pool is ordered by scarcity-relative-to-value (stockpile /
+    // valueWeight, ascending) instead of Collections.shuffle(). See
+    // GatherRoutine.RESOURCE_VALUE_WEIGHT for the sourced value ratio. Off by default so existing
+    // blind-rotation behavior is unchanged unless a user opts in.
+    GATHER_SMART_PRIORITY_BOOL      ("false",               Boolean.class,  ConfigCategory.GATHERING),
+    // Cache written by ResourceStockpileRoutine from the Overview > Resource Production panel's
+    // "Owned" column and read back by GatherRoutine.
+    RESOURCE_STOCKPILE_MEAT_LONG        ("0",  Long.class,    ConfigCategory.GATHERING),
+    RESOURCE_STOCKPILE_WOOD_LONG        ("0",  Long.class,    ConfigCategory.GATHERING),
+    RESOURCE_STOCKPILE_COAL_LONG        ("0",  Long.class,    ConfigCategory.GATHERING),
+    RESOURCE_STOCKPILE_IRON_LONG        ("0",  Long.class,    ConfigCategory.GATHERING),
+    // Read from the Backpack "Resource & Speedup Summary" popup. Steel has no "Total Items" column,
+    // so its "Total Resources" value is stored; the five speedup buckets are stored in minutes
+    // (parsed from the game's "6 day(s)3 hr(s)3 min" form).
+    RESOURCE_STOCKPILE_STEEL_LONG       ("0",  Long.class,    ConfigCategory.GATHERING),
+    SPEEDUP_GENERAL_MIN_LONG            ("0",  Long.class,    ConfigCategory.GATHERING),
+    SPEEDUP_TRAINING_MIN_LONG           ("0",  Long.class,    ConfigCategory.GATHERING),
+    SPEEDUP_CONSTRUCTION_MIN_LONG       ("0",  Long.class,    ConfigCategory.GATHERING),
+    SPEEDUP_RESEARCH_MIN_LONG           ("0",  Long.class,    ConfigCategory.GATHERING),
+    SPEEDUP_HEALING_MIN_LONG            ("0",  Long.class,    ConfigCategory.GATHERING),
+    RESOURCE_STOCKPILE_LAST_READ_STRING ("",   String.class,  ConfigCategory.GATHERING),
+    // Per-resource read times. A pass can accept one resource and reject another, so one shared
+    // timestamp would make a rejected value look as fresh as an accepted one.
+    RESOURCE_STOCKPILE_MEAT_LAST_READ_STRING ("", String.class, ConfigCategory.GATHERING),
+    RESOURCE_STOCKPILE_WOOD_LAST_READ_STRING ("", String.class, ConfigCategory.GATHERING),
+    RESOURCE_STOCKPILE_COAL_LAST_READ_STRING ("", String.class, ConfigCategory.GATHERING),
+    RESOURCE_STOCKPILE_IRON_LAST_READ_STRING ("", String.class, ConfigCategory.GATHERING),
     GATHER_TASK_BOOL                ("false",               Boolean.class,  ConfigCategory.GATHERING),
     GATHER_WOOD_BOOL                ("false",               Boolean.class,  ConfigCategory.GATHERING),
     GATHER_WOOD_LEVEL_INT           ("9",                   Integer.class,  ConfigCategory.GATHERING),

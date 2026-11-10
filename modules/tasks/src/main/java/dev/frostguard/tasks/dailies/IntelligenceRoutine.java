@@ -18,6 +18,7 @@ import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.schedule.TaskQueue;
+import dev.frostguard.engine.schedule.TroopSlotPolicy;
 import dev.frostguard.engine.service.StaminaService;
 import dev.frostguard.engine.service.StatisticsService;
 import dev.frostguard.engine.service.TaskManagementService;
@@ -128,6 +129,10 @@ private boolean beastMarchSent;
 
 private final List<LocalDateTime> intelBeastReturnTimes = new ArrayList<>();
 
+// Running count of beast/fire-beast marches actually dispatched this pass, so the troop-slot
+// claim below is sized to real demand instead of a guessed constant.
+private int intelMarchesSentThisPass;
+
 private TaskStateData autoJoinTask;
 
 private ResilientOcrExecutor<LocalDateTime> textHelper;
@@ -146,6 +151,7 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 @Override
 	protected void execute() {
 		intelBeastReturnTimes.clear();
+		intelMarchesSentThisPass = 0;
 
 
 		hydrateConfiguration();
@@ -174,6 +180,9 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 			logInfo(routineLogIntelligenceLine("Daily sidebar has no green Intel availability evidence and no "
 					+ "Intel cycle is active. Planning the next UTC Intel refresh at: "
 					+ entryDecision.nextRun().format(DATETIME_FORMATTER)));
+			// No Intel this pass. Left unwritten, a stale true would keep Gather deferring for an
+			// Intel run that is not coming.
+			updateIntelMissionsAvailableFlag(false);
 			reschedule(entryDecision.nextRun());
 			processingTask = false;
 			return;
@@ -184,6 +193,9 @@ public IntelligenceRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 			intelScreenHelper.resumeIntelCycleFromWilderness();
 		}
 		boolean intelMissionsDetected = hasVisibleIntelMissionFlow();
+		// Written where the board is checked so Gather's defer/recall decision reflects what this
+		// pass actually found.
+		updateIntelMissionsAvailableFlag(intelMissionsDetected);
 		if (!intelMissionsDetected) {
 			logInfo(routineLogIntelligenceLine("Daily reported Intel, but no enabled mission marker was detected."));
 			tryRescheduleFromCooldownFlow();
@@ -415,6 +427,21 @@ private LocalDateTime readCooldownFlow(AreaData area, String layout) {
 		return cooldown;
 	}
 
+/**
+	 * Writes INTEL_LAST_RUN_HAD_MISSIONS_BOOL, which GatherRoutine reads to decide whether to
+	 * defer/recall for an imminent Intel pass.
+	 *
+	 * <p>{@code profile.setConfig(...)} only mutates the in-memory profile; {@code DelayedTask.run()}
+	 * persists changed settings only when {@code shouldUpdateConfig} is set, and reloads the profile
+	 * before the next task. Every write goes through here so the two halves cannot be separated.
+	 * Called from the initial board scan and again from {@link #manageRescheduling} when a re-scan
+	 * finds the board drained.</p>
+	 */
+	void updateIntelMissionsAvailableFlag(boolean hasMissions) {
+		profile.setConfig(ConfigurationKeyEnum.INTEL_LAST_RUN_HAD_MISSIONS_BOOL, hasMissions);
+		setShouldUpdateConfig(true);
+	}
+
 private String routineLogIntelligenceLine(String note) {
         return "IntelligenceRoutine | " + note;
     }
@@ -593,6 +620,14 @@ private void requeueAutoJoinTaskFlow() {
 	}
 
 private void finalizePostIntelTaskFlow() {
+		// Gather runs as a separate dispatch on the serial per-profile TaskQueue, after this
+		// execute() returns, so a claim released here would never be observed and would drop the
+		// reservation while a beast march is still out. Release only when nothing was sent; a real
+		// claim expires on its own at the march's round-trip ETA.
+		if (intelMarchesSentThisPass == 0) {
+			TroopSlotPolicy.release(profile, TpDailyTaskEnum.INTEL);
+		}
+
 		if (shouldRequeueGatherAfterIntel) {
 			requeueGatherTasksFlow();
 		}
@@ -983,6 +1018,8 @@ private void manageRescheduling(boolean anyIntelProcessed, boolean nonBeastIntel
 
 		if (!missionsStillAvailable) {
 			logInfo(routineLogIntelligenceLine("No intel missions found after re-scan. Intel run is complete for now."));
+			// The board is drained; clear the flag the initial scan set so Gather stops deferring.
+			updateIntelMissionsAvailableFlag(false);
 			tryRescheduleFromCooldownFlow();
 			processingTask = false;
 			return;
@@ -1407,6 +1444,13 @@ private void handleBeast(ImageSearchResultData beast) {
 
 		logInfo(routineLogIntelligenceLine("Beast march deployed finished cleanly."));
 		beastMarchSent = true;
+		// Reserve the slot for this beast march. The round-trip time is read further down and can
+		// fail to parse, so start with a 10-minute expiry and re-claim with the real ETA once known.
+		// claimDeployed(), not claim(): the march already reads as busy in Gather's live march
+		// queue, so counting it as demand would recall a gather march for nothing.
+		intelMarchesSentThisPass++;
+		TroopSlotPolicy.claimDeployed(profile, TpDailyTaskEnum.INTEL, intelMarchesSentThisPass,
+				LocalDateTime.now().plusMinutes(10));
 		intelMarchesRemaining = Math.max(0, intelMarchesRemaining - 1);
 		if (intelMarchesRemaining <= 0) {
 			marchQueueLimitReached = true;
@@ -1422,6 +1466,9 @@ private void handleBeast(ImageSearchResultData beast) {
 		if (useSmartProcessing) {
 			LocalDateTime rescheduleTime = LocalDateTime.now().plusSeconds(travelTimeSeconds * 2);
 			intelBeastReturnTimes.add(rescheduleTime);
+			// Replace the 10-minute placeholder with the real round-trip ETA; claims are idempotent
+			// per task.
+			TroopSlotPolicy.claimDeployed(profile, TpDailyTaskEnum.INTEL, intelMarchesSentThisPass, rescheduleTime);
 			if (useFlag) {
 				logInfo(routineLogIntelligenceLine("Intel beast march return ETA: "
 						+ GameTimeUtils.formatCountdown(rescheduleTime)

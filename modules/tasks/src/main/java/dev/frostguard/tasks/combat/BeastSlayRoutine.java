@@ -13,6 +13,7 @@ import dev.frostguard.data.entity.DailyTask;
 import dev.frostguard.data.repository.DailyTaskRepository;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
+import dev.frostguard.engine.schedule.TroopSlotPolicy;
 import dev.frostguard.engine.helper.DeploymentHelper;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.nav.SearchConfigConstants;
@@ -33,6 +34,11 @@ public class BeastSlayRoutine extends DelayedTask {
 	/** Tracks the earliest time this task should resume (like GatherRoutine pattern). */
 	private LocalDateTime earliestReschedule;
 
+	/** True when this pass found every march slot occupied and published unmet demand for one.
+	 *  {@link #finalizeReschedule()} must then keep the claim: Gather runs as a separate dispatch on
+	 *  the serial task queue, so a claim released before this task returns is never observed. */
+	private boolean queueFullThisPass;
+
 	public BeastSlayRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
 		super(profile, tpTask);
 	}
@@ -45,6 +51,7 @@ public class BeastSlayRoutine extends DelayedTask {
 	@Override
 	protected void execute() {
 		earliestReschedule = null;
+		queueFullThisPass = false;
 
 		// Load configuration
 		Integer configMarches = profile.getConfig(ConfigurationKeyEnum.BEAST_HUNTING_MARCHES_INT, Integer.class);
@@ -118,6 +125,17 @@ public class BeastSlayRoutine extends DelayedTask {
 			
 			sleepTask(3000);
 
+			// Every march slot is occupied, usually by Gather. This is unmet demand, so publish it
+			// and let Gather recall one of its own marches on its next pass instead of retrying
+			// against the same full queue.
+			if (deploymentHelper.isMarchQueueFull()) {
+				logWarning("March queue is full; no slot available for Beast Hunting this pass.");
+				LocalDateTime retryAt = LocalDateTime.now().plusMinutes(5);
+				TroopSlotPolicy.claim(profile, TpDailyTaskEnum.BEAST_HUNTING, 1, retryAt.plusMinutes(2));
+				queueFullThisPass = true;
+				updateReschedule(retryAt);
+				break;
+			}
 
 			try {
 				if (deploymentHelper.hasNoDeployableTroops()) {
@@ -182,6 +200,10 @@ public class BeastSlayRoutine extends DelayedTask {
 				long returnSeconds = (travelSeconds > 0) ? travelSeconds * 2 : 120;
 				LocalDateTime marchReturn = LocalDateTime.now().plusSeconds(returnSeconds);
 				updateReschedule(marchReturn);
+
+				// claimDeployed(), not claim(): these marches already read as busy in Gather's live
+				// march queue, so they reserve their slots until return without adding recall demand.
+				TroopSlotPolicy.claimDeployed(profile, TpDailyTaskEnum.BEAST_HUNTING, attacksDone, marchReturn);
 
 				logInfo("Beast attacked. March returns in ~" + returnSeconds
 						+ "s. Cost: " + staminaCost + ", remaining stamina: " + currentStamina
@@ -259,6 +281,13 @@ public class BeastSlayRoutine extends DelayedTask {
 	}
 
 	private void finalizeReschedule() {
+		// Marches already out occupy slots Gather already sees as busy, so the claim can go and
+		// Gather is pulled forward. A queue-full claim is still unmet demand and must outlive this
+		// pass for Gather to observe it.
+		if (!queueFullThisPass) {
+			TroopSlotPolicy.release(profile, TpDailyTaskEnum.BEAST_HUNTING);
+		}
+
 		if (earliestReschedule != null) {
 			logInfo("Beast Hunting finished. Rescheduling to " + earliestReschedule + " (earliest march return).");
 			reschedule(earliestReschedule);
