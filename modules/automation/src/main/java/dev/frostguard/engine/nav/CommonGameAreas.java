@@ -57,6 +57,8 @@ public final class CommonGameAreas {
     public static final AreaData SURVIVOR_STATUS_BAKERY_ENTRY = region(41, 721, 124, 808);
     public static final AreaData SURVIVOR_STATUS_BAKERY_GO = region(162, 626, 326, 674);
     public static final AreaData SURVIVOR_STATUS_BAKERY_UNFOCUS = region(166, 669, 618, 860);
+    public static final PointData SURVIVOR_STATUS_BAKERY_RESET_FROM = point(355, 664);
+    public static final PointData SURVIVOR_STATUS_BAKERY_RESET_TO = point(351, 900);
     public static final PointData SURVIVOR_STATUS_FARM_SCROLL_FROM = point(344, 934);
     public static final PointData SURVIVOR_STATUS_FARM_SCROLL_TO = point(341, 600);
     public static final AreaData SURVIVOR_STATUS_FARM_NAME = region(140, 1023, 229, 1061);

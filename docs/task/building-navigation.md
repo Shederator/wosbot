@@ -14,11 +14,13 @@ here.
 
 ## Bakery
 
-The helper opens Survivor Status, selects Bakery, presses its **Go** button,
-then taps the named neutral area to leave focused mode. It does not recognise
-the label or **Go** button before tapping. The controls are assumed reliable at
-their fixed positions; this is an unverified navigation result until live
-validation confirms it.
+The helper opens Survivor Status, then makes one named downward swipe to reset
+the list to its head before selecting Bakery. The reset is required because the
+dialog retains the previous building-list position, including after Farm
+navigation. It then presses the Bakery **Go** button and taps the named neutral
+area to leave focused mode. It does not recognise the label or **Go** button
+before tapping. The controls are assumed reliable at their fixed positions;
+this is an unverified navigation result until live validation confirms it.
 
 ## Farm
 

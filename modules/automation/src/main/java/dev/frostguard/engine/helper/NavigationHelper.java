@@ -133,7 +133,10 @@ public class NavigationHelper {
         tapSurvivorStatusEntry();
         waitForBuildingTransition();
 
-        if (destination == BuildingDestination.FARM) {
+        if (destination == BuildingDestination.BAKERY) {
+            swipeToBakeryEntry();
+            waitForBuildingTransition();
+        } else if (destination == BuildingDestination.FARM) {
             swipeToFarmEntry();
             waitForBuildingTransition();
             if (!isFarmEntryVisible()) {
@@ -161,6 +164,11 @@ public class NavigationHelper {
     void swipeToFarmEntry() {
         emu.swipeScreen(device, CommonGameAreas.SURVIVOR_STATUS_FARM_SCROLL_FROM,
                 CommonGameAreas.SURVIVOR_STATUS_FARM_SCROLL_TO);
+    }
+
+    void swipeToBakeryEntry() {
+        emu.swipeScreen(device, CommonGameAreas.SURVIVOR_STATUS_BAKERY_RESET_FROM,
+                CommonGameAreas.SURVIVOR_STATUS_BAKERY_RESET_TO);
     }
 
     boolean isFarmEntryVisible() {

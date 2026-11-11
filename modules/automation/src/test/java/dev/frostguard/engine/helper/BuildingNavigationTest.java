@@ -21,7 +21,19 @@ class BuildingNavigationTest {
         RecordingNavigation navigation = new RecordingNavigation(true);
 
         assertTrue(navigation.navigateToBuilding(BuildingDestination.BAKERY));
-        assertEquals(List.of("home", "survivor", "wait", "entry:BAKERY", "wait",
+        assertEquals(List.of("home", "survivor", "wait", "reset-bakery", "wait", "entry:BAKERY", "wait",
+                "go:BAKERY", "wait", "unfocus:BAKERY", "wait"), navigation.actions);
+    }
+
+    @Test
+    void resetsTheSurvivorListBeforeBakeryAfterFarmNavigation() {
+        RecordingNavigation navigation = new RecordingNavigation(true);
+
+        assertTrue(navigation.navigateToBuilding(BuildingDestination.FARM));
+        assertTrue(navigation.navigateToBuilding(BuildingDestination.BAKERY));
+        assertEquals(List.of("home", "survivor", "wait", "scroll-farm", "wait", "farm-ocr",
+                "entry:FARM", "wait", "go:FARM", "wait", "unfocus:FARM", "wait",
+                "home", "survivor", "wait", "reset-bakery", "wait", "entry:BAKERY", "wait",
                 "go:BAKERY", "wait", "unfocus:BAKERY", "wait"), navigation.actions);
     }
 
@@ -67,6 +79,11 @@ class BuildingNavigationTest {
         @Override
         void swipeToFarmEntry() {
             actions.add("scroll-farm");
+        }
+
+        @Override
+        void swipeToBakeryEntry() {
+            actions.add("reset-bakery");
         }
 
         @Override
