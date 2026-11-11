@@ -28,6 +28,12 @@ public final class CommonOCRSettings {
                     .allowedGlyphs(LATIN_LETTERS)
                     .build();
 
+    public static final OcrSettingsData SURVIVOR_STATUS_BUILDING_NAME_SETTINGS =
+            OcrSettingsData.builder()
+                    .textLayout(TextLayout.SINGLE_LINE)
+                    .allowedGlyphs(LATIN_LETTERS)
+                    .build();
+
     // Result-overlay exit hints can be centered with decorative spacing and are English in this scope.
     public static final OcrSettingsData STARTUP_EXIT_HINT_SETTINGS =
             OcrSettingsData.builder()

@@ -8,6 +8,7 @@ import dev.frostguard.engine.emulator.EmulatorController;
 import dev.frostguard.engine.helper.NavigationHelper.AllianceMenu;
 import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
 import dev.frostguard.engine.helper.NavigationHelper.DealsTarget;
+import dev.frostguard.engine.helper.NavigationHelper.BuildingDestination;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.domain.AutomationBlueprint;
@@ -113,6 +114,9 @@ public class TaskBuilderLayoutController {
     @FXML private VBox dealsNavigationPropsBox;
     @FXML private ComboBox<DealsTarget> dealsTargetCombo;
     @FXML private Label dealsTargetInvalidLabel;
+    @FXML private VBox buildingNavigationPropsBox;
+    @FXML private ComboBox<BuildingDestination> buildingTargetCombo;
+    @FXML private Label buildingTargetInvalidLabel;
     @FXML private VBox ocrPropsBox;
     @FXML private TextField ocrTlXField, ocrTlYField, ocrBrXField, ocrBrYField;
     @FXML private ComboBox<String> ocrConditionCombo;
@@ -323,6 +327,11 @@ public class TaskBuilderLayoutController {
             dealsTargetCombo.setConverter(menuConverter(DealsTarget.class));
             dealsTargetCombo.setValue(DealsTarget.BANK);
         }
+        if (buildingTargetCombo != null) {
+            buildingTargetCombo.setItems(FXCollections.observableArrayList(BuildingDestination.values()));
+            buildingTargetCombo.setConverter(menuConverter(BuildingDestination.class));
+            buildingTargetCombo.setValue(BuildingDestination.BAKERY);
+        }
         addAutoApplyListeners();
         setStatus("Ready — add nodes from the toolbox");
     }
@@ -421,6 +430,11 @@ public class TaskBuilderLayoutController {
         if (dealsTargetCombo != null) {
             dealsTargetCombo.valueProperty().addListener((obs, oldV, newV) -> {
                 if (!isBinding) handleApplyDealsNavigationProps(null);
+            });
+        }
+        if (buildingTargetCombo != null) {
+            buildingTargetCombo.valueProperty().addListener((obs, oldV, newV) -> {
+                if (!isBinding) handleApplyBuildingNavigationProps(null);
             });
         }
         if (sidebarModeCombo != null && sidebarTargetCombo != null) {
@@ -1083,6 +1097,7 @@ public class TaskBuilderLayoutController {
     @FXML private void handleAddAllianceNavigationNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.ALLIANCE_NAVIGATION); }
     @FXML private void handleAddEventNavigationNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.EVENT_NAVIGATION); }
     @FXML private void handleAddDealsNavigationNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.DEALS_NAVIGATION); }
+    @FXML private void handleAddBuildingNavigationNode(ActionEvent e) { addNodeToCanvas(FlowStepKind.BUILDING_NAVIGATION); }
 
     private void addNodeToCanvas(FlowStepKind type) {
         ensureSession();
@@ -1105,6 +1120,8 @@ public class TaskBuilderLayoutController {
                     AutomationStep.PARAM_EVENT_MENU, EventMenu.HERO_MISSION.name());
             case DEALS_NAVIGATION -> node.setParam(
                     AutomationStep.PARAM_DEALS_TARGET, DealsTarget.BANK.name());
+            case BUILDING_NAVIGATION -> node.setParam(
+                    AutomationStep.PARAM_BUILDING_TARGET, BuildingDestination.BAKERY.name());
             default -> {}
         }
 
@@ -1847,6 +1864,14 @@ public class TaskBuilderLayoutController {
                 dealsTargetCombo.setValue(selection);
                 showInvalidMenuSelection(dealsTargetInvalidLabel, storedTarget, selection);
             }
+            case BUILDING_NAVIGATION -> {
+                buildingNavigationPropsBox.setVisible(true);
+                buildingNavigationPropsBox.setManaged(true);
+                String storedTarget = node.getParam(AutomationStep.PARAM_BUILDING_TARGET);
+                BuildingDestination selection = menuSelection(storedTarget, BuildingDestination.class);
+                buildingTargetCombo.setValue(selection);
+                showInvalidMenuSelection(buildingTargetInvalidLabel, storedTarget, selection);
+            }
             case EVENT_NAVIGATION -> {
                 eventNavigationPropsBox.setVisible(true);
                 eventNavigationPropsBox.setManaged(true);
@@ -1997,6 +2022,14 @@ public class TaskBuilderLayoutController {
         selectedNode.setParam(AutomationStep.PARAM_DEALS_TARGET, dealsTargetCombo.getValue().name());
         showInvalidMenuSelection(dealsTargetInvalidLabel, dealsTargetCombo.getValue().name(),
                 dealsTargetCombo.getValue());
+        refreshCard(selectedNode);
+    }
+
+    @FXML private void handleApplyBuildingNavigationProps(ActionEvent e) {
+        if (selectedNode == null || buildingTargetCombo == null || buildingTargetCombo.getValue() == null) return;
+        selectedNode.setParam(AutomationStep.PARAM_BUILDING_TARGET, buildingTargetCombo.getValue().name());
+        showInvalidMenuSelection(buildingTargetInvalidLabel, buildingTargetCombo.getValue().name(),
+                buildingTargetCombo.getValue());
         refreshCard(selectedNode);
     }
 

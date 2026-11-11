@@ -51,6 +51,19 @@ public final class CommonGameAreas {
     public static final AreaData STARTUP_EXIT_HINT_OCR_AREA = region(0, 1160, 719, 1279);
     public static final AreaData STARTUP_EXIT_HINT_TAP_AREA = region(180, 1160, 540, 1279);
 
+    // Survivor Status gives deterministic City camera navigation to these newer buildings.
+    // Both flows use fixed controls measured from the standard 720 x 1280 viewport.
+    public static final AreaData SURVIVOR_STATUS_ENTRY = region(238, 0, 366, 30);
+    public static final AreaData SURVIVOR_STATUS_BAKERY_ENTRY = region(41, 721, 124, 808);
+    public static final AreaData SURVIVOR_STATUS_BAKERY_GO = region(162, 626, 326, 674);
+    public static final AreaData SURVIVOR_STATUS_BAKERY_UNFOCUS = region(166, 669, 618, 860);
+    public static final PointData SURVIVOR_STATUS_FARM_SCROLL_FROM = point(344, 934);
+    public static final PointData SURVIVOR_STATUS_FARM_SCROLL_TO = point(341, 600);
+    public static final AreaData SURVIVOR_STATUS_FARM_NAME = region(140, 1023, 229, 1061);
+    public static final AreaData SURVIVOR_STATUS_FARM_ENTRY = region(37, 1032, 124, 1118);
+    public static final AreaData SURVIVOR_STATUS_FARM_GO = region(160, 936, 326, 985);
+    public static final AreaData SURVIVOR_STATUS_FARM_UNFOCUS = region(600, 804, 703, 884);
+
     // The cooldown stays in the top banner while Intel markers remain, then moves to the center
     // after every completed Intel reward has been claimed.
     public static final AreaData INTEL_COOLDOWN_WITH_MARKERS_OCR_AREA = region(378, 103, 508, 146);

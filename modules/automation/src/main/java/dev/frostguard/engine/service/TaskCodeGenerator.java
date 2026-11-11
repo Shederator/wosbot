@@ -10,6 +10,7 @@ import dev.frostguard.engine.nav.SidebarSection;
 import dev.frostguard.engine.helper.NavigationHelper.AllianceMenu;
 import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
 import dev.frostguard.engine.helper.NavigationHelper.DealsTarget;
+import dev.frostguard.engine.helper.NavigationHelper.BuildingDestination;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -82,6 +83,7 @@ public class TaskCodeGenerator {
         out.append("import dev.frostguard.engine.helper.NavigationHelper.AllianceMenu;\n");
         out.append("import dev.frostguard.engine.helper.NavigationHelper.EventMenu;\n");
         out.append("import dev.frostguard.engine.helper.NavigationHelper.DealsTarget;\n");
+        out.append("import dev.frostguard.engine.helper.NavigationHelper.BuildingDestination;\n");
         out.append("import dev.frostguard.engine.schedule.DelayedTask;\n");
         out.append("import dev.frostguard.engine.schedule.LaunchPoint;\n");
         out.append("import dev.frostguard.engine.service.TemplatePathResolver;\n");
@@ -196,6 +198,7 @@ public class TaskCodeGenerator {
             case ALLIANCE_NAVIGATION -> writeAllianceNavigation(out, node, nodeEdges);
             case EVENT_NAVIGATION -> writeEventNavigation(out, node, nodeEdges);
             case DEALS_NAVIGATION -> writeDealsNavigation(out, node, nodeEdges);
+            case BUILDING_NAVIGATION -> writeBuildingNavigation(out, node, nodeEdges);
             default              -> out.append(i5).append("// Unrecognised action\n");
         }
 
@@ -205,7 +208,8 @@ public class TaskCodeGenerator {
                 && node.getType() != FlowStepKind.SIDEBAR_NAVIGATION
                 && node.getType() != FlowStepKind.ALLIANCE_NAVIGATION
                 && node.getType() != FlowStepKind.EVENT_NAVIGATION
-                && node.getType() != FlowStepKind.DEALS_NAVIGATION) {
+                && node.getType() != FlowStepKind.DEALS_NAVIGATION
+                && node.getType() != FlowStepKind.BUILDING_NAVIGATION) {
             int nextId = node.getNextNodeId();
             LoopDetector.BackEdge edge = pickEdge(nodeEdges, false);
             if (edge != null && nextId > 0) {
@@ -370,6 +374,21 @@ public class TaskCodeGenerator {
         writeMenuNavigation(out, node, nodeEdges,
                 "navigateToDeals(DealsTarget." + target.name() + ")",
                 "Deals navigation failed: " + target.name());
+    }
+
+    private void writeBuildingNavigation(StringBuilder out, AutomationStep node,
+                                         List<LoopDetector.BackEdge> nodeEdges) {
+        String configuredTarget = node.getParam(AutomationStep.PARAM_BUILDING_TARGET);
+        BuildingDestination target;
+        try {
+            target = BuildingDestination.valueOf(configuredTarget);
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            throw new IllegalArgumentException("Building Navigation node #" + node.getId()
+                    + " has invalid buildingTarget: " + configuredTarget, exception);
+        }
+        writeMenuNavigation(out, node, nodeEdges,
+                "navigateToBuilding(BuildingDestination." + target.name() + ")",
+                "Building navigation failed: " + target.displayName());
     }
 
     private void writeMenuNavigation(StringBuilder out, AutomationStep node,

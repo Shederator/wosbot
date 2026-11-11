@@ -76,38 +76,17 @@ rules not described above are out of scope.
 
 ## Navigation to the Bakery
 
-Building navigation must become available through a navigation helper. Whether
-this is a dedicated helper or an extension of an existing helper is **TBC** and
-requires review and confirmation. The selected helper's documentation should
-later contain this navigation description and this document should reference it,
-so it is available to the Task Builder.
-
-Only the Survivor Status dialog is used to reach the Bakery because it is the
-most predictable path. The navigation flow is:
-
-1. Tap the fixed Survivor icon in the top bar to open Survivor Status.
-2. Tap the fixed Bakery icon to open its helper dialog with a blue **Go** button.
-3. Tap the fixed **Go** button; the Bakery appears in focused mode. A tutorial
-   finger may be visible.
-4. Tap a fixed, named neutral area to leave focused mode.
-
-Allow a static 500 ms settle wait between taps for dialog and camera animation.
-The historical custom task bakery.json, from start from city through tap neutral
-area to unzoom, is the source of truth for the named tap areas. Its concrete
-coordinates are intentionally not duplicated here.
-
-The controls are considered reliably present at their fixed locations. No label
-or button recognition is planned before a tap, and no separate tap confirmation
-is currently planned. If the Bakery is absent, navigation may remain where it
-is; the task must not block other task execution. The safe behaviour is **TBC**
-pending community feedback.
+The task uses the shared [City building navigation](building-navigation.md)
+helper with the `BAKERY` destination. Bakery is the predictable Survivor Status
+path to the grouped non-Farm reward. Navigation ends with the building
+unfocused and does not itself prove a reward action.
 
 ## Navigation to the Farm
 
-Farm navigation has the same helper ownership and City-only constraint. The
-historical custom task farm.json is the source of truth for its named areas and
-navigation sequence. Its coordinates and detection settings are not copied into
-this document.
+Farm navigation uses the shared [City building navigation](building-navigation.md)
+helper with the `FARM` destination. The Farm row is OCR-confirmed after its
+bounded Survivor Status scroll; an unconfirmed row ends navigation safely
+without touching it.
 
 ## Task states
 

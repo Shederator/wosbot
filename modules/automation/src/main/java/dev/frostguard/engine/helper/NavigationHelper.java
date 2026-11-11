@@ -14,6 +14,7 @@ import dev.frostguard.engine.error.ProfileInReconnectStateException;
 import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.nav.ButtonConstants;
 import dev.frostguard.engine.nav.CommonGameAreas;
+import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.nav.SidebarRowLookup;
@@ -71,6 +72,7 @@ public class NavigationHelper {
     private static final int CRYSTAL_LAB_UI_CHECKS = 3;
     private static final long CRYSTAL_LAB_CHECK_DELAY_MS = 500L;
     private static final long CRYSTAL_LAB_CITY_SETTLE_MS = 1_000L;
+    private static final long BUILDING_NAVIGATION_SETTLE_MS = 500L;
 
     private final TemplateSearchHelper searcher;
     private final EmulatorController emu;
@@ -119,6 +121,79 @@ public class NavigationHelper {
     public boolean navigateToLabyrinth() {
         ensureCorrectScreenLocation(LaunchPoint.HOME);
         return navigateToSidebarDestination(SidebarDestination.LAND_OF_HEROES);
+    }
+
+    /**
+     * Reaches a supported new City building through Survivor Status and leaves
+     * the camera unfocused so the caller can perform its own interaction.
+     */
+    public boolean navigateToBuilding(BuildingDestination destination) {
+        ensureCorrectScreenLocation(LaunchPoint.HOME);
+        broadcastInfo("Navigating through Survivor Status to " + destination.displayName());
+        tapSurvivorStatusEntry();
+        waitForBuildingTransition();
+
+        if (destination == BuildingDestination.FARM) {
+            swipeToFarmEntry();
+            waitForBuildingTransition();
+            if (!isFarmEntryVisible()) {
+                pressBackFromSurvivorStatus();
+                broadcastWarn("Farm entry was not confirmed after the bounded Survivor Status scroll");
+                return false;
+            }
+        }
+
+        tapBuildingEntry(destination);
+        waitForBuildingTransition();
+        tapBuildingGo(destination);
+        waitForBuildingTransition();
+        tapBuildingUnfocusArea(destination);
+        waitForBuildingTransition();
+        broadcastInfo("Building navigation completed without an action confirmation: "
+                + destination.displayName());
+        return true;
+    }
+
+    void tapSurvivorStatusEntry() {
+        taps.tapInside(CommonGameAreas.SURVIVOR_STATUS_ENTRY);
+    }
+
+    void swipeToFarmEntry() {
+        emu.swipeScreen(device, CommonGameAreas.SURVIVOR_STATUS_FARM_SCROLL_FROM,
+                CommonGameAreas.SURVIVOR_STATUS_FARM_SCROLL_TO);
+    }
+
+    boolean isFarmEntryVisible() {
+        try {
+            String text = emu.readText(device, CommonGameAreas.SURVIVOR_STATUS_FARM_NAME.topLeft(),
+                    CommonGameAreas.SURVIVOR_STATUS_FARM_NAME.bottomRight(),
+                    CommonOCRSettings.SURVIVOR_STATUS_BUILDING_NAME_SETTINGS);
+            return text != null && text.toLowerCase(java.util.Locale.ROOT).contains("farm");
+        } catch (Exception exception) {
+            broadcastWarn("Could not read the Farm Survivor Status entry: "
+                    + exception.getClass().getSimpleName());
+            return false;
+        }
+    }
+
+    void tapBuildingEntry(BuildingDestination destination) {
+        taps.tapInside(destination.entryArea());
+    }
+
+    void tapBuildingGo(BuildingDestination destination) {
+        taps.tapInside(destination.goArea());
+    }
+
+    void tapBuildingUnfocusArea(BuildingDestination destination) {
+        taps.tapInside(destination.unfocusArea());
+    }
+
+    void pressBackFromSurvivorStatus() {
+        emu.pressBack(device);
+    }
+
+    void waitForBuildingTransition() {
+        interruptibleWait(BUILDING_NAVIGATION_SETTLE_MS);
     }
 
     /** Completes the Crystal Laboratory city transition after its Daily sidebar destination is selected. */
@@ -699,6 +774,43 @@ public class NavigationHelper {
     public enum AllianceMenu { WAR, CHESTS, TERRITORY, SHOP, TECH, HELP, TRIUMPH }
     public enum EventMenu { HERO_MISSION, MERCENARY, ALLIANCE_CHAMPIONSHIP, ALLIANCE_MOBILIZATION, TUNDRA_TRUCK }
     public enum DealsTarget { BANK, JOURNEY_OF_LIGHT }
+    public enum BuildingDestination {
+        BAKERY("Bakery", CommonGameAreas.SURVIVOR_STATUS_BAKERY_ENTRY,
+                CommonGameAreas.SURVIVOR_STATUS_BAKERY_GO,
+                CommonGameAreas.SURVIVOR_STATUS_BAKERY_UNFOCUS),
+        FARM("Farm", CommonGameAreas.SURVIVOR_STATUS_FARM_ENTRY,
+                CommonGameAreas.SURVIVOR_STATUS_FARM_GO,
+                CommonGameAreas.SURVIVOR_STATUS_FARM_UNFOCUS);
+
+        private final String displayName;
+        private final AreaData entryArea;
+        private final AreaData goArea;
+        private final AreaData unfocusArea;
+
+        BuildingDestination(String displayName, AreaData entryArea, AreaData goArea,
+                            AreaData unfocusArea) {
+            this.displayName = displayName;
+            this.entryArea = entryArea;
+            this.goArea = goArea;
+            this.unfocusArea = unfocusArea;
+        }
+
+        public String displayName() {
+            return displayName;
+        }
+
+        AreaData entryArea() {
+            return entryArea;
+        }
+
+        AreaData goArea() {
+            return goArea;
+        }
+
+        AreaData unfocusArea() {
+            return unfocusArea;
+        }
+    }
 
     public enum EventMenuOpenResult { REACHED, PANEL_CLOSED, TAB_ABSENT }
 }
