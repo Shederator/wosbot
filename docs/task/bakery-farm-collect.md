@@ -102,9 +102,9 @@ once.
 | --- | --- | --- |
 | INACTIVE | Reserved for an unconfigured task. A configured routine does not enter it. | No execution. |
 | READY | Initial state of a configured routine. | Normal execution. |
-| COMPLETED_SUCCESS_RESCHEDULED | Farm and Bakery/grouped rewards were collected. | Daily reset + one minute. |
+| COMPLETED_SUCCESS | At least one Farm or Bakery/grouped reward was confirmed, with no unknown outcome. | Daily reset + one minute. |
 | COMPLETED_UNVERIFIED | No reward icon was detected on either building. | Daily reset + one minute. |
-| TIMEOUT_RETRY | First, second, or third retryable exit: timeout, navigation, scan, or action. | Five minutes. |
+| FAILED_RETRY | First, second, or third retryable exit: timeout, navigation, scan, or action. | Five minutes. |
 | PARTIAL_RESCHEDULED | Fourth retryable exit after at least one confirmed collection. | Daily reset + one minute. |
 | FAILED_RESCHEDULED | Fourth retryable exit with no confirmed collection. | Daily reset + one minute. |
 
@@ -130,8 +130,10 @@ Every step must terminate in a controlled way so finalization can choose an
 exit and a next execution time. Screen mapping (templates, detection
 parameters, and named areas) must be declared separately from business logic.
 
-The execution time limit and retry budget beyond the four listed retryable
-exits are **TBC**.
+One visit is limited to two minutes. Three retryable exits use the five-minute
+delay; the fourth is deferred until the next reset. The retry count and any
+confirmed collections stay only in the task instance and reset after that
+deferred execution starts.
 
 ## Task control UI
 
@@ -168,13 +170,15 @@ replace live-account confirmation.
 
 # Implementation status and gaps: delivered features, evidence, and differences from the design
 
-The shared navigation and reward-icon mapping are implemented. The Bakery and
-Farm indicators use dedicated bundled templates, named search zones, and their
-own color-search settings. Automated mapping tests and redacted real-frame
+The built-in task, its control checkbox, in-memory visit state, single
+rescheduling decision, counters, and diagnostic handling are implemented. The
+Bakery and Farm indicators use dedicated bundled templates, named search zones,
+and their own color-search settings. Automated mapping and redacted real-frame
 tests cover visible reward indicators. Live manual validation confirms the
 navigation sequence, including Bakery after Farm.
 
-Reward collection, confirmation, task state, scheduling, statistics, and the
-control checkbox remain for the next implementation stage. The historical
-custom tasks are disabled but retained on the test workstation as comparison
-fixtures; runtime code and documentation do not depend on them.
+Live account confirmation of both collection actions, their result-overlay
+dismissal, statistics, and next scheduling remains required before merge
+readiness. The historical custom tasks are disabled but retained on the test
+workstation as comparison fixtures; runtime code and documentation do not
+depend on them.

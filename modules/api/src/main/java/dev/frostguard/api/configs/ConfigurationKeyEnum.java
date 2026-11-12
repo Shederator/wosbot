@@ -108,6 +108,7 @@ public enum ConfigurationKeyEnum {
     /** Legacy arena alliance protection key retained only so existing persisted profiles can still be read. */
     ARENA_TASK_PROTECT_ALLIANCE_BOOL    ("true",    Boolean.class,  ConfigCategory.DAILIES, true),
     ARENA_TASK_REFRESH_WITH_GEMS_BOOL   ("false",   Boolean.class,  ConfigCategory.DAILIES),
+    BAKERY_FARM_COLLECT_BOOL            ("false",   Boolean.class,  ConfigCategory.DAILIES),
     DAILY_LABYRINTH_BOOL                ("false",   Boolean.class,  ConfigCategory.DAILIES),
     DAILY_MISSION_AUTO_SCHEDULE_BOOL    ("false",   Boolean.class,  ConfigCategory.DAILIES),
     DAILY_MISSION_BOOL                  ("false",   Boolean.class,  ConfigCategory.DAILIES),

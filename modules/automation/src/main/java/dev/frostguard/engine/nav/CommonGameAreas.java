@@ -69,6 +69,7 @@ public final class CommonGameAreas {
     // These compact zones contain the reward indicator after the City building navigation.
     public static final AreaData BAKERY_REWARD_ICON_SEARCH = region(319, 470, 391, 532);
     public static final AreaData FARM_REWARD_ICON_SEARCH = region(272, 474, 351, 548);
+    public static final AreaData BUILDING_DAILY_REWARD_OVERLAY_EXIT = region(110, 1046, 673, 1252);
 
     // The cooldown stays in the top banner while Intel markers remain, then moves to the center
     // after every completed Intel reward has been claimed.

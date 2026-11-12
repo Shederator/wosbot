@@ -50,6 +50,8 @@ public class CityEventsExtraLayoutController extends AbstractProfileController {
     @FXML
     private CheckBox checkBoxStorehouseChest;
     @FXML
+    private CheckBox checkBoxBakeryFarmCollect;
+    @FXML
     private CheckBox checkBoxDailyLabyrinth;
     @FXML
     private CheckBox checkBoxHeroRecruitment;
@@ -110,6 +112,7 @@ public class CityEventsExtraLayoutController extends AbstractProfileController {
             new ToggleBinding(checkBoxDailyVipRewards, ConfigurationKeyEnum.BOOL_VIP_POINTS),
             new ToggleBinding(checkBoxBuyMonthlyVip, ConfigurationKeyEnum.VIP_MONTHLY_BUY_BOOL),
             new ToggleBinding(checkBoxStorehouseChest, ConfigurationKeyEnum.STOREHOUSE_CHEST_BOOL),
+            new ToggleBinding(checkBoxBakeryFarmCollect, ConfigurationKeyEnum.BAKERY_FARM_COLLECT_BOOL),
             new ToggleBinding(checkBoxDailyLabyrinth, ConfigurationKeyEnum.DAILY_LABYRINTH_BOOL),
             new ToggleBinding(checkBoxHeroRecruitment, ConfigurationKeyEnum.BOOL_HERO_RECRUITMENT),
             new ToggleBinding(checkBoxTrekSupplies, ConfigurationKeyEnum.TUNDRA_TREK_SUPPLIES_BOOL),

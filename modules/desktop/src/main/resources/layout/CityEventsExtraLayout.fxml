@@ -144,6 +144,11 @@
 
                             <Separator style="-fx-opacity: 0.15;" />
 
+                            <CheckBox fx:id="checkBoxBakeryFarmCollect"
+                                      text="Enable Collect of Bakery and Farm rewards" />
+
+                            <Separator style="-fx-opacity: 0.15;" />
+
                             <CheckBox fx:id="checkBoxHeroRecruitment"
                                       text="Open recruitment hero chests" />
 
