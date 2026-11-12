@@ -20,12 +20,19 @@ confirmed by observation.
 
 # Business reference: principles, rules, and objectives
 
-The task is named **Collect Bakery and Farm**.
+The task is named **Collect Bakery and Farm**. The gameplay strategy has two
+separate phases.
 
-This is an unconditional daily reward-collection activity. Newer,
-non-essential buildings are visible in the north-east part of the city. Each
-day, a building with a reward offers a collection which only needs to be
-claimed.
+The first phase is building construction. The player completes game tasks to
+earn the specific coins required to buy the essential furniture, then uses that
+furniture to create the buildings. Frostguard does not automate coin
+acquisition, furniture purchases, or building construction; those choices and
+actions remain with the player.
+
+The second phase is unconditional daily reward collection from buildings the
+player has already constructed. Newer, non-essential buildings are visible in
+the north-east part of the city. Each day, a building with a reward offers a
+collection which only needs to be claimed.
 
 These buildings include the Farm, Bakery, and Record House. The Farm has a
 dedicated collection. Collecting at a non-Farm building collects the grouped
@@ -33,7 +40,10 @@ reward for the other buildings.
 
 # Recommended gameplay strategy: decisions, priorities, and special cases
 
-Collect every available reward every day.
+First construct the buildings manually, including the prerequisite coin and
+furniture work. Once Bakery exists, collect its grouped reward every day. Also
+collect Farm's dedicated reward when the player has constructed Farm and marks
+it present in the task controls.
 
 # UI reference: screens, important areas, visual feedback, and ambiguities
 
@@ -66,12 +76,15 @@ the screen and returns to the City view.
 
 # Target coverage: expected features, explicit limitations, and unsupported behavior
 
-The task always supports the grouped collection at the Bakery. Farm collection is
-attempted afterwards, including for accounts that have not built it yet. Other
-new buildings are covered only through the Bakery's grouped collection.
+The task supports only the daily collection phase. Bakery must already be
+constructed by the player and is the required route to the grouped reward. Farm
+collection is attempted afterwards, including for accounts that have not built
+it yet. Other new buildings are covered only through the Bakery's grouped
+collection.
 
-Free city panning, direct navigation to every other building, and collection
-rules not described above are out of scope.
+Coin acquisition, furniture purchases, building construction, free city
+panning, direct navigation to every other building, and collection rules not
+described above are out of scope.
 
 # Task design: navigation, states, steps, exits, and rescheduling
 
@@ -151,6 +164,7 @@ Under **Extra city events** -> **Other tasks**, provide these checkboxes:
 | --- | --- | --- | --- |
 | Bakery navigation, or Farm marked present, is not confirmed | Expected screen is not recognized. | Do not collect; finalize the visit and schedule a retry. | Define acceptable intermediate screens. |
 | Optional Farm entry is unavailable | Farm is not OCR-confirmed and **Farm is present** is unchecked. | Do not collect Farm; retain Bakery's result and complete the visit safely. | The setting is an operator declaration, not construction detection. |
+| Bakery has not been constructed | Bakery entry cannot be reached. | Do not infer a grouped collection; use the bounded navigation failure path. | Construction is intentionally controlled by the player. |
 | ADB error during capture, scan, or tap | Emulator communication exception. | Continue only to finalization without an ADB-dependent recovery action; let the scheduler retry. | Immediate recovery is impossible without a connection. |
 | Invalid scan result | Vision returns no usable result. | Retry once, then classify the result as unknown and leave the cycle in a controlled way. | Distinguish this from normal absence of a reward icon. |
 | UI or template is incompatible | Expected control is absent or the result is inconsistent. | Do not infer collection; produce diagnostics and schedule a bounded retry. | Absence may also be a manual collection. |
@@ -176,12 +190,14 @@ replace live-account confirmation.
 
 # Implementation status and gaps: delivered features, evidence, and differences from the design
 
-The built-in task, its control checkbox, in-memory visit state, single
-rescheduling decision, counters, and diagnostic handling are implemented. The
-Bakery and Farm indicators use dedicated bundled templates, named search zones,
-and their own color-search settings. Automated mapping and redacted real-frame
-tests cover visible reward indicators. Live manual validation confirms the
-navigation sequence, including Bakery after Farm.
+The built-in daily-collection phase, its control checkboxes, in-memory visit
+state, single rescheduling decision, counters, and diagnostic handling are
+implemented. The construction phase is intentionally unsupported and remains
+with the player. The Bakery and Farm indicators use dedicated bundled
+templates, named search zones, and their own color-search settings. Automated
+mapping and redacted real-frame tests cover visible reward indicators. Live
+manual validation confirms the navigation sequence, including Bakery after
+Farm.
 
 Live account confirmation of both collection actions, their result-overlay
 dismissal, statistics, and next scheduling remains required before merge
