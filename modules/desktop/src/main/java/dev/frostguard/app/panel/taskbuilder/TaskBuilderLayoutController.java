@@ -1790,6 +1790,10 @@ public class TaskBuilderLayoutController {
             dealsNavigationPropsBox.setVisible(false);
             dealsNavigationPropsBox.setManaged(false);
         }
+        if (buildingNavigationPropsBox != null) {
+            buildingNavigationPropsBox.setVisible(false);
+            buildingNavigationPropsBox.setManaged(false);
+        }
         ocrPropsBox.setVisible(false); ocrPropsBox.setManaged(false);
         if (templatePropsBox != null) { templatePropsBox.setVisible(false); templatePropsBox.setManaged(false); }
         
