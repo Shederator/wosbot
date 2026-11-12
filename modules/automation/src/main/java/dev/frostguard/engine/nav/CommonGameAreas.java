@@ -66,6 +66,10 @@ public final class CommonGameAreas {
     public static final AreaData SURVIVOR_STATUS_FARM_GO = region(160, 936, 326, 985);
     public static final AreaData SURVIVOR_STATUS_FARM_UNFOCUS = region(600, 804, 703, 884);
 
+    // These compact zones contain the reward indicator after the City building navigation.
+    public static final AreaData BAKERY_REWARD_ICON_SEARCH = region(319, 470, 391, 532);
+    public static final AreaData FARM_REWARD_ICON_SEARCH = region(272, 474, 351, 548);
+
     // The cooldown stays in the top banner while Intel markers remain, then moves to the center
     // after every completed Intel reward has been claimed.
     public static final AreaData INTEL_COOLDOWN_WITH_MARKERS_OCR_AREA = region(378, 103, 508, 146);

@@ -8,9 +8,8 @@ tap changed the game UI.
 
 The supported destinations are `BAKERY` and `FARM`. The helper uses named
 fixed regions in `CommonGameAreas` and a 500 ms settle between its UI inputs.
-The fixed-control contract comes from the historical Task Builder flows
-`bakery.json` and `farm.json`; raw coordinates are deliberately not repeated
-here.
+The controls are declared in the shared source mapping; raw coordinates are
+deliberately not repeated here.
 
 ## Bakery
 
@@ -41,6 +40,7 @@ than duplicating its zones or gesture sequence.
 
 ## Evidence
 
-Automated tests cover the bounded decision paths and Task Builder wiring. Saved
-real-frame evidence and live account-log confirmation are still required before
-the navigation is considered merge-ready for reward collection.
+Automated tests cover the bounded decision paths and Task Builder wiring. Live
+manual validation confirmed the Bakery -> Farm -> Bakery sequence, including
+the Bakery list reset. Saved real-frame evidence is provided for reward-icon
+detection, not for the navigation controls.

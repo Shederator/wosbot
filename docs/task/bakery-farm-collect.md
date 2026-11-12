@@ -113,13 +113,13 @@ once.
 The temporary cycle starts from the beginning on the next execution:
 
 1. **Navigate to Farm**.
-2. **Verify Farm reward icon presence** — detect the icon. Its method and
-   template are imported from the custom task in the later import stage.
+2. **Verify Farm reward icon presence** — use `BuildingRewardDetector` with
+   `FARM_REWARD_ICON` in `FARM_REWARD_ICON_SEARCH`.
 3. **Collect Farm reward** — if present, tap the icon and seek negative icon
    detection as visual confirmation.
 4. **Navigate to Bakery**.
-5. **Verify Bakery reward icon presence** — detect the icon using the later
-   imported method and template settings.
+5. **Verify Bakery reward icon presence** — use `BuildingRewardDetector` with
+   `BAKERY_REWARD_ICON` in `BAKERY_REWARD_ICON_SEARCH`.
 6. **Collect grouped reward** — if present, tap the icon and seek negative icon
    detection as visual confirmation.
 7. **Choose the exit** — stop the visit when complete, anomalous, or too long.
@@ -168,10 +168,13 @@ replace live-account confirmation.
 
 # Implementation status and gaps: delivered features, evidence, and differences from the design
 
-No built-in implementation exists yet. There is no saved-frame verification,
-live account-log confirmation, or automated test evidence for this task.
+The shared navigation and reward-icon mapping are implemented. The Bakery and
+Farm indicators use dedicated bundled templates, named search zones, and their
+own color-search settings. Automated mapping tests and redacted real-frame
+tests cover visible reward indicators. Live manual validation confirms the
+navigation sequence, including Bakery after Farm.
 
-The historical Task Builder custom tasks bakery.json and farm.json are available
-on selso@wosbot.lan. Their named areas, templates, and search zones must be
-reviewed and imported during roadmap step 3, when the custom tasks are replaced.
-This documentation stage does not access, copy, or validate them.
+Reward collection, confirmation, task state, scheduling, statistics, and the
+control checkbox remain for the next implementation stage. The historical
+custom tasks are disabled but retained on the test workstation as comparison
+fixtures; runtime code and documentation do not depend on them.
