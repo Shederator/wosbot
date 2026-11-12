@@ -13,22 +13,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class BakeryFarmCollectFlowTest {
 
     @Test
-    void collectsFarmThenBakeryWhenBothAreConfirmed() {
+    void collectsBakeryThenFarmWhenBothAreConfirmed() {
         ScriptedActions actions = new ScriptedActions(false,
                 BakeryFarmCollectFlow.TargetResult.confirmed(),
                 BakeryFarmCollectFlow.TargetResult.confirmed());
 
-        BakeryFarmCollectFlow.VisitResult result = BakeryFarmCollectFlow.execute(actions);
+        BakeryFarmCollectFlow.VisitResult result = BakeryFarmCollectFlow.execute(actions, true);
 
         assertTrue(result.completedReliably());
         assertEquals(2, result.confirmedCollections());
-        assertEquals(List.of(BuildingDestination.FARM, BuildingDestination.BAKERY), actions.visited);
+        assertEquals(List.of(BuildingDestination.BAKERY, BuildingDestination.FARM), actions.visited);
     }
 
     @Test
     void treatsBothAbsentRewardsAsACompleteReliableVisit() {
         BakeryFarmCollectFlow.VisitResult result = BakeryFarmCollectFlow.execute(new ScriptedActions(false,
-                BakeryFarmCollectFlow.TargetResult.absent(), BakeryFarmCollectFlow.TargetResult.absent()));
+                BakeryFarmCollectFlow.TargetResult.absent(), BakeryFarmCollectFlow.TargetResult.absent()), true);
 
         assertTrue(result.completedReliably());
         assertEquals(0, result.confirmedCollections());
@@ -36,17 +36,58 @@ class BakeryFarmCollectFlowTest {
     }
 
     @Test
-    void stopsBeforeBakeryWhenFarmCollectionIsUnconfirmed() {
+    void completesWhenOptionalFarmNavigationIsUnconfirmedAfterBakery() {
+        ScriptedActions actions = new ScriptedActions(false,
+                BakeryFarmCollectFlow.TargetResult.failed(BakeryFarmCollectFlow.FailureReason.NAVIGATION),
+                BakeryFarmCollectFlow.TargetResult.confirmed());
+
+        BakeryFarmCollectFlow.VisitResult result = BakeryFarmCollectFlow.execute(actions, false);
+
+        assertTrue(result.completedReliably());
+        assertEquals(1, result.confirmedBakeryCollections());
+        assertEquals(0, result.confirmedFarmCollections());
+        assertEquals(List.of(BuildingDestination.BAKERY, BuildingDestination.FARM), actions.visited);
+    }
+
+    @Test
+    void failsWhenRequiredFarmNavigationIsUnconfirmedAfterBakery() {
+        ScriptedActions actions = new ScriptedActions(false,
+                BakeryFarmCollectFlow.TargetResult.failed(BakeryFarmCollectFlow.FailureReason.NAVIGATION),
+                BakeryFarmCollectFlow.TargetResult.confirmed());
+
+        BakeryFarmCollectFlow.VisitResult result = BakeryFarmCollectFlow.execute(actions, true);
+
+        assertFalse(result.completedReliably());
+        assertEquals(1, result.confirmedBakeryCollections());
+        assertEquals(BakeryFarmCollectFlow.FailureReason.NAVIGATION, result.failureReason());
+        assertEquals(List.of(BuildingDestination.BAKERY, BuildingDestination.FARM), actions.visited);
+    }
+
+    @Test
+    void doesNotIgnoreAnOptionalFarmActionFailure() {
         ScriptedActions actions = new ScriptedActions(false,
                 BakeryFarmCollectFlow.TargetResult.failed(BakeryFarmCollectFlow.FailureReason.ACTION),
                 BakeryFarmCollectFlow.TargetResult.confirmed());
 
-        BakeryFarmCollectFlow.VisitResult result = BakeryFarmCollectFlow.execute(actions);
+        BakeryFarmCollectFlow.VisitResult result = BakeryFarmCollectFlow.execute(actions, false);
+
+        assertFalse(result.completedReliably());
+        assertEquals(BakeryFarmCollectFlow.FailureReason.ACTION, result.failureReason());
+        assertEquals(1, result.confirmedBakeryCollections());
+    }
+
+    @Test
+    void stopsBeforeFarmWhenBakeryCollectionIsUnconfirmed() {
+        ScriptedActions actions = new ScriptedActions(false,
+                BakeryFarmCollectFlow.TargetResult.confirmed(),
+                BakeryFarmCollectFlow.TargetResult.failed(BakeryFarmCollectFlow.FailureReason.ACTION));
+
+        BakeryFarmCollectFlow.VisitResult result = BakeryFarmCollectFlow.execute(actions, true);
 
         assertFalse(result.completedReliably());
         assertTrue(result.hasUnconfirmedAction());
         assertEquals(BakeryFarmCollectFlow.FailureReason.ACTION, result.failureReason());
-        assertEquals(List.of(BuildingDestination.FARM), actions.visited);
+        assertEquals(List.of(BuildingDestination.BAKERY), actions.visited);
     }
 
     @Test
@@ -54,7 +95,7 @@ class BakeryFarmCollectFlowTest {
         ScriptedActions actions = new ScriptedActions(true,
                 BakeryFarmCollectFlow.TargetResult.confirmed(), BakeryFarmCollectFlow.TargetResult.confirmed());
 
-        BakeryFarmCollectFlow.VisitResult result = BakeryFarmCollectFlow.execute(actions);
+        BakeryFarmCollectFlow.VisitResult result = BakeryFarmCollectFlow.execute(actions, true);
 
         assertEquals(BakeryFarmCollectFlow.FailureReason.TIMEOUT, result.failureReason());
         assertTrue(actions.visited.isEmpty());

@@ -1,5 +1,6 @@
 package dev.frostguard.tasks.city;
 
+import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.ImageSearchResultData;
@@ -149,7 +150,9 @@ public class BakeryFarmCollectRoutine extends DelayedTask {
     }
 
     protected BakeryFarmCollectFlow.VisitResult runVisit() {
-        return BakeryFarmCollectFlow.execute(new BakeryFarmActions());
+        boolean farmExpected = Boolean.TRUE.equals(profile.getConfig(
+                ConfigurationKeyEnum.BAKERY_FARM_COLLECT_FARM_PRESENT_BOOL, Boolean.class));
+        return BakeryFarmCollectFlow.execute(new BakeryFarmActions(farmExpected), farmExpected);
     }
 
     protected String captureFailureSnapshot(BakeryFarmCollectFlow.FailureReason reason) {
@@ -183,6 +186,12 @@ public class BakeryFarmCollectRoutine extends DelayedTask {
 
     private final class BakeryFarmActions implements BakeryFarmCollectFlow.Actions {
 
+        private final boolean farmExpected;
+
+        private BakeryFarmActions(boolean farmExpected) {
+            this.farmExpected = farmExpected;
+        }
+
         @Override
         public boolean timedOut() {
             return System.currentTimeMillis() >= executionDeadlineMillis;
@@ -193,7 +202,8 @@ public class BakeryFarmCollectRoutine extends DelayedTask {
             if (timedOut()) {
                 return BakeryFarmCollectFlow.TargetResult.failed(BakeryFarmCollectFlow.FailureReason.TIMEOUT);
             }
-            if (!navigationHelper.navigateToBuilding(destination)) {
+            boolean requireFarmEntry = destination != BuildingDestination.FARM || farmExpected;
+            if (!navigationHelper.navigateToBuilding(destination, requireFarmEntry)) {
                 return BakeryFarmCollectFlow.TargetResult.failed(BakeryFarmCollectFlow.FailureReason.NAVIGATION);
             }
             if (timedOut()) {

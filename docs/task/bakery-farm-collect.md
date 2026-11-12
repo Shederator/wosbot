@@ -66,8 +66,9 @@ the screen and returns to the City view.
 
 # Target coverage: expected features, explicit limitations, and unsupported behavior
 
-The task will support Farm collection and grouped collection at the Bakery.
-Other new buildings are covered only through the Bakery's grouped collection.
+The task always supports the grouped collection at the Bakery. Farm collection is
+attempted afterwards, including for accounts that have not built it yet. Other
+new buildings are covered only through the Bakery's grouped collection.
 
 Free city panning, direct navigation to every other building, and collection
 rules not described above are out of scope.
@@ -85,8 +86,9 @@ unfocused and does not itself prove a reward action.
 
 Farm navigation uses the shared [City building navigation](building-navigation.md)
 helper with the `FARM` destination. The Farm row is OCR-confirmed after its
-bounded Survivor Status scroll; an unconfirmed row ends navigation safely
-without touching it.
+bounded Survivor Status scroll. An unconfirmed row ends navigation safely
+without touching it; it is retryable only when the operator declares Farm
+present in the task controls.
 
 ## Task states
 
@@ -112,15 +114,15 @@ once.
 
 The temporary cycle starts from the beginning on the next execution:
 
-1. **Navigate to Farm**.
-2. **Verify Farm reward icon presence** — use `BuildingRewardDetector` with
-   `FARM_REWARD_ICON` in `FARM_REWARD_ICON_SEARCH`.
-3. **Collect Farm reward** — if present, tap the icon and seek negative icon
-   detection as visual confirmation.
-4. **Navigate to Bakery**.
-5. **Verify Bakery reward icon presence** — use `BuildingRewardDetector` with
+1. **Navigate to Bakery**.
+2. **Verify Bakery reward icon presence** — use `BuildingRewardDetector` with
    `BAKERY_REWARD_ICON` in `BAKERY_REWARD_ICON_SEARCH`.
-6. **Collect grouped reward** — if present, tap the icon and seek negative icon
+3. **Collect grouped reward** — if present, tap the icon and seek negative icon
+   detection as visual confirmation.
+4. **Navigate to Farm**.
+5. **Verify Farm reward icon presence** — use `BuildingRewardDetector` with
+   `FARM_REWARD_ICON` in `FARM_REWARD_ICON_SEARCH`.
+6. **Collect Farm reward** — if present, tap the icon and seek negative icon
    detection as visual confirmation.
 7. **Choose the exit** — stop the visit when complete, anomalous, or too long.
 8. **Finalize** — record statistics, calculate progress state, and make the
@@ -137,14 +139,18 @@ deferred execution starts.
 
 ## Task control UI
 
-Under **Extra city events** -> **Other tasks**, provide one checkbox:
-**Enable Collect of Bakery and Farm rewards**.
+Under **Extra city events** -> **Other tasks**, provide these checkboxes:
+
+- **Enable Collect of Bakery and Farm rewards** enables the task.
+- **Farm is present** defaults to unchecked. Farm is still probed after Bakery,
+  but a missing Farm entry is accepted only while this checkbox is unchecked.
 
 # Risk management: FMEA-like analysis, detection, impact, and safe recovery
 
 | Risk | Available signal | Intended safe behaviour | Missing decision or information |
 | --- | --- | --- | --- |
-| Navigation is not confirmed | Expected screen is not recognized. | Do not collect; finalize the visit and schedule a retry. | Define acceptable intermediate screens. |
+| Bakery navigation, or Farm marked present, is not confirmed | Expected screen is not recognized. | Do not collect; finalize the visit and schedule a retry. | Define acceptable intermediate screens. |
+| Optional Farm entry is unavailable | Farm is not OCR-confirmed and **Farm is present** is unchecked. | Do not collect Farm; retain Bakery's result and complete the visit safely. | The setting is an operator declaration, not construction detection. |
 | ADB error during capture, scan, or tap | Emulator communication exception. | Continue only to finalization without an ADB-dependent recovery action; let the scheduler retry. | Immediate recovery is impossible without a connection. |
 | Invalid scan result | Vision returns no usable result. | Retry once, then classify the result as unknown and leave the cycle in a controlled way. | Distinguish this from normal absence of a reward icon. |
 | UI or template is incompatible | Expected control is absent or the result is inconsistent. | Do not infer collection; produce diagnostics and schedule a bounded retry. | Absence may also be a manual collection. |

@@ -2,7 +2,7 @@ package dev.frostguard.tasks.city;
 
 import dev.frostguard.engine.helper.NavigationHelper.BuildingDestination;
 
-/** Pure ordering and terminal-decision flow for the Farm then Bakery visit. */
+/** Pure ordering and terminal-decision flow for the required Bakery then optional Farm visit. */
 final class BakeryFarmCollectFlow {
 
     enum TargetState { CONFIRMED, ABSENT, FAILED }
@@ -49,20 +49,25 @@ final class BakeryFarmCollectFlow {
 
     private BakeryFarmCollectFlow() {}
 
-    static VisitResult execute(Actions actions) {
+    static VisitResult execute(Actions actions, boolean farmExpected) {
         if (actions.timedOut()) {
             return new VisitResult(null, null, FailureReason.TIMEOUT);
         }
-        TargetResult farm = actions.visit(BuildingDestination.FARM);
-        if (farm.state() == TargetState.FAILED) {
-            return new VisitResult(farm, null, farm.failureReason());
-        }
-        if (actions.timedOut()) {
-            return new VisitResult(farm, null, FailureReason.TIMEOUT);
-        }
         TargetResult bakery = actions.visit(BuildingDestination.BAKERY);
         if (bakery.state() == TargetState.FAILED) {
-            return new VisitResult(farm, bakery, bakery.failureReason());
+            return new VisitResult(null, bakery, bakery.failureReason());
+        }
+        if (actions.timedOut()) {
+            return new VisitResult(null, bakery, FailureReason.TIMEOUT);
+        }
+
+        TargetResult farm = actions.visit(BuildingDestination.FARM);
+        if (!farmExpected && farm.state() == TargetState.FAILED
+                && farm.failureReason() == FailureReason.NAVIGATION) {
+            return new VisitResult(TargetResult.absent(), bakery, FailureReason.NONE);
+        }
+        if (farm.state() == TargetState.FAILED) {
+            return new VisitResult(farm, bakery, farm.failureReason());
         }
         return new VisitResult(farm, bakery, FailureReason.NONE);
     }

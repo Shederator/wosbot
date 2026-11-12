@@ -128,6 +128,13 @@ public class NavigationHelper {
      * the camera unfocused so the caller can perform its own interaction.
      */
     public boolean navigateToBuilding(BuildingDestination destination) {
+        return navigateToBuilding(destination, true);
+    }
+
+    /**
+     * Reaches a supported new City building while making Farm-entry absence either required or optional.
+     */
+    public boolean navigateToBuilding(BuildingDestination destination, boolean farmExpected) {
         ensureCorrectScreenLocation(LaunchPoint.HOME);
         broadcastInfo("Navigating through Survivor Status to " + destination.displayName());
         tapSurvivorStatusEntry();
@@ -141,7 +148,11 @@ public class NavigationHelper {
             waitForBuildingTransition();
             if (!isFarmEntryVisible()) {
                 pressBackFromSurvivorStatus();
-                broadcastWarn("Farm entry was not confirmed after the bounded Survivor Status scroll");
+                if (farmExpected) {
+                    broadcastWarn("Farm entry was not confirmed after the bounded Survivor Status scroll");
+                } else {
+                    broadcastInfo("Farm entry was not confirmed; Farm is optional for this visit.");
+                }
                 return false;
             }
         }
