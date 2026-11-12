@@ -14,6 +14,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -42,6 +43,7 @@ import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.GatherQueuePolicy;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.schedule.TaskQueue;
+import dev.frostguard.engine.schedule.TroopSlotPolicy;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.engine.service.StatisticsService;
 
@@ -64,7 +66,8 @@ public class GatherRoutine extends DelayedTask {
     // pernerch/2026-07-02: initial margin added after max march return time before re-deploying
     private static final int TROOP_RETURN_MARGIN_MINUTES = 2;
     // pernerch/2026-07-02: retry interval when recalled troops are still marching home
-    private static final int TROOP_RETURN_RETRY_MINUTES = 1;
+    /** Floor on how often the recall-wait re-opens the march screen. */
+    private static final int TROOP_RETURN_MIN_RETRY_MINUTES = 5;
     // pernerch/2026-07-02: Bear Trap active duration (30 min) used to estimate end time for defer calculation
     private static final int BEAR_TRAP_DURATION_MINUTES = 30;
     private static final int LOWER_BOUND_RECHECK_BUFFER_MINUTES = 1;
@@ -122,6 +125,7 @@ public class GatherRoutine extends DelayedTask {
     private boolean autoJoinEnabled;
     private boolean onlyFullResources;
     private boolean downgradeLevelOnMissingNode;
+    private boolean smartPriority;
 
     private List<GatherType> enabledTypes;
     private List<GatherType> rotationPool;
@@ -269,6 +273,7 @@ public class GatherRoutine extends DelayedTask {
         this.autoJoinEnabled = get(ConfigurationKeyEnum.ALLIANCE_AUTOJOIN_BOOL, false);
         this.onlyFullResources = get(ConfigurationKeyEnum.GATHER_ONLY_FULL_RESOURCES_BOOL, false);
         this.downgradeLevelOnMissingNode = get(ConfigurationKeyEnum.GATHER_DOWNGRADE_LEVEL_BOOL, true);
+        this.smartPriority = get(ConfigurationKeyEnum.GATHER_SMART_PRIORITY_BOOL, false);
 
         this.enabledTypes = Arrays.stream(GatherType.values())
                 .filter(this::isTypeEnabled)
@@ -323,8 +328,10 @@ public class GatherRoutine extends DelayedTask {
             return new GatherFillResult(0, 0, 0, 0, false, 0);
         }
 
-        // Shuffle loaded pool for randomness in this run
-        Collections.shuffle(rotationPool);
+        // Smart Gathering: order the pool by scarcity-relative-to-value instead of blind
+        // randomness when the user opts in. Off by default (existing blind-rotation behavior is
+        // unchanged unless GATHER_SMART_PRIORITY_BOOL is set).
+        orderRotationPoolForThisRun();
 
         int remaining = freeSlots;
         int safetyLoop = 0;
@@ -333,10 +340,12 @@ public class GatherRoutine extends DelayedTask {
 
             // Refill if empty
             if (rotationPool.isEmpty()) {
+                // Don't remove active marches on refill — duplicates are needed
+                // to fill remaining slots when activeQueues > enabledTypes.size()
                 if (!refillRotationPool(activeMarches, unavailableThisRun)) {
                     break;
                 }
-                Collections.shuffle(rotationPool);
+                orderRotationPoolForThisRun();
             }
 
             // Try ALL pool items â€” don't limit to remaining, so if one type fails
@@ -390,6 +399,210 @@ public class GatherRoutine extends DelayedTask {
 
         saveRotationPool();
         return new GatherFillResult(deployed, noNode, blocked, sameTargetBlocked, false, remaining);
+    }
+
+    // ================= SMART GATHERING (VALUE-WEIGHTED PRIORITY) =================
+
+    /**
+     * Relative acquisition value of each gather resource, anchored to Meat = 1.
+     *
+     * <p><b>Source:</b> the in-game Alliance Resource Exchange (Alliance &gt; Territory &gt;
+     * Resource Exchange), the closest thing this game has to an authoritative, dev-set
+     * conversion rate between resources (as opposed to a community guess). Two independent
+     * community sources report identical figures for that exchange:
+     * <ul>
+     *   <li>https://whiteoutdata.com/guides/alliance-resource-exchange/</li>
+     *   <li>https://www.whiteoutsurvival.wiki/alliance-resources-exchange/ (Century Games
+     *       community wiki)</li>
+     * </ul>
+     * Both list the same acquisition cost, anchored to Meat/Wood:
+     * <pre>
+     *   2 Meat  = 1 Wood   -&gt; Wood is worth 2x Meat
+     *   4 Meat  = 1 Coal   -&gt; Coal is worth 4x Meat
+     *   8 Meat  = 1 Iron   -&gt; Iron is worth 8x Meat
+     * </pre>
+     * which gives the doubling progression Meat:Wood:Coal:Iron = 1:2:4:8.
+     *
+     * <p><b>Known discrepancy, deliberately not used:</b> both sources agree the exchange
+     * is <i>not</i> a single coherent value field — converting back down a tier gives a
+     * worse-than-reciprocal rate (1 Iron only converts back to 2 Meat/Wood, not 8; Coal-to-
+     * Iron is 4:1 while Wood-to-Coal is <i>also</i> 4:1 despite Wood being worth 2x Meat).
+     * That reads like a deliberate anti-arbitrage spread built into the exchange, not a
+     * data-entry error — both independent sources report it identically. We deliberately
+     * use only the "acquiring a higher tier, anchored to Meat" direction because it is the
+     * one internally-consistent, unambiguous number the source data actually supports;
+     * forcing a single ratio out of the full asymmetric matrix would just be picking a
+     * different guess dressed up as precision.
+     */
+    private static final Map<GatherType, Double> RESOURCE_VALUE_WEIGHT = Map.of(
+            GatherType.MEAT, 1.0,
+            GatherType.WOOD, 2.0,
+            GatherType.COAL, 4.0,
+            GatherType.IRON, 8.0
+    );
+
+    /**
+     * Orders {@link #rotationPool} for this run: value-weighted scarcity when Smart
+     * Gathering is on and a stockpile read succeeds, otherwise the original blind
+     * {@link Collections#shuffle}. This is the single seam both call sites in
+     * {@link #fillQueues} go through so behavior stays identical between the initial
+     * fill and any mid-run refill.
+     */
+    private void orderRotationPoolForThisRun() {
+        if (!smartPriority) {
+            Collections.shuffle(rotationPool);
+            return;
+        }
+
+        Map<GatherType, Long> stockpiles = readCurrentStockpiles();
+        if (stockpiles == null || stockpiles.isEmpty()) {
+            logWarning("Smart Gathering is enabled but the stockpile read failed or returned "
+                    + "nothing usable this cycle. Falling back to blind rotation for this run "
+                    + "rather than blocking gathering.");
+            Collections.shuffle(rotationPool);
+            return;
+        }
+
+        rotationPool.sort(Comparator.comparingDouble(type -> scarcityScore(type, stockpiles)));
+        logInfo("Smart Gathering pool order (scarcest-relative-to-value first): " + rotationPool
+                + " | stockpiles=" + stockpiles);
+    }
+
+    /**
+     * score = currentStockpile / valueWeight — lower means "scarcer relative to how much
+     * it's worth", i.e. higher priority to gather first. A resource we couldn't read a
+     * stockpile for is sorted last (not first) so a single bad OCR read can't cause the
+     * bot to hammer one resource type under the guise of "it's the scarcest".
+     */
+    private double scarcityScore(GatherType type, Map<GatherType, Long> stockpiles) {
+        Long stockpile = stockpiles.get(type);
+        double valueWeight = RESOURCE_VALUE_WEIGHT.getOrDefault(type, 1.0);
+        if (stockpile == null) {
+            return Double.MAX_VALUE;
+        }
+        return stockpile / valueWeight;
+    }
+
+    /**
+     * Reads the cached stockpile total for every gather resource.
+     *
+     * <p>{@link ResourceStockpileRoutine} runs on its own schedule (gated on the same
+     * {@code GATHER_SMART_PRIORITY_BOOL}) and caches the totals to profile config; this method only
+     * reads that cache and never navigates, so it cannot disturb the deployment flow. A
+     * never-populated cache (all zeros, the config default) returns null, and the caller falls back
+     * to blind rotation exactly as it would on an OCR failure.
+     *
+     * <p>A value older than {@link #STOCKPILE_STALE_AFTER} is not trusted, so a cache that stops
+     * refreshing (routine disabled, stuck, or failing every pass) cannot steer gathering forever.
+     * Freshness is judged per resource against that resource's own
+     * {@code RESOURCE_STOCKPILE_*_LAST_READ_STRING} (falling back to the legacy shared key only
+     * for a cache written before the per-field keys existed) rather than one shared timestamp for
+     * all four fields -- a rejected/never-refreshed field can't ride along looking as fresh as a
+     * field that was just updated. A stale individual field is dropped from the returned map, not
+     * the whole cache ({@link #scarcityScore} already sorts a missing entry last rather than
+     * treating it as scarcest). A missing, malformed, or future timestamp is trusted once but
+     * immediately re-stamped to now, so it can't repeat that same ungoverned trust forever.
+     */
+    private static final Duration STOCKPILE_STALE_AFTER = Duration.ofHours(3);
+
+    Map<GatherType, Long> readCurrentStockpiles() {
+        Long meat = profile.getConfig(ConfigurationKeyEnum.RESOURCE_STOCKPILE_MEAT_LONG, Long.class);
+        Long wood = profile.getConfig(ConfigurationKeyEnum.RESOURCE_STOCKPILE_WOOD_LONG, Long.class);
+        Long coal = profile.getConfig(ConfigurationKeyEnum.RESOURCE_STOCKPILE_COAL_LONG, Long.class);
+        Long iron = profile.getConfig(ConfigurationKeyEnum.RESOURCE_STOCKPILE_IRON_LONG, Long.class);
+
+        boolean neverPopulated = (meat == null || meat == 0)
+                && (wood == null || wood == 0)
+                && (coal == null || coal == 0)
+                && (iron == null || iron == 0);
+        if (neverPopulated) {
+            return null;
+        }
+
+        java.util.Map<GatherType, Long> out = new java.util.EnumMap<>(GatherType.class);
+        if (isFieldFresh(GatherType.MEAT, meat, ConfigurationKeyEnum.RESOURCE_STOCKPILE_MEAT_LAST_READ_STRING)) {
+            out.put(GatherType.MEAT, meat);
+        }
+        if (isFieldFresh(GatherType.WOOD, wood, ConfigurationKeyEnum.RESOURCE_STOCKPILE_WOOD_LAST_READ_STRING)) {
+            out.put(GatherType.WOOD, wood);
+        }
+        if (isFieldFresh(GatherType.COAL, coal, ConfigurationKeyEnum.RESOURCE_STOCKPILE_COAL_LAST_READ_STRING)) {
+            out.put(GatherType.COAL, coal);
+        }
+        if (isFieldFresh(GatherType.IRON, iron, ConfigurationKeyEnum.RESOURCE_STOCKPILE_IRON_LAST_READ_STRING)) {
+            out.put(GatherType.IRON, iron);
+        }
+        // Every field individually stale (or every field simply missing) is the same "nothing
+        // usable" case the never-populated check above already covers -- let the caller fall back
+        // to blind rotation rather than sorting on an empty map.
+        return out.isEmpty() ? null : out;
+    }
+
+    /**
+     * True when {@code value} is non-null and its own per-field timestamp is fresh enough to
+     * trust, checking {@code perFieldKey} first and falling back to the legacy shared
+     * {@link ConfigurationKeyEnum#RESOURCE_STOCKPILE_LAST_READ_STRING} only when the per-field key
+     * has never been written (a cache from before per-field timestamps existed). A missing,
+     * malformed, or future timestamp is trusted once and immediately re-stamped to {@code now} on
+     * the per-field key so the next pass has a governed baseline.
+     */
+    boolean isFieldFresh(GatherType type, Long value, ConfigurationKeyEnum perFieldKey) {
+        if (value == null || value == 0L) {
+            // 0 is the config default and means "never read". Such a field has no timestamp
+            // either, so the trust-once path below would otherwise treat the default as real data.
+            return false;
+        }
+        String perFieldRaw = profile.getConfig(perFieldKey, String.class);
+        String raw = (perFieldRaw != null && !perFieldRaw.isBlank())
+                ? perFieldRaw
+                : profile.getConfig(ConfigurationKeyEnum.RESOURCE_STOCKPILE_LAST_READ_STRING, String.class);
+
+        if (raw == null || raw.isBlank()) {
+            // No timestamp anywhere for this field -- a legacy cache. Trust it this pass rather
+            // than discarding real data over a bookkeeping gap, but stamp it now so the NEXT pass
+            // has a real baseline instead of repeating this same ungoverned trust forever.
+            restampFieldRead(perFieldKey, LocalDateTime.now());
+            return true;
+        }
+        try {
+            LocalDateTime lastRead = LocalDateTime.parse(raw);
+            LocalDateTime now = LocalDateTime.now();
+            if (lastRead.isAfter(now)) {
+                logDebug(type + " stockpile timestamp " + lastRead + " is in the future (clock skew or a "
+                        + "bad write) -- trusting it this once but re-stamping to now.");
+                restampFieldRead(perFieldKey, now);
+                return true;
+            }
+            if (Duration.between(lastRead, now).compareTo(STOCKPILE_STALE_AFTER) > 0) {
+                logDebug(type + " stockpile last refreshed " + lastRead + ", older than " + STOCKPILE_STALE_AFTER
+                        + " -- excluding it from this pass's Smart Gathering priority.");
+                return false;
+            }
+            return true;
+        } catch (Exception e) {
+            logDebug("Unparseable " + type + " stockpile timestamp '" + raw + "' -- trusting it this once, "
+                    + "re-stamping to now so a permanently-malformed value can't bypass staleness forever.");
+            restampFieldRead(perFieldKey, LocalDateTime.now());
+            return true;
+        }
+    }
+
+
+    /**
+     * Re-stamps a per-field stockpile read time AND arms persistence for it.
+     *
+     * <p>{@code profile.setConfig} alone only mutates the in-memory descriptor.
+     * {@link dev.frostguard.engine.schedule.DelayedTask#run()} reloads the profile from the
+     * database before each task and writes changed settings back only when {@code
+     * shouldUpdateConfig} is set, so a re-stamp that does not arm it is discarded before the next
+     * pass ever reads it. That turned each "trust this value once" branch into trusting it every
+     * pass, indefinitely, which is the opposite of what the re-stamp exists to prevent.</p>
+     *
+     * <p>Both halves live here so the pairing cannot be half-applied at a new call site.</p>
+     */
+    private void restampFieldRead(ConfigurationKeyEnum perFieldKey, LocalDateTime when) {
+        profile.setConfig(perFieldKey, when.toString());
+        setShouldUpdateConfig(true);
     }
 
     private boolean refillRotationPool(List<GatherType> activeMarches, Set<GatherType> unavailableThisRun) {
@@ -989,48 +1202,112 @@ public class GatherRoutine extends DelayedTask {
     // - Bear Trap (with recall+rally): recall all gather troops, defer past Bear end
     // - Dual-event (Intel+Bear both within 15 min): defer past BOTH to avoid pointless round-trips
     private boolean checkHighPriorityEventConflict() {
-        boolean intelNeedsFullRecall = intelEnabled && intelRecall && !intelSmart;
-        boolean intelNeedsSmartDefer = intelEnabled && (intelRecall || intelSmart);
-        boolean intelPendingSoon     = intelNeedsSmartDefer
-                                       && isEventPendingWithin(TpDailyTaskEnum.INTEL, DUAL_EVENT_LOOKAHEAD_MINUTES);
-
+        // ---- Bear Trap: hard deadline, must pre-empt BEFORE it executes ----
+        // Bear can't publish an in-run claim — it runs on a fixed alliance schedule and must have its
+        // slots the moment it fires — so Gather still recalls ALL marches and defers past the event.
         boolean bearNeedsRecall  = isBearTrapRecallRequired();
         boolean bearPendingSoon  = bearNeedsRecall
                                    && isEventPendingWithin(TpDailyTaskEnum.BEAR_TRAP, DUAL_EVENT_LOOKAHEAD_MINUTES);
 
-        if (!intelPendingSoon && !bearPendingSoon) return false;
+        // ---- Intel flag gate ----
+        // Only treat a pending Intel as march-consuming demand when its last pass had a mission.
+        // Intel reschedules itself ~15 min out (beast recheck cap) even on an empty board, so
+        // without this gate Gather sees "Intel pending within 15 min" every cycle and never deploys.
+        boolean intelNeedsSmartDefer = intelEnabled && (intelRecall || intelSmart);
+        boolean intelHasMissions     = get(ConfigurationKeyEnum.INTEL_LAST_RUN_HAD_MISSIONS_BOOL, false);
+        boolean intelPendingSoon     = intelNeedsSmartDefer
+                                       && intelHasMissions
+                                       && isEventPendingWithin(TpDailyTaskEnum.INTEL, DUAL_EVENT_LOOKAHEAD_MINUTES);
 
-        // Recall gather marches if required by the relevant event
-        if (intelNeedsFullRecall && intelPendingSoon) {
-            logInfo("Intel (full-recall mode) pending within " + DUAL_EVENT_LOOKAHEAD_MINUTES
-                + " min. Recalling all gather marches.");
-            recallAllGatherMarchesAndTrack();
-        } else if (intelPendingSoon) {
-            logInfo("Intel (smart mode) pending within " + DUAL_EVENT_LOOKAHEAD_MINUTES
-                + " min. Deferring gather without full recall (duplicates only).");
-        }
         if (bearPendingSoon) {
             logInfo("Bear Trap (recall+rally mode) pending within " + DUAL_EVENT_LOOKAHEAD_MINUTES
                 + " min. Recalling all gather marches.");
             recallAllGatherMarchesAndTrack();
+            LocalDateTime deferUntil = computeDeferTimeAfterHighPriorityEvents(intelPendingSoon, true);
+            logInfo(String.format("Deferring gather until after Bear Trap%s at %s.",
+                intelPendingSoon ? " (and Intel)" : "", GameTimeUtils.formatCountdown(deferUntil)));
+            reschedule(deferUntil);
+            return true;
         }
 
-        // Compute defer time past all pending high-priority events
-        LocalDateTime deferUntil = computeDeferTimeAfterHighPriorityEvents(intelPendingSoon, bearPendingSoon);
-
-        if (intelPendingSoon && bearPendingSoon) {
-            logInfo(String.format(
-                "Intel AND Bear Trap both pending within %d min. Deferring gather until after both events at %s.",
-                DUAL_EVENT_LOOKAHEAD_MINUTES, GameTimeUtils.formatCountdown(deferUntil)));
-        } else if (intelPendingSoon) {
-            logInfo(String.format("Intel pending within %d min. Deferring gather until %s.",
-                DUAL_EVENT_LOOKAHEAD_MINUTES, GameTimeUtils.formatCountdown(deferUntil)));
-        } else {
-            logInfo(String.format("Bear Trap pending within %d min. Deferring gather until %s.",
-                DUAL_EVENT_LOOKAHEAD_MINUTES, GameTimeUtils.formatCountdown(deferUntil)));
+        // ---- Claim-driven demand for the other troop tasks (Intel/Polar/Beast) ----
+        // Intel only publishes its own claim once it runs, so an imminent Intel with missions is
+        // claimed here on its behalf, sized to the configured marches, so Gather frees those slots
+        // ahead of the run. Polar and Beast publish their own claims when they confirm real work.
+        if (intelPendingSoon) {
+            int intelMarches = Math.max(1, Math.min(6,
+                    get(ConfigurationKeyEnum.GATHER_ACTIVE_MARCH_QUEUE_INT, 6)));
+            TroopSlotPolicy.claim(profile, TpDailyTaskEnum.INTEL, intelMarches,
+                    LocalDateTime.now().plusMinutes(DUAL_EVENT_LOOKAHEAD_MINUTES + TROOP_RETURN_MARGIN_MINUTES));
         }
+
+        // Fast path: with no outstanding claims nothing competes for slots, so deploy without an
+        // extra march-screen read on the common no-conflict cycle.
+        if (TroopSlotPolicy.activeClaims(profile).isEmpty()) {
+            return false;
+        }
+
+        int idle = countIdlePhysicalMarchSlots();
+        int toRecall = TroopSlotPolicy.slotsToRecallForGather(profile, idle);
+        if (toRecall <= 0) {
+            // Claims exist but idle slots already cover them — deploy gather into the remainder now.
+            return false;
+        }
+
+        int recalled = recallLongestGatherMarches(toRecall);
+        LocalDateTime expiry = TroopSlotPolicy.soonestClaimExpiry(profile);
+        LocalDateTime deferUntil = (expiry != null ? expiry
+                : LocalDateTime.now().plusMinutes(DUAL_EVENT_LOOKAHEAD_MINUTES))
+                .plusMinutes(TROOP_RETURN_MARGIN_MINUTES);
+        logInfo(String.format(
+            "Troop-slot demand (%d slot(s) short of %d idle) recalled %d longest gather march(es). "
+                + "Deferring gather until %s (soonest claim expiry + %d min margin).",
+            toRecall, idle, recalled, GameTimeUtils.formatCountdown(deferUntil), TROOP_RETURN_MARGIN_MINUTES));
         reschedule(deferUntil);
         return true;
+    }
+
+    // Counts physically idle march slots from the live queue, so the claim ledger can compute how
+    // many gather marches must be recalled to satisfy demand.
+    private int countIdlePhysicalMarchSlots() {
+        try {
+            return (int) marchHelper.readMarchQueue().stream()
+                    .filter(slot -> slot.availability() == MarchSlotAvailability.IDLE)
+                    .count();
+        } catch (Exception e) {
+            logDebug("Could not read idle march slot count: " + e.getMessage());
+            return 0;
+        }
+    }
+
+    // Recalls exactly N gather marches, longest-returning first (they have already collected the
+    // most). Reuses the overflow-correction candidate collection and per-row recall, and stamps
+    // GATHER_LAST_RECALL_TIME so the existing return-wait handshake covers the walk home.
+    private int recallLongestGatherMarches(int n) {
+        if (n <= 0) return 0;
+        List<ActiveGatherMarchCandidate> candidates = collectActiveGatherMarchCandidatesFlow();
+        if (candidates.isEmpty()) {
+            logInfo("Troop-slot demand wanted " + n + " slot(s) freed but no active gather marches to recall.");
+            return 0;
+        }
+        List<ActiveGatherMarchCandidate> longest = candidates.stream()
+                .sorted(Comparator.comparing(ActiveGatherMarchCandidate::returnTime).reversed())
+                .limit(n)
+                .collect(Collectors.toList());
+
+        // Record BEFORE recalling so the return margin counts from now (mirrors recallAllGatherMarchesAndTrack).
+        this.lastRecallTime = LocalDateTime.now();
+        profile.setConfig(ConfigurationKeyEnum.GATHER_LAST_RECALL_TIME_STRING, lastRecallTime.toString());
+        setShouldUpdateConfig(true);
+
+        int recalled = 0;
+        for (ActiveGatherMarchCandidate c : longest) {
+            if (recallGatherMarchByQueueFlow(c, RecallReason.HIGH_PRIORITY_EVENT) == RecallAttempt.RECALLED) {
+                recalled++;
+            }
+            sleepTask(300);
+        }
+        return recalled;
     }
 
     // pernerch/2026-07-02: true when Bear Trap is configured to consume ALL gather marches.
@@ -1050,8 +1327,9 @@ public class GatherRoutine extends DelayedTask {
         try {
             DailyTask t = dailyTaskRepository.findByAccountIdAndTaskType(profile.getId(), task);
             if (t == null || t.getScheduledAt() == null) return false;
-            long minutesUntil = ChronoUnit.MINUTES.between(LocalDateTime.now(), t.getScheduledAt());
-            return minutesUntil >= 0 && minutesUntil < minutes;
+            // Compare in seconds: truncated whole minutes make the window edge flap.
+            long secondsUntil = ChronoUnit.SECONDS.between(LocalDateTime.now(), t.getScheduledAt());
+            return secondsUntil >= 0 && secondsUntil < minutes * 60L;
         } catch (Exception e) {
             return false;
         }
@@ -1060,16 +1338,18 @@ public class GatherRoutine extends DelayedTask {
     // pernerch/2026-07-02: recalls all active gather marches and records the recall timestamp.
     // Timestamp is stored both as instance field (fast) and in profile config (survives restart).
     private void recallAllGatherMarchesAndTrack() {
-        // Record BEFORE recalling so the return margin counts from now
-        this.lastRecallTime = LocalDateTime.now();
-        writeProfileSetting(ConfigurationKeyEnum.GATHER_LAST_RECALL_TIME_STRING, lastRecallTime.toString());
-        logInfo("Gather march recall for high-priority event. Recall time recorded: "
-            + lastRecallTime.format(DATETIME_FORMATTER));
+        // Stamp the recall time only when something is actually out; a phantom stamp costs a whole
+        // troop-return poll cycle for a recall that never happened.
         List<ActiveGatherMarchCandidate> candidates = collectActiveGatherMarchCandidatesFlow();
         if (candidates.isEmpty()) {
             logInfo("No active gather marches found to recall.");
             return;
         }
+        // Record BEFORE recalling so the return margin counts from now
+        this.lastRecallTime = LocalDateTime.now();
+        writeProfileSetting(ConfigurationKeyEnum.GATHER_LAST_RECALL_TIME_STRING, lastRecallTime.toString());
+        logInfo("Gather march recall for high-priority event. Recall time recorded: "
+            + lastRecallTime.format(DATETIME_FORMATTER));
         RecallBatchResult result = executeRecallBatch(candidates, candidate -> {
             RecallAttempt attempt = recallGatherMarchByQueueFlow(candidate, RecallReason.HIGH_PRIORITY_EVENT);
             if (attempt == RecallAttempt.RECALLED) sleepTask(300);
@@ -1119,16 +1399,42 @@ public class GatherRoutine extends DelayedTask {
             clearRecallState();
             return false;
         }
-        List<ActiveGatherMarchCandidate> active = collectActiveGatherMarchCandidatesFlow();
-        if (active.isEmpty()) {
-            logInfo("All recalled gather troops have returned home. Clearing recall state and proceeding with fresh deployment.");
+
+        // A recalled march is reclassified RETURNING with activityType UNKNOWN, so the
+        // activityType == GATHER candidate list would count marches still gathering and miss the
+        // ones heading home. Wait on marches that are actually returning, and back off to the
+        // soonest arrival instead of a flat one-minute poll.
+        List<MarchSlotState> returning = marchHelper.readMarchQueue().stream()
+                .filter(s -> s.movementPhase() == MarchMovementPhase.RETURNING)
+                .toList();
+        if (returning.isEmpty()) {
+            logInfo("Recalled gather troops are home (no marches returning). Clearing recall state and proceeding with fresh deployment.");
             clearRecallState();
             return false; // troops home, proceed with normal execute
         }
-        LocalDateTime retryAt = LocalDateTime.now().plusMinutes(TROOP_RETURN_RETRY_MINUTES);
+
+        LocalDateTime soonestHome = returning.stream()
+                .map(s -> s.countdown() != null
+                        ? LocalDateTime.now().plus(s.countdown())
+                        : LocalDateTime.now().plusMinutes(TROOP_RETURN_MIN_RETRY_MINUTES))
+                .min(Comparator.naturalOrder())
+                .orElse(LocalDateTime.now().plusMinutes(TROOP_RETURN_MIN_RETRY_MINUTES));
+        LocalDateTime floor = LocalDateTime.now().plusMinutes(TROOP_RETURN_MIN_RETRY_MINUTES);
+        LocalDateTime retryAt = soonestHome.plusMinutes(TROOP_RETURN_MARGIN_MINUTES);
+        if (retryAt.isBefore(floor)) retryAt = floor;
+
+        // Don't re-open the march screen before an active troop claim expires: the borrower
+        // (Intel/Polar/Beast) still holds those slots. release() pulls Gather forward as soon as
+        // the borrower finishes.
+        LocalDateTime claimExpiry = TroopSlotPolicy.soonestClaimExpiry(profile);
+        if (claimExpiry != null) {
+            LocalDateTime claimFloor = claimExpiry.plusMinutes(TROOP_RETURN_MARGIN_MINUTES);
+            if (claimFloor.isAfter(retryAt)) retryAt = claimFloor;
+        }
+
         logInfo(String.format(
-            "Recalled gather troops still returning (%d march(es) active). Rechecking in %d min at %s.",
-            active.size(), TROOP_RETURN_RETRY_MINUTES, GameTimeUtils.formatCountdown(retryAt)));
+            "Recalled gather troops still returning (%d march(es)). Rechecking at %s.",
+            returning.size(), GameTimeUtils.formatCountdown(retryAt)));
         reschedule(retryAt);
         return true;
     }

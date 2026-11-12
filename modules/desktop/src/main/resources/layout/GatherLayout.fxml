@@ -60,6 +60,7 @@
                                                         <CheckBox fx:id="checkBoxDowngradeLevel" mnemonicParsing="false" text="Downgrade level if no node is found" />
                                                         <CheckBox fx:id="checkBoxRemoveHeros" mnemonicParsing="false" text="Remove 2nd and 3rd hero from march" />
                                                         <CheckBox fx:id="checkBoxNoHeroFallback" mnemonicParsing="false" text="Send without heroes if Gather hero is unavailable" />
+                                                        <CheckBox fx:id="checkBoxGatherSmartPriority" mnemonicParsing="false" text="Smart Gathering (prioritize scarcest resource by value)" wrapText="true" />
                                                     </children>
                                                 </VBox>
 

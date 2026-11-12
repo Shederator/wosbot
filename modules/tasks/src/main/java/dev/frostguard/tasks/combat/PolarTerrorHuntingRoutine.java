@@ -17,8 +17,9 @@ import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
-import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
+import dev.frostguard.engine.schedule.TroopSlotPolicy;
 import dev.frostguard.engine.service.TaskManagementService;
+import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
 import dev.frostguard.vision.convert.GameTimeUtils;
 
 import java.time.Duration;
@@ -178,6 +179,10 @@ private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
             List<MarchSlotState> marchQueue = marchHelper.readMarchQueue();
             if (marchQueue.stream().noneMatch(MarchSlotState::isIdle)) {
                 LocalDateTime retryAt = resolveNoSlotRetry(marchQueue);
+                // A rally is ready but every slot is busy: publish the demand so Gather frees one
+                // on its next run.
+                TroopSlotPolicy.claim(profile, TpDailyTaskEnum.EVENT_POLAR_TERROR, 1,
+                        retryAt.plusMinutes(2));
                 logInfo(routineLogPolarTerrorHuntingLine(String.format(
                         "Zero marches available after %d rallies. Planning next run at %s.",
                         deployedCount,
@@ -225,6 +230,8 @@ private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
             if (result.outcome() == RallyLaunchOutcome.NO_SPECIAL_REWARDS) {
                 logInfo(routineLogPolarTerrorHuntingLine(
                         "Zero special rewards left. Planning next run after daily reset."));
+                // Done for the day: drop any slot demand so gathering resumes immediately.
+                TroopSlotPolicy.release(profile, TpDailyTaskEnum.EVENT_POLAR_TERROR);
                 reschedule(GameTimeUtils.dailyResetTime().plusMinutes(30));
                 return;
             }
@@ -239,7 +246,12 @@ private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
 
             if (result.outcome() == RallyLaunchOutcome.MARCH_QUEUE_FULL) {
                 logInfo(routineLogPolarTerrorHuntingLine("March queue popup detected after Rally. Waiting for a march slot to return."));
-                reschedule(LocalDateTime.now().plusMinutes(UNKNOWN_MARCH_RETRY_MINUTES));
+                // Same condition as the proactive every-slot-busy check above, found after the
+                // launch attempt. This return skips the completion release below, so the claim
+                // survives until Gather can observe it.
+                LocalDateTime retryAt = LocalDateTime.now().plusMinutes(UNKNOWN_MARCH_RETRY_MINUTES);
+                TroopSlotPolicy.claim(profile, TpDailyTaskEnum.EVENT_POLAR_TERROR, 1, retryAt.plusMinutes(2));
+                reschedule(retryAt);
                 return;
             }
 
@@ -292,6 +304,10 @@ private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
                 deferForStamina(requiredStaminaForRally(), refreshStaminaLevel, nextRun, marchReadyAt);
             }
         }
+
+        // All configured rallies are out and tracked via activeDeployments, so release the slot
+        // demand; Gather is pulled forward to refill the remaining idle slots.
+        TroopSlotPolicy.release(profile, TpDailyTaskEnum.EVENT_POLAR_TERROR);
 
         reschedule(nextRun);
         logInfo(routineLogPolarTerrorHuntingLine(String.format(

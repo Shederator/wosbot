@@ -21,7 +21,7 @@ public class GatherLayoutController extends AbstractProfileController {
 	private CheckBox checkBoxGatherResources, checkBoxGatherCoal, checkBoxGatherIron,
 			checkBoxGatherMeat, checkBoxGatherWood,
 			checkBoxGatherSpeedBoost, checkBoxOnlyFullResources, checkBoxDowngradeLevel,
-			checkBoxRemoveHeros, checkBoxNoHeroFallback, checkBoxTestPreemption;
+			checkBoxRemoveHeros, checkBoxNoHeroFallback, checkBoxTestPreemption, checkBoxGatherSmartPriority;
 	@FXML
 	private ComboBox<Integer> comboBoxActiveMarchQueue, comboBoxLevelCoal,
 			comboBoxLevelIron, comboBoxLevelMeat,
@@ -54,7 +54,8 @@ public class GatherLayoutController extends AbstractProfileController {
 			new GatherSwitch(checkBoxDowngradeLevel, ConfigurationKeyEnum.GATHER_DOWNGRADE_LEVEL_BOOL),
 			new GatherSwitch(checkBoxRemoveHeros, ConfigurationKeyEnum.GATHER_REMOVE_HEROS_BOOL),
 			new GatherSwitch(checkBoxNoHeroFallback, ConfigurationKeyEnum.GATHER_NO_HERO_FALLBACK_BOOL),
-			new GatherSwitch(checkBoxTestPreemption, ConfigurationKeyEnum.TEST_GATHER_DEPLOY_PREEMPTION_BOOL)
+			new GatherSwitch(checkBoxTestPreemption, ConfigurationKeyEnum.TEST_GATHER_DEPLOY_PREEMPTION_BOOL),
+			new GatherSwitch(checkBoxGatherSmartPriority, ConfigurationKeyEnum.GATHER_SMART_PRIORITY_BOOL)
 		);
 	}
 
