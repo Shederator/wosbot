@@ -1,6 +1,7 @@
 package dev.frostguard.engine.service;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.frostguard.api.configs.FlowStepKind;
@@ -175,6 +176,31 @@ class TaskCodeGeneratorTest {
 
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                 () -> new TaskCodeGenerator().generate(blueprint, "invalid_deals", "Invalid Deals"));
+    }
+
+    @Test
+    void generatesBuildingNavigationWithSafeFailureHandling() {
+        AutomationBlueprint blueprint = new AutomationBlueprint("Open Farm");
+        AutomationStep step = new AutomationStep(1, FlowStepKind.BUILDING_NAVIGATION);
+        step.setParam(AutomationStep.PARAM_BUILDING_TARGET, "FARM");
+        blueprint.addNode(step);
+
+        String source = new TaskCodeGenerator().generate(blueprint, "FarmNavigationTask", "Open Farm");
+
+        assertTrue(source.contains("import dev.frostguard.engine.helper.NavigationHelper.BuildingDestination;"));
+        assertTrue(source.contains("if (!navigationHelper.navigateToBuilding(BuildingDestination.FARM))"));
+        assertTrue(source.contains("Building navigation failed: Farm"));
+    }
+
+    @Test
+    void rejectsInvalidBuildingNavigationTarget() {
+        AutomationBlueprint blueprint = new AutomationBlueprint("Invalid building");
+        AutomationStep step = new AutomationStep(7, FlowStepKind.BUILDING_NAVIGATION);
+        step.setParam(AutomationStep.PARAM_BUILDING_TARGET, "UNKNOWN");
+        blueprint.addNode(step);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new TaskCodeGenerator().generate(blueprint, "InvalidBuildingTask", "Invalid building"));
     }
 
     @Test

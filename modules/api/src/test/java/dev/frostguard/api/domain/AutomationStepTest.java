@@ -67,6 +67,14 @@ class AutomationStepTest {
                 new AutomationStep(3, FlowStepKind.ALLIANCE_NAVIGATION).describeBriefly());
     }
 
+    @Test
+    void summarizesBuildingSelectionForTheEditor() {
+        AutomationStep step = new AutomationStep(1, FlowStepKind.BUILDING_NAVIGATION);
+        step.setParam(AutomationStep.PARAM_BUILDING_TARGET, "FARM");
+
+        assertEquals("Building: Farm", step.describeBriefly());
+    }
+
     /** Every kind must produce a summary; none may throw. */
     @Test
     void summarizesEveryStepKind() {

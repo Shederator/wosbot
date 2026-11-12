@@ -17,6 +17,7 @@ public enum FlowStepKind {
     ALLIANCE_NAVIGATION("Alliance Navigation", "Open a selected Alliance menu"),
     EVENT_NAVIGATION("Event Navigation", "Open a selected Event menu"),
     DEALS_NAVIGATION("Deals Navigation", "Open a selected Deals destination"),
+    BUILDING_NAVIGATION("Building Navigation", "Open a selected City building"),
     NAVIGATE("Navigate", "Ensure correct screen location (Home/World)");
 
     private final String label;

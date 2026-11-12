@@ -53,6 +53,7 @@ public enum TpDailyTaskEnum {
     /* ── daily objectives ── */
 
     DAILY_MISSIONS         (31,  "Daily Missions",               ConfigurationKeyEnum.DAILY_MISSION_BOOL,                     RoutineCategory.DAILY_OBJECTIVE),
+    BAKERY_FARM_COLLECT    (13,  "Collect Bakery and Farm",      ConfigurationKeyEnum.BAKERY_FARM_COLLECT_BOOL,               RoutineCategory.DAILY_OBJECTIVE),
     EXPERT_AGNES_INTEL     (34,  "Expert Agnes Intel",           ConfigurationKeyEnum.EXPERT_AGNES_INTEL_BOOL,                RoutineCategory.DAILY_OBJECTIVE),
     EXPERT_ROMULUS_TAG     (35,  "Expert Romulus Tag",           ConfigurationKeyEnum.EXPERT_ROMULUS_TAG_BOOL,                 RoutineCategory.DAILY_OBJECTIVE),
     EXPERT_ROMULUS_TROOPS  (36,  "Expert Romulus Troops",        ConfigurationKeyEnum.EXPERT_ROMULUS_TROOPS_BOOL,              RoutineCategory.DAILY_OBJECTIVE),

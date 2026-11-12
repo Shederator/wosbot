@@ -221,6 +221,20 @@ class AutomationBlueprintSerializationTest {
     }
 
     @Test
+    void preservesBuildingDestinationAcrossSaveAndReload() throws Exception {
+        AutomationBlueprint blueprint = new AutomationBlueprint("building probe");
+        AutomationStep building = new AutomationStep(3, FlowStepKind.BUILDING_NAVIGATION);
+        building.setParam(AutomationStep.PARAM_BUILDING_TARGET, "FARM");
+        blueprint.addNode(building);
+
+        AutomationBlueprint reloaded = mapper.readValue(
+                mapper.writeValueAsString(blueprint), AutomationBlueprint.class);
+
+        assertEquals(FlowStepKind.BUILDING_NAVIGATION, reloaded.getSteps().get(0).getKind());
+        assertEquals("FARM", reloaded.getSteps().get(0).getParam(AutomationStep.PARAM_BUILDING_TARGET));
+    }
+
+    @Test
     void keepsInsertedEntryStepAndConnectionsAcrossSaveAndReload() throws Exception {
         AutomationBlueprint imported = mapper.readValue(
                 mapper.writeValueAsString(sampleFlow()), AutomationBlueprint.class);

@@ -30,6 +30,7 @@ import dev.frostguard.engine.nav.SidebarSection;
 import dev.frostguard.engine.helper.NavigationHelper.AllianceMenu;
 import dev.frostguard.engine.helper.NavigationHelper.EventMenu;
 import dev.frostguard.engine.helper.NavigationHelper.DealsTarget;
+import dev.frostguard.engine.helper.NavigationHelper.BuildingDestination;
 import dev.frostguard.vision.logging.ProfileContextLogger;
 
 class TaskBuilderServiceTest {
@@ -217,6 +218,79 @@ class TaskBuilderServiceTest {
             node.setExecuted(true);
 
             assertFalse(service.executeNode(node));
+            assertFalse(node.isExecuted());
+        } finally {
+            restoreWorkspace(originalWorkspace);
+        }
+    }
+
+    @Test
+    void executesBuildingNavigationWithTheSelectedProfileAndTarget() {
+        String originalWorkspace = System.getProperty(WorkspacePaths.WORKSPACE_PROPERTY);
+        System.setProperty(WorkspacePaths.WORKSPACE_PROPERTY, tempDir.toString());
+        try {
+            AtomicReference<BuildingDestination> observed = new AtomicReference<>();
+            TaskBuilderService service = new TaskBuilderService(new ObjectMapper(),
+                    (device, profile, tab) -> true,
+                    new TaskBuilderService.SidebarNavigationAction() {
+                        @Override
+                        public boolean openSection(String device, AccountDescriptor profile, SidebarSection section) {
+                            return true;
+                        }
+
+                        @Override
+                        public boolean navigateTo(String device, AccountDescriptor profile,
+                                                  SidebarDestination destination) {
+                            return true;
+                        }
+                    },
+                    (device, profile, target) -> true,
+                    (device, profile, target) -> true,
+                    (device, profile, target) -> true,
+                    (device, profile, target) -> { observed.set(target); return true; });
+            AccountDescriptor profile = new AccountDescriptor(42L, "Test Profile", "3", true, 1L, 30L);
+            service.startSession("Building probe", profile);
+            AutomationStep node = new AutomationStep(1, FlowStepKind.BUILDING_NAVIGATION);
+            node.setParam(AutomationStep.PARAM_BUILDING_TARGET, BuildingDestination.FARM.name());
+
+            assertTrue(service.executeNode(node));
+            assertEquals(BuildingDestination.FARM, observed.get());
+            assertTrue(node.isExecuted());
+        } finally {
+            restoreWorkspace(originalWorkspace);
+        }
+    }
+
+    @Test
+    void rejectsInvalidBuildingTargetWithoutCallingNavigator() {
+        String originalWorkspace = System.getProperty(WorkspacePaths.WORKSPACE_PROPERTY);
+        System.setProperty(WorkspacePaths.WORKSPACE_PROPERTY, tempDir.toString());
+        try {
+            AtomicBoolean called = new AtomicBoolean();
+            TaskBuilderService service = new TaskBuilderService(new ObjectMapper(),
+                    (device, profile, tab) -> true,
+                    new TaskBuilderService.SidebarNavigationAction() {
+                        @Override
+                        public boolean openSection(String device, AccountDescriptor profile, SidebarSection section) {
+                            return true;
+                        }
+
+                        @Override
+                        public boolean navigateTo(String device, AccountDescriptor profile,
+                                                  SidebarDestination destination) {
+                            return true;
+                        }
+                    },
+                    (device, profile, target) -> true,
+                    (device, profile, target) -> true,
+                    (device, profile, target) -> true,
+                    (device, profile, target) -> { called.set(true); return true; });
+            service.startSession("Building probe", new AccountDescriptor(42L, "Test Profile", "3", true, 1L, 30L));
+            AutomationStep node = new AutomationStep(1, FlowStepKind.BUILDING_NAVIGATION);
+            node.setParam(AutomationStep.PARAM_BUILDING_TARGET, "UNKNOWN");
+
+            assertFalse(service.executeNode(node));
+            assertFalse(called.get());
             assertFalse(node.isExecuted());
         } finally {
             restoreWorkspace(originalWorkspace);
