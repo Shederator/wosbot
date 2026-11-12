@@ -3,6 +3,7 @@ package dev.frostguard.app.panel.combat;
 import dev.frostguard.app.shared.AbstractProfileController;
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
 import dev.frostguard.api.domain.FormationSlots;
+import dev.frostguard.api.configs.PolarTerrorExpertBonusState;
 import dev.frostguard.api.configs.PolarTerrorMode;
 import dev.frostguard.app.panel.profile.ProfileAux;
 import javafx.fxml.FXML;
@@ -77,6 +78,9 @@ public class PolarTerrorLayoutController extends AbstractProfileController {
     private ComboBox<String> comboBoxPolarTerrorMode;
 
     @FXML
+    private ComboBox<String> comboBoxPolarTerrorExpertBonus;
+
+    @FXML
     private CheckBox checkBoxEnableBerserkCryptid;
 
     @FXML
@@ -145,6 +149,9 @@ public class PolarTerrorLayoutController extends AbstractProfileController {
         comboBoxPolarTerrorMode.getItems().addAll(
                 PolarTerrorMode.SPECIAL_REWARDS.getDisplayName(),
                 PolarTerrorMode.UNLIMITED.getDisplayName());
+        for (PolarTerrorExpertBonusState state : PolarTerrorExpertBonusState.values()) {
+            comboBoxPolarTerrorExpertBonus.getItems().add(state.getDisplayName());
+        }
 
         // Manual Rally Join combos
         @SuppressWarnings("unchecked")
@@ -197,6 +204,12 @@ public class PolarTerrorLayoutController extends AbstractProfileController {
         comboBoxMappings.put(comboBoxRallyTarget, ConfigurationKeyEnum.RALLY_TARGET_STRING);
 
         initializeChangeEvents();
+        comboBoxPolarTerrorExpertBonus.valueProperty().addListener((obs, oldValue, value) -> {
+            PolarTerrorExpertBonusState state = PolarTerrorExpertBonusState.fromStoredValue(value);
+            if (!isLoadingProfile && state != PolarTerrorExpertBonusState.NOT_CONFIRMED) {
+                publishWhenReady(ConfigurationKeyEnum.POLAR_TERROR_EXPERT_BONUS_LAYOUT_STRING, value);
+            }
+        });
 
         // Add listener for dynamic march flags visibility (Manual Rally)
         comboBoxBerserkCryptidMarches.valueProperty().addListener((obs, oldVal, newVal) -> {
@@ -218,6 +231,15 @@ public class PolarTerrorLayoutController extends AbstractProfileController {
     @Override
     public void onProfileLoad(ProfileAux profile) {
         super.onProfileLoad(profile);
+
+        isLoadingProfile = true;
+        try {
+            PolarTerrorExpertBonusState state = PolarTerrorExpertBonusState.fromStoredValue(
+                    profile.getConfiguration(ConfigurationKeyEnum.POLAR_TERROR_EXPERT_BONUS_LAYOUT_STRING));
+            comboBoxPolarTerrorExpertBonus.setValue(state.getDisplayName());
+        } finally {
+            isLoadingProfile = false;
+        }
 
         String storedMode = profile.getConfiguration(ConfigurationKeyEnum.POLAR_TERROR_MODE_STRING);
         if (!PolarTerrorMode.isLegacyValue(storedMode)) {

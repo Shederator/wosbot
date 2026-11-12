@@ -91,6 +91,11 @@ public final class CommonOCRSettings {
             buildConfig("SpecialRewardsleft0123456789() ", true,
                     255, 255, 255, TextLayout.SINGLE_LINE);
 
+    // Expert Bonus heading: "Expert Bonus (Remaining Chests: 3)" in white on a blue section bar.
+    public static final OcrSettingsData POLAR_EXPERT_BONUS_SETTINGS =
+            buildConfig("ExpertBonusRemainingChests0123456789(): ", true,
+                    255, 255, 255, TextLayout.SINGLE_LINE);
+
     // extraction pattern for pulling first integer from noisy OCR text
     public static final Pattern NUMBER_PATTERN = Pattern.compile(".*?(\\d+).*");
 

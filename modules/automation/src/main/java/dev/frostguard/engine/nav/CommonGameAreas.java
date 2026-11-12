@@ -239,6 +239,9 @@ public final class CommonGameAreas {
     public static final AreaData POLAR_SEARCH_BUTTON = region(301, 1200, 412, 1229);
     // A newly revealed section heading enters this strip before more reward rows are swiped into view.
     public static final AreaData POLAR_SPECIAL_REWARDS_HEADER = region(35, 1090, 685, 1185);
+    // When Expert Bonus is active, the Reward Details dialog initially presents both headers here.
+    public static final AreaData POLAR_EXPERT_BONUS_HEADER = region(35, 510, 685, 565);
+    public static final AreaData POLAR_SPECIAL_REWARDS_WITH_EXPERT_HEADER = region(35, 800, 685, 860);
     public static final PointData POLAR_REWARD_DETAILS_CLOSE = point(665, 195);
 
     // ── stamina "Obtain more" dialog ─────────────────────────────────

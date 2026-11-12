@@ -36,6 +36,13 @@
                                 <ComboBox fx:id="comboBoxPolarTerrorMode" prefWidth="150.0" />
                             </HBox>
                             <HBox alignment="CENTER_LEFT" spacing="14">
+                                <Label styleClass="task-field-label" text="Expert Bonus" minWidth="140" />
+                                <ComboBox fx:id="comboBoxPolarTerrorExpertBonus" prefWidth="150.0" />
+                            </HBox>
+                            <Label style="-fx-text-fill: #f59e0b; -fx-font-size: 11px;"
+                                   text="Leave Not defined to detect Expert Bonus on the first Special Rewards check. Select Exists or Missing to override the detected layout."
+                                   wrapText="true" />
+                            <HBox alignment="CENTER_LEFT" spacing="14">
                                 <Label styleClass="task-field-label" text="Level" minWidth="140" />
                                 <ComboBox fx:id="comboBoxPolarTerrorLevel" prefWidth="150.0" />
                             </HBox>
