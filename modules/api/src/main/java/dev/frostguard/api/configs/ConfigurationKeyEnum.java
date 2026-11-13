@@ -174,6 +174,7 @@ public enum ConfigurationKeyEnum {
     POLAR_TERROR_MARCH_6_FLAG_STRING            ("No Flag", String.class,        ConfigCategory.EVENTS),
     POLAR_TERROR_MARCHES_INT                    ("1",       Integer.class,       ConfigCategory.EVENTS),
     POLAR_TERROR_MODE_STRING                    (PolarTerrorMode.SPECIAL_REWARDS.getDisplayName(), String.class, ConfigCategory.EVENTS),
+    POLAR_TERROR_EXPERT_BONUS_LAYOUT_STRING     (PolarTerrorExpertBonusState.NOT_DEFINED.getDisplayName(), String.class, ConfigCategory.EVENTS),
     POLAR_TERROR_USE_STAMINA_ITEMS_BOOL         ("false",   Boolean.class,       ConfigCategory.EVENTS),
     POLAR_TERROR_STAMINA_ITEM_RESERVE_INT       ("0",       Integer.class,       ConfigCategory.EVENTS),
     RALLY_ENABLED_BOOL                          ("false",   Boolean.class,       ConfigCategory.EVENTS),

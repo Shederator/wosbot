@@ -1,10 +1,12 @@
 package dev.frostguard.tasks.combat;
 
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
+import dev.frostguard.api.configs.PolarTerrorExpertBonusState;
 import dev.frostguard.api.configs.PolarTerrorMode;
 import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
+import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.MarchSlotState;
 import dev.frostguard.api.domain.PointData;
@@ -18,6 +20,7 @@ import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
+import dev.frostguard.engine.service.ConfigService;
 import dev.frostguard.engine.service.TaskManagementService;
 import dev.frostguard.vision.convert.GameTimeUtils;
 
@@ -25,6 +28,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -99,6 +103,17 @@ private boolean useStaminaItems;
 
 private int staminaItemReserve;
 
+private PolarTerrorExpertBonusState configuredExpertBonusState;
+
+private PolarTerrorExpertBonusState effectiveExpertBonusState;
+
+private boolean rewardDetailsLayoutResolved;
+
+private String specialRewardsFailureSnapshot;
+
+// This exists only for one task visit. The game remains the source of truth at the next visit.
+private PolarSpecialRewardsBudget specialRewardsBudget = new PolarSpecialRewardsBudget();
+
 public PolarTerrorHuntingRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
         super(profile, tpTask);
     }
@@ -119,12 +134,6 @@ public PolarTerrorHuntingRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTa
         STAMINA_ITEMS_DISABLED,
         STAMINA_ITEMS_INSUFFICIENT,
         STAMINA_REFILL_FAILED
-    }
-
-    private enum SpecialRewardsStatus {
-        AVAILABLE,
-        EXHAUSTED,
-        READ_FAILED
     }
 
 private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
@@ -255,18 +264,35 @@ private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
             }
 
             if (!result.success()) {
-                logInfo(routineLogPolarTerrorHuntingLine(String.format(
-                        "Rally attempt %d/%d result=%s detail=%s. Planning next run in %d minutes.",
+                LocalDateTime retryAt = LocalDateTime.now().plusMinutes(RALLY_FAILURE_RETRY_MINUTES);
+                String snapshot = specialRewardsFailureSnapshot != null
+                        ? specialRewardsFailureSnapshot
+                        : TaskDiagnosticSnapshots.capture(
+                                emuManager, EMULATOR_NUMBER, "polarterror", failureSnapshotType(result.outcome()));
+                logWarning(routineLogPolarTerrorHuntingLine(String.format(
+                        "Rally attempt %d/%d result=%s detail=%s. Planning next run at %s; %s.",
                         deployedCount + 1,
                         maxMarches,
                         result.outcome(),
                         result.detail(),
-                        RALLY_FAILURE_RETRY_MINUTES)));
-                reschedule(LocalDateTime.now().plusMinutes(RALLY_FAILURE_RETRY_MINUTES));
+                        retryAt.format(DATETIME_FORMATTER),
+                        snapshot)));
+                reschedule(retryAt);
                 return;
             }
 
             deployedCount++;
+            if (limitedHunting) {
+                int remainingRewards = specialRewardsBudget.consumeConfirmedRally();
+                logInfo(routineLogPolarTerrorHuntingLine(
+                        "Special rewards visit budget: " + remainingRewards + " left after confirmed rally"));
+                if (remainingRewards == 0) {
+                    logInfo(routineLogPolarTerrorHuntingLine(
+                            "Special rewards visit budget is exhausted after a confirmed rally. Planning next run after daily reset."));
+                    reschedule(GameTimeUtils.dailyResetTime().plusMinutes(30));
+                    return;
+                }
+            }
             logInfo(routineLogPolarTerrorHuntingLine("Rally #" + deployedCount + " deployed finished cleanly. Current stamina: "
                     + staminaHelper.getCurrentStamina()));
             sleepTask(1500);
@@ -346,6 +372,7 @@ private static void registerDeploymentFlow(long profileId, LocalDateTime returnT
 
 private RallyLaunchResult launchSingleRallyFlow(int polarLevel, boolean useFlag, int flagNumber,
                                                 boolean checkSpecialRewards) {
+        specialRewardsFailureSnapshot = null;
         navigationHelper.ensureCorrectScreenLocation(getRequiredStartLocation());
 
         logInfo(routineLogPolarTerrorHuntingLine(String.format("Opening Polar Terror search: level=%s",
@@ -356,14 +383,19 @@ private RallyLaunchResult launchSingleRallyFlow(int polarLevel, boolean useFlag,
         }
 
         if (checkSpecialRewards) {
-            SpecialRewardsStatus rewardsStatus = inspectSpecialRewards();
-            if (rewardsStatus == SpecialRewardsStatus.EXHAUSTED) {
-                return fail(RallyLaunchOutcome.NO_SPECIAL_REWARDS,
-                        "The reward details show zero special rewards left");
-            }
-            if (rewardsStatus == SpecialRewardsStatus.READ_FAILED) {
-                return fail(RallyLaunchOutcome.SEARCH_FAILED,
-                        "Special rewards could not be checked from the Polar Terror result");
+            if (specialRewardsBudget.requiresInitialRead()) {
+                Integer rewardsRemaining = inspectSpecialRewards();
+                if (rewardsRemaining == null) {
+                    return fail(RallyLaunchOutcome.SEARCH_FAILED,
+                            "Special rewards could not be checked from the Polar Terror result");
+                }
+                specialRewardsBudget.recordInitialRead(rewardsRemaining);
+                logInfo(routineLogPolarTerrorHuntingLine(
+                        "Special rewards visit budget initialized: " + rewardsRemaining + " left"));
+                if (specialRewardsBudget.isExhausted()) {
+                    return fail(RallyLaunchOutcome.NO_SPECIAL_REWARDS,
+                            "The reward details show zero special rewards left");
+                }
             }
             logInfo(routineLogPolarTerrorHuntingLine(
                     "Special rewards remain; searching from the retained Polar Terror panel."));
@@ -629,6 +661,13 @@ private void hydrateConfiguration() {
         Boolean configuredHighestLevel = profile.getConfig(ConfigurationKeyEnum.POLAR_TERROR_HIGHEST_LEVEL_BOOL, Boolean.class);
         this.huntHighestLevel = configuredHighestLevel != null && configuredHighestLevel;
 
+        String configuredLayout = profile.getConfig(
+                ConfigurationKeyEnum.POLAR_TERROR_EXPERT_BONUS_LAYOUT_STRING, String.class);
+        this.configuredExpertBonusState = PolarTerrorExpertBonusState.fromStoredValue(configuredLayout);
+        this.effectiveExpertBonusState = configuredExpertBonusState;
+        this.rewardDetailsLayoutResolved = false;
+        this.specialRewardsBudget = new PolarSpecialRewardsBudget();
+
         this.maxMarches = Math.min(6, Math.max(1, this.maxMarches));
 
         if (huntHighestLevel)
@@ -646,33 +685,78 @@ private void hydrateConfiguration() {
         }
     }
 
-private SpecialRewardsStatus inspectSpecialRewards() {
+private Integer inspectSpecialRewards() {
         ImageSearchResultData magnifyingGlass = templateSearchHelper.locatePattern(
                 TemplatesEnum.POLAR_TERROR_TAB_MAGNIFYING_GLASS_ICON,
                 SearchConfigConstants.SINGLE_WITH_RETRIES);
         sleepTask(500);
 
         if (!magnifyingGlass.isFound()) {
-            return SpecialRewardsStatus.READ_FAILED;
+            return null;
         }
 
         tapInside(magnifyingGlass);
         sleepTask(2000);
 
-        PolarSpecialRewardsScanner.Result result = PolarSpecialRewardsScanner.scan(
-                this::readVisibleSpecialRewardsCount,
-                () -> swipe(new PointData(363, 1088), new PointData(363, 1030)),
-                this::sleepTask);
+        resolveRewardDetailsLayout();
+        Integer remaining = searchSpecialRewardsValue(rewardDetailsLayout());
+        if (remaining == null) {
+            specialRewardsFailureSnapshot = TaskDiagnosticSnapshots.capture(
+                    emuManager, EMULATOR_NUMBER, "polarterror", "special-rewards-read-failed");
+            logWarning(routineLogPolarTerrorHuntingLine(
+                    "Special Rewards could not be read while Reward Details was open; " + specialRewardsFailureSnapshot));
+        }
         tapNear(CommonGameAreas.POLAR_REWARD_DETAILS_CLOSE);
         sleepTask(500);
-        return switch (result) {
-            case AVAILABLE -> SpecialRewardsStatus.AVAILABLE;
-            case EXHAUSTED -> SpecialRewardsStatus.EXHAUSTED;
-            case NOT_FOUND -> SpecialRewardsStatus.READ_FAILED;
-        };
+        return remaining;
     }
 
-private Integer readVisibleSpecialRewardsCount() {
+private void resolveRewardDetailsLayout() {
+        if (rewardDetailsLayoutResolved || configuredExpertBonusState != PolarTerrorExpertBonusState.NOT_DEFINED) {
+            return;
+        }
+
+        rewardDetailsLayoutResolved = true;
+        String detected = stringHelper.attemptRecognition(
+                CommonGameAreas.POLAR_EXPERT_BONUS_HEADER,
+                1,
+                0L,
+                CommonOCRSettings.POLAR_EXPERT_BONUS_SETTINGS,
+                text -> text != null && text.toLowerCase(Locale.ROOT).matches(".*expert\\s*bonus.*"),
+                String::trim);
+        PolarRewardDetailsLayout.Resolution resolution = PolarRewardDetailsLayout.resolve(
+                configuredExpertBonusState, detected != null);
+        effectiveExpertBonusState = resolution.effectiveState();
+        if (!resolution.persistExistence()) {
+            logWarning(routineLogPolarTerrorHuntingLine(
+                    "Expert Bonus layout probe was inconclusive; using the no-Expert Special Rewards mapping for this run"));
+            return;
+        }
+
+        if (ConfigService.obtain().writeAccountSetting(
+                profile,
+                ConfigurationKeyEnum.POLAR_TERROR_EXPERT_BONUS_LAYOUT_STRING,
+                PolarTerrorExpertBonusState.EXIST.getDisplayName())) {
+            configuredExpertBonusState = PolarTerrorExpertBonusState.EXIST;
+            logInfo(routineLogPolarTerrorHuntingLine("Expert Bonus layout confirmed and saved for this profile"));
+        } else {
+            logWarning(routineLogPolarTerrorHuntingLine(
+                    "Expert Bonus layout was recognized but could not be saved; using it for this run"));
+        }
+    }
+
+private PolarRewardDetailsLayout.Mapping rewardDetailsLayout() {
+        return PolarRewardDetailsLayout.resolve(effectiveExpertBonusState, false).mapping();
+    }
+
+private Integer searchSpecialRewardsValue(PolarRewardDetailsLayout.Mapping layout) {
+        AreaData headerArea = layout == PolarRewardDetailsLayout.Mapping.CONFIRMED_EXPERT_BONUS
+                ? CommonGameAreas.POLAR_SPECIAL_REWARDS_WITH_EXPERT_HEADER
+                : CommonGameAreas.POLAR_SPECIAL_REWARDS_WITHOUT_EXPERT_HEADER;
+        return readVisibleSpecialRewardsCount(headerArea);
+    }
+
+private Integer readVisibleSpecialRewardsCount(AreaData headerArea) {
         if (templateSearchHelper.locatePattern(
                 TemplatesEnum.POLAR_TERROR_TAB_SPECIAL_REWARDS,
                 SearchConfigConstants.QUICK_SEARCH).isFound()) {
@@ -681,7 +765,7 @@ private Integer readVisibleSpecialRewardsCount() {
         }
 
         Integer count = integerHelper.attemptRecognition(
-                CommonGameAreas.POLAR_SPECIAL_REWARDS_HEADER,
+                headerArea,
                 1,
                 0L,
                 CommonOCRSettings.POLAR_SPECIAL_REWARDS_SETTINGS,
@@ -696,6 +780,10 @@ private Integer readVisibleSpecialRewardsCount() {
             logInfo(routineLogPolarTerrorHuntingLine("Special rewards counter: " + count + " left"));
         }
         return count;
+    }
+
+private String failureSnapshotType(RallyLaunchOutcome outcome) {
+        return "hunt-" + outcome.name().toLowerCase(Locale.ROOT).replace('_', '-');
     }
 
 private boolean openUpPolarsMenu(int polarLevel) {
