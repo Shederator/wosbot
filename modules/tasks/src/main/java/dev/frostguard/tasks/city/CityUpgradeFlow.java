@@ -10,6 +10,8 @@ final class CityUpgradeFlow {
         CONTROL_NOT_RECOGNIZED,
         RESOURCES_NOT_OBTAINED,
         CONFIRMATION_NOT_FOUND,
+        /** Not a failure: the queue stays idle until a busy queue finishes. */
+        PREREQUISITE_BLOCKED,
         HOME_TRANSITION_NOT_CONFIRMED
     }
 

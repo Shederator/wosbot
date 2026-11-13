@@ -6,6 +6,8 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BuildingUpgradeConfirmationFlowTest {
 
@@ -34,6 +36,25 @@ class BuildingUpgradeConfirmationFlowTest {
     }
 
     @Test
+    void reportsPrerequisiteBlockedDialogInsteadOfMissingButton() {
+        RecordingUi ui = new RecordingUi(false);
+        ui.prerequisiteBlocked = true;
+
+        BuildingUpgradeConfirmationFlow.Outcome outcome = BuildingUpgradeConfirmationFlow.run(ui, 3);
+
+        assertEquals(BuildingUpgradeConfirmationFlow.Outcome.PREREQUISITE_BLOCKED, outcome);
+        assertEquals(1, ui.taps);
+        assertEquals(0, ui.waits);
+    }
+
+    @Test
+    void prerequisiteBlockNeedsGoButtonAndGreyedUpgrade() {
+        assertTrue(BuildingUpgradeConfirmationFlow.isPrerequisiteBlocked(true, 79.9));
+        assertFalse(BuildingUpgradeConfirmationFlow.isPrerequisiteBlocked(false, 79.9));
+        assertFalse(BuildingUpgradeConfirmationFlow.isPrerequisiteBlocked(true, 40));
+    }
+
+    @Test
     void boundsPostconditionChecksWhenDialogDoesNotClose() {
         RecordingUi ui = new RecordingUi(true, true, true, true);
 
@@ -51,6 +72,7 @@ class BuildingUpgradeConfirmationFlowTest {
         private int taps;
         private int waits;
         private int postconditionChecks;
+        private boolean prerequisiteBlocked;
 
         private RecordingUi(boolean buttonDetected, Boolean... dialogStates) {
             this.buttonDetected = buttonDetected;
@@ -72,6 +94,11 @@ class BuildingUpgradeConfirmationFlowTest {
         public boolean isConfirmationPending() {
             postconditionChecks++;
             return dialogStates.removeFirst();
+        }
+
+        @Override
+        public boolean isPrerequisiteBlocked() {
+            return prerequisiteBlocked;
         }
     }
 }

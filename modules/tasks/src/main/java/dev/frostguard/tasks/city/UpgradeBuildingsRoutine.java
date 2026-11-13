@@ -31,6 +31,7 @@ import static dev.frostguard.api.configs.TemplatesEnum.BUILDING_BUTTON_SPEED;
 import static dev.frostguard.api.configs.TemplatesEnum.BUILDING_BUTTON_TRAIN;
 import static dev.frostguard.api.configs.TemplatesEnum.BUILDING_BUTTON_UPGRADE;
 import static dev.frostguard.api.configs.TemplatesEnum.BUILDING_SURVIVOR_BUTTON_UPGRADE;
+import static dev.frostguard.api.configs.TemplatesEnum.GAME_HOME_SHORTCUTS_GO;
 import static dev.frostguard.api.configs.TemplatesEnum.GAME_HOME_SHORTCUTS_HELP_REQUEST4;
 import static dev.frostguard.api.configs.TemplatesEnum.GAME_HOME_SHORTCUTS_OBTAIN;
 import static dev.frostguard.api.configs.TemplatesEnum.GAME_HOME_SHORTCUTS_UPGRADE_TEXT;
@@ -48,6 +49,11 @@ private static final AreaData BUILDING_ACTION_BUTTON_AREA_VALUE = new AreaData(n
 
 private static final AreaData BUILDING_CONFIRM_UPGRADE_SEARCH_AREA_VALUE =
         new AreaData(new PointData(350, 900), new PointData(700, 1255));
+
+static final AreaData BUILDING_REQUIREMENT_GO_AREA_VALUE =
+        new AreaData(new PointData(480, 250), new PointData(700, 1000));
+
+static final int REQUIREMENT_GO_THRESHOLD = 85;
 
 static final AreaData BUILDING_NAME_AREA_VALUE = new AreaData(new PointData(260, 510), new PointData(510, 575));
 
@@ -740,14 +746,28 @@ private FailureReason confirmDetectedBuildingUpgrade() {
                         diagnostics.decision(frame, "confirmation=" + action + "; home=" + home);
                         return action.isFound() || !home.isFound();
                     }
+
+                    @Override
+                    public boolean isPrerequisiteBlocked() {
+                        checkPreemption();
+                        RawImageData frame = emuManager.captureScreen(EMULATOR_NUMBER);
+                        ImageSearchResultData go = locateOnFrame(frame, GAME_HOME_SHORTCUTS_GO,
+                                BUILDING_REQUIREMENT_GO_AREA_VALUE, REQUIREMENT_GO_THRESHOLD);
+                        ImageSearchResultData upgrade = locateOnFrame(frame, GAME_HOME_SHORTCUTS_UPGRADE_TEXT,
+                                BUILDING_CONFIRM_UPGRADE_SEARCH_AREA_VALUE, UPGRADE_CONFIRMATION_THRESHOLD);
+                        diagnostics.decision(frame, "prerequisite go=" + go + "; upgrade=" + upgrade);
+                        return BuildingUpgradeConfirmationFlow.isPrerequisiteBlocked(go.isFound(), upgrade.getMatchScore());
+                    }
                 }, BUILDING_CONTROL_CHECKS);
         if (outcome == BuildingUpgradeConfirmationFlow.Outcome.CONFIRMED) {
             logInfo(routineLogUpgradeBuildingsLine("Building upgrade confirmed; Home anchor returned"));
             return null;
         }
-        return outcome == BuildingUpgradeConfirmationFlow.Outcome.BUTTON_NOT_FOUND
-                ? FailureReason.CONFIRMATION_NOT_FOUND
-                : FailureReason.HOME_TRANSITION_NOT_CONFIRMED;
+        return switch (outcome) {
+            case BUTTON_NOT_FOUND -> FailureReason.CONFIRMATION_NOT_FOUND;
+            case PREREQUISITE_BLOCKED -> FailureReason.PREREQUISITE_BLOCKED;
+            default -> FailureReason.HOME_TRANSITION_NOT_CONFIRMED;
+        };
     }
 
 private ImageSearchResultData locateConfirmationWithEvidence() {
@@ -993,7 +1013,8 @@ private QueueHandlingResult handleQueue(QueueReadout queueResult) {
                 if (result.failure() == null) {
                     logInfo(routineLogUpgradeBuildingsLine("Recommended building handled; queue="
                             + queueResult.queueNumber() + "; attempt=" + number
-                            + "; outcome=" + (result.result().blocker() == null ? "construction-attempted" : "production-blocked")));
+                            + "; outcome=" + (result.result().blocker() != null ? "production-blocked"
+                                    : result.result().constructionAttempted() ? "construction-attempted" : "prerequisite-blocked")));
                 }
                 return result;
             }
@@ -1064,6 +1085,11 @@ private Attempt<QueueHandlingResult> handleQueueAttempt(QueueReadout queueResult
     }
 
 private Attempt<QueueHandlingResult> buildingAttempt(FailureReason failure) {
+        if (failure == FailureReason.PREREQUISITE_BLOCKED) {
+            logInfo(routineLogUpgradeBuildingsLine("Recommended building has an unmet requirement (Go in Requires, Upgrade greyed);"
+                    + " leaving the queue idle until a busy queue finishes"));
+            return Attempt.completed(new QueueHandlingResult(false, null));
+        }
         return failure == null ? Attempt.completed(new QueueHandlingResult(true, null))
                 : Attempt.unresolved(failure);
     }
