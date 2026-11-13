@@ -111,6 +111,9 @@ private boolean rewardDetailsLayoutResolved;
 
 private String specialRewardsFailureSnapshot;
 
+// This exists only for one task visit. The game remains the source of truth at the next visit.
+private PolarSpecialRewardsBudget specialRewardsBudget = new PolarSpecialRewardsBudget();
+
 public PolarTerrorHuntingRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
         super(profile, tpTask);
     }
@@ -131,12 +134,6 @@ public PolarTerrorHuntingRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTa
         STAMINA_ITEMS_DISABLED,
         STAMINA_ITEMS_INSUFFICIENT,
         STAMINA_REFILL_FAILED
-    }
-
-    private enum SpecialRewardsStatus {
-        AVAILABLE,
-        EXHAUSTED,
-        READ_FAILED
     }
 
 private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
@@ -285,6 +282,17 @@ private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
             }
 
             deployedCount++;
+            if (limitedHunting) {
+                int remainingRewards = specialRewardsBudget.consumeConfirmedRally();
+                logInfo(routineLogPolarTerrorHuntingLine(
+                        "Special rewards visit budget: " + remainingRewards + " left after confirmed rally"));
+                if (remainingRewards == 0) {
+                    logInfo(routineLogPolarTerrorHuntingLine(
+                            "Special rewards visit budget is exhausted after a confirmed rally. Planning next run after daily reset."));
+                    reschedule(GameTimeUtils.dailyResetTime().plusMinutes(30));
+                    return;
+                }
+            }
             logInfo(routineLogPolarTerrorHuntingLine("Rally #" + deployedCount + " deployed finished cleanly. Current stamina: "
                     + staminaHelper.getCurrentStamina()));
             sleepTask(1500);
@@ -375,14 +383,19 @@ private RallyLaunchResult launchSingleRallyFlow(int polarLevel, boolean useFlag,
         }
 
         if (checkSpecialRewards) {
-            SpecialRewardsStatus rewardsStatus = inspectSpecialRewards();
-            if (rewardsStatus == SpecialRewardsStatus.EXHAUSTED) {
-                return fail(RallyLaunchOutcome.NO_SPECIAL_REWARDS,
-                        "The reward details show zero special rewards left");
-            }
-            if (rewardsStatus == SpecialRewardsStatus.READ_FAILED) {
-                return fail(RallyLaunchOutcome.SEARCH_FAILED,
-                        "Special rewards could not be checked from the Polar Terror result");
+            if (specialRewardsBudget.requiresInitialRead()) {
+                Integer rewardsRemaining = inspectSpecialRewards();
+                if (rewardsRemaining == null) {
+                    return fail(RallyLaunchOutcome.SEARCH_FAILED,
+                            "Special rewards could not be checked from the Polar Terror result");
+                }
+                specialRewardsBudget.recordInitialRead(rewardsRemaining);
+                logInfo(routineLogPolarTerrorHuntingLine(
+                        "Special rewards visit budget initialized: " + rewardsRemaining + " left"));
+                if (specialRewardsBudget.isExhausted()) {
+                    return fail(RallyLaunchOutcome.NO_SPECIAL_REWARDS,
+                            "The reward details show zero special rewards left");
+                }
             }
             logInfo(routineLogPolarTerrorHuntingLine(
                     "Special rewards remain; searching from the retained Polar Terror panel."));
@@ -653,6 +666,7 @@ private void hydrateConfiguration() {
         this.configuredExpertBonusState = PolarTerrorExpertBonusState.fromStoredValue(configuredLayout);
         this.effectiveExpertBonusState = configuredExpertBonusState;
         this.rewardDetailsLayoutResolved = false;
+        this.specialRewardsBudget = new PolarSpecialRewardsBudget();
 
         this.maxMarches = Math.min(6, Math.max(1, this.maxMarches));
 
@@ -671,22 +685,22 @@ private void hydrateConfiguration() {
         }
     }
 
-private SpecialRewardsStatus inspectSpecialRewards() {
+private Integer inspectSpecialRewards() {
         ImageSearchResultData magnifyingGlass = templateSearchHelper.locatePattern(
                 TemplatesEnum.POLAR_TERROR_TAB_MAGNIFYING_GLASS_ICON,
                 SearchConfigConstants.SINGLE_WITH_RETRIES);
         sleepTask(500);
 
         if (!magnifyingGlass.isFound()) {
-            return SpecialRewardsStatus.READ_FAILED;
+            return null;
         }
 
         tapInside(magnifyingGlass);
         sleepTask(2000);
 
         resolveRewardDetailsLayout();
-        SpecialRewardsStatus status = searchSpecialRewardsValue(rewardDetailsLayout());
-        if (status == SpecialRewardsStatus.READ_FAILED) {
+        Integer remaining = searchSpecialRewardsValue(rewardDetailsLayout());
+        if (remaining == null) {
             specialRewardsFailureSnapshot = TaskDiagnosticSnapshots.capture(
                     emuManager, EMULATOR_NUMBER, "polarterror", "special-rewards-read-failed");
             logWarning(routineLogPolarTerrorHuntingLine(
@@ -694,7 +708,7 @@ private SpecialRewardsStatus inspectSpecialRewards() {
         }
         tapNear(CommonGameAreas.POLAR_REWARD_DETAILS_CLOSE);
         sleepTask(500);
-        return status;
+        return remaining;
     }
 
 private void resolveRewardDetailsLayout() {
@@ -715,7 +729,7 @@ private void resolveRewardDetailsLayout() {
         effectiveExpertBonusState = resolution.effectiveState();
         if (!resolution.persistExistence()) {
             logWarning(routineLogPolarTerrorHuntingLine(
-                    "Expert Bonus layout probe was inconclusive; using the legacy Special Rewards mapping for this run"));
+                    "Expert Bonus layout probe was inconclusive; using the no-Expert Special Rewards mapping for this run"));
             return;
         }
 
@@ -735,28 +749,11 @@ private PolarRewardDetailsLayout.Mapping rewardDetailsLayout() {
         return PolarRewardDetailsLayout.resolve(effectiveExpertBonusState, false).mapping();
     }
 
-private SpecialRewardsStatus searchSpecialRewardsValue(PolarRewardDetailsLayout.Mapping layout) {
-        if (layout == PolarRewardDetailsLayout.Mapping.CONFIRMED_EXPERT_BONUS) {
-            return toSpecialRewardsStatus(readVisibleSpecialRewardsCount(
-                    CommonGameAreas.POLAR_SPECIAL_REWARDS_WITH_EXPERT_HEADER));
-        }
-
-        PolarSpecialRewardsScanner.Result result = PolarSpecialRewardsScanner.scan(
-                () -> readVisibleSpecialRewardsCount(CommonGameAreas.POLAR_SPECIAL_REWARDS_HEADER),
-                () -> swipe(new PointData(363, 1088), new PointData(363, 1030)),
-                this::sleepTask);
-        return switch (result) {
-            case AVAILABLE -> SpecialRewardsStatus.AVAILABLE;
-            case EXHAUSTED -> SpecialRewardsStatus.EXHAUSTED;
-            case NOT_FOUND -> SpecialRewardsStatus.READ_FAILED;
-        };
-    }
-
-private SpecialRewardsStatus toSpecialRewardsStatus(Integer count) {
-        if (count == null) {
-            return SpecialRewardsStatus.READ_FAILED;
-        }
-        return count == 0 ? SpecialRewardsStatus.EXHAUSTED : SpecialRewardsStatus.AVAILABLE;
+private Integer searchSpecialRewardsValue(PolarRewardDetailsLayout.Mapping layout) {
+        AreaData headerArea = layout == PolarRewardDetailsLayout.Mapping.CONFIRMED_EXPERT_BONUS
+                ? CommonGameAreas.POLAR_SPECIAL_REWARDS_WITH_EXPERT_HEADER
+                : CommonGameAreas.POLAR_SPECIAL_REWARDS_WITHOUT_EXPERT_HEADER;
+        return readVisibleSpecialRewardsCount(headerArea);
     }
 
 private Integer readVisibleSpecialRewardsCount(AreaData headerArea) {

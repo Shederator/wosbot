@@ -37,9 +37,26 @@ class PolarRewardDetailsFrameTest {
                 () -> "Special Rewards OCR='" + specialRewards + "'");
     }
 
+    @Test
+    void recognizesSpecialRewardsWithoutExpertBonusInTheInitialLayout() throws IOException, OcrException {
+        RawImageData frame = rawRgba(loadFrame("/polarterror/reward-details-without-expert-bonus-20261113.png"));
+
+        String specialRewards = OcrEngine.recognizeText(frame,
+                CommonGameAreas.POLAR_SPECIAL_REWARDS_WITHOUT_EXPERT_HEADER.topLeft(),
+                CommonGameAreas.POLAR_SPECIAL_REWARDS_WITHOUT_EXPERT_HEADER.bottomRight(),
+                CommonOCRSettings.POLAR_SPECIAL_REWARDS_SETTINGS);
+
+        assertTrue(normalize(specialRewards).matches(".*specialrewards\\(?10left.*"),
+                () -> "Special Rewards OCR='" + specialRewards + "'");
+    }
+
     private static BufferedImage loadFrame() throws IOException {
+        return loadFrame("/polarterror/reward-details-expert-bonus-20261112.png");
+    }
+
+    private static BufferedImage loadFrame(String resource) throws IOException {
         try (InputStream stream = PolarRewardDetailsFrameTest.class.getResourceAsStream(
-                "/polarterror/reward-details-expert-bonus-20261112.png")) {
+                resource)) {
             return ImageIO.read(Objects.requireNonNull(stream, "Missing Polar Terror reward details fixture"));
         }
     }
