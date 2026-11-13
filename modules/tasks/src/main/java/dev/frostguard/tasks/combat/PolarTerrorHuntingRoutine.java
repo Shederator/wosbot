@@ -109,6 +109,8 @@ private PolarTerrorExpertBonusState effectiveExpertBonusState;
 
 private boolean rewardDetailsLayoutResolved;
 
+private String specialRewardsFailureSnapshot;
+
 public PolarTerrorHuntingRoutine(AccountDescriptor profile, TpDailyTaskEnum tpTask) {
         super(profile, tpTask);
     }
@@ -266,8 +268,10 @@ private record RallyLaunchResult(RallyLaunchOutcome outcome, String detail) {
 
             if (!result.success()) {
                 LocalDateTime retryAt = LocalDateTime.now().plusMinutes(RALLY_FAILURE_RETRY_MINUTES);
-                String snapshot = TaskDiagnosticSnapshots.capture(
-                        emuManager, EMULATOR_NUMBER, "polarterror", failureSnapshotType(result.outcome()));
+                String snapshot = specialRewardsFailureSnapshot != null
+                        ? specialRewardsFailureSnapshot
+                        : TaskDiagnosticSnapshots.capture(
+                                emuManager, EMULATOR_NUMBER, "polarterror", failureSnapshotType(result.outcome()));
                 logWarning(routineLogPolarTerrorHuntingLine(String.format(
                         "Rally attempt %d/%d result=%s detail=%s. Planning next run at %s; %s.",
                         deployedCount + 1,
@@ -360,6 +364,7 @@ private static void registerDeploymentFlow(long profileId, LocalDateTime returnT
 
 private RallyLaunchResult launchSingleRallyFlow(int polarLevel, boolean useFlag, int flagNumber,
                                                 boolean checkSpecialRewards) {
+        specialRewardsFailureSnapshot = null;
         navigationHelper.ensureCorrectScreenLocation(getRequiredStartLocation());
 
         logInfo(routineLogPolarTerrorHuntingLine(String.format("Opening Polar Terror search: level=%s",
@@ -681,6 +686,12 @@ private SpecialRewardsStatus inspectSpecialRewards() {
 
         resolveRewardDetailsLayout();
         SpecialRewardsStatus status = searchSpecialRewardsValue(rewardDetailsLayout());
+        if (status == SpecialRewardsStatus.READ_FAILED) {
+            specialRewardsFailureSnapshot = TaskDiagnosticSnapshots.capture(
+                    emuManager, EMULATOR_NUMBER, "polarterror", "special-rewards-read-failed");
+            logWarning(routineLogPolarTerrorHuntingLine(
+                    "Special Rewards could not be read while Reward Details was open; " + specialRewardsFailureSnapshot));
+        }
         tapNear(CommonGameAreas.POLAR_REWARD_DETAILS_CLOSE);
         sleepTask(500);
         return status;
