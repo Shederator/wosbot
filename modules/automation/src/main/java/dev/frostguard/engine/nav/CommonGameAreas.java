@@ -256,6 +256,15 @@ public final class CommonGameAreas {
     // formation layout, turning "00:00:15" into the valid but false ten-hour value "10:00:15".
     public static final AreaData TRAVEL_TIME_OCR_AREA   = region(500, 1134, 622, 1162);
 
+    // ── My Island (Life Essence) ─────────────────────────────────────
+    //
+    // The top-bar Life Essence counter. It appears on the player's own island and on no other
+    // screen the claim routine can land on, so it confirms the island is open.
+    public static final AreaData ISLAND_ESSENCE_COUNTER = region(500, 10, 640, 60);
+    // Window for the crystal-blob candidate search. The top edge excludes the counter above,
+    // which is the same crystal artwork, and leaves headroom for the badge over a tall tree.
+    public static final AreaData ISLAND_CLAIM_BADGE_AREA = region(0, 100, 720, 1100);
+
     // ── character identity ───────────────────────────────────────────
 
     public static final AreaData CHARACTER_ID_OCR_AREA   = region(300, 940, 465, 980);

@@ -27,6 +27,12 @@ benchmark timing with `tools/close-cross-detection` through
 
 `--search color` is the default and the search the task uses. `--search template`
 runs the original 90 percent `claimCurrent.png` search, then `claim.png`.
+`--search blob` runs the candidate crystal search (`IslandClaimBadges`), which
+finds the green crystal whatever colour its bubble has. Every run also prints
+`island=confirmed` or `island=unconfirmed` from `LifeEssenceIslandScreen`, the
+counter check the task applies before it reads markers. The blob search's
+two-capture stability check needs two frames and is not part of this
+single-frame benchmark.
 `--do-benchmark` measures the selected search only. Each image is read once, then
 analyzed `--passes` times (default 1000). The console prints the mean time
 per file and no annotated PNG is written.

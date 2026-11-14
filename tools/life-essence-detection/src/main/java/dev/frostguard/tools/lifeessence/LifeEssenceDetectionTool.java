@@ -13,6 +13,7 @@ import java.util.Locale;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.tools.detection.DetectionToolSupport;
 import dev.frostguard.tools.detection.DetectionToolSupport.Mark;
+import dev.frostguard.tasks.pets.LifeEssenceIslandScreen;
 import dev.frostguard.tasks.pets.LifeEssenceLeafSearch;
 import dev.frostguard.tasks.pets.LifeEssenceMarkerDetector;
 import dev.frostguard.tasks.pets.LifeEssenceMarkerDetector.Candidate;
@@ -74,13 +75,28 @@ public final class LifeEssenceDetectionTool {
                 + "  search=" + searchKind.name().toLowerCase(Locale.ROOT)
                 + "  passes=" + passes
                 + "  mean=" + String.format(Locale.ROOT, "%.3f", benchmark.meanMillis()) + " ms"
-                + "  points=" + benchmark.detections();
+                + "  points=" + benchmark.detections()
+                + "  island=" + islandState(frame);
     }
 
     static Path writeDetection(Path image, Path output, String timestamp, LifeEssenceSearchKind searchKind)
             throws IOException {
         byte[] encodedPng = Files.readAllBytes(image);
         BufferedImage frame = DetectionToolSupport.readFrame(encodedPng);
+        System.out.println(image.getFileName() + "  island=" + islandState(frame));
+        if (searchKind == LifeEssenceSearchKind.BLOB) {
+            List<PointData> points = searchKind.open(encodedPng).find(frame);
+            for (PointData point : points) {
+                System.out.println(image.getFileName() + "  blob center=" + point.getX() + "," + point.getY());
+            }
+            if (points.isEmpty()) {
+                System.out.println(image.getFileName() + "  blob search found no crystal-sized green region");
+            }
+            List<Mark> marks = points.stream().map(point -> Mark.point(point, "blob")).toList();
+            Path destination = output.resolve(outputName(timestamp, image, searchKind));
+            return DetectionToolSupport.writeAnnotation(frame, marks, destination,
+                    "crystal blob search, cyan cross = blob centroid");
+        }
         if (searchKind == LifeEssenceSearchKind.TEMPLATE) {
             List<PointData> points = searchKind.open(encodedPng).find(frame);
             for (PointData point : points) {
@@ -108,6 +124,10 @@ public final class LifeEssenceDetectionTool {
         Path destination = output.resolve(outputName(timestamp, image, LifeEssenceSearchKind.COLOR));
         return DetectionToolSupport.writeAnnotation(frame, marks, destination,
                 "green box accepted, red rejected, cyan cross = tap, orange cross = box center");
+    }
+
+    private static String islandState(BufferedImage frame) {
+        return LifeEssenceIslandScreen.isConfirmed(frame) ? "confirmed" : "unconfirmed";
     }
 
     static String outputName(String timestamp, Path image, LifeEssenceSearchKind searchKind) {
@@ -146,10 +166,11 @@ public final class LifeEssenceDetectionTool {
     private record Arguments(Path output, List<Path> inputs, boolean doBenchmark, int passes,
             LifeEssenceSearchKind search, boolean help) {
         static final String USAGE = """
-                Usage: detect.sh [--output dir] [--search color|template] [--do-benchmark] [--passes N] <image-or-directory>...
+                Usage: detect.sh [--output dir] [--search color|template|blob] [--do-benchmark] [--passes N] <image-or-directory>...
 
                 Writes timestamp-fixture_name-search-detection_result.png for each PNG.
                 The default search is color, which is also the search the task uses.
+                Every frame also reports whether the island counter confirms the island screen.
                 The default directory is tools/life-essence-detection/target/detections.
                 A negative leaf dy means the green centroid is above the box center.
                 --do-benchmark reads each image once, runs the selected search --passes times
@@ -169,7 +190,7 @@ public final class LifeEssenceDetectionTool {
                     help = true;
                 } else if ("--search".equals(arg)) {
                     if (index + 1 >= args.length) {
-                        throw new IllegalArgumentException("--search must be color or template");
+                        throw new IllegalArgumentException("--search must be color, template or blob");
                     }
                     search = LifeEssenceSearchKind.parse(args[++index]);
                 } else if ("--do-benchmark".equals(arg)) {
