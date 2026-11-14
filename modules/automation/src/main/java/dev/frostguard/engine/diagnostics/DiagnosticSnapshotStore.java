@@ -94,6 +94,17 @@ public final class DiagnosticSnapshotStore {
      * and leaves every other activity untouched.
      */
     public Optional<String> write(RawImageData frame, String activity, String type, Instant capturedAt) {
+        return write(frame, activity, type, capturedAt, true);
+    }
+
+    /** Saves an emulator frame when the caller captures its desktop frame separately. */
+    public Optional<String> writeWithoutDesktop(
+            RawImageData frame, String activity, String type, Instant capturedAt) {
+        return write(frame, activity, type, capturedAt, false);
+    }
+
+    private Optional<String> write(
+            RawImageData frame, String activity, String type, Instant capturedAt, boolean pairDesktop) {
         if (capturedAt == null || !isEnabled()) {
             return Optional.empty();
         }
@@ -104,7 +115,7 @@ public final class DiagnosticSnapshotStore {
             return Optional.empty();
         }
         Optional<String> saved = persist(image, activity, type, capturedAt);
-        if (saved.isPresent() && !DESKTOP_ACTIVITY.equals(activityToken(activity))) {
+        if (pairDesktop && saved.isPresent() && !DESKTOP_ACTIVITY.equals(activityToken(activity))) {
             accompanyDesktop(type, capturedAt);
         }
         return saved;

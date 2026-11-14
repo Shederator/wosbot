@@ -9,7 +9,9 @@ import dev.frostguard.engine.listener.QueueStateListener;
 import dev.frostguard.engine.service.ScheduleService;
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
+import javafx.scene.control.Alert;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -37,7 +39,12 @@ public class LauncherActionController implements BotStateListener, QueueStateLis
 
     public void stopBot() {
         // Changed by pernerch | Date: 2026-07-04 | Why: route GUI stop through dedicated GUI stop-behavior policy.
-        scheduleService.haltEngineFromGui();
+        List<String> failures = scheduleService.haltEngineFromGui();
+        if (!failures.isEmpty()) {
+            new Alert(Alert.AlertType.WARNING,
+                    "Bot stopped, but emulator shutdown could not be confirmed for: "
+                            + String.join(", ", failures) + ". Check the logs and diagnostic snapshots.").show();
+        }
     }
 
     public void pauseAllQueues() {

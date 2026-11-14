@@ -11,6 +11,7 @@ import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.OcrSettingsData;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.engine.emulator.EmulatorStopResult;
 import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.service.BotOcrEngine;
@@ -94,8 +95,12 @@ public class CharacterSwitchHelper {
             cancelSwitch();
         }
         // Changed by pernerch | Date: 2026-07-02 | Why: close emulator only as final fallback after repeated switch failure.
-        log.error("Character not found after 3 passes — closing emulator");
-        emu.closeEmulator(dev); return false;
+        log.error("Character not found after 3 passes — requesting emulator shutdown");
+        EmulatorStopResult stop = emu.closeEmulator(dev);
+        if (!stop.confirmed()) {
+            log.error("Emulator shutdown unconfirmed after character switch failure: " + stop.evidence());
+        }
+        return false;
     }
 
     // --- Roster scanning (merged active + inactive search) ---
