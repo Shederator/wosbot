@@ -14,6 +14,7 @@ import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.OcrSettingsData;
+import dev.frostguard.api.domain.TaskFailureReport;
 import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.input.TapJitterPolicy;
 import dev.frostguard.engine.service.LoggingService;
@@ -58,6 +59,8 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
     private int repeatIntervalMinutes = 0;
     private String customTaskIdentifier;
     private volatile StaminaDeferral staminaDeferral;
+    private volatile TaskOutcome executionOutcome = TaskOutcome.SUCCESS;
+    private volatile TaskFailureReport handledFailureReport;
 
     // ── services ────────────────────────────────────────────────────
     protected EmulatorController emuManager = EmulatorController.getInstance();
@@ -150,6 +153,8 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
     public void run() {
         checkPreemption();
         staminaDeferral = null;
+        executionOutcome = TaskOutcome.SUCCESS;
+        handledFailureReport = null;
         refreshProfileFromDb();
         checkPreemption();
         Map<String, String> configBeforeExecution = snapshotProfileConfig();
@@ -497,7 +502,37 @@ public abstract class DelayedTask implements Runnable, Delayed, StaminaWaitSched
             LocalDateTime retryAt,
             LocalDateTime earliestRunnableAt) {
         staminaDeferral = new StaminaDeferral(minimumRequired, regenerationTarget, earliestRunnableAt);
+        executionOutcome = TaskOutcome.DEFERRED;
         reschedule(retryAt);
+    }
+
+    public TaskOutcome getExecutionOutcome() {
+        return executionOutcome;
+    }
+
+    public TaskFailureReport getHandledFailureReport() {
+        return handledFailureReport;
+    }
+
+    public void setExecutionOutcome(TaskOutcome outcome) {
+        this.executionOutcome = Objects.requireNonNull(outcome, "outcome cannot be null");
+    }
+
+    public void recordHandledFailure(TaskFailureReport report) {
+        this.executionOutcome = TaskOutcome.HANDLED_FAILURE;
+        this.handledFailureReport = Objects.requireNonNull(report, "report cannot be null");
+        reschedule(report.retryAt());
+    }
+
+    public void recordUnknownOutcome(String reason, LocalDateTime retryAt) {
+        this.executionOutcome = TaskOutcome.UNKNOWN;
+        this.handledFailureReport = null;
+        reschedule(retryAt);
+    }
+
+    public void markDeferred() {
+        this.executionOutcome = TaskOutcome.DEFERRED;
+        this.handledFailureReport = null;
     }
 
     public StaminaDeferral getStaminaDeferral() {

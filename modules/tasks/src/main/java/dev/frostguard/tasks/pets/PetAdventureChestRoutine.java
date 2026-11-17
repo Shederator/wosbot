@@ -9,6 +9,7 @@ import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.configs.TpDailyTaskEnum;
 import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
+import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.nav.SearchConfigConstants;
@@ -163,10 +164,7 @@ public class PetAdventureChestRoutine extends DelayedTask {
 		}
 
 		claimCompletedChests();
-		if (observeOnlyVisit()) {
-			clearObserveOnly();
-			logInfo("Re-reading Pet Adventure after an unverified start; Start will not be sent on this visit.");
-			rescheduleForChestCompletion();
+		if (deferAfterObservation(LocalDateTime.now())) {
 			return;
 		}
 		startAvailableChests();
@@ -333,7 +331,7 @@ public class PetAdventureChestRoutine extends DelayedTask {
 
 		// No more chests found - reschedule for later
 		logInfo("No more available chests found. Rescheduling for chest completion check");
-		rescheduleForChestCompletion();
+		rescheduleForChestCompletion(LocalDateTime.now());
 	}
 
 	/**
@@ -432,14 +430,7 @@ public class PetAdventureChestRoutine extends DelayedTask {
 				return ChestStartResult.STARTED;
 			}
 
-			markObserveOnly();
-			LocalDateTime nextCheck = unverifiedStartRecheck(LocalDateTime.now());
-			String snapshot = TaskDiagnosticSnapshots.capture(
-					emuManager, EMULATOR_NUMBER, "petadventurechest", "start-outcome");
-			logWarning("Start tap was sent but the adventure state was not confirmed; "
-					+ "the next visit only re-reads. Next check at "
-					+ nextCheck.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
-			reschedule(nextCheck);
+			recordUnconfirmedStart(LocalDateTime.now());
 			pressBack();
 			sleepTask(500);
 			return ChestStartResult.UNKNOWN;
@@ -472,8 +463,8 @@ public class PetAdventureChestRoutine extends DelayedTask {
 	 * Used when chests have been started and we need to wait for them
 	 * to complete before claiming rewards.
 	 */
-	private void rescheduleForChestCompletion() {
-		LocalDateTime nextCheck = LocalDateTime.now().plusHours(CHEST_COMPLETION_HOURS);
+	private void rescheduleForChestCompletion(LocalDateTime now) {
+		LocalDateTime nextCheck = now.plusHours(CHEST_COMPLETION_HOURS);
 		reschedule(nextCheck);
 		logInfo("Rescheduled for chest completion check at " +
 				nextCheck.format(TIME_FORMATTER));
@@ -500,7 +491,7 @@ public class PetAdventureChestRoutine extends DelayedTask {
 	 */
 	private void rescheduleForNavigationRetry() {
 		LocalDateTime retryTime = LocalDateTime.now().plusMinutes(NAVIGATION_RETRY_MINUTES);
-		reschedule(retryTime);
+		recordUnknownOutcome("Navigation failed", retryTime);
 		logWarning("Navigation failed. Retrying at " + retryTime.format(TIME_FORMATTER));
 	}
 
@@ -508,17 +499,31 @@ public class PetAdventureChestRoutine extends DelayedTask {
 		return now.plusHours(CHEST_COMPLETION_HOURS);
 	}
 
-	private boolean observeOnlyVisit() {
-		return Boolean.TRUE.equals(profile.getConfig(
-				ConfigurationKeyEnum.PET_ADVENTURE_OBSERVE_ONLY_BOOL, Boolean.class));
-	}
-
-	private void markObserveOnly() {
+	void recordUnconfirmedStart(LocalDateTime now) {
 		writeProfileSetting(ConfigurationKeyEnum.PET_ADVENTURE_OBSERVE_ONLY_BOOL, true);
+		LocalDateTime nextCheck = unverifiedStartRecheck(now);
+		String reason = "Start tap was sent but the adventure state was not confirmed";
+		String snapshot = TaskDiagnosticSnapshots.capture(this::captureStartDiagnosticFrame,
+				"petadventurechest", "start-outcome");
+		recordUnknownOutcome(reason, nextCheck);
+		logWarning(reason + "; the next visit only re-reads. Next check at "
+				+ nextCheck.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
 	}
 
-	private void clearObserveOnly() {
+	boolean deferAfterObservation(LocalDateTime now) {
+		if (!Boolean.TRUE.equals(profile.getConfig(
+				ConfigurationKeyEnum.PET_ADVENTURE_OBSERVE_ONLY_BOOL, Boolean.class))) {
+			return false;
+		}
 		writeProfileSetting(ConfigurationKeyEnum.PET_ADVENTURE_OBSERVE_ONLY_BOOL, false);
+		logInfo("Re-reading Pet Adventure after an unverified start; Start will not be sent on this visit.");
+		markDeferred();
+		rescheduleForChestCompletion(now);
+		return true;
+	}
+
+	RawImageData captureStartDiagnosticFrame() {
+		return emuManager.captureScreen(EMULATOR_NUMBER);
 	}
 
 	private void scheduleUnknownChestRetry(String reason, String type) {
@@ -526,7 +531,7 @@ public class PetAdventureChestRoutine extends DelayedTask {
 		String snapshot = TaskDiagnosticSnapshots.capture(emuManager, EMULATOR_NUMBER, "petadventurechest", type);
 		logWarning("Pet Adventure outcome is unknown: " + reason + "; retrying at "
 				+ retryTime.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
-		reschedule(retryTime);
+		recordUnknownOutcome(reason, retryTime);
 	}
 
 	// ========================================================================

@@ -30,6 +30,9 @@ import jakarta.persistence.Table;
 @Access(AccessType.FIELD)
 public class DailyTask {
 
+	// Keep schedule-only rows compatible with the non-null column in existing workspaces.
+	public static final LocalDateTime NO_COMPLETION = LocalDateTime.of(1970, 1, 1, 0, 0);
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	@Column(name = "id", nullable = false, unique = true)
@@ -110,8 +113,10 @@ public class DailyTask {
 	public Profile getOwner() { return owner; }
 	public void setOwner(Profile owner) { this.owner = owner; }
 
-	public LocalDateTime getCompletedAt() { return completedAt; }
-	public void setCompletedAt(LocalDateTime completedAt) { this.completedAt = completedAt; }
+	public LocalDateTime getCompletedAt() { return NO_COMPLETION.equals(completedAt) ? null : completedAt; }
+	public void setCompletedAt(LocalDateTime completedAt) {
+		this.completedAt = completedAt != null ? completedAt : NO_COMPLETION;
+	}
 
 	public LocalDateTime getNextRunAt() { return nextRunAt; }
 	public void setNextRunAt(LocalDateTime nextRunAt) { this.nextRunAt = nextRunAt; }
@@ -139,8 +144,8 @@ public class DailyTask {
 	public void setDefinition(DailyTaskTemplate d) { this.routine = d; }
 	public Profile getAccount() { return owner; }
 	public void setAccount(Profile p) { this.owner = p; }
-	public LocalDateTime getPreviousRun() { return completedAt; }
-	public void setPreviousRun(LocalDateTime t) { this.completedAt = t; }
+	public LocalDateTime getPreviousRun() { return getCompletedAt(); }
+	public void setPreviousRun(LocalDateTime t) { setCompletedAt(t); }
 	public LocalDateTime getScheduledAt() { return nextRunAt; }
 	public void setScheduledAt(LocalDateTime t) { this.nextRunAt = t; }
 

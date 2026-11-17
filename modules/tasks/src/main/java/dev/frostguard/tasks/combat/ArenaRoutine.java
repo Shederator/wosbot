@@ -2,6 +2,7 @@ package dev.frostguard.tasks.combat;
 
 import java.awt.Color;
 import java.awt.image.BufferedImage;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -287,13 +288,13 @@ public class ArenaRoutine extends DelayedTask {
             return;
         }
 
-        if (!isWithinExecutionWindow()) {
+        if (!isWithinExecutionWindow(activationTime, ZonedDateTime.now(ZoneId.of("UTC")))) {
             return;
         }
 
         if (!navigateToArena()) {
             logWarning("Failed to navigate to arena.");
-            rescheduleWithActivationHour();
+            recordUnknownOutcome("Failed to navigate to arena", LocalDateTime.now().plusMinutes(15));
             return;
         }
 
@@ -301,13 +302,13 @@ public class ArenaRoutine extends DelayedTask {
 
         if (!openChallengeList()) {
             logWarning("Failed to open challenge list.");
-            rescheduleWithActivationHour();
+            recordUnknownOutcome("Failed to open challenge list", LocalDateTime.now().plusMinutes(15));
             return;
         }
 
         if (!readInitialAttempts()) {
             logWarning("Failed to read initial attempts.");
-            rescheduleWithActivationHour();
+            recordUnknownOutcome("Failed to read initial attempts", LocalDateTime.now().plusMinutes(15));
             return;
         }
 
@@ -320,12 +321,7 @@ public class ArenaRoutine extends DelayedTask {
         rescheduleWithActivationHour();
     }
 
-    private boolean isWithinExecutionWindow() {
-        if (!isValidTimeFormat(activationTime)) {
-            return true;
-        }
-
-        ZonedDateTime nowUtc = ZonedDateTime.now(ZoneId.of("UTC"));
+    boolean isWithinExecutionWindow(String activationTime, ZonedDateTime nowUtc) {
         String[] timeParts = activationTime.split(":");
         int hour = Integer.parseInt(timeParts[0]);
         int minute = Integer.parseInt(timeParts[1]);
@@ -340,18 +336,20 @@ public class ArenaRoutine extends DelayedTask {
         if (nowUtc.isBefore(scheduledTimeUtc)) {
             logDebug(String.format("Task triggered too early (current: %s UTC, scheduled: %s UTC). Rescheduling for scheduled time.",
                     nowUtc.format(DateTimeFormatter.ofPattern("HH:mm")), activationTime));
-            rescheduleForToday();
+            markDeferred();
+            reschedule(scheduledTimeUtc.withZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime());
             return false;
         }
 
         if (nowUtc.isAfter(cutoffTimeUtc)) {
-            logDebug(String.format("Task triggered too late (current: %s UTC, cutoff: 23:55 UTC). Scheduling for tomorrow.",
+            logDebug(String.format("Task triggered too late (current: %s UTC, cutoff: 23:56 UTC). Scheduling for tomorrow.",
                     nowUtc.format(DateTimeFormatter.ofPattern("HH:mm"))));
-            rescheduleWithActivationHour();
+            markDeferred();
+            reschedule(scheduledTimeUtc.plusDays(1).withZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime());
             return false;
         }
 
-        logDebug(String.format("Task running within window (current: %s UTC, window: %s - 23:55 UTC)",
+        logDebug(String.format("Task running within window (current: %s UTC, window: %s - 23:56 UTC)",
                 nowUtc.format(DateTimeFormatter.ofPattern("HH:mm")), activationTime));
         return true;
     }
@@ -1534,38 +1532,6 @@ public class ArenaRoutine extends DelayedTask {
         }
     }
 
-    private void rescheduleForToday() {
-        if (!isValidTimeFormat(activationTime)) {
-            logInfo("Rescheduling Arena task for 5 min before game reset time (invalid activation time)");
-            reschedule(GameTimeUtils.dailyResetTime().minusMinutes(5));
-            return;
-        }
-
-        try {
-            String[] timeParts = activationTime.split(":");
-            int hour = Integer.parseInt(timeParts[0]);
-            int minute = Integer.parseInt(timeParts[1]);
-
-            ZonedDateTime nowUtc = ZonedDateTime.now(ZoneId.of("UTC"));
-            ZonedDateTime todayActivationUtc = nowUtc.toLocalDate()
-                    .atTime(hour, minute)
-                    .atZone(ZoneId.of("UTC"));
-
-            ZonedDateTime localActivationTime = todayActivationUtc.withZoneSameInstant(
-                    ZoneId.systemDefault());
-
-            logInfo(String.format("Rescheduling Arena task for %s UTC today (%s local)",
-                    activationTime,
-                    localActivationTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))));
-
-            reschedule(localActivationTime.toLocalDateTime());
-
-        } catch (Exception e) {
-            logError("Failed to reschedule for today's activation time: " + e.getMessage());
-            logInfo("Falling back to 5 min before game reset time");
-            reschedule(GameTimeUtils.dailyResetTime().minusMinutes(5));
-        }
-    }
 
     private String normalizeAllianceTag(String value) {
         if (value == null || value.isBlank()) {
