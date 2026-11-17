@@ -33,6 +33,21 @@ public class TaskDispatcher implements PreemptionListener, StaminaChangeListener
         });
     }
 
+    public void registerQueue(TaskQueue queue) {
+        if (queue == null || queue.getProfile() == null || queue.getProfile().getId() == null) {
+            return;
+        }
+        managedQueues.put(queue.getProfile().getId(), queue);
+        pauseFlags.put(queue.getProfile().getId(), Boolean.FALSE);
+    }
+
+    public void deregisterAccount(Long accountId) {
+        if (accountId != null) {
+            managedQueues.remove(accountId);
+            pauseFlags.remove(accountId);
+        }
+    }
+
     public TaskQueue getQueue(Long accountId) {
         return managedQueues.get(accountId);
     }
