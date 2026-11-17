@@ -14,6 +14,7 @@ duration is a confirmed start, not an occupied-chest miss. The 2026-10-01
 `start-outcome` frames are that overlay at 05:00:00 / 03:59:59 / 04:59:59.
 
 If Start disappears and `In Adventure` is missing (for example the stamina
-Obtain more sheet), the visit is unverified: the next run only claims and
-re-reads, and does not tap Start. Daily attempts exhausted uses the game
-reset.
+Obtain more sheet), the visit records an unknown outcome and preserves stamina
+and completion history. The two-hour recheck only claims and re-reads. It
+defers the next Start attempt to a later visit. Verified exhaustion uses the
+game reset.

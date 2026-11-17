@@ -24,6 +24,9 @@ import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.nav.SidebarDestination;
 import dev.frostguard.engine.helper.TemplateSearchHelper.SearchConfig;
 import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
+import dev.frostguard.api.domain.TaskFailureReport;
+import dev.frostguard.engine.service.TaskFailureIncidentService;
+import java.util.Locale;
 
 public class LifeEssenceRoutine extends DelayedTask {
 
@@ -332,7 +335,22 @@ public class LifeEssenceRoutine extends DelayedTask {
 		Duration retryDelay = decision.retryDelay();
 		LocalDateTime nextAttempt = LocalDateTime.now().plus(retryDelay);
 
-		reschedule(nextAttempt);
+		recordHandledFailure(new TaskFailureReport(
+				profile.getId(),
+				profile.getName(),
+				tpTask.name(),
+				taskName,
+				"life-essence." + reason.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-"),
+				"Life Essence attempt failed",
+				reason,
+				"Life Essence claims available essence and schedules next collection",
+				reason,
+				"Life Essence rescheduled for retry",
+				"Retry at " + nextAttempt,
+				"No game or emulator restart needed",
+				nextAttempt,
+				TaskFailureIncidentService.DEFAULT_ESCALATION_THRESHOLD,
+				""));
 
 		logWarning(reason + ". Consecutive failures: " + consecutiveFailures
 				+ ". Task remains enabled and will retry in " + retryDelay.toMinutes()

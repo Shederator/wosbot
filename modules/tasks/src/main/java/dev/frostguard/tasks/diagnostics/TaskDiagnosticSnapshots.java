@@ -17,7 +17,7 @@ public final class TaskDiagnosticSnapshots {
         return capture(() -> emulator.captureScreen(emulatorNumber), activity, type);
     }
 
-    static String capture(Supplier<RawImageData> takeFrame, String activity, String type) {
+    public static String capture(Supplier<RawImageData> takeFrame, String activity, String type) {
         return capture(takeFrame, activity, type, DiagnosticSnapshotStore.forCurrentWorkspace());
     }
 

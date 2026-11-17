@@ -12,12 +12,16 @@ import dev.frostguard.api.domain.ImageSearchResultData;
 import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.OcrSettingsData;
+import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.helper.NavigationHelper.DealsTarget;
 import dev.frostguard.engine.nav.SearchConfigConstants;
 import dev.frostguard.engine.helper.TemplateSearchHelper;
 import dev.frostguard.tasks.diagnostics.TaskDiagnosticSnapshots;
+import dev.frostguard.api.domain.TaskFailureReport;
+import dev.frostguard.engine.service.TaskFailureIncidentService;
+import java.util.Locale;
 
 /**
  * Task responsible for managing bank deposit operations.
@@ -382,11 +386,29 @@ public class BankRoutine extends DelayedTask {
 		sleepTask(2000); // Wait for deposit interface to load
 
 		confirmDeposit();
+		sleepTask(500);
+		recordDepositOutcome(config.durationDays, LocalDateTime.now());
+	}
 
-		LocalDateTime nextCheck = LocalDateTime.now().plusDays(config.durationDays);
+	void recordDepositOutcome(int durationDays, LocalDateTime now) {
+		if (!templateSearchHelper.locatePattern(TemplatesEnum.EVENTS_DEALS_BANK_INDEPOSIT,
+				SearchConfigConstants.SINGLE_WITH_RETRIES).isFound()) {
+			LocalDateTime retryAt = now.plusMinutes(OPERATION_FAILURE_RETRY_MINUTES);
+			String reason = "Active deposit was not visible after confirmation";
+			String snapshot = TaskDiagnosticSnapshots.capture(this::captureDepositDiagnosticFrame,
+					"bank", "deposit-unconfirmed");
+			recordUnknownOutcome(reason, retryAt);
+			logWarning(reason + ". Rechecking at " + retryAt.format(DATETIME_FORMATTER) + "; " + snapshot + ".");
+			return;
+		}
+
+		LocalDateTime nextCheck = now.plusDays(durationDays);
 		reschedule(nextCheck);
+		logInfo("Active deposit verified. Next check scheduled for: " + nextCheck.format(DATETIME_FORMATTER));
+	}
 
-		logInfo("Deposit created. Next check scheduled for: " + nextCheck.format(DATETIME_FORMATTER));
+	RawImageData captureDepositDiagnosticFrame() {
+		return emuManager.captureScreen(EMULATOR_NUMBER);
 	}
 
 	/**
@@ -516,7 +538,22 @@ public class BankRoutine extends DelayedTask {
 	 */
 	private void rescheduleForRetry(String reason) {
 		LocalDateTime retryTime = LocalDateTime.now().plusMinutes(OPERATION_FAILURE_RETRY_MINUTES);
-		reschedule(retryTime);
+		recordHandledFailure(new TaskFailureReport(
+				profile.getId(),
+				profile.getName(),
+				tpTask.name(),
+				taskName,
+				"bank." + reason.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-"),
+				"Bank operation failed",
+				"Bank operation encountered: " + reason,
+				"Bank completes deposit/withdrawal and schedules next maturity",
+				reason,
+				"Bank routine rescheduled for retry",
+				"Retry at " + retryTime,
+				"No game or emulator restart needed",
+				retryTime,
+				TaskFailureIncidentService.DEFAULT_ESCALATION_THRESHOLD,
+				""));
 
 		logWarning(reason + ". Retrying in " + OPERATION_FAILURE_RETRY_MINUTES +
 				" minutes at: " + retryTime.format(DATETIME_FORMATTER));
