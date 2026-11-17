@@ -13,6 +13,11 @@ import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.service.ProfileService;
 import dev.frostguard.engine.schedule.DelayedTask;
+import dev.frostguard.engine.error.ActionRequiredContext;
+import dev.frostguard.engine.error.ProfileCooldownException;
+import dev.frostguard.engine.error.StopExecutionException;
+
+import java.time.LocalDateTime;
 
 /**
  * Skip Tutorial Task.
@@ -33,17 +38,41 @@ public class SkipTutorialRoutine extends DelayedTask {
     private void ensureEmulatorRunning() {
         logInfo("Checking emulator status...");
 
-        while (!isStarted) {
-            if (emuManager.isRunning(EMULATOR_NUMBER)) {
-                isStarted = true;
-                logInfo("Emulator is running.");
-            } else {
-                logInfo("Emulator not found. Attempting to start it...");
-                emuManager.launchEmulator(EMULATOR_NUMBER);
-                logInfo("Waiting 10 seconds before checking again.");
-                sleepTask(10000); // Wait for emulator to start
-            }
+        if (!isStarted) {
+            InitializeRoutine.awaitEmulatorRunning(
+                    () -> emuManager.isRunning(EMULATOR_NUMBER),
+                    () -> {
+                        logInfo("Emulator not found. Attempting to start it...");
+                        emuManager.launchEmulator(EMULATOR_NUMBER);
+                    },
+                    () -> {
+                        logInfo("Waiting 10 seconds before checking again.");
+                        sleepTask(10000);
+                    },
+                    this::checkPreemption,
+                    StartupRecoveryPolicy.MAX_EMULATOR_BOOT_ATTEMPTS,
+                    this::deferEmulatorBootTimeout);
+            isStarted = true;
+            logInfo("Emulator is running.");
         }
+    }
+
+    private void deferEmulatorBootTimeout() {
+        String reason = "Emulator failed to start after bounded launch attempts";
+        LocalDateTime retryAt = LocalDateTime.now().plus(StartupRecoveryPolicy.EMULATOR_BOOT_FAILURE_COOLDOWN);
+        logError("Skip Tutorial blocked for profile=" + profile.getName()
+                + ", expected=emulator-running, observed=emulator-not-running"
+                + ", lastAction=launched emulator " + EMULATOR_NUMBER
+                + ", attempts=" + StartupRecoveryPolicy.MAX_EMULATOR_BOOT_ATTEMPTS
+                + ", fallback=pause-profile-and-release-slot, retryAt=" + retryAt
+                + ", reason=" + reason + ".");
+        throw new ProfileCooldownException(reason, retryAt, new ActionRequiredContext(
+                "skip-tutorial.emulator-launch-timeout",
+                "Emulator failed to start for Skip Tutorial",
+                "emulator running",
+                "emulator remained stopped after " + StartupRecoveryPolicy.MAX_EMULATOR_BOOT_ATTEMPTS + " launch attempts",
+                "Launched emulator and polled running state",
+                "Check emulator configuration, available disk space, and VM health"));
     }
 
     private void ensureGameRunning() {
