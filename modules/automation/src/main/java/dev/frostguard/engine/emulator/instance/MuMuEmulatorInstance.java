@@ -52,6 +52,28 @@ public class MuMuEmulatorInstance extends EmulatorInstance {
     }
 
     @Override
+    public boolean hideWindow(String identifier) {
+        boolean ok = executeControlAction(identifier, "hide_window");
+        if (ok) {
+            log.info("Hidden window for MuMu instance {}", identifier);
+        } else {
+            log.warn("Failed to hide window for MuMu instance {}", identifier);
+        }
+        return ok;
+    }
+
+    @Override
+    public boolean showWindow(String identifier) {
+        boolean ok = executeControlAction(identifier, "show_window");
+        if (ok) {
+            log.info("Restored window for MuMu instance {}", identifier);
+        } else {
+            log.warn("Failed to show window for MuMu instance {}", identifier);
+        }
+        return ok;
+    }
+
+    @Override
     public boolean isRunning(String identifier) {
         try {
             return readRunningState(
@@ -96,6 +118,61 @@ public class MuMuEmulatorInstance extends EmulatorInstance {
         } catch (IOException ioe) {
             log.error("Failed to execute MuMu action '{}'", action, ioe);
         }
+    }
+
+    ProcessBuilder buildControlProcess(String instanceId, String action) {
+        return buildControlProcess(Paths.get(consolePath), instanceId, action);
+    }
+
+    static ProcessBuilder buildControlProcess(Path consoleDir, String instanceId, String action) {
+        Path binary = consoleDir.resolve("MuMuManager.exe");
+        List<String> cmd = List.of(
+                binary.toString(),
+                "control", "-v", instanceId, action);
+        ProcessBuilder pb = new ProcessBuilder(cmd);
+        Path parent = consoleDir.getParent();
+        pb.directory(parent != null ? parent.toFile() : consoleDir.toFile());
+        return pb;
+    }
+
+    private boolean executeControlAction(String instanceId, String action) {
+        try {
+            return readControlResponse(buildControlProcess(instanceId, action), ACTION_TIMEOUT);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            log.debug("MuMu control action '{}' interrupted; killed the manager process", action);
+        } catch (IOException ioe) {
+            log.error("Failed to execute MuMu control action '{}'", action, ioe);
+        }
+        return false;
+    }
+
+    static boolean readControlResponse(ProcessBuilder controlProcess, Duration timeout)
+            throws IOException, InterruptedException {
+        BoundedProcessRunner.ProcessResult result = BoundedProcessRunner.run(controlProcess, timeout);
+        if (result.timedOut()) {
+            log.warn("MuMu control action timed out after {} seconds; killed the manager process",
+                    timeout.toSeconds());
+            return false;
+        }
+        return isControlSuccessful(result.exitCode(), result.output());
+    }
+
+    static boolean isControlSuccessful(int exitCode, String output) {
+        if (exitCode != 0) {
+            return false;
+        }
+        if (output == null || output.isBlank()) {
+            return true;
+        }
+        if (output.contains("\"errcode\": 0") || output.contains("\"errcode\":0")
+                || output.contains("\"error_code\": 0") || output.contains("\"error_code\":0")) {
+            return true;
+        }
+        if (output.contains("\"errcode\":") || output.contains("\"error_code\":")) {
+            return false;
+        }
+        return true;
     }
 
     static boolean readRunningState(ProcessBuilder managerProcess, Duration timeout)

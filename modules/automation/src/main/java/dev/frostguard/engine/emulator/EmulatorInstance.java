@@ -44,6 +44,8 @@ public abstract class EmulatorInstance {
     public    abstract void    launchEmulator(String idx);
     public    abstract void    closeEmulator(String idx);
     public    abstract boolean isRunning(String idx);
+    public    boolean          hideWindow(String idx) { return false; }
+    public    boolean          showWindow(String idx) { return false; }
 
     protected EmulatorInstance(String consolePath) {
         this.consolePath = consolePath;

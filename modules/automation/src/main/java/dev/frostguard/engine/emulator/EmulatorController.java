@@ -148,6 +148,10 @@ public class EmulatorController {
             LOG.info("{} acquired emulator launch lock (dev {})", label(i), i);
             backend.launchEmulator(i);
 
+            if (isHeadlessModeEnabled()) {
+                applyHeadlessAfterLaunch(i);
+            }
+
             long delayMs = readLaunchDelayMs();
             if (delayMs > 0) {
                 LOG.info("Waiting {} ms before allowing another emulator launch...", delayMs);
@@ -174,6 +178,40 @@ public class EmulatorController {
     public void    invalidateAllCaches(String i)          { requireBackend(); backend.invalidateAllCaches(i); }
     public String  getAdbPath()                           { requireBackend(); return backend.getAdbPath(); }
     public String  getDeviceSerial(String i)              { requireBackend(); return backend.getPublicDeviceSerial(i); }
+    public boolean hideWindow(String i)                   { requireBackend(); return backend.hideWindow(i); }
+    public boolean showWindow(String i)                   { requireBackend(); return backend.showWindow(i); }
+
+    private boolean isHeadlessModeEnabled() {
+        try {
+            Map<String, String> cfg = ConfigService.obtain().loadGlobalSettings();
+            return cfg != null && Boolean.parseBoolean(cfg.getOrDefault(
+                    ConfigurationKeyEnum.EMULATOR_HEADLESS_BOOL.name(), "false"));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private void applyHeadlessAfterLaunch(String idx) {
+        long deadline = System.currentTimeMillis() + 60_000L;
+        while (System.currentTimeMillis() < deadline) {
+            if (Thread.currentThread().isInterrupted()) {
+                return;
+            }
+            if (backend.isRunning(idx)) {
+                if (backend.hideWindow(idx)) {
+                    LOG.info("{} headless mode: window hidden (dev {})", label(idx), idx);
+                    return;
+                }
+            }
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+        LOG.warn("{} headless mode: timed out waiting to hide window (dev {})", label(idx), idx);
+    }
 
     // --- OCR ---
 
