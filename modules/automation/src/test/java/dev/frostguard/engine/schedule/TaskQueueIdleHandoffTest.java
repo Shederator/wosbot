@@ -29,7 +29,6 @@ class TaskQueueIdleHandoffTest {
     @BeforeAll
     static void initializeTestWorkspace() {
         WorkspaceSession.initializeLayout(WorkspacePaths.current());
-        DelayedTaskRegistry.registerFactory((type, profile) -> new TestDelayedTask(profile, type, LocalDateTime.now()));
     }
 
     @AfterEach
@@ -62,7 +61,6 @@ class TaskQueueIdleHandoffTest {
         // Profile B has an overdue runnable task
         queueB.enqueue(new TestDelayedTask(profileB, TpDailyTaskEnum.GATHER_RESOURCES, LocalDateTime.now().minusMinutes(5)));
         queueB.statusModel.setOperational(true);
-        queueB.pause();
 
         queueA.handleIdleTransitions();
 
@@ -70,11 +68,10 @@ class TaskQueueIdleHandoffTest {
         assertTrue(queueA.events.contains("release"), "Active slot lease must be released for sibling handover");
         assertFalse(queueA.suspendCalled, "Device must not be suspended when handing over to peer");
 
-        assertTrue(queueB.getNextQueuedTaskTypes(2).contains(TpDailyTaskEnum.INITIALIZE),
-                "Candidate peer must have INITIALIZE task enqueued for immediate switch");
-        assertEquals(TpDailyTaskEnum.INITIALIZE, queueB.selectNextTask().getTpTask(),
-                "Candidate peer must prioritize INITIALIZE ahead of overdue normal tasks");
-        assertFalse(queueB.isPaused(), "Candidate peer queue must be resumed");
+        assertFalse(queueB.isPaused());
+        queueB.runSchedulerTick();
+        assertEquals(List.of(TpDailyTaskEnum.INITIALIZE), queueB.executed,
+                "The peer must run Initialize on the normal scheduler path before gameplay.");
     }
 
     @Test
@@ -172,14 +169,14 @@ class TaskQueueIdleHandoffTest {
         // Profile B now has an overdue task
         queueB.enqueue(new TestDelayedTask(profileB, TpDailyTaskEnum.INTEL, LocalDateTime.now().minusMinutes(2)));
         queueB.statusModel.setOperational(true);
-        queueB.pause();
 
         queueA.handleIdleTransitions();
 
         assertTrue(queueA.events.contains("release"), "Idle profile keeping device open must yield slot when sibling becomes overdue");
-        assertTrue(queueB.getNextQueuedTaskTypes(2).contains(TpDailyTaskEnum.INITIALIZE));
-        assertEquals(TpDailyTaskEnum.INITIALIZE, queueB.selectNextTask().getTpTask());
         assertFalse(queueB.isPaused());
+        queueB.runSchedulerTick();
+        assertEquals(List.of(TpDailyTaskEnum.INITIALIZE), queueB.executed,
+                "The peer must run Initialize on the normal scheduler path before gameplay.");
     }
 
     @Test
@@ -262,6 +259,91 @@ class TaskQueueIdleHandoffTest {
         assertFalse(queueA.suspendCalled);
     }
 
+
+    @Test
+    void handoverArmsInitializeWhilePeerWorkerWaitsForSlot() {
+        HandoffFixture fixture = overdueHandoff();
+        fixture.peer().beforeAcquire = fixture.owner()::handleIdleTransitions;
+
+        fixture.peer().runSchedulerTick();
+
+        assertEquals(1, fixture.owner().slotReleaseCount);
+        assertEquals(List.of(TpDailyTaskEnum.INITIALIZE), fixture.peer().executed);
+        fixture.peer().runSchedulerTick();
+        assertEquals(List.of(TpDailyTaskEnum.INITIALIZE, TpDailyTaskEnum.GATHER_RESOURCES),
+                fixture.peer().executed);
+    }
+
+    @Test
+    void manuallyPausedPeerKeepsPauseAndDoesNotReceiveLease() {
+        HandoffFixture fixture = overdueHandoff();
+        fixture.peer().pause();
+
+        fixture.owner().handleIdleTransitions();
+
+        assertEquals(0, fixture.owner().slotReleaseCount);
+        assertTrue(fixture.peer().statusModel.isUserPaused());
+        assertTrue(fixture.peer().isPaused());
+        assertFalse(fixture.peer().getNextQueuedTaskTypes(2).contains(TpDailyTaskEnum.INITIALIZE));
+    }
+
+    @Test
+    void cooldownPeerKeepsItsRetryAcrossIdleChecks() {
+        HandoffFixture fixture = overdueHandoff();
+        LocalDateTime retryAt = LocalDateTime.now().plusMinutes(15);
+        var initialize = new TestDelayedTask(fixture.peer().getProfile(), TpDailyTaskEnum.INITIALIZE, retryAt);
+        fixture.peer().enqueue(initialize);
+        TaskQueue.applyProfileCooldown(initialize, fixture.peer().statusModel, retryAt);
+
+        fixture.owner().handleIdleTransitions();
+        fixture.owner().handleIdleTransitions();
+
+        assertEquals(0, fixture.owner().slotReleaseCount);
+        assertTrue(fixture.peer().isPaused());
+        assertEquals(retryAt, fixture.peer().statusModel.getDelayUntil());
+        assertEquals(retryAt, initialize.getScheduled());
+    }
+
+    @Test
+    void failedReleaseKeepsSourceLeaseAndAllowsHandoverToRetry() {
+        HandoffFixture fixture = overdueHandoff();
+        fixture.owner().failSlotRelease = true;
+
+        fixture.owner().handleIdleTransitions();
+
+        assertEquals(0, fixture.owner().slotReleaseCount);
+        assertFalse(fixture.owner().statusModel.isIdleTimeExceeded());
+        assertTrue(fixture.peer().executed.isEmpty());
+
+        fixture.owner().failSlotRelease = false;
+        fixture.owner().handleIdleTransitions();
+
+        assertEquals(1, fixture.owner().slotReleaseCount);
+        fixture.peer().runSchedulerTick();
+        assertEquals(List.of(TpDailyTaskEnum.INITIALIZE), fixture.peer().executed);
+    }
+
+    private HandoffFixture overdueHandoff() {
+        String emulator = "test-emu-" + UUID.randomUUID();
+        var ownerProfile = persistedProfile("Owner " + UUID.randomUUID(), emulator, true, 100L);
+        ownerProfile.setConfig(ConfigurationKeyEnum.KEEP_EMULATOR_OPEN_BOOL, true);
+        var peerProfile = persistedProfile("Peer " + UUID.randomUUID(), emulator, true, 200L);
+        var owner = new TestableTaskQueue(ownerProfile);
+        var peer = new TestableTaskQueue(peerProfile);
+        registerQueues(owner, peer);
+        LocalDateTime nextOwnTask = LocalDateTime.now().plusHours(2);
+        owner.enqueue(owner.task(TpDailyTaskEnum.DAILY_MISSIONS, nextOwnTask));
+        owner.statusModel.setDelayUntil(nextOwnTask);
+        owner.statusModel.setOperational(true);
+        owner.retainLease();
+        peer.statusModel.setOperational(true);
+        peer.enqueue(peer.task(TpDailyTaskEnum.GATHER_RESOURCES, LocalDateTime.now().minusMinutes(5)));
+        return new HandoffFixture(owner, peer);
+    }
+
+    private record HandoffFixture(TestableTaskQueue owner, TestableTaskQueue peer) {
+    }
+
     private AccountDescriptor persistedProfile(String name, String emulator, boolean enabled, long priority) {
         AccountDescriptor profile = new AccountDescriptor(
                 null, name, emulator, enabled, priority, 30L);
@@ -280,6 +362,9 @@ class TaskQueueIdleHandoffTest {
     private static final class TestableTaskQueue extends TaskQueue {
 
         private final List<String> events = new ArrayList<>();
+        private final List<TpDailyTaskEnum> executed = new ArrayList<>();
+        private Runnable beforeAcquire = () -> {};
+        private boolean failSlotRelease;
         private boolean suspendCalled;
         private int slotReleaseCount;
 
@@ -293,12 +378,16 @@ class TaskQueueIdleHandoffTest {
 
         @Override
         protected void acquireSlot() {
+            beforeAcquire.run();
             events.add("acquire");
             markSlotAcquired();
         }
 
         @Override
         protected void releaseEmulatorSlotLease() {
+            if (failSlotRelease) {
+                throw new IllegalStateException("Synthetic lease release failure");
+            }
             slotReleaseCount++;
             events.add("release");
         }
@@ -313,6 +402,21 @@ class TaskQueueIdleHandoffTest {
         }
 
         @Override
+        DelayedTask createIdleWakeInitializeTask() {
+            return task(TpDailyTaskEnum.INITIALIZE, LocalDateTime.now());
+        }
+
+        TestDelayedTask task(TpDailyTaskEnum type, LocalDateTime scheduledAt) {
+            return new TestDelayedTask(getProfile(), type, scheduledAt) {
+                @Override
+                public void run() {
+                    executed.add(type);
+                    setRecurring(false);
+                }
+            };
+        }
+
+        @Override
         protected void sleepSchedulerTick(long millis) {
         }
 
@@ -321,7 +425,7 @@ class TaskQueueIdleHandoffTest {
         }
     }
 
-    private static final class TestDelayedTask extends DelayedTask {
+    private static class TestDelayedTask extends DelayedTask {
 
         private TestDelayedTask(AccountDescriptor profile, TpDailyTaskEnum type, LocalDateTime scheduledAt) {
             super(profile, type);

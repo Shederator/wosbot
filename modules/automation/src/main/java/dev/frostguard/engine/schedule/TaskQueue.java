@@ -469,6 +469,17 @@ public class TaskQueue {
             emitInfo("Device offline - re-acquiring slot");
             acquireSlot();
         }
+        if (shuttingDown || statusModel.isPaused()) {
+            return;
+        }
+        // A peer can request initialization while this worker waits for the device lease.
+        if (idleWakeInitializationPending) {
+            runIdleWakeInitialization();
+            if (!statusModel.getLoopState().isExecutedTask() && !statusModel.isPaused()) {
+                finishIdleSchedulerTick();
+            }
+            return;
+        }
         if (enforceSessionCap()) return;
 
         DelayedTask chosen = selectNextTask();
@@ -524,6 +535,9 @@ public class TaskQueue {
             emitInfo("Next task approaching - resuming active slot");
         }
 
+        if (shuttingDown || statusModel.isPaused()) {
+            return false;
+        }
         DelayedTask initialize = takeIdleWakeInitialize(idleWakeInitializationForceNow);
         if (initialize == null) {
             return false;
@@ -626,7 +640,7 @@ public class TaskQueue {
         }
     }
 
-    synchronized DelayedTask selectNextTask() {
+    private synchronized DelayedTask selectNextTask() {
         DelayedTask head = taskBacklog.peek();
         if (head == null) { statusModel.setDelayUntil(LocalDateTime.now().plusSeconds(1)); return null; }
         if (head.getDelay(TimeUnit.MILLISECONDS) > 0) { statusModel.setDelayUntil(head.getScheduled()); return null; }
@@ -1042,18 +1056,19 @@ public class TaskQueue {
         }
         int idleCap = resolvePositiveIdleLimit();
         statusModel.setIdleTimeLimit(idleCap);
-        if (runningContext != null) return;
+        if (runningContext != null || requiresSlotAcquisition(sessionOrigin)) return;
+        boolean keep = Boolean.TRUE.equals(profile.getConfig(ConfigurationKeyEnum.KEEP_EMULATOR_OPEN_BOOL, Boolean.class));
         if (!statusModel.isIdleTimeExceeded() && statusModel.checkIdleTimeExceeded()) {
             if (hasEnabledSiblingOnSameEmulator()) {
                 Optional<PeerSwitchCandidate> peerCandidate = findBestOverduePeerOnSameEmulator();
                 if (peerCandidate.isPresent()) {
-                    handoverSlotToPeer(peerCandidate.get());
-                    statusModel.setIdleTimeExceeded(true);
+                    if (handoverSlotToPeer(peerCandidate.get())) {
+                        statusModel.setIdleTimeExceeded(true);
+                    }
                     return;
                 }
             }
 
-            boolean keep = Boolean.TRUE.equals(profile.getConfig(ConfigurationKeyEnum.KEEP_EMULATOR_OPEN_BOOL, Boolean.class));
             if (keep) {
                 emitInfo("Idle exceeded - keeping device open per config");
                 statusModel.setIdleTimeExceeded(true);
@@ -1062,7 +1077,7 @@ public class TaskQueue {
 
             suspendDevice(statusModel.getDelayUntil(), hasEnabledSiblingOnSameEmulator());
             statusModel.setIdleTimeExceeded(true);
-        } else if (statusModel.isIdleTimeExceeded() && !requiresSlotAcquisition(sessionOrigin) && hasEnabledSiblingOnSameEmulator()) {
+        } else if (keep && statusModel.isIdleTimeExceeded() && hasEnabledSiblingOnSameEmulator()) {
             Optional<PeerSwitchCandidate> peerCandidate = findBestOverduePeerOnSameEmulator();
             if (peerCandidate.isPresent()) {
                 handoverSlotToPeer(peerCandidate.get());
@@ -1086,7 +1101,7 @@ public class TaskQueue {
                 .filter(other -> profile.getEmulatorNumber().equals(other.getEmulatorNumber()))
                 .map(other -> {
                     TaskQueue q = coordinator.getQueue(other.getId());
-                    if (q == null || !q.isActive()) {
+                    if (q == null || !q.canAcceptPeerHandover()) {
                         return null;
                     }
                     Optional<OverdueRunnableSnapshot> snapshot = q.peekMostRelevantOverdueRunnableTask();
@@ -1099,7 +1114,7 @@ public class TaskQueue {
                         .thenComparingLong(c -> c.overdue().overdueSeconds()));
     }
 
-    boolean hasEnabledSiblingOnSameEmulator() {
+    private boolean hasEnabledSiblingOnSameEmulator() {
         if (profile == null || profile.getEmulatorNumber() == null || profile.getEmulatorNumber().isBlank()) {
             return false;
         }
@@ -1110,7 +1125,30 @@ public class TaskQueue {
                 .anyMatch(other -> profile.getEmulatorNumber().equals(other.getEmulatorNumber()));
     }
 
-    void handoverSlotToPeer(PeerSwitchCandidate candidate) {
+    private boolean canAcceptPeerHandover() {
+        return isActive() && !shuttingDown && !statusModel.isPaused() && !hasDeferredIdleWakeInitialize();
+    }
+
+    private synchronized boolean requireInitializeAfterHandover() {
+        if (!canAcceptPeerHandover()) {
+            return false;
+        }
+        idleWakeInitializationPending = true;
+        return true;
+    }
+
+    private boolean handoverSlotToPeer(PeerSwitchCandidate candidate) {
+        if (!candidate.queue().requireInitializeAfterHandover()) {
+            return false;
+        }
+        // Releasing the lease immediately wakes workers already waiting in acquireSlot().
+        try {
+            releaseActiveSlotLease();
+        } catch (RuntimeException exception) {
+            emitWarn("Could not release the slot for peer handover: " + exception.getMessage());
+            return false;
+        }
+
         OverdueRunnableSnapshot overdue = candidate.overdue();
         emitInfo(String.format(
                 "Idle exceeded - handing emulator slot to profile '%s' (task=%s, taskPriority=%d, profilePriority=%d, overdue=%ds)",
@@ -1120,14 +1158,7 @@ public class TaskQueue {
                 candidate.account().getPriority(),
                 overdue.overdueSeconds()));
 
-        try {
-            releaseActiveSlotLease();
-        } catch (Exception ex) {
-            emitWarn("Slot handover warning: " + ex.getMessage());
-        }
-
-        candidate.queue().runNow(TpDailyTaskEnum.INITIALIZE, false);
-        candidate.queue().resume();
+        return true;
     }
 
     record PeerSwitchCandidate(AccountDescriptor account,
