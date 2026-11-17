@@ -12,6 +12,7 @@ import dev.frostguard.engine.error.ActionRequiredContext;
 import dev.frostguard.engine.error.ProfileCooldownException;
 import dev.frostguard.engine.service.ActionRequiredIncidentService;
 import dev.frostguard.engine.service.ProfileService;
+import dev.frostguard.engine.service.ScheduleService;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -27,6 +28,7 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TaskQueueInitializeRecoveryTest {
@@ -65,6 +67,12 @@ class TaskQueueInitializeRecoveryTest {
         DailyTask persisted = DailyTaskRepository.getRepository()
                 .findByAccountIdAndTaskType(profile.getId(), TpDailyTaskEnum.INITIALIZE);
         assertCloseTo(retryAt, persisted.getNextRunAt());
+        assertNull(persisted.getPreviousRun(), "a first-run retry must not create a completion");
+        var summary = DailyTaskRepository.getRepository().statusSummary(profile.getId()).stream()
+                .filter(row -> row.getTaskTypeCode() == TpDailyTaskEnum.INITIALIZE.getId())
+                .findFirst().orElseThrow();
+        assertCloseTo(retryAt, summary.getScheduledAt());
+        assertNull(summary.getLastCompletion());
 
         queue.runSchedulerTick();
 
@@ -129,6 +137,74 @@ class TaskQueueInitializeRecoveryTest {
             deleteRecursively(snapshotWorkspace);
         }
     }
+
+    @Test
+    void blockedCharacterKeepsCompletionAndGatesWorkUntilInitializeRetriesSuccessfully() {
+        AccountDescriptor profile = new AccountDescriptor(
+                null, "Character retry " + UUID.randomUUID(), "0", false, 100L, 30L);
+        assertTrue(ProfileService.obtain().createAccount(profile));
+        LocalDateTime priorCompletion = LocalDateTime.of(2025, 1, 1, 12, 0);
+        LocalDateTime retryAt = LocalDateTime.now().plusMinutes(15).truncatedTo(ChronoUnit.SECONDS);
+        DailyTaskRepository repository = DailyTaskRepository.getRepository();
+        ScheduleService.obtain().persistDailyCompletion(profile, TpDailyTaskEnum.INITIALIZE, LocalDateTime.now());
+        DailyTask record = repository.findByAccountIdAndTaskType(profile.getId(), TpDailyTaskEnum.INITIALIZE);
+        record.setPreviousRun(priorCompletion);
+        repository.saveDailyTask(record);
+
+        RecordingQueue queue = new RecordingQueue(profile);
+        CharacterRetryInitialize initialize = new CharacterRetryInitialize(profile, retryAt);
+        queue.enqueue(initialize);
+        queue.runSchedulerTick();
+
+        DailyTask persisted = repository.findByAccountIdAndTaskType(profile.getId(), TpDailyTaskEnum.INITIALIZE);
+        assertEquals(priorCompletion, persisted.getPreviousRun());
+        assertEquals(retryAt, persisted.getNextRunAt());
+        assertTrue(queue.statusModel.isPaused());
+        assertEquals(1, queue.gameStopCount);
+        assertEquals(1, queue.slotReleaseCount);
+
+        int[] workRuns = {0};
+        DelayedTask work = new DelayedTask(profile, TpDailyTaskEnum.SKIP_TUTORIAL) {
+            @Override
+            protected void execute() {
+                workRuns[0]++;
+            }
+        };
+        work.reschedule(LocalDateTime.now().minusMinutes(1));
+        queue.enqueue(work);
+        queue.statusModel.setDelayUntil(LocalDateTime.now().minusSeconds(1));
+        queue.runSchedulerTick();
+        queue.runSchedulerTick();
+        assertEquals(0, workRuns[0], "overdue work must wait for the deferred Initialize");
+        assertEquals(1, initialize.executions);
+
+        initialize.reschedule(LocalDateTime.now().minusSeconds(1));
+        queue.runSchedulerTick();
+        assertEquals(2, initialize.executions);
+        assertEquals(0, workRuns[0], "Initialize must finish before ordinary work starts");
+
+        queue.runSchedulerTick();
+        assertEquals(1, workRuns[0]);
+    }
+
+    private static final class CharacterRetryInitialize extends DelayedTask {
+        private final LocalDateTime retryAt;
+        private int executions;
+
+        private CharacterRetryInitialize(AccountDescriptor profile, LocalDateTime retryAt) {
+            super(profile, TpDailyTaskEnum.INITIALIZE);
+            this.retryAt = retryAt;
+        }
+
+        @Override
+        protected void execute() {
+            setRecurring(false);
+            if (++executions == 1) {
+                throw new ProfileCooldownException("Active character identity could not be read", retryAt);
+            }
+        }
+    }
+
 
     private static void deleteRecursively(Path root) throws Exception {
         if (!Files.exists(root)) {

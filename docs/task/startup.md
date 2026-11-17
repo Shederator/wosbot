@@ -110,3 +110,13 @@ failure budget. The queue keeps the requested next run, force-stops only the
 game process, releases the emulator slot, and reacquires it before resuming. If
 slot release fails, it retains lease ownership instead of acquiring a second
 slot.
+
+When a character identity is configured, Initialize reads it from Chief Profile
+after verifying the Settings control. A configured ID takes precedence over a
+name. Name-only profiles use a full-name comparison that removes an explicit
+three-character bracketed alliance tag and preserves punctuation. Unreadable
+identity blocks Initialize. A verified mismatch can launch name-based roster
+selection, after which Initialize requires a fresh identity read. A failed
+selection or identity check saves a best-effort startup snapshot and puts the
+profile on a fifteen-minute cooldown. The retry preserves completion history,
+and queued routines wait for Initialize to pass before resuming.

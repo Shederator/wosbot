@@ -17,6 +17,7 @@ import dev.frostguard.api.domain.RawImageData;
 import dev.frostguard.engine.schedule.DelayedTask;
 import dev.frostguard.engine.schedule.LaunchPoint;
 import dev.frostguard.engine.helper.CharacterSwitchHelper;
+import dev.frostguard.engine.helper.CharacterSwitchHelper.MatchStatus;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.nav.CommonOCRSettings;
 import dev.frostguard.vision.convert.ImageConverter;
@@ -172,11 +173,7 @@ public class InitializeRoutine extends DelayedTask {
 			return;
 		}
 		
-		// Verify and switch character if needed (before reading stamina)
-		if (!verifyAndSwitchCharacter()) {
-			// Character verification/switching failed - already handled
-			return;
-		}
+		verifyAndSwitchCharacter();
 		
 		// All checks passed - complete initialization
 		handleInitializationSuccess();
@@ -897,9 +894,13 @@ public class InitializeRoutine extends DelayedTask {
 	 * does not replace the cooldown.
 	 */
 	private StartupBlockerSnapshots.Retention retainTerminalSnapshot(String type) {
+		return retainTerminalSnapshot(type, lastStartupFrame);
+	}
+
+	private StartupBlockerSnapshots.Retention retainTerminalSnapshot(String type, RawImageData decisionFrame) {
 		StartupBlockerSnapshots.Retention retention = StartupBlockerSnapshots.retain(
 				startupSnapshots,
-				lastStartupFrame,
+				decisionFrame,
 				() -> captureStartupFrame("terminal startup snapshot"),
 				type,
 				Instant.now());
@@ -909,74 +910,40 @@ public class InitializeRoutine extends DelayedTask {
 		return retention;
 	}
 
-	/**
-	 * Verifies and switches character if needed.
-	 * 
-	 * <p>
-	 * This method:
-	 * <ol>
-	 * <li>Verifies current character matches profile configuration</li>
-	 * <li>If character doesn't match, switches to correct character</li>
-	 * <li>If character matches or config not set, continues normally</li>
-	 * </ol>
-	 * 
-	 * <p>
-	 * If character switching fails (character not found), the emulator is closed
-	 * and the method returns false. The queue will continue to the next profile.
-	 * 
-	 * <p>
-	 * If character switch is successful, waits for game to reload and re-checks
-	 * home screen before returning true.
-	 * 
-	 * @return true if character verification/switching succeeded, false if failed
-	 */
-	private boolean verifyAndSwitchCharacter() {
-		// Check if character configuration is set
-		String characterName = profile.getCharacterName();
-		String characterId = profile.getCharacterId();
-		
-		// If no character info is configured, skip verification
-		if ((characterName == null || characterName.isEmpty()) &&
-			(characterId == null || characterId.isEmpty())) {
-			logInfo("No character configuration found. Skipping character verification.");
-			return true; // Continue with initialization
+	private void verifyAndSwitchCharacter() {
+		if ((profile.getCharacterName() == null || profile.getCharacterName().isBlank())
+				&& (profile.getCharacterId() == null || profile.getCharacterId().isBlank())) {
+			return;
 		}
-		
-		// Verify current character
-		boolean characterMatches = characterSwitchHelper.verifyCurrentCharacter(profile);
-		
-		if (!characterMatches) {
-			logInfo("Current character does not match profile configuration. Switching character...");
-			
-			// Switch to correct character
-			boolean switchSuccess = characterSwitchHelper.switchToCharacter(profile);
-			
-			if (!switchSuccess) {
-				// Character not found - emulator already closed by helper
-				// According to requirements: do not retry, continue to next profile
-				logError("Character switching failed. Character not found. Continuing to next profile.");
-				// Reset isStarted flag since emulator was closed
-				isStarted = false;
-				// Do not set recurring=true - let queue continue to next profile
-				return false;
-			}
-			
-			// Character switch successful, wait for game to reload
-			logInfo("Character switch successful. Waiting for game to reload...");
-			sleepTask(CharacterSwitchHelper.CHARACTER_SWITCH_RELOAD_DELAY_MS);
-			
-			// Re-check home screen after character switch
-			if (!waitForHomeScreen()) {
-				// Home screen not found after character switch
-				return false;
-			}
-			
-			logInfo("Home screen verified after character switch.");
-		} else {
-			logInfo("Character verification passed - correct character is active.");
+
+		MatchStatus initial = characterSwitchHelper.inspectCurrentCharacter(profile);
+		if (initial == MatchStatus.MATCH) {
+			return;
 		}
-		
-		return true;
+		if (initial == MatchStatus.UNKNOWN) {
+			throw characterCooldown("Active character identity could not be read");
+		}
+		if (!characterSwitchHelper.switchToCharacter(profile)) {
+			throw characterCooldown("Configured character could not be selected safely");
+		}
+
+		sleepTask(CharacterSwitchHelper.CHARACTER_SWITCH_RELOAD_DELAY_MS);
+		if (!waitForHomeScreen() || characterSwitchHelper.inspectCurrentCharacter(profile) != MatchStatus.MATCH) {
+			throw characterCooldown("Active character identity was not verified after switching");
+		}
+	}
+
+	private ProfileCooldownException characterCooldown(String reason) {
+		isStarted = false;
+		LocalDateTime retryAt = LocalDateTime.now().plus(StartupRecoveryPolicy.UNKNOWN_BLOCKER_COOLDOWN);
+		StartupBlockerSnapshots.Retention snapshot = retainTerminalSnapshot(
+				StartupBlockerSnapshots.TYPE_INITIALIZE_BLOCKED, null);
+		logWarning("Character initialization blocked for profile=" + profile.getName()
+				+ ", expected=configured active character, observed=" + reason
+				+ ", fallback=stop-game-and-release-slot, retryAt=" + retryAt
+				+ ", snapshot=" + snapshot.logToken() + ", snapshotBasis=" + snapshot.basis());
+		return new ProfileCooldownException(reason, retryAt)
+				.withEvidencePath(snapshot.saved() ? snapshot.relativePath() : "");
 	}
 
 	/**
