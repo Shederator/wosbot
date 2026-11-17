@@ -42,6 +42,12 @@ Initialization distinguishes startup blockers before attempting recovery:
   profile-wide cooldown stops only the game,
   releases the slot for fifteen minutes, and never cycles the emulator or
   immediately retries Initialize.
+- Emulator startup is bounded by at most three launch attempts with a 10-second
+  poll delay. If the emulator fails to report running within this bound,
+  `InitializeRoutine` captures an optional terminal diagnostic snapshot, logs
+  the exhaustion, and enters a 15-minute profile cooldown
+  (`startup.emulator-launch-timeout`) with `ActionRequiredContext`, releasing the
+  emulator slot lease and stopping launch lock re-acquisition.
 
 The generic `CloseCrossDetector` handles close controls in initialization,
 restricted to the measured `(540, 20)`–`(719, 280)` area. A full upper-right

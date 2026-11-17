@@ -207,16 +207,52 @@ public class InitializeRoutine extends DelayedTask {
 						logInfo("Waiting 10 seconds before checking again.");
 						sleepTask(10000); // Wait for emulator to start
 					},
-					this::checkPreemption);
+					this::checkPreemption,
+					StartupRecoveryPolicy.MAX_EMULATOR_BOOT_ATTEMPTS,
+					this::deferEmulatorBootTimeout);
 			isStarted = true;
 			lastVerifiedStartupState = "emulator running";
 			logInfo("Emulator is running.");
 		}
 	}
 
+	private void deferEmulatorBootTimeout() {
+		String reason = "Emulator failed to start after bounded launch attempts";
+		StartupBlockerSnapshots.Retention snapshot = retainTerminalSnapshot(
+				StartupBlockerSnapshots.TYPE_EMULATOR_LAUNCH_TIMEOUT);
+		LocalDateTime retryAt = LocalDateTime.now().plus(StartupRecoveryPolicy.EMULATOR_BOOT_FAILURE_COOLDOWN);
+		logError("Initialization blocked for profile=" + profile.getName()
+				+ ", expected=emulator-running, observed=emulator-not-running"
+				+ ", lastAction=launched emulator " + EMULATOR_NUMBER
+				+ ", attempts=" + StartupRecoveryPolicy.MAX_EMULATOR_BOOT_ATTEMPTS
+				+ ", fallback=stop-game-and-release-slot, retryAt=" + retryAt
+				+ ", reason=" + reason
+				+ ", snapshot=" + snapshot.logToken()
+				+ ", snapshotBasis=" + snapshot.basis() + ".");
+		throw new ProfileCooldownException(reason, retryAt, new ActionRequiredContext(
+				"startup.emulator-launch-timeout",
+				"Emulator failed to start",
+				"emulator running",
+				"emulator remained stopped after " + StartupRecoveryPolicy.MAX_EMULATOR_BOOT_ATTEMPTS + " launch attempts",
+				"Launched emulator and polled running state",
+				"Check emulator configuration, available disk space, and VM health"))
+				.withEvidencePath(snapshot.saved() ? snapshot.relativePath() : "");
+	}
+
 	static void awaitEmulatorRunning(BooleanSupplier isRunning, Runnable launch,
 			Runnable retryDelay, Runnable checkPreemption) {
-		while (true) {
+		awaitEmulatorRunning(isRunning, launch, retryDelay, checkPreemption,
+				StartupRecoveryPolicy.MAX_EMULATOR_BOOT_ATTEMPTS,
+				() -> {
+					throw new ProfileCooldownException(
+							"Emulator failed to start after bounded launch attempts",
+							LocalDateTime.now().plus(StartupRecoveryPolicy.EMULATOR_BOOT_FAILURE_COOLDOWN));
+				});
+	}
+
+	static void awaitEmulatorRunning(BooleanSupplier isRunning, Runnable launch,
+			Runnable retryDelay, Runnable checkPreemption, int maxAttempts, Runnable onExhausted) {
+		for (int attempt = 1; attempt <= maxAttempts; attempt++) {
 			checkPreemption.run();
 			boolean running = isRunning.getAsBoolean();
 			checkPreemption.run();
@@ -227,6 +263,13 @@ public class InitializeRoutine extends DelayedTask {
 			checkPreemption.run();
 			retryDelay.run();
 		}
+		checkPreemption.run();
+		boolean running = isRunning.getAsBoolean();
+		checkPreemption.run();
+		if (running) {
+			return;
+		}
+		onExhausted.run();
 	}
 
 	/**

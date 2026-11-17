@@ -16,6 +16,7 @@ final class StartupBlockerSnapshots {
 
     static final String ACTIVITY = "initialize";
     static final String TYPE_INITIALIZE_BLOCKED = "initialize-blocked";
+    static final String TYPE_EMULATOR_LAUNCH_TIMEOUT = "emulator-launch-timeout";
     static final String TYPE_PLAY_STORE_REDIRECT = "play-store-redirect";
     static final String TYPE_RESOURCE_DOWNLOAD_TIMEOUT = "resource-download-timeout";
     static final String TYPE_UPDATE_FOLLOW_UP = "update-follow-up";

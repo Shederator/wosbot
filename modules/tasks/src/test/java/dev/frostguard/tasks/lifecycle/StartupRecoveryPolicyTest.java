@@ -25,6 +25,12 @@ class StartupRecoveryPolicyTest {
     }
 
     @Test
+    void boundsEmulatorBootAttemptsAndUsesStandardCooldown() {
+        assertEquals(3, StartupRecoveryPolicy.MAX_EMULATOR_BOOT_ATTEMPTS);
+        assertEquals(Duration.ofMinutes(15), StartupRecoveryPolicy.EMULATOR_BOOT_FAILURE_COOLDOWN);
+    }
+
+    @Test
     void usesLongerCooldownOnlyForVerifiedPlayStoreRedirect() {
         assertEquals(Duration.ofMinutes(15), StartupRecoveryPolicy.UNKNOWN_BLOCKER_COOLDOWN);
         assertEquals(Duration.ofMinutes(15), StartupRecoveryPolicy.UPDATE_FOLLOW_UP_COOLDOWN);
