@@ -65,11 +65,11 @@ public class DailyTaskRepository {
 		if (profileId == null) return Collections.emptyList();
 		return store.executeQuery(
 			"SELECT new dev.frostguard.api.domain.DailyTaskStatusData(" +
-				"d.owner.id, d.routine.id, d.completedAt, d.nextRunAt, d.customTaskLabel, " +
+				"d.owner.id, d.routine.id, nullif(d.completedAt, :noCompletion), d.nextRunAt, d.customTaskLabel, " +
 				"d.staminaMinimumRequired, d.staminaRegenerationTarget, d.staminaEarliestRunnableAt" +
 			") FROM DailyTask d WHERE d.owner.id = :profileId",
 			DailyTaskStatusData.class,
-			Map.of("profileId", profileId));
+			Map.of("profileId", profileId, "noCompletion", DailyTask.NO_COMPLETION));
 	}
 
 	public boolean addDailyTask(DailyTask task) {

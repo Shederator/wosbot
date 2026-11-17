@@ -8,19 +8,29 @@ import dev.frostguard.api.configs.TemplatesEnum;
 import dev.frostguard.api.domain.AccountDescriptor;
 import dev.frostguard.api.domain.AreaData;
 import dev.frostguard.api.domain.ImageSearchResultData;
-import dev.frostguard.api.domain.PointData;
 import dev.frostguard.api.domain.OcrSettingsData;
+import dev.frostguard.api.domain.PointData;
 import dev.frostguard.engine.emulator.EmulatorController;
+import dev.frostguard.engine.error.TaskPreemptedException;
 import dev.frostguard.engine.input.TapInteractionService;
 import dev.frostguard.engine.nav.CommonGameAreas;
 import dev.frostguard.engine.service.BotOcrEngine;
 import dev.frostguard.vision.logging.ProfileContextLogger;
 import dev.frostguard.vision.ocr.ResilientOcrExecutor;
 
-// Handles character verification and switching via the in-game profile menu.
 public class CharacterSwitchHelper {
 
     public static final int CHARACTER_SWITCH_RELOAD_DELAY_MS = 5000;
+    private static final Pattern ALLIANCE_TAG_PREFIX = Pattern.compile("^\\[[A-Za-z0-9]{3}\\]\\s*");
+    private static final Pattern ID_DIGITS = Pattern.compile("[0-9]+");
+
+    public enum MatchStatus { MATCH, MISMATCH, UNKNOWN }
+
+    record MatchResult(MatchStatus status, String detail) {
+        boolean ok() {
+            return status == MatchStatus.MATCH;
+        }
+    }
 
     private final EmulatorController emu;
     private final String dev;
@@ -38,175 +48,230 @@ public class CharacterSwitchHelper {
         this.ocr = new ResilientOcrExecutor<>(new BotOcrEngine(emuManager, emulatorNumber));
     }
 
-    // --- Character verification ---
-
-    public boolean verifyCurrentCharacter(AccountDescriptor p) {
-        String wantName = p.getCharacterName(), wantId = p.getCharacterId();
-        if (blank(wantName) && blank(wantId)) { log.debug("No character config, skipping"); return true; }
-        log.info("Verifying character: name='" + wantName + "' id='" + wantId + "'");
-
-        taps.tapInside(CommonGameAreas.PROFILE_AVATAR, 1, 500);
-
-        String liveId = ocrRead(CommonGameAreas.CHARACTER_ID_OCR_AREA, idOcrCfg());
-        String liveName = ocrRead(CommonGameAreas.CHARACTER_NAME_OCR_AREA, nameOcrCfg());
-        log.debug("Live char: name='" + liveName + "' id='" + liveId + "'");
-
-        boolean idOk = blank(wantId) || (!blank(liveId) && wantId.equals(liveId));
-        boolean nameOk = blank(wantName) || (!blank(liveName) && nameMatch(liveName, wantName));
-        if (!blank(wantId) && blank(liveId)) log.warn("ID configured but OCR failed");
-        if (!blank(wantName) && blank(liveName)) log.warn("Name configured but OCR failed");
-
-        if (idOk || nameOk) { log.info("Char verified OK"); emu.pressBack(dev); return true; }
-        log.warn("Char mismatch"); return false;
+    static MatchResult evaluateMatch(String wantId, String liveId, String wantName, String liveName) {
+        if (!blank(wantId)) {
+            if (blank(liveId) || !ID_DIGITS.matcher(liveId.strip()).matches()) {
+                return new MatchResult(MatchStatus.UNKNOWN, "Configured ID could not be read (OCR blank or invalid)");
+            }
+            if (!wantId.strip().equals(liveId.strip())) {
+                return new MatchResult(MatchStatus.MISMATCH, "ID mismatch");
+            }
+            if (!blank(wantName) && !blank(liveName) && !nameMatch(liveName, wantName)) {
+                return new MatchResult(MatchStatus.MATCH, "Name differs, accepted via immutable ID");
+            }
+            return new MatchResult(MatchStatus.MATCH, "ID verified OK");
+        }
+        if (blank(wantName)) {
+            return new MatchResult(MatchStatus.MATCH, "No character criteria configured");
+        }
+        if (normalizedName(liveName).isEmpty() || normalizedName(wantName).isEmpty()) {
+            return new MatchResult(MatchStatus.UNKNOWN, "Configured name could not be verified (OCR blank or invalid name)");
+        }
+        if (!nameMatch(liveName, wantName)) {
+            return new MatchResult(MatchStatus.MISMATCH, "Name mismatch");
+        }
+        return new MatchResult(MatchStatus.MATCH, "Name verified OK");
     }
 
-    // --- Character switching ---
+    public boolean verifyCurrentCharacter(AccountDescriptor profile) {
+        return inspectCurrentCharacter(profile) == MatchStatus.MATCH;
+    }
 
-    public boolean switchToCharacter(AccountDescriptor p) {
-        String target = p.getCharacterName();
-        if (blank(target)) { log.error("No character name configured"); return false; }
-        log.info("Switching to '" + target + "' server=" + p.getCharacterServer());
-
-        if (!tapTemplate(TemplatesEnum.GAME_PROFILE_SETTINGS_BUTTON,
-                CommonGameAreas.PROFILE_SETTINGS_BUTTON_AREA)) {
-            log.error("Settings button not found"); return false;
+    /**
+     * Opens Chief Profile and leaves it available on a verified mismatch for roster navigation.
+     */
+    public MatchStatus inspectCurrentCharacter(AccountDescriptor profile) {
+        String wantName = profile.getCharacterName();
+        String wantId = profile.getCharacterId();
+        if (blank(wantName) && blank(wantId)) {
+            return MatchStatus.MATCH;
         }
-        if (!tapTemplate(TemplatesEnum.GAME_PROFILE_SETTINGS_SWITCH_CHARACTER_BUTTON, null)) {
-            log.error("Switch Character button not found"); emu.pressBack(dev); return false;
+
+        taps.tapInside(CommonGameAreas.PROFILE_AVATAR, 1, 500);
+        if (!profileVisible()) {
+            log.warn("Character identity unknown: Chief Profile could not be verified");
+            return MatchStatus.UNKNOWN;
+        }
+
+        String liveId = blank(wantId) ? null : ocrRead(CommonGameAreas.CHARACTER_ID_OCR_AREA, idOcrCfg());
+        String liveName = blank(wantId) ? ocrRead(CommonGameAreas.CHARACTER_NAME_OCR_AREA, nameOcrCfg()) : null;
+        MatchResult result = evaluateMatch(wantId, liveId, wantName, liveName);
+        if (result.ok()) {
+            log.info("Char verified OK: " + result.detail());
+            emu.pressBack(dev);
+        } else {
+            log.warn("Character verification " + result.status() + ": " + result.detail());
+        }
+        return result.status();
+    }
+
+    public boolean switchToCharacter(AccountDescriptor profile) {
+        String target = profile.getCharacterName();
+        if (normalizedName(target).isEmpty()) {
+            log.warn("No usable character name is configured for roster lookup");
+            return false;
+        }
+        if (!tapTemplate(TemplatesEnum.GAME_PROFILE_SETTINGS_BUTTON, CommonGameAreas.PROFILE_SETTINGS_BUTTON_AREA)) {
+            log.warn("Settings button not found in Chief Profile");
+            return false;
+        }
+        if (!tapTemplate(TemplatesEnum.GAME_PROFILE_SETTINGS_SWITCH_CHARACTER_BUTTON,
+                CommonGameAreas.PROFILE_SETTINGS_SWITCH_CHARACTER_BUTTON_AREA)) {
+            log.warn("Switch Character button not found");
+            return false;
         }
         sleep(2000);
 
         for (int pass = 0; pass < 3; pass++) {
-            log.debug("Roster scan " + (pass + 1) + "/3");
-            ImageSearchResultData hit = findInRoster(target);
-            if (hit == null) { log.debug("Not visible, scrolling"); scrollDown(); continue; }
-
-            // Check if already active via checkmark badge
-            if (checkmarkAt(hit.getPoint())) {
-                log.info("Already active — done");
-                emu.pressBack(dev); sleep(500); return true;
+            List<ImageSearchResultData> matches = findInRoster(target);
+            if (matches.isEmpty()) {
+                if (pass < 2) {
+                    scrollDown();
+                }
+                continue;
             }
-
-            // Tap and confirm
-            taps.tapInside(hit, 1, 500); sleep(500);
-            if (confirmSwitch(target)) { sleep(CHARACTER_SWITCH_RELOAD_DELAY_MS); log.info("Switch OK"); return true; }
-            log.warn("Confirm failed, canceling");
+            if (matches.size() > 1) {
+                log.warn("Multiple visible roster entries match the configured name");
+                return false;
+            }
+            ImageSearchResultData hit = matches.getFirst();
+            if (checkmarkAt(hit.getPoint())) {
+                return leaveVerifiedRoster();
+            }
+            if (taps.tapInside(hit, 1, 500) && confirmSwitch(target)) {
+                return true;
+            }
             cancelSwitch();
+            return false;
         }
-        // Changed by pernerch | Date: 2026-07-02 | Why: close emulator only as final fallback after repeated switch failure.
-        log.error("Character not found after 3 passes — closing emulator");
-        emu.closeEmulator(dev); return false;
+        log.warn("Character not found after three roster scans");
+        return false;
     }
 
-    // --- Roster scanning (merged active + inactive search) ---
+    private boolean leaveVerifiedRoster() {
+        emu.pressBack(dev);
+        sleep(500);
+        if (!findTemplate(TemplatesEnum.GAME_PROFILE_SETTINGS_SWITCH_CHARACTER_BUTTON,
+                CommonGameAreas.PROFILE_SETTINGS_SWITCH_CHARACTER_BUTTON_AREA).isFound()) {
+            return false;
+        }
+        emu.pressBack(dev);
+        sleep(500);
+        if (!profileVisible()) {
+            return false;
+        }
+        emu.pressBack(dev);
+        return true;
+    }
 
-    private ImageSearchResultData findInRoster(String targetName) {
+    private boolean profileVisible() {
+        return findTemplate(TemplatesEnum.GAME_PROFILE_SETTINGS_BUTTON,
+                CommonGameAreas.PROFILE_SETTINGS_BUTTON_AREA).isFound();
+    }
+
+    private List<ImageSearchResultData> findInRoster(String targetName) {
         TemplateSearchHelper.SearchConfig cfg = TemplateSearchHelper.SearchConfig.builder()
                 .withArea(CommonGameAreas.PROFILE_SETTINGS_SWITCH_CHARACTER_CHARACTER_LIST_AREA)
                 .withMaxAttempts(3).withThreshold(90).withMaxResults(5).build();
-
-        List<ImageSearchResultData> hits = new ArrayList<>();
-        addAll(hits, tpl.locateAllPatterns(TemplatesEnum.GAME_PROFILE_SETTINGS_CHARACTER_FURNACE_LEVEL_ACTIVE, cfg));
-        addAll(hits, tpl.locateAllPatterns(TemplatesEnum.GAME_PROFILE_SETTINGS_CHARACTER_FURNACE_LEVEL_INACTIVE, cfg));
-        if (hits.isEmpty()) return null;
-        log.debug(hits.size() + " furnace indicators found");
-
-        for (ImageSearchResultData h : hits) {
-            PointData fp = h.getPoint();
+        List<ImageSearchResultData> hits = new ArrayList<>(tpl.locateAllPatterns(
+                TemplatesEnum.GAME_PROFILE_SETTINGS_CHARACTER_FURNACE_LEVEL_ACTIVE, cfg));
+        hits.addAll(tpl.locateAllPatterns(TemplatesEnum.GAME_PROFILE_SETTINGS_CHARACTER_FURNACE_LEVEL_INACTIVE, cfg));
+        List<ImageSearchResultData> matches = new ArrayList<>();
+        for (ImageSearchResultData hit : hits) {
+            PointData point = hit.getPoint();
             String name = ocr.attemptRecognition(
                     new PointData(CommonGameAreas.CHARACTER_NAME_ABOVE_FURNACE_X_START,
-                            fp.getY() - CommonGameAreas.CHARACTER_NAME_ABOVE_FURNACE_TOP_OFFSET_Y),
+                            point.getY() - CommonGameAreas.CHARACTER_NAME_ABOVE_FURNACE_TOP_OFFSET_Y),
                     new PointData(CommonGameAreas.CHARACTER_NAME_ABOVE_FURNACE_X_END,
-                            fp.getY() - CommonGameAreas.CHARACTER_NAME_ABOVE_FURNACE_BOTTOM_OFFSET_Y),
-                    2, 200, nameOcrCfg(), t -> t != null && !t.trim().isEmpty(), String::trim);
-            if (name != null && nameMatch(name, targetName)) { log.info("Found: '" + name + "'"); return h; }
+                            point.getY() - CommonGameAreas.CHARACTER_NAME_ABOVE_FURNACE_BOTTOM_OFFSET_Y),
+                    2, 200, nameOcrCfg(), text -> !blank(text), String::strip);
+            if (nameMatch(name, targetName)) {
+                matches.add(hit);
+            }
         }
-        return null;
+        return matches;
     }
 
-    private boolean checkmarkAt(PointData fp) {
-        int cx = fp.getX() + 264, cy = fp.getY() - 40;
+    private boolean checkmarkAt(PointData point) {
+        int x = point.getX() + 264;
+        int y = point.getY() - 40;
         return tpl.locatePattern(TemplatesEnum.GAME_PROFILE_SETTINGS_CHARACTER_ACTIVE_CHECKMARK,
                 TemplateSearchHelper.SearchConfig.builder()
-                        .withArea(new AreaData(new PointData(cx, cy), new PointData(cx + 60, cy + 60)))
+                        .withArea(new AreaData(new PointData(x, y), new PointData(x + 60, y + 60)))
                         .withMaxAttempts(1).withThreshold(90).build()).isFound();
     }
 
-    // --- Confirm / cancel dialog ---
-
     private boolean confirmSwitch(String expectedName) {
-        String dialogName = ocr.attemptRecognition(
-                CommonGameAreas.PROFILE_SETTINGS_SWITCH_CHARACTER_CONFIRM_DIALOG_NAME_OCR_AREA.topLeft(),
-                CommonGameAreas.PROFILE_SETTINGS_SWITCH_CHARACTER_CONFIRM_DIALOG_NAME_OCR_AREA.bottomRight(),
-                2, 200, nameOcrCfg(), t -> t != null && !t.trim().isEmpty(), String::trim);
-        if (blank(dialogName) || !nameMatch(dialogName, expectedName)) {
-            log.warn("Dialog name mismatch: got='" + dialogName + "' want='" + expectedName + "'");
+        String dialogName = ocrRead(CommonGameAreas.PROFILE_SETTINGS_SWITCH_CHARACTER_CONFIRM_DIALOG_NAME_OCR_AREA,
+                nameOcrCfg());
+        if (!nameMatch(dialogName, expectedName)) {
+            log.warn("Confirmation dialog name was unreadable or did not match");
             return false;
         }
-        log.info("Dialog name OK: '" + dialogName + "'");
         return tapTemplate(TemplatesEnum.GAME_PROFILE_SETTINGS_SWITCH_CHARACTER_CONFIRM_BUTTON,
                 CommonGameAreas.PROFILE_SETTINGS_SWITCH_CHARACTER_PROMPT_BUTTON_AREA);
     }
 
     private void cancelSwitch() {
-        ImageSearchResultData btn = tpl.locatePattern(
-                TemplatesEnum.GAME_PROFILE_SETTINGS_SWITCH_CHARACTER_CANCEL_BUTTON,
-                TemplateSearchHelper.SearchConfig.builder()
-                        .withArea(CommonGameAreas.PROFILE_SETTINGS_SWITCH_CHARACTER_PROMPT_BUTTON_AREA)
-                        .withMaxAttempts(3).withDelay(500).withThreshold(80).build());
-        if (btn == null || !btn.isFound()) emu.pressBack(dev);
-        else taps.tapInside(btn, 1, 500);
-        sleep(500);
+        tapTemplate(TemplatesEnum.GAME_PROFILE_SETTINGS_SWITCH_CHARACTER_CANCEL_BUTTON,
+                CommonGameAreas.PROFILE_SETTINGS_SWITCH_CHARACTER_PROMPT_BUTTON_AREA);
     }
 
-    // --- Shared utilities ---
-
-    private boolean tapTemplate(TemplatesEnum t, AreaData area) {
-        TemplateSearchHelper.SearchConfig.Builder b = TemplateSearchHelper.SearchConfig.builder()
-                .withMaxAttempts(3).withDelay(500).withThreshold(80);
-        if (area != null) b.withArea(area);
-        ImageSearchResultData hit = tpl.locatePattern(t, b.build());
-        if (hit == null || !hit.isFound()) return false;
-        taps.tapInside(hit, 1, 500); return true;
+    private boolean tapTemplate(TemplatesEnum template, AreaData area) {
+        return taps.tapInside(findTemplate(template, area), 1, 500);
     }
 
-    private boolean nameMatch(String ocrText, String expected) {
-        if (blank(ocrText) || blank(expected)) return false;
-        String a = ocrText.trim().replaceAll("\\s+", "");
-        String b = expected.trim().replaceAll("\\s+", "");
-        return Pattern.compile(Pattern.quote(b), Pattern.CASE_INSENSITIVE).matcher(a).find();
+    private ImageSearchResultData findTemplate(TemplatesEnum template, AreaData area) {
+        return tpl.locatePattern(template, TemplateSearchHelper.SearchConfig.builder()
+                .withArea(area).withMaxAttempts(3).withDelay(500).withThreshold(80).build());
+    }
+
+    static boolean nameMatch(String ocrText, String expected) {
+        String actual = normalizedName(ocrText);
+        return !actual.isEmpty() && actual.equalsIgnoreCase(normalizedName(expected));
+    }
+
+    private static String normalizedName(String name) {
+        if (blank(name)) {
+            return "";
+        }
+        String base = ALLIANCE_TAG_PREFIX.matcher(name.strip()).replaceFirst("").strip().replaceAll("\\s+", " ");
+        return base.codePoints().anyMatch(Character::isLetterOrDigit) ? base : "";
     }
 
     private String ocrRead(AreaData area, OcrSettingsData cfg) {
-        return ocr.attemptRecognition(area, 3, 300L, cfg, t -> t != null && !t.trim().isEmpty(), String::trim);
+        return ocr.attemptRecognition(area, 3, 300L, cfg, text -> !blank(text), String::strip);
     }
 
-    private static boolean blank(String s) { return s == null || s.isEmpty(); }
+    private static boolean blank(String value) {
+        return value == null || value.isBlank();
+    }
 
     private void scrollDown() {
         emu.swipeScreen(dev, new PointData(360, 800), new PointData(360, 400));
         sleep(1000);
     }
 
-    private static void addAll(List<ImageSearchResultData> dst, List<ImageSearchResultData> src) {
-        if (src != null) dst.addAll(src);
-    }
-
     private OcrSettingsData idOcrCfg() {
         return OcrSettingsData.builder()
                 .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
                 .setAllowedChars("0123456789")
-                .setRemoveBackground(true).build();
+                .build();
     }
 
     private OcrSettingsData nameOcrCfg() {
         return OcrSettingsData.builder()
                 .textLayout(OcrSettingsData.TextLayout.SINGLE_LINE)
-                .setAllowedChars("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ")
-                .setRemoveBackground(true).build();
+                .setAllowedChars("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789[]()-_.'# ")
+                .build();
     }
 
     private void sleep(long ms) {
-        try { Thread.sleep(ms); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw TaskPreemptedException.because("Character navigation interrupted");
+        }
     }
 }

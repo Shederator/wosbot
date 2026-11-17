@@ -676,7 +676,7 @@ public class TaskQueue {
         LocalDateTime priorSchedule = task.getScheduled();
         TaskStateData st = recordPreExecution(task);
         long t0 = System.currentTimeMillis();
-        boolean ok;
+        boolean ok = false;
         ExecutionContext ctx = new ExecutionContext(task);
         synchronized (this) {
             runningContext = ctx;
@@ -700,7 +700,6 @@ public class TaskQueue {
             emitInfoTask(task, "Completed: " + task.getTaskName() + " scheduled="
                     + (scheduledAfterRun != null ? scheduledAfterRun.format(TS_FMT) : "none"));
             AnalyticsService.getInstance().trackTaskCompleted(task.getTaskName(), "success", elapsed);
-            ok = true;
             checkDailyMissionFollow(task);
             try {
                 TaskFailureIncidentService.obtain().recordSuccess(
@@ -709,24 +708,23 @@ public class TaskQueue {
                 emitWarnTask(task, "Could not reset persistent task-failure state: "
                         + exception.getMessage());
             }
+            ok = true;
         } catch (dev.frostguard.engine.error.TaskPreemptedException ex) {
             emitWarnTask(task, "PREEMPTED: " + ex.getReasoning());
             AnalyticsService.getInstance().trackTaskCompleted(task.getTaskName(), "preempted", (System.currentTimeMillis()-t0)/1000);
-            task.reschedule(LocalDateTime.now()); ok = false;
+            task.reschedule(LocalDateTime.now());
         } catch (Exception ex) {
             if (shuttingDown) {
                 emitInfo("Task interrupted during shutdown: " + task.getTaskName());
-                ok = false;
             } else {
                 routeError(task, ex);
                 AnalyticsService.getInstance().trackTaskCompleted(task.getTaskName(), "failed", (System.currentTimeMillis()-t0)/1000);
-                ok = false;
             }
         } finally {
             synchronized (this) { if (runningContext != null) runningContext.clear(); runningContext = null; }
             if (!shuttingDown) {
                 handleReschedule(task, priorSchedule);
-                recordPostExecution(task, st);
+                recordPostExecution(task, st, ok);
             }
         }
         return ok;
@@ -800,21 +798,37 @@ public class TaskQueue {
         s.setProfileId(profile.getId()); s.setTaskId(task.getTpDailyTaskId());
         Object k = task.getDistinctKey(); if (k != null) s.setCustomTaskName(k.toString());
         s.setScheduled(true); s.setExecuting(true);
-        s.setLastExecutionTime(LocalDateTime.now()); s.setNextExecutionTime(task.getScheduled());
+        if (task.getTpTask() == TpDailyTaskEnum.INITIALIZE) {
+            TaskStateData previous = TaskManagementService.shared()
+                    .lookupTaskState(profile.getId(), task.getTpDailyTaskId(), s.getCustomTaskName());
+            if (previous != null) {
+                s.setLastExecutionTime(previous.getLastExecutionTime());
+            }
+        } else {
+            s.setLastExecutionTime(LocalDateTime.now());
+        }
+        s.setNextExecutionTime(task.getScheduled());
         TaskManagementService.shared().recordTaskState(profile.getId(), s);
         return s;
     }
 
-    private void recordPostExecution(DelayedTask task, TaskStateData s) {
+    private void recordPostExecution(DelayedTask task, TaskStateData s, boolean completed) {
         if (shuttingDown) {
             emitInfo("Skipping state save during shutdown");
             return;
         }
+        boolean initializeRetry = !completed && task.getTpTask() == TpDailyTaskEnum.INITIALIZE;
         s.setExecuting(false); s.setScheduled(task.isRecurring());
-        s.setLastExecutionTime(LocalDateTime.now()); s.setNextExecutionTime(task.getScheduled());
+        if (!initializeRetry) {
+            s.setLastExecutionTime(LocalDateTime.now());
+        }
+        s.setNextExecutionTime(task.getScheduled());
         Object k = task.getDistinctKey(); if (k != null) s.setCustomTaskName(k.toString());
         TaskManagementService.shared().recordTaskState(profile.getId(), s);
-        if (task.getScheduled() != null) {
+        if (task.getScheduled() != null && initializeRetry) {
+            ScheduleService.obtain().persistScheduleAdjustment(
+                    profile, task.getTpTask(), task.getScheduled(), s.getCustomTaskName(), task.getStaminaDeferral());
+        } else if (task.getScheduled() != null) {
             ScheduleService.obtain().persistDailyCompletion(
                     profile, task.getTpTask(), task.getScheduled(), s.getCustomTaskName(), task.getStaminaDeferral());
         }
@@ -883,6 +897,10 @@ public class TaskQueue {
         emitErrorTask(task, "Profile cooldown requested: " + cooldown.getMessage()
                 + "; queue paused until " + retryAt.format(TS_FMT));
         applyProfileCooldown(task, statusModel, retryAt);
+        if (task.getTpTask() == TpDailyTaskEnum.INITIALIZE) {
+            idleWakeInitializationPending = true;
+            idleWakeInitializationForceNow = false;
+        }
         boolean immediatelyActionRequired = cooldown.getActionRequiredContext().isPresent();
         profileCooldownStatus = (immediatelyActionRequired ? "ACTION REQUIRED - " : "COOLDOWN - ")
                 + cooldown.getMessage() + " - retry " + retryAt.format(TS_FMT);

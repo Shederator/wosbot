@@ -258,8 +258,10 @@ public final class CommonGameAreas {
 
     // ── character identity ───────────────────────────────────────────
 
-    public static final AreaData CHARACTER_ID_OCR_AREA   = region(300, 940, 465, 980);
-    public static final AreaData CHARACTER_NAME_OCR_AREA = region(280, 890, 600, 930);
+    // Row 1: Character Name (covers text, padding for descenders, stops before pencil edit icon)
+    public static final AreaData CHARACTER_NAME_OCR_AREA = region(280, 830, 600, 885);
+    // Row 2: Character ID (skips 'ID:' prefix and space, covers 9 digits, stops before copy icon)
+    public static final AreaData CHARACTER_ID_OCR_AREA   = region(315, 895, 465, 935);
 
     public static final AreaData PROFILE_SETTINGS_BUTTON_AREA =
             region(540, 1150, 720, 1250);
