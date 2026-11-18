@@ -1,5 +1,7 @@
 package dev.frostguard.engine.emulator.instance;
 
+import dev.frostguard.engine.emulator.BoundedProcessRunner;
+import java.io.IOException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -21,7 +23,7 @@ class MuMuManagerProcessTest {
 
     @Test
     void acceptsRunningStateWhenManagerExits() throws Exception {
-        boolean running = MuMuEmulatorInstance.readRunningState(
+        boolean running = readRunningState(
                 childProcess("running", tempDir.resolve("normal.pid")), Duration.ofSeconds(5));
 
         assertTrue(running);
@@ -29,7 +31,7 @@ class MuMuManagerProcessTest {
 
     @Test
     void rejectsStoppedStateWhenManagerExits() throws Exception {
-        boolean running = MuMuEmulatorInstance.readRunningState(
+        boolean running = readRunningState(
                 childProcess("stopped", tempDir.resolve("stopped.pid")), Duration.ofSeconds(5));
 
         assertFalse(running);
@@ -37,7 +39,7 @@ class MuMuManagerProcessTest {
 
     @Test
     void rejectsRunningTokenFromFailedManagerCommand() throws Exception {
-        boolean running = MuMuEmulatorInstance.readRunningState(
+        boolean running = readRunningState(
                 childProcess("failed", tempDir.resolve("failed.pid")), Duration.ofSeconds(5));
 
         assertFalse(running);
@@ -48,7 +50,7 @@ class MuMuManagerProcessTest {
         Path pidFile = tempDir.resolve("timeout.pid");
         long startedAt = System.nanoTime();
 
-        boolean running = MuMuEmulatorInstance.readRunningState(
+        boolean running = readRunningState(
                 childProcess("hang", pidFile), Duration.ofSeconds(3));
 
         assertFalse(running);
@@ -63,7 +65,7 @@ class MuMuManagerProcessTest {
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread worker = new Thread(() -> {
             try {
-                MuMuEmulatorInstance.readRunningState(
+                readRunningState(
                         childProcess("hang", pidFile), Duration.ofSeconds(30));
             } catch (InterruptedException expected) {
                 interrupted.set(true);
@@ -81,6 +83,20 @@ class MuMuManagerProcessTest {
         assertTrue(interrupted.get());
         assertNull(failure.get());
         assertProcessExited(childPid);
+    }
+
+    private boolean readRunningState(ProcessBuilder child, Duration timeout) throws InterruptedException {
+        MuMuManagerClient client = new MuMuManagerClient(tempDir, (command, budget) -> {
+            if (command.command().get(1).equals("info")) {
+                return new BoundedProcessRunner.ProcessResult(0, "unknown cmd: info", false);
+            }
+            return BoundedProcessRunner.run(child, timeout);
+        });
+        try {
+            return client.state("0") == MuMuManagerClient.State.RUNNING;
+        } catch (IOException failure) {
+            return false;
+        }
     }
 
     private ProcessBuilder childProcess(String action, Path pidFile) {

@@ -1,15 +1,11 @@
 package dev.frostguard.engine.emulator.instance;
 
-import dev.frostguard.engine.emulator.BoundedProcessRunner;
 import dev.frostguard.engine.emulator.EmulatorInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.time.Duration;
-import java.util.List;
 
 /**
  * Controls MuMu Player emulator instances through the {@code MuMuManager.exe}
@@ -22,12 +18,15 @@ public class MuMuEmulatorInstance extends EmulatorInstance {
 
     private static final int ADB_BASE_PORT = 16384;
     private static final int ADB_PORT_STRIDE = 32;
-    private static final Duration STATE_PROBE_TIMEOUT = Duration.ofSeconds(5);
-    private static final Duration ACTION_TIMEOUT = Duration.ofSeconds(45);
-    private static final String RUNNING_TOKEN = "state=start_finished";
+    private final MuMuManagerClient manager;
 
     public MuMuEmulatorInstance(String executablePath) {
+        this(executablePath, new MuMuManagerClient(Path.of(executablePath)));
+    }
+
+    MuMuEmulatorInstance(String executablePath, MuMuManagerClient manager) {
         super(executablePath);
+        this.manager = manager;
     }
 
     /**
@@ -41,21 +40,22 @@ public class MuMuEmulatorInstance extends EmulatorInstance {
 
     @Override
     public void launchEmulator(String identifier) {
-        executeManagerAction(identifier, "launch_player");
-        log.info("Launch requested for MuMu instance {}", identifier);
+        executeManagerAction(identifier, true);
     }
 
     @Override
     public void closeEmulator(String identifier) {
-        executeManagerAction(identifier, "shutdown_player");
-        log.info("Shutdown requested for MuMu instance {}", identifier);
+        executeManagerAction(identifier, false);
     }
 
     @Override
     public boolean isRunning(String identifier) {
         try {
-            return readRunningState(
-                    buildManagerProcess(identifier, "player_state"), STATE_PROBE_TIMEOUT);
+            MuMuManagerClient.State state = manager.state(identifier);
+            if (state == MuMuManagerClient.State.UNKNOWN) {
+                log.warn("MuMu state unknown for instance {}; running is not confirmed", identifier);
+            }
+            return state == MuMuManagerClient.State.RUNNING;
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
             log.debug("State probe interrupted for MuMu #{}", identifier);
@@ -67,45 +67,20 @@ public class MuMuEmulatorInstance extends EmulatorInstance {
 
     // ── internal helpers ─────────────────────────────────────────────
 
-    private Path resolveManagerBinary() {
-        return Paths.get(consolePath, "MuMuManager.exe");
-    }
-
-    private ProcessBuilder buildManagerProcess(String instanceId, String action) {
-        List<String> cmd = List.of(
-                resolveManagerBinary().toString(),
-                "api", "-v", instanceId, action);
-        ProcessBuilder pb = new ProcessBuilder(cmd);
-        pb.directory(Paths.get(consolePath).getParent().toFile());
-        return pb;
-    }
-
-    private void executeManagerAction(String instanceId, String action) {
+    private void executeManagerAction(String instanceId, boolean launch) {
+        String action = launch ? "launch" : "shutdown";
         try {
-            BoundedProcessRunner.ProcessResult result = BoundedProcessRunner.run(
-                    buildManagerProcess(instanceId, action), ACTION_TIMEOUT);
-            if (result.timedOut()) {
-                log.error("MuMu action '{}' timed out after {} seconds; killed the manager process",
-                        action, ACTION_TIMEOUT.toSeconds());
-            } else if (result.exitCode() != 0) {
-                log.error("MuMu action '{}' exited with code {}", action, result.exitCode());
-            }
+            manager.request(instanceId, launch);
+            invalidateAllCaches(instanceId);
+            log.info("MuMu {} request accepted for instance {}; transition completion is not confirmed",
+                    action, instanceId);
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
-            log.debug("MuMu action '{}' interrupted; killed the manager process", action);
+            throw new IllegalStateException("MuMu " + action + " interrupted for instance " + instanceId, ie);
         } catch (IOException ioe) {
-            log.error("Failed to execute MuMu action '{}'", action, ioe);
+            throw new IllegalStateException("MuMu " + action + " failed for instance " + instanceId
+                    + ": " + ioe.getMessage(), ioe);
         }
     }
 
-    static boolean readRunningState(ProcessBuilder managerProcess, Duration timeout)
-            throws IOException, InterruptedException {
-        BoundedProcessRunner.ProcessResult result = BoundedProcessRunner.run(managerProcess, timeout);
-        if (result.timedOut()) {
-            log.warn("MuMu state probe timed out after {} seconds; killed the manager process",
-                    timeout.toSeconds());
-            return false;
-        }
-        return result.exitCode() == 0 && result.output().contains(RUNNING_TOKEN);
-    }
 }

@@ -183,6 +183,9 @@ the Maven command is only for source development.
 
 ## Scheduled Automation
 
+For MuMu Manager command selection, legacy fallback and verification limits, see
+[MuMu lifecycle compatibility](mumu-lifecycle.md).
+
 Optional Task Scheduler templates are in `docs/schedule-autostart/`.
 
 Use them when the machine should wake, run Frostguard for a fixed window, stop the emulator, and return to standby. Edit imported task actions before enabling them:
