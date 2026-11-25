@@ -45,6 +45,9 @@ public abstract class EmulatorInstance {
     public    abstract void    closeEmulator(String idx);
     public    abstract boolean isRunning(String idx);
 
+    /** Releases capture workers without stopping the emulator or shared ADB server. */
+    public void closeCaptureSessions() { }
+
     protected EmulatorInstance(String consolePath) {
         this.consolePath = consolePath;
         initBridge();
@@ -277,6 +280,12 @@ public abstract class EmulatorInstance {
         }
     }
 
+    protected void recordLastFrame(String idx, RawImageData frame) {
+        if (idx != null && frame != null) {
+            lastFrame.put(idx, frame);
+        }
+    }
+
     static String captureFailureMessage(String idx, String serial, int receivedBytes, Exception failure) {
         String timeout = failure instanceof com.android.ddmlib.TimeoutException
                 ? "commandTimeoutMs=2000"
@@ -304,16 +313,32 @@ public abstract class EmulatorInstance {
     boolean touchArea(String idx, PointData a, PointData b, int n, int delMs) { return tap(idx, a, b, n, delMs); }
 
     private boolean tap(String idx, PointData c1, PointData c2, int reps, int delMs) {
-        return withRetries(idx, dev -> {
-            Random rng = new Random();
-            int x0 = Math.min(c1.getX(), c2.getX()), x1 = Math.max(c1.getX(), c2.getX());
-            int y0 = Math.min(c1.getY(), c2.getY()), y1 = Math.max(c1.getY(), c2.getY());
-            for (int t = 0; t < reps; t++) {
-                int tx = x0 + rng.nextInt(Math.max(1, x1 - x0 + 1));
-                int ty = y0 + rng.nextInt(Math.max(1, y1 - y0 + 1));
-                try { dev.executeShellCommand("input tap " + tx + " " + ty, new NullOutputReceiver()); Thread.sleep(delMs); }
-                catch (Exception e) { throw new RuntimeException(e); }
+        Random rng = new Random();
+        int x0 = Math.min(c1.getX(), c2.getX()), x1 = Math.max(c1.getX(), c2.getX());
+        int y0 = Math.min(c1.getY(), c2.getY()), y1 = Math.max(c1.getY(), c2.getY());
+        for (int t = 0; t < reps; t++) {
+            PointData point = new PointData(x0 + rng.nextInt(Math.max(1, x1 - x0 + 1)),
+                    y0 + rng.nextInt(Math.max(1, y1 - y0 + 1)));
+            if (!tryNativeTouch(idx, point, point, 40)) {
+                sendAdbTap(idx, point);
             }
+            try { Thread.sleep(delMs); }
+            catch (InterruptedException cancelled) {
+                Thread.currentThread().interrupt();
+                throw ADBConnectionException.forDevice(getDeviceSerial(idx), "Tap cancelled", cancelled);
+            }
+        }
+        return true;
+    }
+
+    protected boolean tryNativeTouch(String idx, PointData from, PointData to, int durationMs) {
+        return false;
+    }
+
+    protected void sendAdbTap(String idx, PointData point) {
+        withRetries(idx, dev -> {
+            try { dev.executeShellCommand("input tap " + point.getX() + " " + point.getY(), new NullOutputReceiver()); }
+            catch (Exception e) { throw new RuntimeException(e); }
             return Boolean.TRUE;
         }, "tap");
     }
@@ -330,6 +355,11 @@ public abstract class EmulatorInstance {
     }
 
     private void swipe(String idx, PointData from, PointData to, Integer durationMs) {
+        if (tryNativeTouch(idx, from, to, durationMs == null ? 300 : durationMs)) return;
+        sendAdbSwipe(idx, from, to, durationMs);
+    }
+
+    protected void sendAdbSwipe(String idx, PointData from, PointData to, Integer durationMs) {
         withRetries(idx, dev -> {
             try { dev.executeShellCommand(swipeCommand(from, to, durationMs), new NullOutputReceiver()); }
             catch (Exception e) { throw new RuntimeException(e); }

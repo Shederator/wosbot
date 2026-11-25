@@ -155,6 +155,7 @@ public class ScheduleService {
 		if (stopBehavior == StopBehaviorEnum.CLOSE_EMULATOR) {
 			closeEnabledEmulators();
 		}
+        EmulatorController.getInstance().closeCaptureSessions();
 		try {
 			AnalyticsService.getInstance().trackBotStopped("manual");
 		} catch (Exception ignored) {

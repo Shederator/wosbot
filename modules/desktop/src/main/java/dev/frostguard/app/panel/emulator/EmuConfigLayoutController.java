@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import dev.frostguard.api.configs.ConfigurationKeyEnum;
+import dev.frostguard.api.configs.CaptureMethodEnum;
 import dev.frostguard.app.shared.SettingValidators;
 import dev.frostguard.app.shared.ValidatedTextFieldBinding;
 import dev.frostguard.engine.emulator.EmulatorType;
@@ -79,6 +80,15 @@ public class EmuConfigLayoutController {
 	private ComboBox<GameVersionEnum> comboboxGameRegion;
 
 	@FXML
+	private ComboBox<CaptureMethodEnum> comboboxCaptureMethod;
+
+	@FXML
+	private Label labelCaptureMethodHint;
+
+	@FXML
+	private CheckBox checkboxMuMuIpcTouch;
+
+	@FXML
 	private ComboBox<IdleBehaviorEnum> comboboxInactivityPolicy;
 
 	// Changed by pernerch | Date: 2026-07-04 | Why: expose dedicated stop behavior for manual GUI stop.
@@ -136,6 +146,7 @@ public class EmuConfigLayoutController {
 
 		populateEmulatorTable(globalConfig);
 		configureTableColumns();
+		configureCaptureMethod(globalConfig);
 		configureValidatedInstanceSettings(globalConfig);
 		attachPersistenceListeners();
 		configureGameAndIdleDropdowns(globalConfig);
@@ -186,6 +197,7 @@ public class EmuConfigLayoutController {
 					ScheduleService.obtain().persistEmulatorPath(
 							ConfigurationKeyEnum.CURRENT_EMULATOR_STRING.name(),
 							chosen.getEmulatorType().name());
+					updateCaptureMethodAvailability();
 				});
 			}
 
@@ -200,6 +212,51 @@ public class EmuConfigLayoutController {
 				}
 			}
 		});
+	}
+
+	private void configureCaptureMethod(Map<String, String> cfg) {
+		checkboxMuMuIpcTouch.setSelected(Boolean.parseBoolean(
+				cfg.get(ConfigurationKeyEnum.MUMU_IPC_TOUCH_BOOL.name())));
+		checkboxMuMuIpcTouch.setOnAction(event -> {
+			boolean selected = checkboxMuMuIpcTouch.isSelected();
+			if (!ConfigService.obtain().writeGlobalSetting(
+					ConfigurationKeyEnum.MUMU_IPC_TOUCH_BOOL, Boolean.toString(selected))) {
+				checkboxMuMuIpcTouch.setSelected(!selected);
+				displayError("Touch method could not be saved. Please try again.");
+			}
+		});
+		comboboxCaptureMethod.setItems(FXCollections.observableArrayList(CaptureMethodEnum.values()));
+		CaptureMethodEnum saved = CaptureMethodEnum.parse(
+				cfg.get(ConfigurationKeyEnum.SCREEN_CAPTURE_METHOD_STRING.name()));
+		comboboxCaptureMethod.setValue(saved);
+		java.util.concurrent.atomic.AtomicReference<CaptureMethodEnum> persisted =
+				new java.util.concurrent.atomic.AtomicReference<>(saved);
+		comboboxCaptureMethod.setOnAction(event -> {
+			CaptureMethodEnum selected = comboboxCaptureMethod.getValue();
+			if (selected == null || selected == persisted.get()) {
+				return;
+			}
+			if (ConfigService.obtain().writeGlobalSetting(
+					ConfigurationKeyEnum.SCREEN_CAPTURE_METHOD_STRING, selected.name())) {
+				persisted.set(selected);
+			} else {
+				comboboxCaptureMethod.setValue(persisted.get());
+				displayError("Capture method could not be saved. Please try again.");
+			}
+		});
+		updateCaptureMethodAvailability();
+	}
+
+	private void updateCaptureMethodAvailability() {
+		boolean mumu = emulatorList.stream()
+				.anyMatch(emulator -> emulator.isActive() && emulator.getEmulatorType() == EmulatorType.MUMU);
+		boolean supported = mumu && System.getProperty("os.name", "")
+				.toLowerCase(java.util.Locale.ROOT).startsWith("windows");
+		comboboxCaptureMethod.setDisable(!supported);
+		checkboxMuMuIpcTouch.setDisable(!supported);
+		labelCaptureMethodHint.setText(supported
+				? "Applies on the next bot start. MuMu IPC uses ADB if native capture is unavailable."
+				: "MuMu IPC requires MuMu on Windows. Other emulators use ADB.");
 	}
 
 	private void attachBrowseButtonColumn() {

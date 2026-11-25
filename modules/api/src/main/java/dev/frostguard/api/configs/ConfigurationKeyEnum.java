@@ -288,6 +288,8 @@ public enum ConfigurationKeyEnum {
     AUTO_START_MODE_STRING              ("Continuous",  String.class,   ConfigCategory.SYSTEM),
     BOOL_DEBUG                          ("false",       Boolean.class,  ConfigCategory.SYSTEM),
     CURRENT_EMULATOR_STRING             ("",            String.class,   ConfigCategory.SYSTEM),
+    SCREEN_CAPTURE_METHOD_STRING       ("ADB",         String.class,   ConfigCategory.SYSTEM),
+    MUMU_IPC_TOUCH_BOOL                 ("false",       Boolean.class,  ConfigCategory.SYSTEM),
     DESKTOP_SNAPSHOT_ENABLED_BOOL       ("false",       Boolean.class,  ConfigCategory.SYSTEM),
     MISSING_TEMPLATE_SNAPSHOT_ENABLED_BOOL ("false",   Boolean.class,  ConfigCategory.SYSTEM),
     DISCORD_TOKEN_STRING                ("",            String.class,   ConfigCategory.SYSTEM),
