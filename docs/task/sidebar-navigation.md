@@ -14,9 +14,17 @@ unknown/closed state, not permission to continue tapping.
 Opening the collapsed panel retains one fixed handle area because no stable visible target
 exists in the supplied open-panel frames. The tap region is restricted to the interior of the
 thin arrow at `x=6..16, y=546..554`. This stays clear of both the absolute display edge, where
-MuMu can discard a tap, and the expanded compact Marching panel behind the handle on World. A
-trigger tap is allowed only while a Home or World anchor is present.
-After the initial 400 ms settle, the navigator polls fresh frames for up to
+MuMu can discard a tap. An expanded World Marching panel can cover that area with
+Add March Queue or a march row. On a verified World frame, detect the expanded
+panel's downward caret in `(5,210)`–`(45,265)`, tap only that detected header
+control once, then require two consecutive fresh observations showing a clear
+root screen or an already-open sidebar. Neither a missing World anchor nor an
+unconfirmed collapse permits a trigger tap. No march recall, queue upgrade or
+deployment control is used. A panel that reappears after the one collapse attempt
+ends navigation conservatively.
+
+A trigger tap is allowed only while a Home or World anchor is present and the
+detected march panel has been cleared. After the initial two-second settle, the navigator polls fresh frames for up to
 roughly two seconds because live logs show that a successful tap can temporarily classify as
 closed or unknown. If no section appears and a fresh Home or World anchor still proves the root
 screen, the trigger is retried once; the second attempt is terminal. Section changes use the
