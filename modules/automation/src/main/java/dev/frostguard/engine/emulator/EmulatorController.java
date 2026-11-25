@@ -74,12 +74,17 @@ public class EmulatorController {
         EmulatorType kind = EmulatorType.valueOf(emuStr);
         String dir = cfg.get(kind.getConfigKey());
         if (dir == null || dir.isBlank()) throw new IllegalStateException("No path for " + kind.getDisplayName());
+        CaptureMethodEnum captureMethod = CaptureMethodEnum.parse(
+                cfg.get(ConfigurationKeyEnum.SCREEN_CAPTURE_METHOD_STRING.name()));
+        closeCaptureSessions();
         backend = switch (kind) {
-            case MUMU     -> new MuMuEmulatorInstance(dir);
+            case MUMU     -> new MuMuEmulatorInstance(dir, captureMethod,
+                    Boolean.parseBoolean(cfg.get(ConfigurationKeyEnum.MUMU_IPC_TOUCH_BOOL.name())));
             case MEMU     -> new MEmuEmulatorInstance(dir);
             case LDPLAYER -> new LDPlayerEmulatorInstance(dir);
         };
         LOG.info("Backend: {}", kind.getDisplayName());
+        LOG.info("Screenshot preference: {}; applies to MuMu on Windows, other backends use ADB", captureMethod.name());
 
         // slot capacity
         maxSlots = Optional.ofNullable(cfg.get(ConfigurationKeyEnum.MAX_RUNNING_EMULATORS_INT.name()))
@@ -89,6 +94,12 @@ public class EmulatorController {
 
     private void requireBackend() {
         if (backend == null) throw new IllegalStateException("Backend not initialised");
+    }
+
+    public void closeCaptureSessions() {
+        if (backend != null) {
+            backend.closeCaptureSessions();
+        }
     }
 
     // --- screen capture ---

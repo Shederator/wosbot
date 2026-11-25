@@ -29,6 +29,18 @@
          </columnResizePolicy>
       </TableView>
 
+      <VBox spacing="6" styleClass="content-card-inner" VBox.vgrow="NEVER">
+          <HBox alignment="CENTER_LEFT" spacing="12">
+              <Label text="Capture method" />
+              <ComboBox fx:id="comboboxCaptureMethod" prefWidth="230.0" maxWidth="Infinity" />
+          </HBox>
+          <Label fx:id="labelCaptureMethodHint" wrapText="true" maxWidth="Infinity" />
+          <CheckBox fx:id="checkboxMuMuIpcTouch" text="Use MuMu IPC for taps and swipes (experimental)"
+                    wrapText="true" />
+          <Label text="Applies on the next bot start. Back and text entry still use ADB."
+                 wrapText="true" />
+      </VBox>
+
       <VBox spacing="16" VBox.vgrow="NEVER">
           <children>
               <!-- Instance Settings (full width) -->

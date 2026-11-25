@@ -53,6 +53,10 @@
             <scope>compile</scope>
         </dependency>
         <dependency>
+            <groupId>net.java.dev.jna</groupId>
+            <artifactId>jna</artifactId>
+        </dependency>
+        <dependency>
             <groupId>com.mixpanel</groupId>
             <artifactId>mixpanel-java</artifactId>
         </dependency>

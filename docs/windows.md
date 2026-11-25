@@ -181,6 +181,12 @@ For automatic startup through scripts or Task Scheduler:
 Installed releases and extracted PR-test bundles should use their supplied launcher;
 the Maven command is only for source development.
 
+## Optional MuMu screen capture
+
+The emulator configuration page includes an optional **MuMu IPC (experimental)**
+capture method, with ADB retained as the default. See the [MuMu capture and smoke
+test guide](mumu-capture.md) for selection, fallback checks and performance advice.
+
 ## Scheduled Automation
 
 Optional Task Scheduler templates are in `docs/schedule-autostart/`.
