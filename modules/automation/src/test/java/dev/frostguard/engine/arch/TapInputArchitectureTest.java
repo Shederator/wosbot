@@ -41,7 +41,8 @@ class TapInputArchitectureTest {
                             return false;
                         }
                         String name = access.getTarget().getName();
-                        return name.equals("touchArea") || name.equals("tap");
+                        return name.equals("touchArea") || name.equals("tap")
+                                || name.equals("sendAdbTap") || name.equals("tryNativeTouch");
                     }
                 };
 
