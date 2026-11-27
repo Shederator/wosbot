@@ -85,9 +85,10 @@ public final class CommonGameAreas {
 
     // The collapsed panel exposes only a thin handle at the left edge. A trigger tap is allowed only
     // after the caller has proved that no selected tab is visible, and the result is then verified.
-    // Keep the trigger inside the thin arrow that remains exposed beside an expanded World march
-    // panel, but away from the absolute display edge where MuMu can discard an otherwise valid tap.
+    // An expanded World march list can cover this handle with Add March Queue.
+    // Collapse the detected march panel before using the handle, keeping away from the display edge.
     public static final AreaData LEFT_MENU_TRIGGER        = region(6, 546, 16, 554);
+    public static final AreaData WORLD_MARCH_PANEL_TOGGLE_AREA = region(5, 210, 45, 265);
     public static final AreaData LEFT_MENU_CITY_TAB       = region(9, 246, 146, 293);
     public static final AreaData LEFT_MENU_WILDERNESS_TAB = region(155, 246, 293, 293);
     public static final AreaData LEFT_MENU_DAILY_TAB      = region(302, 246, 438, 293);

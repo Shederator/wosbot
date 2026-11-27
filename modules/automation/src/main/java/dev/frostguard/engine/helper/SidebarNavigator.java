@@ -141,6 +141,7 @@ public final class SidebarNavigator {
     }
 
     private boolean openSectionInternal(SidebarSection target) {
+        if (Thread.currentThread().isInterrupted()) return false;
         ScreenState initialState = screenStates.read();
         Optional<SidebarSection> current = initialState.section();
 
@@ -150,7 +151,21 @@ public final class SidebarNavigator {
                 return false;
             }
             int triggerTaps = 0;
+            boolean collapseAttempted = false;
             while (current.isEmpty() && triggerTaps < MAX_TRIGGER_TAPS) {
+                if (Thread.currentThread().isInterrupted()) return false;
+                if (initialState.marchPanelToggle().isFound()) {
+                    if (collapseAttempted) {
+                        log.warn("World march panel reappeared; refusing an obstructed sidebar trigger");
+                        return false;
+                    }
+                    collapseAttempted = true;
+                    initialState = collapseMarchPanel(initialState.marchPanelToggle());
+                    if (initialState == null) return false;
+                    current = initialState.section();
+                    if (current.isPresent()) break;
+                }
+                if (!initialState.rootScreen() || Thread.currentThread().isInterrupted()) return false;
                 triggerTaps++;
                 log.debug("Sidebar closed/unknown; trigger tap " + triggerTaps + "/" + MAX_TRIGGER_TAPS
                         + " before selecting " + target);
@@ -168,6 +183,7 @@ public final class SidebarNavigator {
                 }
 
                 ScreenState retryState = screenStates.read();
+                initialState = retryState;
                 current = retryState.section();
                 if (current.isPresent()) {
                     log.debug("Sidebar open confirmed on retry verification without another trigger: observed="
@@ -205,6 +221,24 @@ public final class SidebarNavigator {
 
         log.debug("Sidebar section ready without assuming a scroll origin: " + target);
         return true;
+    }
+
+    private ScreenState collapseMarchPanel(ImageSearchResultData toggle) {
+        if (Thread.currentThread().isInterrupted()) return null;
+        log.debug("Expanded World march panel detected; collapsing before opening the sidebar");
+        taps.tapInside(toggle);
+        int consecutiveClear = 0;
+        for (int check = 1; check <= TRANSITION_POLL_CHECKS; check++) {
+            if (Thread.currentThread().isInterrupted()) return null;
+            ScreenState observed = screenStates.read();
+            boolean ready = observed.section().isPresent()
+                    || observed.rootScreen() && !observed.marchPanelToggle().isFound();
+            consecutiveClear = ready ? consecutiveClear + 1 : 0;
+            if (consecutiveClear >= 2) return observed;
+            if (check < TRANSITION_POLL_CHECKS && !transitionWaiter.waitFor(TRANSITION_POLL_MS)) return null;
+        }
+        log.warn("World march panel collapse was not confirmed; no sidebar trigger sent");
+        return null;
     }
 
     static AreaData rowActionAreaFor(ImageSearchResultData rowIcon) {
@@ -282,13 +316,17 @@ public final class SidebarNavigator {
     private ScreenState captureScreenState() {
         RawImageData frame = emu.captureScreen(device);
         Optional<SidebarSection> section = selectedSection(frame);
-        return new ScreenState(section, section.isEmpty() && isRootScreen(frame));
-    }
-
-    private boolean isRootScreen(RawImageData frame) {
+        if (section.isPresent()) return new ScreenState(section, false);
         double threshold = SearchConfigConstants.DEFAULT_SINGLE.getThreshold();
-        return emu.locatePattern(device, frame, TemplatesEnum.GAME_HOME_FURNACE, threshold).isFound()
-                || emu.locatePattern(device, frame, TemplatesEnum.GAME_HOME_WORLD, threshold).isFound();
+        boolean atWorld = emu.locatePattern(device, frame, TemplatesEnum.GAME_HOME_WORLD, threshold).isFound();
+        boolean root = atWorld || emu.locatePattern(device, frame, TemplatesEnum.GAME_HOME_FURNACE, threshold).isFound();
+        ImageSearchResultData toggle = ImageSearchResultData.miss();
+        if (atWorld) {
+            toggle = emu.locatePattern(device, frame, TemplatesEnum.WORLD_MARCH_PANEL_EXPANDED,
+                    CommonGameAreas.WORLD_MARCH_PANEL_TOGGLE_AREA.topLeft(),
+                    CommonGameAreas.WORLD_MARCH_PANEL_TOGGLE_AREA.bottomRight(), threshold);
+        }
+        return new ScreenState(section, root, toggle);
     }
 
     private Optional<SidebarSection> selectedSection() {
@@ -340,7 +378,11 @@ public final class SidebarNavigator {
 
     record TransitionObservation(Optional<SidebarSection> section, int checks, boolean interrupted) {}
 
-    record ScreenState(Optional<SidebarSection> section, boolean rootScreen) {}
+    record ScreenState(Optional<SidebarSection> section, boolean rootScreen, ImageSearchResultData marchPanelToggle) {
+        ScreenState(Optional<SidebarSection> section, boolean rootScreen) {
+            this(section, rootScreen, ImageSearchResultData.miss());
+        }
+    }
 
     @FunctionalInterface
     interface SectionReader {
